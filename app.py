@@ -655,6 +655,11 @@ def trigger_backup():
         'timestamp': datetime.now().isoformat()
     })
 
+@app.route('/embed-generator')
+def embed_generator():
+    """Generate embed code for clients"""
+    return render_template('embed-generator.html')
+
 # =====================================================================
 # RUN SERVER
 # =====================================================================

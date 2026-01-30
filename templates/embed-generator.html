@@ -1,0 +1,157 @@
+<html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Embed Code Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        h1 {
+            font-size: 28px;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+        
+        .subtitle {
+            color: #6b7280;
+            margin-bottom: 32px;
+        }
+        
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #374151;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .code-box {
+            background: #1f2937;
+            color: #10b981;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            margin-bottom: 16px;
+            position: relative;
+            word-wrap: break-word;
+        }
+        
+        .copy-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .copy-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .copy-btn:active {
+            transform: translateY(0);
+        }
+        
+        .success {
+            background: #10b981;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            margin-top: 16px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 Embed Code Generator</h1>
+        <p class="subtitle">Generate custom embed code for your clients</p>
+        
+        <label for="client-id">Client ID:</label>
+        <input type="text" id="client-id" placeholder="demo" value="demo">
+        
+        <label>Embed Code:</label>
+        <div class="code-box" id="embed-code">
+            &lt;script src="https://your-chatbot.onrender.com/static/embed.js?client_id=demo"&gt;&lt;/script&gt;
+        </div>
+        
+        <button class="copy-btn" onclick="copyCode()">📋 Copy to Clipboard</button>
+        
+        <div class="success" id="success">✅ Copied to clipboard!</div>
+    </div>
+    
+    <script>
+    const baseUrl = window.location.origin;
+    const clientIdInput = document.getElementById('client-id');
+    const codeBox = document.getElementById('embed-code');
+    
+    clientIdInput.addEventListener('input', updateCode);
+    
+    function updateCode() {
+        const clientId = clientIdInput.value || 'demo';
+        const embedCode = '<script src="' + baseUrl + '/static/embed.js?client_id=' + clientId + '"></' + 'script>';
+        codeBox.innerHTML = embedCode.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    
+    function copyCode() {
+        const clientId = clientIdInput.value || 'demo';
+        const embedCode = '<script src="' + baseUrl + '/static/embed.js?client_id=' + clientId + '"></' + 'script>';
+        
+        navigator.clipboard.writeText(embedCode).then(() => {
+            document.getElementById('success').style.display = 'block';
+            setTimeout(() => {
+                document.getElementById('success').style.display = 'none';
+            }, 3000);
+        });
+    }
+    
+    // Initialize
+    updateCode();
+</script>
+</body>
+</html>
