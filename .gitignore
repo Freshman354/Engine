@@ -1,0 +1,32 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Leads data (optional - uncomment if you don't want to commit leads)
+# clients/*/leads.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+# Logs
+logs/
+*.log
+
+# Backups
+backups/
+
+# Production secrets
+.env.production

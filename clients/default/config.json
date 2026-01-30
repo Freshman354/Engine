@@ -1,0 +1,23 @@
+{
+  "client_id": "default",
+  "branding": {
+    "company_name": "Support Bot",
+    "logo_url": "https://via.placeholder.com/150x50?text=Logo",
+    "primary_color": "#4F46E5",
+    "secondary_color": "#10B981",
+    "bot_avatar": "https://via.placeholder.com/40?text=Bot"
+  },
+  "contact": {
+    "email": "support@example.com",
+    "phone": "+1-555-0100",
+    "whatsapp": "+15550100",
+    "business_hours": "Mon-Fri, 9 AM - 6 PM EST"
+  },
+  "bot_settings": {
+    "bot_name": "Support Assistant",
+    "welcome_message": "Hi! I'm here to help. Ask me anything or type 'contact' to speak with our team.",
+    "tone": "friendly",
+    "fallback_message": "I'm not sure about that. Would you like to speak with a human? Just type 'contact'.",
+    "lead_triggers": ["contact", "human", "agent", "speak", "talk", "pricing", "quote", "demo"]
+  }
+}

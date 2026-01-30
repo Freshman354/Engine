@@ -1,0 +1,40 @@
+{
+  "faqs": [
+    {
+      "id": "faq_1",
+      "triggers": ["hours", "open", "available", "time"],
+      "question": "What are your business hours?",
+      "answer": "We're available Monday to Friday, 9 AM - 6 PM EST. Need immediate assistance? Type 'contact' to reach our team!"
+    },
+    {
+      "id": "faq_2",
+      "triggers": ["price", "pricing", "cost", "how much"],
+      "question": "What are your prices?",
+      "answer": "Our pricing varies based on your needs. I'd love to connect you with our team for a custom quote. Type 'contact' or provide your email and we'll reach out!"
+    },
+    {
+      "id": "faq_3",
+      "triggers": ["shipping", "delivery", "ship"],
+      "question": "What is your shipping policy?",
+      "answer": "We offer free shipping on orders over $50 within the US. International shipping is available - rates calculated at checkout."
+    },
+    {
+      "id": "faq_4",
+      "triggers": ["return", "refund", "money back"],
+      "question": "What is your return policy?",
+      "answer": "We offer a 30-day money-back guarantee. If you're not satisfied, contact us for a full refund - no questions asked!"
+    },
+    {
+      "id": "faq_5",
+      "triggers": ["payment", "pay", "credit card", "paypal"],
+      "question": "What payment methods do you accept?",
+      "answer": "We accept all major credit cards (Visa, Mastercard, Amex), PayPal, and Apple Pay. All transactions are secure and encrypted."
+    },
+    {
+      "id": "faq_6",
+      "triggers": ["support", "help", "contact", "email", "phone"],
+      "question": "How can I contact support?",
+      "answer": "TRIGGER_LEAD_COLLECTION"
+    }
+  ]
+}

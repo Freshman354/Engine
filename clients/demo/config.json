@@ -1,0 +1,23 @@
+{
+  "client_id": "demo",
+  "branding": {
+    "company_name": "Demo Company",
+    "logo_url": "https://via.placeholder.com/150x50?text=DemoLogo",
+    "primary_color": "#EC4899",
+    "secondary_color": "#8B5CF6",
+    "bot_avatar": "https://via.placeholder.com/40?text=DC"
+  },
+  "contact": {
+    "email": "hello@democompany.com",
+    "phone": "+1-555-DEMO",
+    "whatsapp": "+15550200",
+    "business_hours": "24/7 Support Available"
+  },
+  "bot_settings": {
+    "bot_name": "Demo Bot",
+    "welcome_message": "Welcome to Demo Company! How can I assist you today?",
+    "tone": "professional",
+    "fallback_message": "I don't have information on that. Would you like to speak with our team?",
+    "lead_triggers": ["contact", "sales", "pricing", "demo"]
+  }
+}

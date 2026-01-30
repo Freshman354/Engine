@@ -1,0 +1,16 @@
+{
+  "faqs": [
+    {
+      "id": "demo_faq_1",
+      "triggers": ["demo", "trial", "test"],
+      "question": "Can I try a demo?",
+      "answer": "Absolutely! I can set up a personalized demo for you. Let me collect your information - what's your name?"
+    },
+    {
+      "id": "demo_faq_2",
+      "triggers": ["features", "what do you do", "capabilities"],
+      "question": "What features do you offer?",
+      "answer": "We offer enterprise-grade solutions including AI automation, analytics dashboards, and 24/7 support. Interested in learning more? Type 'contact'!"
+    }
+  ]
+}
