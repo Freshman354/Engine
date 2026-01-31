@@ -1,3 +1,17 @@
 {
-  "leads": []
+  "leads": [
+    {
+      "name": "James",
+      "email": "jamespot@gmail.com",
+      "phone": "222093748",
+      "company": "netflix",
+      "message": "i would like to partner with you",
+      "conversation_snippet": "James | jamespot@gmail.com | 222093748 | netflix | i would like to partner with you",
+      "source_url": "http://127.0.0.1:5000/widget?client_id=demo",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+      "id": "lead_1",
+      "timestamp": "2026-01-31T17:56:54.320940",
+      "client_id": "demo"
+    }
+  ]
 }

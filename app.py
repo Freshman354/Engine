@@ -180,7 +180,7 @@ def extract_email(text):
     return match.group(0) if match else None
 
 def match_faq(message, faqs, lead_triggers):
-    """Match user message to FAQ based on triggers"""
+    """Match user message to FAQ based on triggers with fuzzy matching"""
     message_lower = message.lower()
     
     # Check for lead collection triggers first
@@ -192,18 +192,38 @@ def match_faq(message, faqs, lead_triggers):
     if is_email(message):
         return "TRIGGER_LEAD_COLLECTION", extract_email(message)
     
-    # Match against FAQ triggers
+    # Match against FAQ triggers with scoring
     best_match = None
-    max_matches = 0
+    max_score = 0
+    all_matches = []
     
     for faq in faqs['faqs']:
-        matches = sum(1 for trigger in faq['triggers'] if trigger.lower() in message_lower)
-        if matches > max_matches:
-            max_matches = matches
+        score = 0
+        matches = []
+        
+        for trigger in faq['triggers']:
+            if trigger.lower() in message_lower:
+                score += 1
+                matches.append(trigger)
+        
+        if score > 0:
+            all_matches.append({
+                'faq': faq,
+                'score': score,
+                'matches': matches
+            })
+        
+        if score > max_score:
+            max_score = score
             best_match = faq
     
-    if best_match and max_matches > 0:
+    if best_match and max_score > 0:
         return best_match['answer'], None
+    
+    # No match found - return similar questions if any partial matches
+    if all_matches:
+        similar_questions = [m['faq']['question'] for m in all_matches[:3]]
+        return "NO_MATCH_WITH_SUGGESTIONS", similar_questions
     
     return None, None
 
@@ -287,18 +307,38 @@ def chat():
                 'contact_info': config['contact']
             })
         
-        # Return FAQ response or fallback
-        if response:
-            final_response = response
+# Handle different response types
+        if response == "NO_MATCH_WITH_SUGGESTIONS":
+            # No exact match but found similar questions
+            similar_questions = extracted_email  # Reusing this parameter for suggestions
+            suggestion_text = "I'm not sure about that exact question, but here are some related topics:\n\n"
+            suggestion_text += "\n".join([f"• {q}" for q in similar_questions])
+            suggestion_text += "\n\nOr type 'contact' to speak with our team!"
+            
+            return jsonify({
+                'success': True,
+                'response': suggestion_text,
+                'trigger_lead_collection': False,
+                'suggestions': similar_questions
+            })
+        elif response:
+            # Found a match
+            return jsonify({
+                'success': True,
+                'response': response,
+                'trigger_lead_collection': False
+            })
         else:
-            final_response = config['bot_settings'].get('fallback_message', 
+            # Complete fallback - no matches at all
+            fallback = config['bot_settings'].get('fallback_message', 
                 "I'm not sure about that. Would you like to speak with a human?")
-        
-        return jsonify({
-            'success': True,
-            'response': final_response,
-            'trigger_lead_collection': False
-        })
+            
+            return jsonify({
+                'success': True,
+                'response': fallback,
+                'trigger_lead_collection': False,
+                'show_contact_button': True
+            })
         
     except Exception as e:
         print(f"Error in chat endpoint: {e}")
@@ -407,14 +447,14 @@ def get_all_leads():
 
 @app.route('/')
 def index():
-    """Homepage with styled interface"""
+    """Homepage with improved value proposition"""
     return '''
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>FAQ Chatbot API</title>
+        <title>White-Label FAQ Chatbot - Deploy in Minutes</title>
         <style>
             * {
                 margin: 0;
@@ -426,71 +466,164 @@ def index():
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
                 padding: 20px;
             }
             
             .container {
+                max-width: 1100px;
+                margin: 0 auto;
+            }
+            
+            .hero {
                 background: white;
                 border-radius: 16px;
                 box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-                max-width: 600px;
-                width: 100%;
-                padding: 40px;
+                padding: 60px 40px;
+                text-align: center;
+                margin-bottom: 24px;
             }
             
             h1 {
-                font-size: 32px;
+                font-size: 48px;
                 color: #1f2937;
-                margin-bottom: 8px;
-                display: flex;
-                align-items: center;
-                gap: 12px;
-            }
-            
-            .subtitle {
-                color: #6b7280;
-                margin-bottom: 32px;
-                font-size: 16px;
-            }
-            
-            .section {
-                margin-bottom: 32px;
-            }
-            
-            .section h2 {
-                font-size: 18px;
-                color: #374151;
                 margin-bottom: 16px;
-                display: flex;
-                align-items: center;
-                gap: 8px;
+                line-height: 1.2;
             }
             
-            .endpoint-list {
-                background: #f9fafb;
+            .tagline {
+                font-size: 24px;
+                color: #667eea;
+                margin-bottom: 16px;
+                font-weight: 600;
+            }
+            
+            .description {
+                font-size: 18px;
+                color: #6b7280;
+                max-width: 700px;
+                margin: 0 auto 40px;
+                line-height: 1.6;
+            }
+            
+            .cta-buttons {
+                display: flex;
+                gap: 16px;
+                justify-content: center;
+                flex-wrap: wrap;
+                margin-bottom: 40px;
+            }
+            
+            .btn {
+                padding: 16px 32px;
                 border-radius: 8px;
-                padding: 16px;
+                font-size: 16px;
+                font-weight: 600;
+                text-decoration: none;
+                transition: transform 0.2s, box-shadow 0.2s;
+                display: inline-block;
+            }
+            
+            .btn-primary {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            }
+            
+            .btn-secondary {
+                background: white;
+                color: #667eea;
+                border: 2px solid #667eea;
+            }
+            
+            .btn:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+            }
+            
+            .features {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 24px;
+                margin-bottom: 24px;
+            }
+            
+            .feature-card {
+                background: white;
+                padding: 32px;
+                border-radius: 12px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            }
+            
+            .feature-icon {
+                font-size: 40px;
+                margin-bottom: 16px;
+            }
+            
+            .feature-card h3 {
+                font-size: 20px;
+                color: #1f2937;
+                margin-bottom: 12px;
+            }
+            
+            .feature-card p {
+                color: #6b7280;
+                line-height: 1.6;
+            }
+            
+            .stats {
+                background: white;
+                border-radius: 12px;
+                padding: 40px;
+                display: flex;
+                justify-content: space-around;
+                flex-wrap: wrap;
+                gap: 24px;
+                margin-bottom: 24px;
+            }
+            
+            .stat {
+                text-align: center;
+            }
+            
+            .stat-number {
+                font-size: 48px;
+                font-weight: 700;
+                color: #667eea;
+            }
+            
+            .stat-label {
+                font-size: 14px;
+                color: #6b7280;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+            
+            .api-section {
+                background: white;
+                border-radius: 12px;
+                padding: 40px;
+                margin-bottom: 24px;
+            }
+            
+            .api-section h2 {
+                font-size: 28px;
+                color: #1f2937;
+                margin-bottom: 24px;
+                text-align: center;
             }
             
             .endpoint {
-                padding: 12px;
-                margin-bottom: 8px;
-                background: white;
-                border-radius: 6px;
-                border-left: 3px solid #667eea;
+                background: #f9fafb;
+                padding: 16px;
+                border-radius: 8px;
+                margin-bottom: 12px;
                 font-family: 'Courier New', monospace;
-                font-size: 13px;
-            }
-            
-            .endpoint:last-child {
-                margin-bottom: 0;
+                font-size: 14px;
+                border-left: 4px solid #667eea;
             }
             
             .method {
-                color: #059669;
+                color: #10b981;
                 font-weight: bold;
                 margin-right: 8px;
             }
@@ -499,128 +632,124 @@ def index():
                 color: #3b82f6;
             }
             
-            .path {
-                color: #1f2937;
-            }
-            
-            .links {
-                display: grid;
-                gap: 12px;
-            }
-            
-            .link-button {
-                display: block;
-                padding: 16px 24px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                text-decoration: none;
-                border-radius: 8px;
-                text-align: center;
-                font-weight: 600;
-                transition: transform 0.2s, box-shadow 0.2s;
-                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-            }
-            
-            .link-button:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
-            }
-            
-            .link-button.secondary {
-                background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
-                box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
-            }
-            
-            .link-button.secondary:hover {
-                box-shadow: 0 6px 16px rgba(245, 158, 11, 0.5);
-            }
-            
-            .status {
-                display: inline-flex;
-                align-items: center;
-                gap: 8px;
-                padding: 8px 16px;
-                background: #d1fae5;
-                color: #065f46;
-                border-radius: 20px;
-                font-size: 14px;
-                font-weight: 600;
-                margin-bottom: 24px;
-            }
-            
-            .status-dot {
-                width: 8px;
-                height: 8px;
-                background: #10b981;
-                border-radius: 50%;
-                animation: pulse 2s infinite;
-            }
-            
-            @keyframes pulse {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.5; }
+            @media (max-width: 768px) {
+                h1 {
+                    font-size: 32px;
+                }
+                
+                .tagline {
+                    font-size: 18px;
+                }
+                
+                .hero {
+                    padding: 40px 24px;
+                }
             }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>💬 FAQ Chatbot API</h1>
-            <p class="subtitle">White-label chatbot with lead collection</p>
-            
-            <div class="status">
-                <span class="status-dot"></span>
-                Server Running
-            </div>
-            
-            <div class="section">
-                <h2>🔌 API Endpoints</h2>
-                <div class="endpoint-list">
-                    <div class="endpoint">
-                        <span class="method">POST</span>
-                        <span class="path">/api/chat</span>
-                        <span style="color: #6b7280; margin-left: 8px;">- Chat with bot</span>
-                    </div>
-                    <div class="endpoint">
-                        <span class="method">POST</span>
-                        <span class="path">/api/lead</span>
-                        <span style="color: #6b7280; margin-left: 8px;">- Submit lead</span>
-                    </div>
-                    <div class="endpoint">
-                        <span class="method get">GET</span>
-                        <span class="path">/api/config?client_id=demo</span>
-                        <span style="color: #6b7280; margin-left: 8px;">- Get client config</span>
-                    </div>
-                    <div class="endpoint">
-                        <span class="method get">GET</span>
-                        <span class="path">/widget</span>
-                        <span style="color: #6b7280; margin-left: 8px;">- Embeddable widget</span>
-                    </div>
-                    <div class="endpoint">
-                        <span class="method get">GET</span>
-                        <span class="path">/admin/leads</span>
-                        <span style="color: #6b7280; margin-left: 8px;">- View collected leads</span>
-                    </div>
+            <div class="hero">
+                <h1>💬 White-Label FAQ Chatbot</h1>
+                <p class="tagline">Deploy a customizable chatbot — white-label, embeddable, and easy to manage</p>
+                <p class="description">
+                    Built for agencies and businesses who need a professional FAQ chatbot with lead collection. 
+                    Each client gets their own branding, FAQs, and analytics. One deployment serves unlimited clients.
+                </p>
+                
+                <div class="cta-buttons">
+                    <a href="/widget?client_id=demo" class="btn btn-primary">🎨 Try Live Demo</a>
+                    <a href="/embed-generator" class="btn btn-secondary">🔌 Get Embed Code</a>
                 </div>
             </div>
             
-            <div class="section">
-                <h2>🚀 Quick Start</h2>
-                <div class="links">
-                    <a href="/widget?client_id=demo" class="link-button">
-                        🎨 Test Demo Widget
-                    </a>
-                    <a href="/widget?client_id=default" class="link-button">
-                        🤖 Test Default Widget
-                    </a>
-                    <a href="/admin/leads?client_id=demo" class="link-button secondary">
-                        📊 View Demo Leads
-                    </a>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-number">10 min</div>
+                    <div class="stat-label">Setup Time</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">∞</div>
+                    <div class="stat-label">Clients Supported</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">1 line</div>
+                    <div class="stat-label">To Embed</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">100%</div>
+                    <div class="stat-label">White-Label</div>
+                </div>
+            </div>
+            
+            <div class="features">
+                <div class="feature-card">
+                    <div class="feature-icon">🎨</div>
+                    <h3>Fully Customizable</h3>
+                    <p>Each client gets their own colors, logo, bot name, and personality. Zero branding from us.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Lead Collection</h3>
+                    <p>Conversational lead capture that feels natural. Collect name, email, phone, and custom fields.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Easy Embedding</h3>
+                    <p>One line of code on any website. Works with WordPress, Shopify, Webflow, or plain HTML.</p>
+                </div>
+                
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Secure & Fast</h3>
+                    <p>Rate limiting, input validation, CORS protection, and automatic backups included.</p>
+                </div>
+            </div>
+            
+            <div class="api-section">
+                <h2>🔌 API Endpoints</h2>
+                
+                <div class="endpoint">
+                    <span class="method">POST</span>
+                    <span>/api/chat</span>
+                    <span style="color: #6b7280; margin-left: 8px;">- Chat with bot</span>
+                </div>
+                
+                <div class="endpoint">
+                    <span class="method">POST</span>
+                    <span>/api/lead</span>
+                    <span style="color: #6b7280; margin-left: 8px;">- Submit lead</span>
+                </div>
+                
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span>/api/config?client_id=demo</span>
+                    <span style="color: #6b7280; margin-left: 8px;">- Get client config</span>
+                </div>
+                
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span>/widget</span>
+                    <span style="color: #6b7280; margin-left: 8px;">- Embeddable widget</span>
+                </div>
+                
+                <div class="endpoint">
+                    <span class="method get">GET</span>
+                    <span>/admin/leads</span>
+                    <span style="color: #6b7280; margin-left: 8px;">- View collected leads</span>
+                </div>
+                
+                <div style="text-align: center; margin-top: 32px;">
+                    <a href="/admin/leads?client_id=demo" class="btn btn-secondary">📊 View Demo Leads</a>
                 </div>
             </div>
         </div>
     </body>
     </html>
     '''
+ 
 
 # =====================================================================
 # HEALTH CHECK & ADMIN ENDPOINTS

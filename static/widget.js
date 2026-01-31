@@ -102,7 +102,18 @@
             container.innerHTML = html;
             
             // Send welcome message
-            this.addBotMessage(this.config?.bot_settings.welcome_message || 'Hi! How can I help you?');
+            const welcomeMsg = this.config?.bot_settings.welcome_message || 'Hi! How can I help you?';
+            this.addBotMessage(welcomeMsg);
+            
+            // Add suggested questions after a short delay
+            setTimeout(() => {
+                const suggestions = [
+                    "What are your hours?",
+                    "How much does it cost?",
+                    "Can I get a demo?"
+                ];
+                this.addSuggestedQuestions(suggestions);
+            }, 500);
         },
         
         /**
@@ -200,6 +211,20 @@
                     } else {
                         this.addBotMessage(data.response);
                         this.conversationHistory.push({ role: 'bot', content: data.response });
+                        
+                        // Add suggestions if provided
+                        if (data.suggestions && data.suggestions.length > 0) {
+                            setTimeout(() => {
+                                this.addSuggestedQuestions(data.suggestions);
+                            }, 500);
+                        }
+                        
+                        // Add contact button if suggested
+                        if (data.show_contact_button) {
+                            setTimeout(() => {
+                                this.addContactButton();
+                            }, 500);
+                        }
                     }
                 } else {
                     this.addBotMessage('Sorry, something went wrong. Please try again.');
@@ -212,121 +237,135 @@
         },
         
         /**
- * Handle lead input during collection
- */
-handleLeadInput: async function(message) {
-    const messageLower = message.toLowerCase().trim();
-    
-    // Check if user wants to cancel lead collection
-    if (messageLower === 'cancel' || messageLower === 'nevermind' || messageLower === 'skip' || messageLower === 'back') {
-        this.leadCollectionMode = false;
-        this.leadData = {};
-        this.addBotMessage("No problem! Lead collection cancelled. Feel free to ask me any questions about our services!");
-        return;
-    }
-    
-    // Check if user is asking a question instead of providing lead info
-    const questionIndicators = ['what', 'how', 'when', 'where', 'why', 'who', 'can', 'do you', 'tell me', '?'];
-    const isQuestion = questionIndicators.some(indicator => messageLower.includes(indicator));
-    
-    if (isQuestion && !this.leadData.name) {
-        // User is asking a question at the start of lead collection
-        this.leadCollectionMode = false;
-        this.leadData = {};
-        
-        // Forward the question to the normal chat handler
-        this.conversationHistory.push({ role: 'user', content: message });
-        this.showTyping();
-        
-        try {
-            const response = await fetch(`${this.apiUrl}/api/chat`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    message: message,
-                    client_id: this.clientId,
-                    context: {
-                        conversation_history: this.conversationHistory
-                    }
-                })
-            });
+         * Start lead collection flow
+         */
+        startLeadCollection: function(extractedEmail = null) {
+            this.leadCollectionMode = true;
+            this.leadData = { email: extractedEmail };
             
-            const data = await response.json();
-            this.hideTyping();
-            
-            if (data.success) {
-                if (data.trigger_lead_collection) {
-                    this.startLeadCollection(data.extracted_email);
-                } else {
-                    this.addBotMessage(data.response);
-                    this.conversationHistory.push({ role: 'bot', content: data.response });
-                }
+            if (extractedEmail) {
+                this.addBotMessage(`Thanks for sharing your email (${extractedEmail})! What's your name?`);
+            } else {
+                this.addBotMessage("I'd be happy to connect you with our team! What's your name?");
             }
-        } catch (error) {
-            this.hideTyping();
-            this.addBotMessage('Sorry, something went wrong. Please try again.');
-        }
-        return;
-    }
-    
-    // Collect name
-    if (!this.leadData.name) {
-        this.leadData.name = message;
+        },
         
-        if (this.leadData.email) {
-            this.addBotMessage("Great! And your phone number? (Type 'skip' if you'd prefer not to share)");
-        } else {
-            this.addBotMessage("Thanks! What's your email address?");
-        }
-        return;
-    }
-    
-    // Collect email
-    if (!this.leadData.email) {
-        if (this.isValidEmail(message)) {
-            this.leadData.email = message;
-            this.addBotMessage("Perfect! And your phone number? (Type 'skip' to leave blank)");
-        } else {
-            this.addBotMessage("That doesn't look like a valid email. Can you try again? (Or type 'cancel' to go back to chatting)");
-        }
-        return;
-    }
-    
-    // Collect phone
-    if (!this.leadData.phone && this.leadData.phone !== 'skipped') {
-        if (messageLower === 'skip') {
-            this.leadData.phone = 'skipped';
-            this.addBotMessage("No worries! What company do you represent? (Type 'skip' to leave blank)");
-        } else {
-            this.leadData.phone = message;
-            this.addBotMessage("Thanks! What company do you represent? (Type 'skip' to leave blank)");
-        }
-        return;
-    }
-    
-    // Collect company
-    if (!this.leadData.company && this.leadData.company !== 'skipped') {
-        if (messageLower === 'skip') {
-            this.leadData.company = 'skipped';
-            this.addBotMessage("Got it! Anything else you'd like to tell us? (Or type 'skip' to finish)");
-        } else {
-            this.leadData.company = message;
-            this.addBotMessage("Excellent! Anything else you'd like to tell us? (Or type 'skip' to finish)");
-        }
-        return;
-    }
-    
-    // Collect final message and submit
-    if (messageLower === 'skip') {
-        this.leadData.message = '';
-    } else {
-        this.leadData.message = message;
-    }
-    
-    await this.submitLead();
-},
+        /**
+         * Handle lead input during collection
+         */
+        handleLeadInput: async function(message) {
+            const messageLower = message.toLowerCase().trim();
+            
+            // Check if user wants to cancel lead collection
+            if (messageLower === 'cancel' || messageLower === 'nevermind' || messageLower === 'skip' || messageLower === 'back') {
+                this.leadCollectionMode = false;
+                this.leadData = {};
+                this.addBotMessage("No problem! Lead collection cancelled. Feel free to ask me any questions about our services!");
+                return;
+            }
+            
+            // Check if user is asking a question instead of providing lead info
+            const questionIndicators = ['what', 'how', 'when', 'where', 'why', 'who', 'can', 'do you', 'tell me', '?'];
+            const isQuestion = questionIndicators.some(indicator => messageLower.includes(indicator));
+            
+            if (isQuestion && !this.leadData.name) {
+                // User is asking a question at the start of lead collection
+                this.leadCollectionMode = false;
+                this.leadData = {};
+                
+                // Forward the question to the normal chat handler
+                this.conversationHistory.push({ role: 'user', content: message });
+                this.showTyping();
+                
+                try {
+                    const response = await fetch(`${this.apiUrl}/api/chat`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            message: message,
+                            client_id: this.clientId,
+                            context: {
+                                conversation_history: this.conversationHistory
+                            }
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    this.hideTyping();
+                    
+                    if (data.success) {
+                        if (data.trigger_lead_collection) {
+                            this.startLeadCollection(data.extracted_email);
+                        } else {
+                            this.addBotMessage(data.response);
+                            this.conversationHistory.push({ role: 'bot', content: data.response });
+                        }
+                    }
+                } catch (error) {
+                    this.hideTyping();
+                    this.addBotMessage('Sorry, something went wrong. Please try again.');
+                }
+                return;
+            }
+            
+            // Collect name
+            if (!this.leadData.name) {
+                this.leadData.name = message;
+                
+                if (this.leadData.email) {
+                    this.addBotMessage("Great! And your phone number? (Type 'skip' if you'd prefer not to share)");
+                } else {
+                    this.addBotMessage("Thanks! What's your email address?");
+                }
+                return;
+            }
+            
+            // Collect email
+            if (!this.leadData.email) {
+                if (this.isValidEmail(message)) {
+                    this.leadData.email = message;
+                    this.addBotMessage("Perfect! And your phone number? (Type 'skip' to leave blank)");
+                } else {
+                    this.addBotMessage("That doesn't look like a valid email. Can you try again? (Or type 'cancel' to go back to chatting)");
+                }
+                return;
+            }
+            
+            // Collect phone
+            if (!this.leadData.phone && this.leadData.phone !== 'skipped') {
+                if (messageLower === 'skip') {
+                    this.leadData.phone = 'skipped';
+                    this.addBotMessage("No worries! What company do you represent? (Type 'skip' to leave blank)");
+                } else {
+                    this.leadData.phone = message;
+                    this.addBotMessage("Thanks! What company do you represent? (Type 'skip' to leave blank)");
+                }
+                return;
+            }
+            
+            // Collect company
+            if (!this.leadData.company && this.leadData.company !== 'skipped') {
+                if (messageLower === 'skip') {
+                    this.leadData.company = 'skipped';
+                    this.addBotMessage("Got it! Anything else you'd like to tell us? (Or type 'skip' to finish)");
+                } else {
+                    this.leadData.company = message;
+                    this.addBotMessage("Excellent! Anything else you'd like to tell us? (Or type 'skip' to finish)");
+                }
+                return;
+            }
+            
+            // Collect final message and submit
+            if (messageLower === 'skip') {
+                this.leadData.message = '';
+            } else {
+                this.leadData.message = message;
+            }
+            
+            await this.submitLead();
+        },
         
         /**
          * Submit lead to API
@@ -418,6 +457,66 @@ handleLeadInput: async function(message) {
             `;
             
             messagesContainer.appendChild(messageEl);
+            this.scrollToBottom();
+        },
+        
+        /**
+         * Add suggested questions as clickable buttons
+         */
+        addSuggestedQuestions: function(questions) {
+            const messagesContainer = document.getElementById('chatbot-messages');
+            
+            const suggestionsEl = document.createElement('div');
+            suggestionsEl.className = 'message bot';
+            suggestionsEl.id = 'suggested-questions';
+            suggestionsEl.innerHTML = `
+                <img src="${this.config?.branding.bot_avatar || ''}" alt="Bot" class="message-avatar" onerror="this.style.display='none'">
+                <div class="message-content">
+                    <div style="margin-bottom: 8px; font-weight: 600;">Try asking:</div>
+                    <div class="suggestion-buttons">
+                        ${questions.map(q => `<button class="suggestion-btn" onclick="window.ChatbotWidget.sendSuggestedQuestion('${q}')">${q}</button>`).join('')}
+                    </div>
+                </div>
+            `;
+            
+            messagesContainer.appendChild(suggestionsEl);
+            this.scrollToBottom();
+        },
+        
+        /**
+         * Handle suggested question click
+         */
+        sendSuggestedQuestion: function(question) {
+            // Remove suggestion buttons
+            const suggestionsEl = document.getElementById('suggested-questions');
+            if (suggestionsEl) {
+                suggestionsEl.remove();
+            }
+            
+            // Set input value and send
+            const inputField = document.getElementById('chatbot-input-field');
+            inputField.value = question;
+            this.sendMessage();
+        },
+        
+        /**
+         * Add a contact button for fallback scenarios
+         */
+        addContactButton: function() {
+            const messagesContainer = document.getElementById('chatbot-messages');
+            
+            const contactEl = document.createElement('div');
+            contactEl.className = 'message bot';
+            contactEl.innerHTML = `
+                <img src="${this.config?.branding.bot_avatar || ''}" alt="Bot" class="message-avatar" onerror="this.style.display='none'">
+                <div class="message-content">
+                    <button class="contact-cta-btn" onclick="window.ChatbotWidget.sendSuggestedQuestion('contact')">
+                        💬 Talk to a Human
+                    </button>
+                </div>
+            `;
+            
+            messagesContainer.appendChild(contactEl);
             this.scrollToBottom();
         },
         

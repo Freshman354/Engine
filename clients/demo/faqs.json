@@ -1,16 +1,52 @@
 {
   "faqs": [
     {
-      "id": "demo_faq_1",
-      "triggers": ["demo", "trial", "test"],
-      "question": "Can I try a demo?",
-      "answer": "Absolutely! I can set up a personalized demo for you. Let me collect your information - what's your name?"
+      "id": "demo_1",
+      "triggers": ["hours", "open", "available", "time", "when"],
+      "question": "What are your hours?",
+      "answer": "We're here to help Monday through Friday, 9 AM - 6 PM EST! 🕒\n\nNeed immediate assistance outside these hours? Type 'contact' and we'll reach out first thing in the morning!"
     },
     {
-      "id": "demo_faq_2",
-      "triggers": ["features", "what do you do", "capabilities"],
+      "id": "demo_2",
+      "triggers": ["price", "pricing", "cost", "how much", "payment", "plans"],
+      "question": "What are your prices?",
+      "answer": "Great question! Our pricing is customized based on your needs:\n\n💼 Starter: $49/mo (up to 5 clients)\n🚀 Agency: $149/mo (unlimited clients)\n⚡ Enterprise: Custom (white-glove support)\n\nWant a personalized quote? Just type 'contact' or 'demo'!"
+    },
+    {
+      "id": "demo_3",
+      "triggers": ["demo", "trial", "test", "try"],
+      "question": "Can I try a demo?",
+      "answer": "You're already in one! 🎉 This is our live demo chatbot.\n\nWant to see how it works for YOUR business? I can set up a personalized demo. Just let me know your name and email, and we'll get you started!"
+    },
+    {
+      "id": "demo_4",
+      "triggers": ["features", "what do you do", "capabilities", "offer"],
       "question": "What features do you offer?",
-      "answer": "We offer enterprise-grade solutions including AI automation, analytics dashboards, and 24/7 support. Interested in learning more? Type 'contact'!"
+      "answer": "Here's what makes us special:\n\n✅ White-label branding (your logo, colors)\n✅ Conversational lead collection\n✅ Multi-client management\n✅ One-line embed on any website\n✅ Analytics & reporting\n✅ 24/7 availability\n\nWant to learn more about a specific feature? Just ask!"
+    },
+    {
+      "id": "demo_5",
+      "triggers": ["contact", "email", "phone", "reach", "speak", "human"],
+      "question": "How can I contact you?",
+      "answer": "I'd love to connect you with our team! Let me collect a few quick details so someone can reach out. What's your name?"
+    },
+    {
+      "id": "demo_6",
+      "triggers": ["setup", "install", "integrate", "embed"],
+      "question": "How do I set it up?",
+      "answer": "Super easy! Just 3 steps:\n\n1️⃣ Copy one line of code\n2️⃣ Paste it before </body> on your site\n3️⃣ Done! ✅\n\nThe whole process takes about 2 minutes. Want to see the exact code? Type 'embed code'!"
+    },
+    {
+      "id": "demo_7",
+      "triggers": ["support", "help", "question"],
+      "question": "What kind of support do you provide?",
+      "answer": "We've got your back! All plans include:\n\n📧 Email support (24hr response)\n💬 Live chat during business hours\n📚 Documentation & video tutorials\n\nAgency & Enterprise plans also get priority support and onboarding calls!"
+    },
+    {
+      "id": "demo_8",
+      "triggers": ["customize", "branding", "white label"],
+      "question": "Can I customize the branding?",
+      "answer": "Absolutely! You control:\n\n🎨 Colors (primary & secondary)\n🖼️ Logo & bot avatar\n💬 Bot name & personality\n✍️ All messages & responses\n\nIt's 100% white-label — zero mention of us anywhere!"
     }
   ]
 }
