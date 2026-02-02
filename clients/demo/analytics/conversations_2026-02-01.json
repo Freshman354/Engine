@@ -1,0 +1,39 @@
+{
+  "conversations": [
+    {
+      "timestamp": "2026-02-01T02:01:08.081714",
+      "user_message": "How much does it cost?",
+      "bot_response": "Great question! Our pricing is customized based on your needs:\n\n\ud83d\udcbc Starter: $49/mo (up to 5 clients)\n\ud83d\ude80 Agency: $149/mo (unlimited clients)\n\u26a1 Enterprise: Custom (white-glove support)\n\nWant a personalize",
+      "matched_faq": "matched",
+      "matched": true
+    },
+    {
+      "timestamp": "2026-02-01T02:03:09.711783",
+      "user_message": "Can I customize the branding?",
+      "bot_response": "Absolutely! You control:\n\n\ud83c\udfa8 Colors (primary & secondary)\n\ud83d\uddbc\ufe0f Logo & bot avatar\n\ud83d\udcac Bot name & personality\n\u270d\ufe0f All messages & responses\n\nIt's 100% white-label \u2014 zero mention of us anywhere!",
+      "matched_faq": "matched",
+      "matched": true
+    },
+    {
+      "timestamp": "2026-02-01T02:04:01.127869",
+      "user_message": "what support do you provide",
+      "bot_response": "We've got your back! All plans include:\n\n\ud83d\udce7 Email support (24hr response)\n\ud83d\udcac Live chat during business hours\n\ud83d\udcda Documentation & video tutorials\n\nAgency & Enterprise plans also get priority support and on",
+      "matched_faq": "matched",
+      "matched": true
+    },
+    {
+      "timestamp": "2026-02-01T02:06:05.650167",
+      "user_message": "your company email",
+      "bot_response": "I'd love to connect you with our team! Let me collect a few quick details so someone can reach out. What's your name?",
+      "matched_faq": "matched",
+      "matched": true
+    },
+    {
+      "timestamp": "2026-02-01T02:06:35.883417",
+      "user_message": "doyou sell pizza",
+      "bot_response": "Hmm, I'm not sure about that one. But I'd love to help! You can:\n\n1\ufe0f\u20e3 Ask another question\n2\ufe0f\u20e3 Type 'contact' to speak with our team\n3\ufe0f\u20e3 Browse our FAQ at democompany.com/faq",
+      "matched_faq": null,
+      "matched": false
+    }
+  ]
+}

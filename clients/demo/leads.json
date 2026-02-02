@@ -12,6 +12,19 @@
       "id": "lead_1",
       "timestamp": "2026-01-31T17:56:54.320940",
       "client_id": "demo"
+    },
+    {
+      "name": "Tobias",
+      "email": "tobias@gmail.com",
+      "phone": "3758475863763",
+      "company": "nord",
+      "message": "nothing",
+      "conversation_snippet": "Tobias | tobias@gmail.com | 3758475863763 | nord | nothing",
+      "source_url": "http://127.0.0.1:5000/widget?client_id=demo",
+      "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36",
+      "id": "lead_2",
+      "timestamp": "2026-02-01T02:02:08.291128",
+      "client_id": "demo"
     }
   ]
 }

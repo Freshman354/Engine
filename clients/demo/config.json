@@ -5,7 +5,7 @@
     "logo_url": "https://via.placeholder.com/150x50?text=Demo+Co",
     "primary_color": "#667eea",
     "secondary_color": "#764ba2",
-    "bot_avatar": "https://via.placeholder.com/40?text=🤖"
+    "bot_avatar": "https://via.placeholder.com/40?text=\ud83e\udd16"
   },
   "contact": {
     "email": "hello@democompany.com",
@@ -15,9 +15,18 @@
   },
   "bot_settings": {
     "bot_name": "Demo Assistant",
-    "welcome_message": "👋 Hi! I'm Demo Assistant. I can answer questions about our services, pricing, and more. Try asking:\n\n• What are your hours?\n• How much does it cost?\n• Can I get a demo?",
+    "welcome_message": "\ud83d\udc4b Hi! I'm Demo Assistant. I can answer questions about our services, pricing, and more. Try asking:\n\n\u2022 What are your hours?\n\u2022 How much does it cost?\n\u2022 Can I get a demo?",
     "tone": "friendly",
-    "fallback_message": "Hmm, I'm not sure about that one. But I'd love to help! You can:\n\n1️⃣ Ask another question\n2️⃣ Type 'contact' to speak with our team\n3️⃣ Browse our FAQ at democompany.com/faq",
-    "lead_triggers": ["contact", "sales", "pricing", "demo", "agent", "human", "speak", "talk"]
+    "fallback_message": "Hmm, I'm not sure about that one. But I'd love to help! You can:\n\n1\ufe0f\u20e3 Ask another question\n2\ufe0f\u20e3 Type 'contact' to speak with our team\n3\ufe0f\u20e3 Browse our FAQ at democompany.com/faq",
+    "lead_triggers": [
+      "contact",
+      "sales",
+      "pricing",
+      "demo",
+      "agent",
+      "human",
+      "speak",
+      "talk"
+    ]
   }
 }

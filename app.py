@@ -113,6 +113,42 @@ def backup_all_clients():
     except Exception as e:
         app.logger.error(f'Backup all failed: {e}')
         return False
+    
+def log_conversation(client_id, message, response, matched_faq_id=None):
+    """Log conversation for analytics"""
+    try:
+        log_dir = os.path.join('clients', client_id, 'analytics')
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        
+        # Use daily log files
+        today = datetime.now().strftime('%Y-%m-%d')
+        log_file = os.path.join(log_dir, f'conversations_{today}.json')
+        
+        # Load existing logs
+        if os.path.exists(log_file):
+            with open(log_file, 'r', encoding='utf-8') as f:
+                logs = json.load(f)
+        else:
+            logs = {'conversations': []}
+        
+        # Add new conversation
+        logs['conversations'].append({
+            'timestamp': datetime.now().isoformat(),
+            'user_message': message,
+            'bot_response': response[:200],  # Truncate long responses
+            'matched_faq': matched_faq_id,
+            'matched': matched_faq_id is not None
+        })
+        
+        # Save
+        with open(log_file, 'w', encoding='utf-8') as f:
+            json.dump(logs, f, indent=2)
+        
+        return True
+    except Exception as e:
+        app.logger.error(f'Error logging conversation: {e}')
+        return False   
 
 # =====================================================================
 # UTILITY FUNCTIONS
@@ -322,7 +358,9 @@ def chat():
                 'suggestions': similar_questions
             })
         elif response:
-            # Found a match
+            # Log the conversation
+            log_conversation(client_id, message, response, matched_faq_id='matched')
+    
             return jsonify({
                 'success': True,
                 'response': response,
@@ -331,8 +369,11 @@ def chat():
         else:
             # Complete fallback - no matches at all
             fallback = config['bot_settings'].get('fallback_message', 
-                "I'm not sure about that. Would you like to speak with a human?")
-            
+    "I'm not sure about that. Would you like to speak with a human?")
+
+            # Log unanswered question
+            log_conversation(client_id, message, fallback, matched_faq_id=None)
+
             return jsonify({
                 'success': True,
                 'response': fallback,
@@ -788,6 +829,189 @@ def trigger_backup():
 def embed_generator():
     """Generate embed code for clients"""
     return render_template('embed-generator.html')
+
+@app.route('/customize')
+def customize_page():
+    """Theme customization admin page"""
+    return render_template('customize.html')
+
+@app.route('/api/admin/customize', methods=['POST'])
+def save_customization():
+    """Save client customization (add authentication in production!)"""
+    try:
+        data = request.json
+        client_id = data.get('client_id', 'demo')
+        
+        # TODO: Add authentication here before production
+        # For now, anyone can customize (fine for testing)
+        
+        # Validate client_id
+        if not re.match(r'^[a-zA-Z0-9_-]+$', client_id):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid client ID'
+            }), 400
+        
+        # Prepare config data
+        config_data = {
+            'client_id': client_id,
+            'branding': data.get('branding', {}),
+            'contact': data.get('contact', {}),
+            'bot_settings': data.get('bot_settings', {})
+        }
+        
+        # Save to file
+        client_path = os.path.join('clients', client_id)
+        
+        # Create client directory if it doesn't exist
+        if not os.path.exists(client_path):
+            os.makedirs(client_path)
+            
+            # Create empty FAQs and leads files
+            with open(os.path.join(client_path, 'faqs.json'), 'w') as f:
+                json.dump({'faqs': []}, f, indent=2)
+            
+            with open(os.path.join(client_path, 'leads.json'), 'w') as f:
+                json.dump({'leads': []}, f, indent=2)
+        
+        # Save config
+        config_path = os.path.join(client_path, 'config.json')
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config_data, f, indent=2)
+        
+        # Backup
+        backup_client_data(client_id)
+        
+        app.logger.info(f'Customization saved for client: {client_id}')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Customization saved successfully',
+            'client_id': client_id
+        })
+        
+    except Exception as e:
+        app.logger.error(f'Error saving customization: {e}')
+        return jsonify({
+            'success': False,
+            'error': 'Failed to save customization'
+        }), 500
+
+@app.route('/analytics')
+def analytics_page():
+    """Analytics dashboard page"""
+    return render_template('analytics.html')
+
+@app.route('/api/admin/analytics', methods=['GET'])
+def get_analytics():
+    """Get analytics data for a client"""
+    try:
+        client_id = request.args.get('client_id', 'demo')
+        date_range = request.args.get('range', 'week')
+        
+        # Calculate date range
+        now = datetime.now()
+        if date_range == 'today':
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif date_range == 'week':
+            start_date = now - timedelta(days=7)
+        elif date_range == 'month':
+            start_date = now - timedelta(days=30)
+        else:  # all
+            start_date = datetime(2020, 1, 1)
+        
+        # Load conversation logs
+        analytics_dir = os.path.join('clients', client_id, 'analytics')
+        all_conversations = []
+        
+        if os.path.exists(analytics_dir):
+            for filename in os.listdir(analytics_dir):
+                if filename.startswith('conversations_'):
+                    file_path = os.path.join(analytics_dir, filename)
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            all_conversations.extend(data.get('conversations', []))
+                    except:
+                        continue
+        
+        # Filter by date range
+        filtered_conversations = [
+            c for c in all_conversations
+            if datetime.fromisoformat(c['timestamp']) >= start_date
+        ]
+        
+        # Load leads
+        leads_path = os.path.join(get_client_path(client_id), 'leads.json')
+        total_leads = 0
+        if os.path.exists(leads_path):
+            with open(leads_path, 'r', encoding='utf-8') as f:
+                leads_data = json.load(f)
+                leads = [
+                    l for l in leads_data.get('leads', [])
+                    if datetime.fromisoformat(l['timestamp']) >= start_date
+                ]
+                total_leads = len(leads)
+        
+        # Calculate stats
+        total_conversations = len(filtered_conversations)
+        answered = sum(1 for c in filtered_conversations if c.get('matched'))
+        unanswered = total_conversations - answered
+        answer_rate = int((answered / total_conversations * 100)) if total_conversations > 0 else 0
+        
+        # Timeline data (last 7 days)
+        timeline = []
+        for i in range(7):
+            date = (now - timedelta(days=6-i)).strftime('%Y-%m-%d')
+            count = sum(1 for c in filtered_conversations if c['timestamp'].startswith(date))
+            timeline.append({
+                'date': date,
+                'count': count
+            })
+        
+        # Top questions (group by user message)
+        question_counts = {}
+        for conv in filtered_conversations:
+            if conv.get('matched'):
+                msg = conv['user_message']
+                question_counts[msg] = question_counts.get(msg, 0) + 1
+        
+        top_questions = [
+            {'question': q, 'count': c}
+            for q, c in sorted(question_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        ]
+        
+        # Unanswered questions
+        unanswered_counts = {}
+        for conv in filtered_conversations:
+            if not conv.get('matched'):
+                msg = conv['user_message']
+                unanswered_counts[msg] = unanswered_counts.get(msg, 0) + 1
+        
+        unanswered_questions = [
+            {'question': q, 'count': c}
+            for q, c in sorted(unanswered_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        ]
+        
+        return jsonify({
+            'success': True,
+            'analytics': {
+                'total_conversations': total_conversations,
+                'total_leads': total_leads,
+                'answer_rate': answer_rate,
+                'unanswered_count': unanswered,
+                'timeline': timeline,
+                'top_questions': top_questions,
+                'unanswered': unanswered_questions
+            }
+        })
+        
+    except Exception as e:
+        app.logger.error(f'Error getting analytics: {e}')
+        return jsonify({
+            'success': False,
+            'error': 'Failed to load analytics'
+        }), 500
 
 # =====================================================================
 # RUN SERVER

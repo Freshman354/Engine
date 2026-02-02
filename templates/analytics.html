@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard - Chatbot Admin</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f9fafb;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 20px 40px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            color: #1f2937;
+        }
+        
+        .header p {
+            color: #6b7280;
+            margin-top: 4px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px;
+        }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        
+        .controls label {
+            font-weight: 600;
+            color: #374151;
+        }
+        
+        .controls select {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .controls button {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .controls button:hover {
+            background: #5568d3;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #667eea;
+        }
+        
+        .stat-card h3 {
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .stat-card .value {
+            font-size: 36px;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 4px;
+        }
+        
+        .stat-card .change {
+            font-size: 13px;
+            color: #10b981;
+        }
+        
+        .stat-card.negative .change {
+            color: #ef4444;
+        }
+        
+        .chart-section {
+            background: white;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+        }
+        
+        .chart-section h2 {
+            font-size: 18px;
+            color: #1f2937;
+            margin-bottom: 24px;
+            font-weight: 600;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        .questions-list {
+            background: white;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .question-item {
+            padding: 16px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .question-item:last-child {
+            border-bottom: none;
+        }
+        
+        .question-text {
+            color: #374151;
+            flex: 1;
+        }
+        
+        .question-count {
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        
+        .unanswered {
+            background: #ef4444;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Analytics Dashboard</h1>
+        <p>Track conversations, leads, and performance</p>
+    </div>
+    
+    <div class="container">
+        <div class="controls">
+            <label for="client-select">Client:</label>
+            <select id="client-select">
+                <option value="default">Default</option>
+                <option value="demo">Demo</option>
+            </select>
+            
+            <label for="date-range">Period:</label>
+            <select id="date-range">
+                <option value="today">Today</option>
+                <option value="week">Last 7 Days</option>
+                <option value="month">Last 30 Days</option>
+                <option value="all">All Time</option>
+            </select>
+            
+            <button onclick="loadAnalytics()">🔄 Refresh</button>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Conversations</h3>
+                <div class="value" id="total-conversations">0</div>
+                <div class="change">↗ +0% from last period</div>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Leads Captured</h3>
+                <div class="value" id="total-leads">0</div>
+                <div class="change">↗ +0% conversion rate</div>
+            </div>
+            
+            <div class="stat-card">
+                <h3>Questions Answered</h3>
+                <div class="value" id="answered-rate">0%</div>
+                <div class="change">Matched FAQ responses</div>
+            </div>
+            
+            <div class="stat-card negative">
+                <h3>Unanswered Questions</h3>
+                <div class="value" id="unanswered-count">0</div>
+                <div class="change">↘ Need FAQ improvement</div>
+            </div>
+        </div>
+        
+        <div class="chart-section">
+            <h2>📈 Conversations Over Time</h2>
+            <div class="chart-container">
+                <canvas id="conversationsChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="questions-list">
+            <h2 style="font-size: 18px; color: #1f2937; margin-bottom: 24px; font-weight: 600;">
+                💬 Most Asked Questions
+            </h2>
+            <div id="top-questions">
+                <div class="loading">Loading analytics data...</div>
+            </div>
+        </div>
+        
+        <div class="questions-list" style="margin-top: 24px;">
+            <h2 style="font-size: 18px; color: #1f2937; margin-bottom: 24px; font-weight: 600;">
+                ❓ Unanswered Questions
+            </h2>
+            <div id="unanswered-questions">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let conversationsChart = null;
+        
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const clientId = urlParams.get('client_id') || 'demo';
+            document.getElementById('client-select').value = clientId;
+            loadAnalytics();
+        };
+        
+        async function loadAnalytics() {
+            const clientId = document.getElementById('client-select').value;
+            const dateRange = document.getElementById('date-range').value;
+            
+            try {
+                const response = await fetch(`/api/admin/analytics?client_id=${clientId}&range=${dateRange}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateStats(data.analytics);
+                    updateChart(data.analytics.timeline);
+                    updateTopQuestions(data.analytics.top_questions);
+                    updateUnansweredQuestions(data.analytics.unanswered);
+                }
+            } catch (error) {
+                console.error('Error loading analytics:', error);
+            }
+        }
+        
+        function updateStats(analytics) {
+            document.getElementById('total-conversations').textContent = analytics.total_conversations;
+            document.getElementById('total-leads').textContent = analytics.total_leads;
+            document.getElementById('answered-rate').textContent = analytics.answer_rate + '%';
+            document.getElementById('unanswered-count').textContent = analytics.unanswered_count;
+        }
+        
+        function updateChart(timeline) {
+            const ctx = document.getElementById('conversationsChart');
+            
+            if (conversationsChart) {
+                conversationsChart.destroy();
+            }
+            
+            conversationsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timeline.map(t => t.date),
+                    datasets: [{
+                        label: 'Conversations',
+                        data: timeline.map(t => t.count),
+                        borderColor: '#667eea',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateTopQuestions(questions) {
+            const container = document.getElementById('top-questions');
+            
+            if (questions.length === 0) {
+                container.innerHTML = '<div class="loading">No questions yet</div>';
+                return;
+            }
+            
+            container.innerHTML = questions.map(q => `
+                <div class="question-item">
+                    <div class="question-text">${escapeHtml(q.question)}</div>
+                    <div class="question-count">${q.count}</div>
+                </div>
+            `).join('');
+        }
+        
+        function updateUnansweredQuestions(questions) {
+            const container = document.getElementById('unanswered-questions');
+            
+            if (questions.length === 0) {
+                container.innerHTML = '<div class="loading">All questions answered! 🎉</div>';
+                return;
+            }
+            
+            container.innerHTML = questions.map(q => `
+                <div class="question-item">
+                    <div class="question-text">${escapeHtml(q.question)}</div>
+                    <div class="question-count unanswered">${q.count}</div>
+                </div>
+            `).join('');
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
