@@ -1013,6 +1013,15 @@ def get_analytics():
             'error': 'Failed to load analytics'
         }), 500
 
+@app.route('/sales')
+def sales_page():
+    return render_template('sales-page.html')
+
+@app.route('/thank-you')
+def thank_you_page():
+    """Thank you page after payment"""
+    return render_template('thank-you.html')
+
 # =====================================================================
 # RUN SERVER
 # =====================================================================

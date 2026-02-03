@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>White-Label FAQ Chatbot for Agencies</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+        }
+        
+        .hero {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 100px 20px;
+            text-align: center;
+        }
+        
+        .hero h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            line-height: 1.2;
+        }
+        
+        .hero p {
+            font-size: 24px;
+            margin-bottom: 40px;
+            opacity: 0.95;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            padding: 18px 40px;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 80px 20px;
+        }
+        
+        .problem {
+            text-align: center;
+            margin-bottom: 80px;
+        }
+        
+        .problem h2 {
+            font-size: 36px;
+            color: #1f2937;
+            margin-bottom: 20px;
+        }
+        
+        .problem p {
+            font-size: 20px;
+            color: #6b7280;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+            margin-bottom: 80px;
+        }
+        
+        .feature {
+            text-align: center;
+            padding: 40px;
+            background: #f9fafb;
+            border-radius: 12px;
+        }
+        
+        .feature-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        .feature h3 {
+            font-size: 24px;
+            color: #1f2937;
+            margin-bottom: 12px;
+        }
+        
+        .feature p {
+            color: #6b7280;
+            font-size: 16px;
+        }
+        
+        .pricing {
+            background: #f9fafb;
+            padding: 80px 20px;
+            text-align: center;
+        }
+        
+        .pricing h2 {
+            font-size: 36px;
+            color: #1f2937;
+            margin-bottom: 60px;
+        }
+        
+        .pricing-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .pricing-card {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .pricing-card.popular {
+            border: 3px solid #667eea;
+            position: relative;
+        }
+        
+        .popular-badge {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #667eea;
+            color: white;
+            padding: 6px 20px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .plan-name {
+            font-size: 24px;
+            color: #1f2937;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .plan-price {
+            font-size: 48px;
+            color: #667eea;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        
+        .plan-price span {
+            font-size: 18px;
+            color: #6b7280;
+        }
+        
+        .plan-features {
+            list-style: none;
+            margin: 30px 0;
+            text-align: left;
+        }
+        
+        .plan-features li {
+            padding: 12px 0;
+            color: #374151;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .plan-features li:before {
+            content: "✓ ";
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        
+        .plan-button {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-top: 20px;
+            transition: background 0.2s;
+        }
+        
+        .plan-button:hover {
+            background: #5568d3;
+        }
+        
+        .testimonials {
+            padding: 80px 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .testimonials h2 {
+            font-size: 36px;
+            color: #1f2937;
+            text-align: center;
+            margin-bottom: 60px;
+        }
+        
+        .testimonial {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        .testimonial-text {
+            font-size: 18px;
+            color: #374151;
+            font-style: italic;
+            margin-bottom: 20px;
+        }
+        
+        .testimonial-author {
+            font-weight: 600;
+            color: #1f2937;
+        }
+        
+        .cta-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 80px 20px;
+            text-align: center;
+        }
+        
+        .cta-section h2 {
+            font-size: 42px;
+            margin-bottom: 20px;
+        }
+        
+        .cta-section p {
+            font-size: 20px;
+            margin-bottom: 40px;
+            opacity: 0.95;
+        }
+        
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 32px;
+            }
+            
+            .hero p {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <h1>White-Label FAQ Chatbot<br>Built for Agencies</h1>
+        <p>One deployment. Unlimited clients. Complete customization.</p>
+        <a href="#pricing" class="cta-button">View Pricing →</a>
+    </div>
+    
+    <div class="container">
+        <div class="problem">
+            <h2>The Problem with Current Chatbots</h2>
+            <p>Tools like Intercom and Drift charge $74-$300 per client. If you manage 10 clients, that's $740-$3,000/month. Plus, they're complex, time-consuming, and not truly white-label.</p>
+        </div>
+        
+        <div class="features">
+            <div class="feature">
+                <div class="feature-icon">🎨</div>
+                <h3>True White-Label</h3>
+                <p>Your logo, colors, domain. Zero mention of us anywhere. Complete ownership.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">⚡</div>
+                <h3>10-Minute Setup</h3>
+                <p>One line of code. Works on any website. WordPress, Shopify, custom sites.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">📊</div>
+                <h3>Built-In Analytics</h3>
+                <p>Show clients ROI with conversation tracking, lead capture, and insights.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">💬</div>
+                <h3>Smart Lead Collection</h3>
+                <p>Conversational lead capture that feels natural, not pushy forms.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">🔧</div>
+                <h3>Visual Customization</h3>
+                <p>No coding needed. Color picker, logo upload, instant preview.</p>
+            </div>
+            
+            <div class="feature">
+                <div class="feature-icon">∞</div>
+                <h3>Unlimited Clients</h3>
+                <p>One price for all your clients. No per-seat, per-contact fees.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="pricing" id="pricing">
+        <h2>Simple, Transparent Pricing</h2>
+        
+        <div class="pricing-cards">
+            <div class="pricing-card">
+                <div class="plan-name">Starter</div>
+                <div class="plan-price">$49<span>/month</span></div>
+                <ul class="plan-features">
+                    <li>Up to 5 clients</li>
+                    <li>Unlimited conversations</li>
+                    <li>Lead collection</li>
+                    <li>Basic analytics</li>
+                    <li>Email support</li>
+                </ul>
+                <a href="https://flutterwave.com/pay/jdnpu3vt2i56" class="plan-button">Get Started</a>
+            </div>
+            
+            <div class="pricing-card popular">
+                <div class="popular-badge">Most Popular</div>
+                <div class="plan-name">Agency</div>
+                <div class="plan-price">$149<span>/month</span></div>
+                <ul class="plan-features">
+                    <li>Unlimited clients</li>
+                    <li>Unlimited conversations</li>
+                    <li>Advanced analytics</li>
+                    <li>Priority support</li>
+                    <li>Custom integrations</li>
+                    <li>Onboarding call</li>
+                </ul>
+                <a href="https://flutterwave.com/pay/3sqkpvu6ihpk" class="plan-button">Get Started</a>
+            </div>
+            
+            <div class="pricing-card">
+                <div class="plan-name">Enterprise</div>
+                <div class="plan-price">Custom</div>
+                <ul class="plan-features">
+                    <li>Everything in Agency</li>
+                    <li>Self-hosted option</li>
+                    <li>Custom features</li>
+                    <li>Dedicated support</li>
+                    <li>SLA guarantee</li>
+                    <li>White-glove setup</li>
+                </ul>
+                <a href="mailto:your@email.com?subject=Enterprise Plan Inquiry" class="plan-button">Contact Sales</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="testimonials">
+        <h2>What Agencies Say</h2>
+        
+        <div class="testimonial">
+            <div class="testimonial-text">"We were spending $370/month on Intercom for 5 clients. Now we pay $149 for all 15 clients. The ROI was immediate, and our clients love it."</div>
+            <div class="testimonial-author">— Sarah M., Digital Marketing Agency</div>
+        </div>
+        
+        <div class="testimonial">
+            <div class="testimonial-text">"Setup took literally 10 minutes. We've added it to all our client sites and they think we built it custom for them. Perfect white-label solution."</div>
+            <div class="testimonial-author">— Mike R., Web Development Agency</div>
+        </div>
+    </div>
+    
+    <div class="cta-section">
+        <h2>Ready to Add Recurring Revenue?</h2>
+        <p>Start offering chatbots to your clients today. No long-term contracts.</p>
+        <a href="https://faqbot-bvsm.onrender.com/widget?client_id=demo" class="cta-button" style="color: #667eea;">Try Live Demo</a>
+    </div>
+    
+    <!-- Add your own chatbot -->
+    <script src="https://faqbot-bvsm.onrender.com/static/embed.js?client_id=demo"></script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thank You for Your Purchase!</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 60px 40px;
+            max-width: 600px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        .success-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            animation: bounce 1s ease;
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+        
+        h1 {
+            font-size: 36px;
+            color: #1f2937;
+            margin-bottom: 16px;
+        }
+        
+        .subtitle {
+            font-size: 18px;
+            color: #6b7280;
+            margin-bottom: 40px;
+        }
+        
+        .next-steps {
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 32px;
+            text-align: left;
+            margin-bottom: 32px;
+        }
+        
+        .next-steps h2 {
+            font-size: 20px;
+            color: #1f2937;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .step {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+            align-items: flex-start;
+        }
+        
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        
+        .step-content {
+            flex: 1;
+        }
+        
+        .step-content h3 {
+            font-size: 16px;
+            color: #1f2937;
+            margin-bottom: 6px;
+        }
+        
+        .step-content p {
+            color: #6b7280;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .contact-box {
+            background: #667eea;
+            color: white;
+            padding: 24px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+        }
+        
+        .contact-box h3 {
+            font-size: 18px;
+            margin-bottom: 12px;
+        }
+        
+        .contact-box p {
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+        
+        .contact-box a {
+            color: white;
+            text-decoration: underline;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            padding: 16px 32px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+        }
+        
+        .info-text {
+            color: #6b7280;
+            font-size: 14px;
+            margin-top: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="success-icon">🎉</div>
+        <h1>Payment Successful!</h1>
+        <p class="subtitle">Welcome aboard! We're excited to have you.</p>
+        
+        <div class="next-steps">
+            <h2>📋 What Happens Next</h2>
+            
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h3>Check Your Email</h3>
+                    <p>We've sent a confirmation email with your payment receipt and next steps.</p>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h3>Send Us Your Client Details</h3>
+                    <p>Reply to our email with your first 3 clients' info: company name, logo URL, and brand colors.</p>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <h3>We Set Everything Up</h3>
+                    <p>Within 24 hours, we'll have your chatbots customized and ready to deploy.</p>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <h3>Go Live!</h3>
+                    <p>You'll receive embed codes and instructions to add the chatbot to your client sites.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="contact-box">
+            <h3>📞 Need Help?</h3>
+            <p>Email: <a href="mailto:Assistly43@gmail.com">Assistly43@gmail.com</a></p>
+            <p>WhatsApp: <a href="https://wa.me/2349132462293">+234 913 246 2293</a></p>
+            <p>We typically respond within 2 hours!</p>
+        </div>
+        
+        <a href="https://faqbot-bvsm.onrender.com/" class="cta-button">Go to Dashboard</a>
+        
+        <p class="info-text">
+            Your subscription will renew automatically each month. 
+            You can cancel anytime from your account settings.
+        </p>
+    </div>
+</body>
+</html>
