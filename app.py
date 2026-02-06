@@ -399,8 +399,7 @@ def chat():
         
         # Sanitize inputs
         message = sanitize_input(data.get('message', ''))
-        client_id = sanitize_input(data.get('client_id', 'default'), max_length=50)
-        conversation_context = data.get('context', {})
+        client_id = sanitize_input(data.get('client_id', 'demo'), max_length=50)
         
         if not message:
             return jsonify({
@@ -408,134 +407,68 @@ def chat():
                 'error': 'Message is required'
             }), 400
         
-        # Get client and config from database
-        client = models.get_client_by_id(client_id)
-        if not client:
-            return jsonify({
-                'success': False,
-                'error': 'Client not found'
-            }), 404
+        # Get client from database
+        try:
+            client = models.get_client_by_id(client_id)
+            if not client:
+                # If client doesn't exist in database, use demo FAQs
+                app.logger.warning(f'Client not found: {client_id}, using demo FAQs')
+                faqs_list = [
+                    {
+                        "id": "demo_1",
+                        "question": "What are your hours?",
+                        "answer": "We're here Monday-Friday, 9 AM - 6 PM EST! 🕒",
+                        "triggers": ["hours", "time", "open", "available", "when"]
+                    },
+                    {
+                        "id": "demo_2",
+                        "question": "What are your prices?",
+                        "answer": "Starter: $49/mo | Agency: $149/mo | Enterprise: Custom pricing. Want details? Type 'contact'!",
+                        "triggers": ["price", "pricing", "cost", "how much", "payment"]
+                    }
+                ]
+                config = {}
+            else:
+                # Parse config
+                config = json.loads(client['branding_settings']) if client['branding_settings'] else {}
+                # Get FAQs from database
+                faqs_list = models.get_faqs(client_id)
+        except Exception as db_error:
+            app.logger.error(f'Database error: {db_error}')
+            # Fallback to demo FAQs
+            faqs_list = [
+                {
+                    "id": "demo_1",
+                    "question": "What are your hours?",
+                    "answer": "We're here Monday-Friday, 9 AM - 6 PM EST! 🕒",
+                    "triggers": ["hours", "time", "open", "available", "when"]
+                }
+            ]
+            config = {}
         
-        # Parse config
-        config = json.loads(client['branding_settings']) if client['branding_settings'] else {}
-        
-        # Get FAQs from database
-        faqs_list = models.get_faqs(client_id)
         faqs = {'faqs': faqs_list}
         
         # Get lead triggers from config
-        lead_triggers = config.get('bot_settings', {}).get('lead_triggers', [])
+        lead_triggers = config.get('bot_settings', {}).get('lead_triggers', ['contact', 'sales', 'demo'])
         
-        # Match FAQ or detect lead trigger
+        # Match FAQ
         response, extracted_email = match_faq(message, faqs, lead_triggers)
         
         # Handle lead collection trigger
         if response == "TRIGGER_LEAD_COLLECTION":
             return jsonify({
                 'success': True,
-                'response': f"I'd be happy to connect you with our team! To help us serve you better, may I have your name?",
+                'response': "I'd be happy to connect you with our team! To help us serve you better, may I have your name?",
                 'trigger_lead_collection': True,
                 'extracted_email': extracted_email,
                 'contact_info': config.get('contact', {})
             })
         
-        # Handle no match with suggestions
-        if response == "NO_MATCH_WITH_SUGGESTIONS":
-            similar_questions = extracted_email  # Reusing this variable for suggestions list
+        # Handle no match
+        if response == "NO_MATCH_WITH_SUGGESTIONS" or not response:
+            fallback = config.get('bot_settings', {}).get('fallback_message', 
+                "I'm not sure about that. Would you like to speak with a human? Type 'contact'!")
             
-            if similar_questions and len(similar_questions) > 0:
-                suggestion_text = "I'm not sure about that exact question, but here are some related topics:\n\n"
-                suggestion_text += "\n".join([f"• {q}" for q in similar_questions])
-                suggestion_text += "\n\nOr type 'contact' to speak with our team!"
-                
-                return jsonify({
-                    'success': True,
-                    'response': suggestion_text,
-                    'trigger_lead_collection': False,
-                    'suggestions': similar_questions
-                })
-            else:
-                response = None
-        
-        # Return matched FAQ response
-        if response:
-            # Log the conversation
-            log_conversation(client_id, message, response, matched_faq_id='matched')
-            
-            return jsonify({
-                'success': True,
-                'response': response,
-                'trigger_lead_collection': False
-            })
-        
-        # Complete fallback
-        fallback = config.get('bot_settings', {}).get('fallback_message', 
-            "I'm not sure about that. Would you like to speak with a human?")
-        
-        # Log unanswered question
-        log_conversation(client_id, message, fallback, matched_faq_id=None)
-        
-        return jsonify({
-            'success': True,
-            'response': fallback,
-            'trigger_lead_collection': False,
-            'show_contact_button': True
-        })
-        
-    except Exception as e:
-        app.logger.error(f'Error in chat endpoint: {e}')
-        return jsonify({
-            'success': False,
-            'error': 'Internal server error'
-        }), 500
-        
-        # Get lead triggers from config
-        lead_triggers = config['bot_settings'].get('lead_triggers', [])
-        
-        # Match FAQ or detect lead trigger
-        response, extracted_email = match_faq(message, faqs, lead_triggers)
-        
-        # Handle lead collection trigger
-        if response == "TRIGGER_LEAD_COLLECTION":
-            return jsonify({
-                'success': True,
-                'response': f"I'd be happy to connect you with our team! To help us serve you better, may I have your name?",
-                'trigger_lead_collection': True,
-                'extracted_email': extracted_email,
-                'contact_info': config['contact']
-            })
-        
-# Handle different response types
-        if response == "NO_MATCH_WITH_SUGGESTIONS":
-            # No exact match but found similar questions
-            similar_questions = extracted_email  # Reusing this parameter for suggestions
-            suggestion_text = "I'm not sure about that exact question, but here are some related topics:\n\n"
-            suggestion_text += "\n".join([f"• {q}" for q in similar_questions])
-            suggestion_text += "\n\nOr type 'contact' to speak with our team!"
-            
-            return jsonify({
-                'success': True,
-                'response': suggestion_text,
-                'trigger_lead_collection': False,
-                'suggestions': similar_questions
-            })
-        elif response:
-            # Log the conversation
-            log_conversation(client_id, message, response, matched_faq_id='matched')
-    
-            return jsonify({
-                'success': True,
-                'response': response,
-                'trigger_lead_collection': False
-            })
-        else:
-            # Complete fallback - no matches at all
-            fallback = config['bot_settings'].get('fallback_message', 
-    "I'm not sure about that. Would you like to speak with a human?")
-
-            # Log unanswered question
-            log_conversation(client_id, message, fallback, matched_faq_id=None)
-
             return jsonify({
                 'success': True,
                 'response': fallback,
@@ -543,12 +476,23 @@ def chat():
                 'show_contact_button': True
             })
         
+        # Return matched FAQ response
+        return jsonify({
+            'success': True,
+            'response': response,
+            'trigger_lead_collection': False
+        })
+        
     except Exception as e:
-        print(f"Error in chat endpoint: {e}")
+        app.logger.error(f'Error in chat endpoint: {e}')
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': 'Internal server error'
         }), 500
+        
+        
 
 @app.route('/api/lead', methods=['POST'])
 @limiter.limit("10 per hour")
@@ -1630,18 +1574,55 @@ def faq_manager_page():
 def manage_faqs():
     """Get or update FAQs for a client"""
     try:
-        client_id = request.args.get('client_id') or request.json.get('client_id')
+        # Get client_id from either query params or JSON body
+        if request.method == 'GET':
+            client_id = request.args.get('client_id')
+        else:
+            # For POST, try JSON first, fallback to form data
+            if request.is_json:
+                client_id = request.json.get('client_id')
+            else:
+                client_id = request.form.get('client_id')
+        
+        # Validate client_id
+        if not client_id:
+            return jsonify({
+                'success': False,
+                'error': 'Client ID is required'
+            }), 400
         
         # Verify ownership
         if not models.verify_client_ownership(current_user.id, client_id):
-            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+            return jsonify({
+                'success': False,
+                'error': 'Unauthorized'
+            }), 403
         
         if request.method == 'GET':
-            faqs = models.get_faqs(client_id)
-            return jsonify({'success': True, 'faqs': faqs})
+            # Get FAQs from database
+            try:
+                faqs = models.get_faqs(client_id)
+                return jsonify({
+                    'success': True,
+                    'faqs': faqs
+                })
+            except Exception as e:
+                app.logger.error(f'Error loading FAQs: {e}')
+                # Return empty list if error
+                return jsonify({
+                    'success': True,
+                    'faqs': []
+                })
         
         elif request.method == 'POST':
-            faqs_list = request.json.get('faqs', [])
+            # Get FAQs list from request
+            if request.is_json:
+                faqs_list = request.json.get('faqs', [])
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'Request must be JSON'
+                }), 400
             
             # Get user plan
             user = models.get_user_by_id(current_user.id)
@@ -1656,13 +1637,22 @@ def manage_faqs():
                     'upgrade_required': True
                 }), 403
             
+            # Save FAQs to database
             models.save_faqs(client_id, faqs_list)
             
-            return jsonify({'success': True, 'message': 'FAQs updated successfully'})
+            return jsonify({
+                'success': True,
+                'message': 'FAQs updated successfully'
+            })
             
     except Exception as e:
         app.logger.error(f'Error managing FAQs: {e}')
-        return jsonify({'success': False, 'error': 'Failed to manage FAQs'}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': 'Failed to manage FAQs'
+        }), 500
     
 @app.route('/upgrade')
 @login_required

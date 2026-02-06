@@ -374,10 +374,19 @@
     </div>
     
     <script>
-        let userPlan = 'free';
-        let faqLimit = 5;
+        // Get client_id from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const CLIENT_ID = urlParams.get('client_id');
+    
+        if (!CLIENT_ID) {
+        alert('Error: No client ID provided');
+        window.location.href = '/dashboard';
+        }
+    
         let currentFAQs = [];
         let editingIndex = -1;
+        let userPlan = 'free';
+        let faqLimit = 999;
 
         
         window.onload = function() {
@@ -388,16 +397,24 @@
         };
         
         async function loadFAQs() {
-            const clientId = document.getElementById('client-select').value;
-            
+            const clientId = CLIENT_ID;  // Use the constant from URL
+    
+            if (!clientId) {
+                console.error('No client ID selected');
+                return;
+            }
+    
             try {
                 const response = await fetch(`/api/faqs?client_id=${clientId}`);
                 const data = await response.json();
-                
+        
                 if (data.success) {
-                    currentFAQs = data.faqs;
+                    currentFAQs = data.faqs || [];
                     renderFAQs();
                     updateFaqCount();
+                } else {
+                    console.error('Failed to load FAQs:', data.error);
+                    showError();
                 }
             } catch (error) {
                 console.error('Error loading FAQs:', error);
@@ -471,30 +488,34 @@
             if (!confirm('Are you sure you want to delete this FAQ?')) {
                 return;
             }
-            
-            const clientId = document.getElementById('client-select').value;
+    
+            const clientId = CLIENT_ID;  // Use the constant from URL
             const updatedFAQs = currentFAQs.filter((_, i) => i !== index);
-            
+    
             try {
                 const response = await fetch('/api/faqs', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'  // ← THIS IS CRITICAL
+                    },
                     body: JSON.stringify({
                         client_id: clientId,
                         faqs: updatedFAQs
                     })
                 });
-                
+        
                 const data = await response.json();
-                
+        
                 if (data.success) {
                     currentFAQs = updatedFAQs;
                     renderFAQs();
                     showSuccess();
+                    updateFaqCount();
                 } else {
                     showError();
                 }
             } catch (error) {
+                console.error('Error deleting FAQ:', error);
                 showError();
             }
         }
@@ -505,25 +526,19 @@
         
         document.getElementById('faq-form').addEventListener('submit', async function(e) {
             e.preventDefault();
-
-            if (editingIndex < 0 && currentFAQs.length >= faqLimit) {
-                showError();
-                document.getElementById('error-message').textContent = `⚠️ Plan limit: Maximum ${faqLimit} FAQs allowed. Upgrade your plan to add more.`;
-                return;
-            }
-            
-            const clientId = document.getElementById('client-select').value;
+    
+            const clientId = CLIENT_ID;  // Use the constant from URL
             const question = document.getElementById('faq-question').value.trim();
             const answer = document.getElementById('faq-answer').value.trim();
             const triggers = document.getElementById('faq-triggers').value.split(',').map(t => t.trim()).filter(Boolean);
-            
+    
             const newFAQ = {
                 id: editingIndex >= 0 ? currentFAQs[editingIndex].id : `faq_${Date.now()}`,
                 question: question,
                 answer: answer,
                 triggers: triggers
             };
-            
+    
             let updatedFAQs;
             if (editingIndex >= 0) {
                 updatedFAQs = [...currentFAQs];
@@ -531,28 +546,33 @@
             } else {
                 updatedFAQs = [...currentFAQs, newFAQ];
             }
-            
+    
             try {
                 const response = await fetch('/api/faqs', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'  // ← THIS IS CRITICAL
+                    },
                     body: JSON.stringify({
                         client_id: clientId,
                         faqs: updatedFAQs
                     })
                 });
-                
+        
                 const data = await response.json();
-                
+        
                 if (data.success) {
                     currentFAQs = updatedFAQs;
                     renderFAQs();
                     closeModal();
                     showSuccess();
+                    updateFaqCount();
                 } else {
                     showError();
+                    document.getElementById('error-message').textContent = data.error || 'Failed to save FAQ';
                 }
             } catch (error) {
+                console.error('Error saving FAQ:', error);
                 showError();
             }
         });
