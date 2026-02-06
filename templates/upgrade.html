@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upgrade Plan - FAQ Chatbot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 48px;
+        }
+        
+        .header h1 {
+            font-size: 42px;
+            margin-bottom: 12px;
+        }
+        
+        .pricing-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+        
+        .pricing-card {
+            background: white;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .pricing-card.recommended {
+            border: 3px solid #10b981;
+            transform: scale(1.05);
+        }
+        
+        .badge {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #10b981;
+            color: white;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .plan-name {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 16px;
+        }
+        
+        .plan-price {
+            font-size: 48px;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+        
+        .plan-price span {
+            font-size: 18px;
+            color: #6b7280;
+        }
+        
+        .plan-features {
+            list-style: none;
+            margin: 32px 0;
+            text-align: left;
+        }
+        
+        .plan-features li {
+            padding: 12px 0;
+            color: #374151;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .plan-features li:before {
+            content: "✓ ";
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .btn-upgrade {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-current {
+            background: #e5e7eb;
+            color: #6b7280;
+            cursor: not-allowed;
+        }
+        
+        .back-link {
+            text-align: center;
+            margin-top: 32px;
+        }
+        
+        .back-link a {
+            color: white;
+            text-decoration: none;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Upgrade Your Plan</h1>
+            <p>Choose the plan that fits your needs</p>
+        </div>
+        
+        <div class="pricing-cards">
+            <div class="pricing-card">
+                <div class="plan-name">Free</div>
+                <div class="plan-price">$0<span>/forever</span></div>
+    
+            <ul class="plan-features">
+                <li>1 client only</li>
+                <li>5 FAQs maximum</li>
+                <li>50 messages/day</li>
+                <li>Basic lead collection</li>
+                <li>No analytics</li>
+                <li>No customization</li>
+            </ul>
+    
+            {% if user.plan_type == 'free' %}
+                <button class="btn btn-current">Current Plan</button>
+            {% else %}
+                <button class="btn btn-current" style="cursor: not-allowed;">Cannot Downgrade</button>
+            {% endif %}
+            </div>
+            
+            <div class="pricing-card">
+                <div class="plan-name">Starter</div>
+                <div class="plan-price">$49<span>/month</span></div>
+                
+                <ul class="plan-features">
+                    <li>Up to 5 clients</li>
+                    <li>Unlimited conversations</li>
+                    <li>Lead collection</li>
+                    <li>Basic analytics</li>
+                    <li>Email support</li>
+                </ul>
+                
+                {% if user.plan_type == 'starter' %}
+                    <button class="btn btn-current">Current Plan</button>
+                {% else %}
+                    <a href="mailto:assistly43@gmail.com?subject=Downgrade to Starter" class="btn btn-upgrade">Contact to Downgrade</a>
+                {% endif %}
+            </div>
+            
+            <div class="pricing-card recommended">
+                <div class="badge">RECOMMENDED</div>
+                <div class="plan-name">Agency</div>
+                <div class="plan-price">$149<span>/month</span></div>
+                
+                <ul class="plan-features">
+                    <li>Up to 20 clients</li>
+                    <li>Unlimited conversations</li>
+                    <li>Advanced analytics</li>
+                    <li>Priority support</li>
+                    <li>Custom integrations</li>
+                    <li>Onboarding call</li>
+                </ul>
+                
+                {% if user.plan_type == 'agency' %}
+                    <button class="btn btn-current">Current Plan</button>
+                {% else %}
+                    <a href="https://flutterwave.com/pay/3sqkpvu6ihpk" class="btn btn-upgrade">Upgrade Now</a>
+                {% endif %}
+            </div>
+            
+            <div class="pricing-card">
+                <div class="plan-name">Enterprise</div>
+                <div class="plan-price" style="font-size: 32px; color: #6b7280;">
+                Custom
+                <span style="font-size: 16px; display: block; margin-top: 8px; font-weight: 400;">Tailored to your needs</span>
+                </div>
+    
+                <ul class="plan-features">
+                    <li>Unlimited clients</li>
+                    <li>Everything in Agency</li>
+                    <li>Self-hosted option</li>
+                    <li>Custom features</li>
+                    <li>Dedicated support</li>
+                    <li>SLA guarantee</li>
+                    <li>White-glove onboarding</li>
+                    <li>Priority development</li>
+                </ul>
+    
+                {% if user.plan_type == 'enterprise' %}
+                <button class="btn btn-current">Current Plan</button>
+                {% else %}
+                <a href="mailto:YOUR_EMAIL@example.com?subject=Enterprise Plan Inquiry&body=Hi, I'm interested in the Enterprise plan.%0D%0A%0D%0ACompany Name:%0D%0ANumber of clients I manage:%0D%0ASpecial requirements:%0D%0ABudget range:" class="btn btn-upgrade">
+                Contact Sales
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="back-link">
+            <a href="/dashboard">← Back to Dashboard</a>
+        </div>
+    </div>
+</body>
+</html>

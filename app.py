@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
@@ -11,12 +11,81 @@ import logging
 from logging.handlers import RotatingFileHandler
 import shutil
 from datetime import datetime, timedelta
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from functools import wraps
+import models
+from io import StringIO
+
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-me')
+
+# Plan limits
+PLAN_LIMITS = {
+    'free': {
+        'clients': 1,
+        'faqs_per_client': 5,
+        'messages_per_day': 50,
+        'analytics': False,
+        'customization': False,
+        'priority_support': False
+    },
+    'starter': {
+        'clients': 5,
+        'faqs_per_client': 999,
+        'messages_per_day': 999999,
+        'analytics': True,
+        'customization': True,
+        'priority_support': False
+    },
+    'agency': {
+        'clients': 15,
+        'faqs_per_client': 999,
+        'messages_per_day': 999999,
+        'analytics': True,
+        'customization': True,
+        'priority_support': True
+    },
+    'enterprise': {
+        'clients': 999999,
+        'faqs_per_client': 999,
+        'messages_per_day': 999999,
+        'analytics': True,
+        'customization': True,
+        'priority_support': True
+    }
+}
+
+# SECRET KEY for sessions (IMPORTANT!)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
+
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# User class for Flask-Login
+class User(UserMixin):
+    def __init__(self, user_data):
+        self.id = user_data['id']
+        self.email = user_data['email']
+        self.plan_type = user_data['plan_type']
+
+@login_manager.user_loader
+def load_user(user_id):
+    user_data = models.get_user_by_id(int(user_id))
+    if user_data:
+        return User(user_data)
+    return None
+
+# Initialize database on startup
+try:
+    models.init_db()
+    print("✅ Database initialized successfully!")
+except Exception as e:
+    print(f"⚠️ Database initialization error: {e}")
 
 # Enhanced CORS configuration for production
 CORS(app, resources={
@@ -270,19 +339,40 @@ def match_faq(message, faqs, lead_triggers):
 @app.route('/api/config', methods=['GET'])
 def get_config():
     """Get client configuration for widget"""
-    client_id = request.args.get('client_id', 'default')
-    config = load_client_config(client_id)
-    
-    if config:
+    try:
+        client_id = request.args.get('client_id', 'default')
+        
+        # Get client from database
+        client = models.get_client_by_id(client_id)
+        
+        if not client:
+            return jsonify({
+                'success': False,
+                'error': 'Client not found'
+            }), 404
+        
+        # Parse branding settings
+        branding_settings = json.loads(client['branding_settings']) if client['branding_settings'] else {}
+        
+        # Build config response
+        config = {
+            'client_id': client_id,
+            'branding': branding_settings.get('branding', {}),
+            'contact': branding_settings.get('contact', {}),
+            'bot_settings': branding_settings.get('bot_settings', {})
+        }
+        
         return jsonify({
             'success': True,
             'config': config
         })
-    else:
+        
+    except Exception as e:
+        app.logger.error(f'Error getting config: {e}')
         return jsonify({
             'success': False,
-            'error': 'Client not found'
-        }), 404
+            'error': 'Failed to load configuration'
+        }), 500
     
 def sanitize_input(text, max_length=500):
     """Sanitize user input to prevent injection attacks"""
@@ -301,11 +391,12 @@ def sanitize_input(text, max_length=500):
     return text.strip()
 
 @app.route('/api/chat', methods=['POST'])
-@limiter.limit("30 per minute")  # Rate limit: 30 messages per minute
+@limiter.limit("30 per minute")
 def chat():
     """Handle chat messages"""
     try:
         data = request.json
+        
         # Sanitize inputs
         message = sanitize_input(data.get('message', ''))
         client_id = sanitize_input(data.get('client_id', 'default'), max_length=50)
@@ -317,15 +408,86 @@ def chat():
                 'error': 'Message is required'
             }), 400
         
-        # Load client data
-        config = load_client_config(client_id)
-        faqs = load_client_faqs(client_id)
-        
-        if not config:
+        # Get client and config from database
+        client = models.get_client_by_id(client_id)
+        if not client:
             return jsonify({
                 'success': False,
-                'error': 'Client configuration not found'
+                'error': 'Client not found'
             }), 404
+        
+        # Parse config
+        config = json.loads(client['branding_settings']) if client['branding_settings'] else {}
+        
+        # Get FAQs from database
+        faqs_list = models.get_faqs(client_id)
+        faqs = {'faqs': faqs_list}
+        
+        # Get lead triggers from config
+        lead_triggers = config.get('bot_settings', {}).get('lead_triggers', [])
+        
+        # Match FAQ or detect lead trigger
+        response, extracted_email = match_faq(message, faqs, lead_triggers)
+        
+        # Handle lead collection trigger
+        if response == "TRIGGER_LEAD_COLLECTION":
+            return jsonify({
+                'success': True,
+                'response': f"I'd be happy to connect you with our team! To help us serve you better, may I have your name?",
+                'trigger_lead_collection': True,
+                'extracted_email': extracted_email,
+                'contact_info': config.get('contact', {})
+            })
+        
+        # Handle no match with suggestions
+        if response == "NO_MATCH_WITH_SUGGESTIONS":
+            similar_questions = extracted_email  # Reusing this variable for suggestions list
+            
+            if similar_questions and len(similar_questions) > 0:
+                suggestion_text = "I'm not sure about that exact question, but here are some related topics:\n\n"
+                suggestion_text += "\n".join([f"• {q}" for q in similar_questions])
+                suggestion_text += "\n\nOr type 'contact' to speak with our team!"
+                
+                return jsonify({
+                    'success': True,
+                    'response': suggestion_text,
+                    'trigger_lead_collection': False,
+                    'suggestions': similar_questions
+                })
+            else:
+                response = None
+        
+        # Return matched FAQ response
+        if response:
+            # Log the conversation
+            log_conversation(client_id, message, response, matched_faq_id='matched')
+            
+            return jsonify({
+                'success': True,
+                'response': response,
+                'trigger_lead_collection': False
+            })
+        
+        # Complete fallback
+        fallback = config.get('bot_settings', {}).get('fallback_message', 
+            "I'm not sure about that. Would you like to speak with a human?")
+        
+        # Log unanswered question
+        log_conversation(client_id, message, fallback, matched_faq_id=None)
+        
+        return jsonify({
+            'success': True,
+            'response': fallback,
+            'trigger_lead_collection': False,
+            'show_contact_button': True
+        })
+        
+    except Exception as e:
+        app.logger.error(f'Error in chat endpoint: {e}')
+        return jsonify({
+            'success': False,
+            'error': 'Internal server error'
+        }), 500
         
         # Get lead triggers from config
         lead_triggers = config['bot_settings'].get('lead_triggers', [])
@@ -389,21 +551,21 @@ def chat():
         }), 500
 
 @app.route('/api/lead', methods=['POST'])
-@limiter.limit("10 per hour")  # Rate limit: 10 lead submissions per hour
-def collect_lead():
-    """Collect and store lead information"""
+@limiter.limit("10 per hour")
+def submit_lead():
+    """Submit lead information"""
     try:
         data = request.json
-        client_id = data.get('client_id', 'default')
         
-        
-        # Sanitize and validate required fields
+        # Sanitize inputs
+        client_id = sanitize_input(data.get('client_id', 'default'), max_length=50)
         name = sanitize_input(data.get('name', ''), max_length=100)
         email = sanitize_input(data.get('email', ''), max_length=200)
         phone = sanitize_input(data.get('phone', ''), max_length=50)
-        company = sanitize_input(data.get('company', ''), max_length=200)
+        company = sanitize_input(data.get('company', ''), max_length=100)
         message = sanitize_input(data.get('message', ''), max_length=1000)
         
+        # Validate required fields
         if not name or not email:
             return jsonify({
                 'success': False,
@@ -417,34 +579,46 @@ def collect_lead():
                 'error': 'Invalid email format'
             }), 400
         
-        # Prepare lead data
-        lead_data = {
-        'name': name,
-        'email': email,
-        'phone': phone,
-        'company': company,
-        'message': message,
-        'conversation_snippet': sanitize_input(data.get('conversation_snippet', ''), max_length=1000),
-        'source_url': sanitize_input(data.get('source_url', ''), max_length=500),
-        'user_agent': request.headers.get('User-Agent', '')[:200]
-        }
-
-        # Backup before saving new lead
-        backup_client_data(client_id)
-        
-        # Save lead
-        if save_lead(client_id, lead_data):
-            config = load_client_config(client_id)
-            return jsonify({
-                'success': True,
-                'message': f"Thanks {name}! We've received your information and will reach out to you at {email} soon.",
-                'contact_info': config['contact'] if config else {}
-            })
-        else:
+        # Get client config
+        client = models.get_client_by_id(client_id)
+        if not client:
             return jsonify({
                 'success': False,
-                'error': 'Failed to save lead'
-            }), 500
+                'error': 'Client not found'
+            }), 404
+        
+        # Prepare lead data
+        lead_data = {
+            'name': name,
+            'email': email,
+            'phone': phone,
+            'company': company,
+            'message': message,
+            'conversation_snippet': data.get('conversation_snippet', ''),
+            'source_url': data.get('source_url', '')
+        }
+        
+        # Save lead to database
+        models.save_lead(client_id, lead_data)
+        
+        app.logger.info(f'Lead captured for client: {client_id}')
+        
+        # Get contact info from config
+        config = json.loads(client['branding_settings']) if client['branding_settings'] else {}
+        contact_info = config.get('contact', {})
+        
+        return jsonify({
+            'success': True,
+            'message': "Thank you! We've received your information and will be in touch soon.",
+            'contact_info': contact_info
+        })
+        
+    except Exception as e:
+        app.logger.error(f'Error submitting lead: {e}')
+        return jsonify({
+            'success': False,
+            'error': 'Failed to submit lead'
+        }), 500
             
     except Exception as e:
         print(f"Error in lead endpoint: {e}")
@@ -452,6 +626,221 @@ def collect_lead():
             'success': False,
             'error': 'Internal server error'
         }), 500
+
+# =====================================================================
+# AUTHENTICATION ROUTES
+# =====================================================================
+
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    """User signup"""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    
+    # Get referral code from URL
+    referral_code = request.args.get('ref')
+    
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        # FORCE FREE PLAN
+        plan_type = 'free'
+        
+        # Validation
+        if password != confirm_password:
+            return render_template('signup.html', error='Passwords do not match', referral_code=referral_code)
+        
+        if len(password) < 6:
+            return render_template('signup.html', error='Password must be at least 6 characters', referral_code=referral_code)
+        
+        # Create user with FREE plan
+        user_id = models.create_user(email, password, plan_type)
+        
+        if user_id is None:
+            return render_template('signup.html', error='Email already exists', referral_code=referral_code)
+        
+        # Track referral if code provided
+        if referral_code:
+            affiliate = models.get_affiliate_by_code(referral_code)
+            if affiliate:
+                models.create_referral(affiliate['id'], user_id, referral_code)
+                app.logger.info(f'Referral tracked: {referral_code} -> {email}')
+        
+        # Auto-login after signup
+        user_data = models.get_user_by_id(user_id)
+        user = User(user_data)
+        login_user(user)
+        
+        return redirect(url_for('dashboard'))
+    
+    return render_template('signup.html', referral_code=referral_code)
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """User login"""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        email = request.form.get('email')
+        password = request.form.get('password')
+        
+        user_data = models.verify_user(email, password)
+        
+        if user_data:
+            user = User(user_data)
+            login_user(user)
+            return redirect(url_for('dashboard'))
+        else:
+            return render_template('login.html', error='Invalid email or password')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    """User logout"""
+    logout_user()
+    return redirect(url_for('login'))
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    """User dashboard - shows all clients"""
+    clients = models.get_user_clients(current_user.id)
+    
+    # Parse branding settings from JSON
+    for client in clients:
+        if client['branding_settings']:
+            client['branding_settings'] = json.loads(client['branding_settings'])
+    
+    return render_template('dashboard.html', user=current_user, clients=clients)
+
+@app.route('/create-client', methods=['POST'])
+@login_required
+def create_client():
+    """Create a new client with plan limit enforcement"""
+    try:
+        company_name = request.form.get('company_name')
+        
+        if not company_name:
+            return jsonify({
+                'success': False,
+                'error': 'Company name is required'
+            }), 400
+        
+        # Get user's current plan
+        user = models.get_user_by_id(current_user.id)
+        plan_type = user['plan_type']
+        
+        # Get current client count
+        current_clients = models.get_user_clients(current_user.id)
+        client_count = len(current_clients)
+        
+        # Check plan limit
+        plan_limit = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])['clients']
+        
+        if client_count >= plan_limit:
+            return f'''
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Plan Limit Reached</title>
+                <style>
+                    body {{
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        min-height: 100vh;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        padding: 20px;
+                    }}
+                    .container {{
+                        background: white;
+                        border-radius: 16px;
+                        padding: 48px;
+                        max-width: 500px;
+                        text-align: center;
+                        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                    }}
+                    h1 {{
+                        font-size: 32px;
+                        color: #1f2937;
+                        margin-bottom: 16px;
+                    }}
+                    p {{
+                        color: #6b7280;
+                        margin-bottom: 24px;
+                        line-height: 1.6;
+                    }}
+                    .plan-info {{
+                        background: #fef3c7;
+                        border: 2px solid #f59e0b;
+                        border-radius: 8px;
+                        padding: 16px;
+                        margin-bottom: 24px;
+                    }}
+                    .plan-info strong {{
+                        color: #92400e;
+                    }}
+                    .btn {{
+                        display: inline-block;
+                        padding: 14px 28px;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color: white;
+                        text-decoration: none;
+                        border-radius: 8px;
+                        font-weight: 600;
+                        margin: 8px;
+                    }}
+                    .btn-secondary {{
+                        background: white;
+                        color: #667eea;
+                        border: 2px solid #667eea;
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="container">
+                    <h1>⚠️ Plan Limit Reached</h1>
+                    <p>You've reached the maximum number of clients for your current plan.</p>
+                    
+                    <div class="plan-info">
+                        <strong>Current Plan:</strong> {plan_type.title()}<br>
+                        <strong>Clients:</strong> {client_count} / {plan_limit}<br>
+                        <strong>Status:</strong> Limit Reached
+                    </div>
+                    
+                    <p>
+                        <strong>Upgrade to add more clients:</strong><br>
+                        <small>Starter: 5 clients | Agency: 15 clients | Enterprise: Unlimited</small>
+                    </p>
+                    
+                    <a href="/upgrade" class="btn">🚀 Upgrade Plan</a>
+                    <a href="/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
+                </div>
+            </body>
+            </html>
+            ''', 403
+        
+        # Create client if under limit
+        client_id = models.create_client(current_user.id, company_name)
+        
+        return redirect(url_for('dashboard'))
+        
+    except Exception as e:
+        app.logger.error(f'Error creating client: {e}')
+        return redirect(url_for('dashboard'))
+
+@app.route('/')
+def index():
+    """Homepage - redirect based on auth status"""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('landing_page'))
 
 # =====================================================================
 # WIDGET & ADMIN ROUTES
@@ -462,40 +851,38 @@ def widget():
     """Serve embeddable widget HTML"""
     return render_template('chat.html')
 
+
 @app.route('/admin/leads')
+@login_required
 def admin_leads():
-    """Simple admin page to view leads"""
-    return send_from_directory('static', 'admin.html')
-
-@app.route('/api/admin/leads', methods=['GET'])
-def get_all_leads():
-    """Get all leads for admin (add authentication in production!)"""
-    client_id = request.args.get('client_id', 'default')
-    leads_path = os.path.join(get_client_path(client_id), 'leads.json')
+    """View collected leads for a client"""
+    client_id = request.args.get('client_id')
     
-    try:
-        with open(leads_path, 'r', encoding='utf-8') as f:
-            leads_data = json.load(f)
-        return jsonify({
-            'success': True,
-            'leads': leads_data['leads']
-        })
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+    if not client_id:
+        return "Client ID required", 400
+    
+    # Verify ownership
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return "Unauthorized", 403
+    
+    # Get leads from database
+    leads = models.get_leads(client_id)
+    
+    # Get client info
+    client = models.get_client_by_id(client_id)
+    
+    return render_template('admin.html', leads=leads, client_id=client_id, client=client)
 
-@app.route('/')
-def index():
-    """Homepage with improved value proposition"""
+@app.route('/landing')
+def landing_page():
+    """Public landing page with value proposition"""
     return '''
     <!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>White-Label FAQ Chatbot - Deploy in Minutes</title>
+        <title>White-Label FAQ Chatbot - Deploy & Manage</title>
         <style>
             * {
                 margin: 0;
@@ -510,40 +897,151 @@ def index():
                 padding: 20px;
             }
             
+            /* Navigation */
+            .navbar {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(10px);
+                padding: 16px 40px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+                z-index: 1000;
+            }
+            
+            .logo {
+                font-size: 24px;
+                font-weight: 700;
+                color: #667eea;
+            }
+            
+            .hamburger {
+                display: none;
+                flex-direction: column;
+                cursor: pointer;
+                gap: 5px;
+            }
+            
+            .hamburger span {
+                width: 25px;
+                height: 3px;
+                background: #667eea;
+                border-radius: 3px;
+                transition: 0.3s;
+            }
+            
+            .nav-menu {
+                display: flex;
+                gap: 24px;
+                align-items: center;
+            }
+            
+            .nav-menu a {
+                color: #374151;
+                text-decoration: none;
+                font-weight: 600;
+                transition: color 0.2s;
+            }
+            
+            .nav-menu a:hover {
+                color: #667eea;
+            }
+            
+            .btn-login {
+                padding: 8px 20px;
+                background: white;
+                color: #667eea;
+                border: 2px solid #667eea;
+                border-radius: 6px;
+                font-weight: 600;
+                text-decoration: none;
+                transition: all 0.2s;
+            }
+            
+            .btn-login:hover {
+                background: #667eea;
+                color: white;
+            }
+            
+            .btn-signup {
+                padding: 8px 20px;
+                background: #667eea;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-weight: 600;
+                text-decoration: none;
+                transition: all 0.2s;
+            }
+            
+            .btn-signup:hover {
+                background: #5568d3;
+            }
+            
+            /* Mobile Menu */
+            @media (max-width: 768px) {
+                .hamburger {
+                    display: flex;
+                }
+                
+                .nav-menu {
+                    position: fixed;
+                    top: 64px;
+                    left: -100%;
+                    flex-direction: column;
+                    background: white;
+                    width: 100%;
+                    padding: 20px;
+                    gap: 16px;
+                    align-items: flex-start;
+                    transition: left 0.3s;
+                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+                }
+                
+                .nav-menu.active {
+                    left: 0;
+                }
+                
+                .navbar {
+                    padding: 16px 20px;
+                }
+            }
+            
+            /* Hero Section */
             .container {
-                max-width: 1100px;
-                margin: 0 auto;
+                max-width: 1200px;
+                margin: 100px auto 40px;
+                background: white;
+                border-radius: 24px;
+                padding: 60px 40px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
             }
             
             .hero {
-                background: white;
-                border-radius: 16px;
-                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-                padding: 60px 40px;
                 text-align: center;
-                margin-bottom: 24px;
+                margin-bottom: 60px;
             }
             
-            h1 {
+            .hero-icon {
+                font-size: 64px;
+                margin-bottom: 20px;
+            }
+            
+            .hero h1 {
                 font-size: 48px;
                 color: #1f2937;
                 margin-bottom: 16px;
                 line-height: 1.2;
             }
             
-            .tagline {
-                font-size: 24px;
-                color: #667eea;
-                margin-bottom: 16px;
-                font-weight: 600;
-            }
-            
-            .description {
-                font-size: 18px;
+            .hero p {
+                font-size: 20px;
                 color: #6b7280;
-                max-width: 700px;
-                margin: 0 auto 40px;
-                line-height: 1.6;
+                margin-bottom: 32px;
             }
             
             .cta-buttons {
@@ -551,85 +1049,64 @@ def index():
                 gap: 16px;
                 justify-content: center;
                 flex-wrap: wrap;
-                margin-bottom: 40px;
-            }
-            
-            .btn {
-                padding: 16px 32px;
-                border-radius: 8px;
-                font-size: 16px;
-                font-weight: 600;
-                text-decoration: none;
-                transition: transform 0.2s, box-shadow 0.2s;
-                display: inline-block;
             }
             
             .btn-primary {
+                padding: 16px 32px;
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color: white;
-                box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+                border: none;
+                border-radius: 8px;
+                font-size: 18px;
+                font-weight: 600;
+                cursor: pointer;
+                text-decoration: none;
+                display: inline-block;
+                transition: transform 0.2s;
+            }
+            
+            .btn-primary:hover {
+                transform: translateY(-2px);
             }
             
             .btn-secondary {
+                padding: 16px 32px;
                 background: white;
                 color: #667eea;
                 border: 2px solid #667eea;
+                border-radius: 8px;
+                font-size: 18px;
+                font-weight: 600;
+                cursor: pointer;
+                text-decoration: none;
+                display: inline-block;
+                transition: all 0.2s;
             }
             
-            .btn:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+            .btn-secondary:hover {
+                background: #f0f9ff;
             }
             
-            .features {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                gap: 24px;
-                margin-bottom: 24px;
-            }
-            
-            .feature-card {
-                background: white;
-                padding: 32px;
-                border-radius: 12px;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            }
-            
-            .feature-icon {
-                font-size: 40px;
-                margin-bottom: 16px;
-            }
-            
-            .feature-card h3 {
-                font-size: 20px;
-                color: #1f2937;
-                margin-bottom: 12px;
-            }
-            
-            .feature-card p {
-                color: #6b7280;
-                line-height: 1.6;
-            }
-            
+            /* Stats */
             .stats {
-                background: white;
-                border-radius: 12px;
-                padding: 40px;
-                display: flex;
-                justify-content: space-around;
-                flex-wrap: wrap;
-                gap: 24px;
-                margin-bottom: 24px;
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 20px;
+                margin-bottom: 60px;
+                padding: 40px 0;
+                border-top: 2px solid #e5e7eb;
+                border-bottom: 2px solid #e5e7eb;
             }
             
             .stat {
                 text-align: center;
             }
             
-            .stat-number {
+            .stat-value {
                 font-size: 48px;
                 font-weight: 700;
                 color: #667eea;
+                margin-bottom: 8px;
             }
             
             .stat-label {
@@ -639,154 +1116,148 @@ def index():
                 letter-spacing: 1px;
             }
             
-            .api-section {
-                background: white;
-                border-radius: 12px;
-                padding: 40px;
-                margin-bottom: 24px;
+            /* Features */
+            .features {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 32px;
             }
             
-            .api-section h2 {
-                font-size: 28px;
-                color: #1f2937;
-                margin-bottom: 24px;
+            .feature {
                 text-align: center;
             }
             
-            .endpoint {
-                background: #f9fafb;
-                padding: 16px;
-                border-radius: 8px;
+            .feature-icon {
+                font-size: 48px;
+                margin-bottom: 16px;
+            }
+            
+            .feature h3 {
+                font-size: 20px;
+                color: #1f2937;
                 margin-bottom: 12px;
-                font-family: 'Courier New', monospace;
-                font-size: 14px;
-                border-left: 4px solid #667eea;
             }
             
-            .method {
-                color: #10b981;
-                font-weight: bold;
-                margin-right: 8px;
-            }
-            
-            .method.get {
-                color: #3b82f6;
+            .feature p {
+                color: #6b7280;
+                line-height: 1.6;
             }
             
             @media (max-width: 768px) {
-                h1 {
+                .container {
+                    padding: 40px 20px;
+                    margin-top: 80px;
+                }
+                
+                .hero h1 {
                     font-size: 32px;
                 }
                 
-                .tagline {
-                    font-size: 18px;
+                .hero p {
+                    font-size: 16px;
                 }
                 
-                .hero {
-                    padding: 40px 24px;
+                .stat-value {
+                    font-size: 32px;
                 }
             }
         </style>
     </head>
     <body>
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="logo">💬 FAQ Chatbot</div>
+            
+            <div class="hamburger" onclick="toggleMenu()">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            
+            <div class="nav-menu" id="navMenu">
+                <a href="/sales">Pricing</a>
+                <a href="/embed-generator">Embed Generator</a>
+                <a href="mailto:support@example.com">Contact Us</a>
+                <a href="/login" class="btn-login">Login</a>
+                <a href="/signup" class="btn-signup">Sign Up Free</a>
+            </div>
+        </nav>
+        
+        <!-- Main Content -->
         <div class="container">
             <div class="hero">
-                <h1>💬 White-Label FAQ Chatbot</h1>
-                <p class="tagline">Deploy a customizable chatbot — white-label, embeddable, and easy to manage</p>
-                <p class="description">
-                    Built for agencies and businesses who need a professional FAQ chatbot with lead collection. 
-                    Each client gets their own branding, FAQs, and analytics. One deployment serves unlimited clients.
-                </p>
+                <div class="hero-icon">💬</div>
+                <h1>White-Label FAQ Chatbot</h1>
+                <p>Deploy a customizable chatbot — white-label, embeddable, and easy to manage</p>
                 
                 <div class="cta-buttons">
-                    <a href="/widget?client_id=demo" class="btn btn-primary">🎨 Try Live Demo</a>
-                    <a href="/embed-generator" class="btn btn-secondary">🔌 Get Embed Code</a>
+                    <a href="/widget?client_id=demo" class="btn-primary">🎯 Try Live Demo</a>
+                    <a href="/embed-generator" class="btn-secondary">📋 Get Embed Code</a>
                 </div>
             </div>
             
             <div class="stats">
                 <div class="stat">
-                    <div class="stat-number">10 min</div>
+                    <div class="stat-value">10 min</div>
                     <div class="stat-label">Setup Time</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-number">∞</div>
+                    <div class="stat-value">∞</div>
                     <div class="stat-label">Clients Supported</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-number">1 line</div>
+                    <div class="stat-value">1 line</div>
                     <div class="stat-label">To Embed</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-number">100%</div>
+                    <div class="stat-value">100%</div>
                     <div class="stat-label">White-Label</div>
                 </div>
             </div>
             
             <div class="features">
-                <div class="feature-card">
+                <div class="feature">
                     <div class="feature-icon">🎨</div>
                     <h3>Fully Customizable</h3>
                     <p>Each client gets their own colors, logo, bot name, and personality. Zero branding from us.</p>
                 </div>
                 
-                <div class="feature-card">
+                <div class="feature">
                     <div class="feature-icon">📊</div>
                     <h3>Lead Collection</h3>
                     <p>Conversational lead capture that feels natural. Collect name, email, phone, and custom fields.</p>
                 </div>
                 
-                <div class="feature-card">
+                <div class="feature">
                     <div class="feature-icon">⚡</div>
                     <h3>Easy Embedding</h3>
                     <p>One line of code on any website. Works with WordPress, Shopify, Webflow, or plain HTML.</p>
                 </div>
                 
-                <div class="feature-card">
+                <div class="feature">
                     <div class="feature-icon">🔒</div>
                     <h3>Secure & Fast</h3>
                     <p>Rate limiting, input validation, CORS protection, and automatic backups included.</p>
                 </div>
             </div>
-            
-            <div class="api-section">
-                <h2>🔌 API Endpoints</h2>
-                
-                <div class="endpoint">
-                    <span class="method">POST</span>
-                    <span>/api/chat</span>
-                    <span style="color: #6b7280; margin-left: 8px;">- Chat with bot</span>
-                </div>
-                
-                <div class="endpoint">
-                    <span class="method">POST</span>
-                    <span>/api/lead</span>
-                    <span style="color: #6b7280; margin-left: 8px;">- Submit lead</span>
-                </div>
-                
-                <div class="endpoint">
-                    <span class="method get">GET</span>
-                    <span>/api/config?client_id=demo</span>
-                    <span style="color: #6b7280; margin-left: 8px;">- Get client config</span>
-                </div>
-                
-                <div class="endpoint">
-                    <span class="method get">GET</span>
-                    <span>/widget</span>
-                    <span style="color: #6b7280; margin-left: 8px;">- Embeddable widget</span>
-                </div>
-                
-                <div class="endpoint">
-                    <span class="method get">GET</span>
-                    <span>/admin/leads</span>
-                    <span style="color: #6b7280; margin-left: 8px;">- View collected leads</span>
-                </div>
-                
-                <div style="text-align: center; margin-top: 32px;">
-                    <a href="/admin/leads?client_id=demo" class="btn btn-secondary">📊 View Demo Leads</a>
-                </div>
-            </div>
         </div>
+        
+        <script>
+            function toggleMenu() {
+                const menu = document.getElementById('navMenu');
+                menu.classList.toggle('active');
+            }
+            
+            // Close menu when clicking outside
+            document.addEventListener('click', function(event) {
+                const menu = document.getElementById('navMenu');
+                const hamburger = document.querySelector('.hamburger');
+                
+                if (!menu.contains(event.target) && !hamburger.contains(event.target)) {
+                    menu.classList.remove('active');
+                }
+            });
+        </script>
     </body>
     </html>
     '''
@@ -831,63 +1302,119 @@ def embed_generator():
     return render_template('embed-generator.html')
 
 @app.route('/customize')
+@login_required
 def customize_page():
     """Theme customization admin page"""
+    client_id = request.args.get('client_id')
+    
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return "Unauthorized", 403
+    
+    # Check if user plan has customization access
+    user = models.get_user_by_id(current_user.id)
+    plan_limits = PLAN_LIMITS.get(user['plan_type'], PLAN_LIMITS['free'])
+    
+    if not plan_limits['customization']:
+        return f'''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Upgrade Required</title>
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
+                }}
+                .container {{
+                    background: white;
+                    border-radius: 16px;
+                    padding: 48px;
+                    max-width: 500px;
+                    text-align: center;
+                }}
+                h1 {{ font-size: 32px; color: #1f2937; margin-bottom: 16px; }}
+                p {{ color: #6b7280; margin-bottom: 24px; }}
+                .btn {{
+                    display: inline-block;
+                    padding: 14px 28px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    font-weight: 600;
+                    margin: 8px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🎨 Theme Customization Locked</h1>
+                <p>Theme customization is not available on the Free plan.</p>
+                <p><strong>Upgrade to Starter or higher to unlock:</strong></p>
+                <ul style="text-align: left; color: #374151; margin: 24px 0;">
+                    <li>Custom colors & branding</li>
+                    <li>Logo upload</li>
+                    <li>Bot personality customization</li>
+                    <li>White-label capabilities</li>
+                </ul>
+                <a href="/upgrade" class="btn">🚀 Upgrade Now</a>
+                <a href="/dashboard" class="btn" style="background: white; color: #667eea; border: 2px solid #667eea;">← Back</a>
+            </div>
+        </body>
+        </html>
+        ''', 403
+    
     return render_template('customize.html')
 
 @app.route('/api/admin/customize', methods=['POST'])
+@login_required
 def save_customization():
-    """Save client customization (add authentication in production!)"""
+    """Save client customization"""
     try:
         data = request.json
-        client_id = data.get('client_id', 'demo')
+        client_id = data.get('client_id')
         
-        # TODO: Add authentication here before production
-        # For now, anyone can customize (fine for testing)
+        if not client_id:
+            return jsonify({'success': False, 'error': 'Client ID required'}), 400
         
-        # Validate client_id
-        if not re.match(r'^[a-zA-Z0-9_-]+$', client_id):
-            return jsonify({
-                'success': False,
-                'error': 'Invalid client ID'
-            }), 400
+        # Verify ownership
+        if not models.verify_client_ownership(current_user.id, client_id):
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
         
-        # Prepare config data
-        config_data = {
-            'client_id': client_id,
+        # Get existing client
+        client = models.get_client_by_id(client_id)
+        if not client:
+            return jsonify({'success': False, 'error': 'Client not found'}), 404
+        
+        # Update branding settings
+        branding_settings = {
             'branding': data.get('branding', {}),
             'contact': data.get('contact', {}),
             'bot_settings': data.get('bot_settings', {})
         }
         
-        # Save to file
-        client_path = os.path.join('clients', client_id)
+        # Save to database
+        conn = models.get_db()
+        cursor = conn.cursor()
         
-        # Create client directory if it doesn't exist
-        if not os.path.exists(client_path):
-            os.makedirs(client_path)
-            
-            # Create empty FAQs and leads files
-            with open(os.path.join(client_path, 'faqs.json'), 'w') as f:
-                json.dump({'faqs': []}, f, indent=2)
-            
-            with open(os.path.join(client_path, 'leads.json'), 'w') as f:
-                json.dump({'leads': []}, f, indent=2)
+        cursor.execute(
+            'UPDATE clients SET branding_settings = ? WHERE client_id = ?',
+            (json.dumps(branding_settings), client_id)
+        )
         
-        # Save config
-        config_path = os.path.join(client_path, 'config.json')
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(config_data, f, indent=2)
-        
-        # Backup
-        backup_client_data(client_id)
+        conn.commit()
+        conn.close()
         
         app.logger.info(f'Customization saved for client: {client_id}')
         
         return jsonify({
             'success': True,
-            'message': 'Customization saved successfully',
-            'client_id': client_id
+            'message': 'Customization saved successfully'
         })
         
     except Exception as e:
@@ -898,8 +1425,73 @@ def save_customization():
         }), 500
 
 @app.route('/analytics')
+@login_required
 def analytics_page():
     """Analytics dashboard page"""
+    client_id = request.args.get('client_id')
+    
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return "Unauthorized", 403
+    
+    # Check if user plan has analytics access
+    user = models.get_user_by_id(current_user.id)
+    plan_limits = PLAN_LIMITS.get(user['plan_type'], PLAN_LIMITS['free'])
+    
+    if not plan_limits['analytics']:
+        return f'''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Upgrade Required</title>
+            <style>
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
+                }}
+                .container {{
+                    background: white;
+                    border-radius: 16px;
+                    padding: 48px;
+                    max-width: 500px;
+                    text-align: center;
+                }}
+                h1 {{ font-size: 32px; color: #1f2937; margin-bottom: 16px; }}
+                p {{ color: #6b7280; margin-bottom: 24px; }}
+                .btn {{
+                    display: inline-block;
+                    padding: 14px 28px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    font-weight: 600;
+                    margin: 8px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>📊 Analytics Unavailable</h1>
+                <p>Analytics is not available on the Free plan.</p>
+                <p><strong>Upgrade to Starter or higher to unlock:</strong></p>
+                <ul style="text-align: left; color: #374151; margin: 24px 0;">
+                    <li>Conversation analytics</li>
+                    <li>Lead tracking</li>
+                    <li>Performance insights</li>
+                    <li>Usage reports</li>
+                </ul>
+                <a href="/upgrade" class="btn">🚀 Upgrade Now</a>
+                <a href="/dashboard" class="btn" style="background: white; color: #667eea; border: 2px solid #667eea;">← Back</a>
+            </div>
+        </body>
+        </html>
+        ''', 403
+    
     return render_template('analytics.html')
 
 @app.route('/api/admin/analytics', methods=['GET'])
@@ -1022,6 +1614,102 @@ def thank_you_page():
     """Thank you page after payment"""
     return render_template('thank-you.html')
 
+@app.route('/faq-manager')
+@login_required
+def faq_manager_page():
+    """FAQ management dashboard"""
+    client_id = request.args.get('client_id')
+    
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return "Unauthorized", 403
+    
+    return render_template('faq-manager.html')
+
+@app.route('/api/faqs', methods=['GET', 'POST'])
+@login_required
+def manage_faqs():
+    """Get or update FAQs for a client"""
+    try:
+        client_id = request.args.get('client_id') or request.json.get('client_id')
+        
+        # Verify ownership
+        if not models.verify_client_ownership(current_user.id, client_id):
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+        
+        if request.method == 'GET':
+            faqs = models.get_faqs(client_id)
+            return jsonify({'success': True, 'faqs': faqs})
+        
+        elif request.method == 'POST':
+            faqs_list = request.json.get('faqs', [])
+            
+            # Get user plan
+            user = models.get_user_by_id(current_user.id)
+            plan_limits = PLAN_LIMITS.get(user['plan_type'], PLAN_LIMITS['free'])
+            max_faqs = plan_limits['faqs_per_client']
+            
+            # Enforce FAQ limit
+            if len(faqs_list) > max_faqs:
+                return jsonify({
+                    'success': False,
+                    'error': f'Plan limit: Maximum {max_faqs} FAQs allowed on {user["plan_type"]} plan',
+                    'upgrade_required': True
+                }), 403
+            
+            models.save_faqs(client_id, faqs_list)
+            
+            return jsonify({'success': True, 'message': 'FAQs updated successfully'})
+            
+    except Exception as e:
+        app.logger.error(f'Error managing FAQs: {e}')
+        return jsonify({'success': False, 'error': 'Failed to manage FAQs'}), 500
+    
+@app.route('/upgrade')
+@login_required
+def upgrade_page():
+    """Plan upgrade page"""
+    return render_template('upgrade.html', user=current_user)
+
+# =====================================================================
+# AFFILIATE ROUTES
+# =====================================================================
+
+@app.route('/become-affiliate', methods=['GET', 'POST'])
+@login_required
+def become_affiliate():
+    """Apply to become an affiliate"""
+    # Check if already an affiliate
+    existing = models.get_affiliate_by_user_id(current_user.id)
+    if existing:
+        return redirect(url_for('affiliate_dashboard'))
+    
+    if request.method == 'POST':
+        payment_email = request.form.get('payment_email')
+        
+        # Create affiliate account
+        affiliate = models.create_affiliate(current_user.id, payment_email)
+        
+        if affiliate:
+            return redirect(url_for('affiliate_dashboard'))
+        else:
+            return "Error creating affiliate account", 500
+    
+    return render_template('become-affiliate.html')
+
+@app.route('/affiliate-dashboard')
+@login_required
+def affiliate_dashboard():
+    """Affiliate dashboard"""
+    affiliate = models.get_affiliate_by_user_id(current_user.id)
+    
+    if not affiliate:
+        return redirect(url_for('become_affiliate'))
+    
+    stats = models.get_affiliate_stats(affiliate['id'])
+    commissions = models.get_affiliate_commissions(affiliate['id'])
+    
+    return render_template('affiliate-dashboard.html', stats=stats, commissions=commissions)
+
 # =====================================================================
 # RUN SERVER
 # =====================================================================
@@ -1029,3 +1717,26 @@ def thank_you_page():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
+
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+# User class for Flask-Login
+class User(UserMixin):
+    def __init__(self, user_data):
+        self.id = user_data['id']
+        self.email = user_data['email']
+        self.plan_type = user_data['plan_type']
+
+@login_manager.user_loader
+def load_user(user_id):
+    user_data = models.get_user_by_id(int(user_id))
+    if user_data:
+        return User(user_data)
+    return None
+
+# Initialize database on startup
+with app.app_context():
+    models.init_db()    

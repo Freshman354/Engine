@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - FAQ Chatbot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f9fafb;
+            min-height: 100vh;
+        }
+        
+        .navbar {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 16px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .navbar-brand {
+            font-size: 20px;
+            font-weight: 700;
+            color: #667eea;
+        }
+        
+        .navbar-right {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        
+        .user-email {
+            color: #6b7280;
+            font-size: 14px;
+        }
+        
+        .btn-logout {
+            padding: 8px 16px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        
+        .header {
+            margin-bottom: 32px;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            color: #6b7280;
+            font-size: 16px;
+        }
+        
+        .plan-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            background: #667eea;
+            color: white;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-left: 12px;
+        }
+        
+        .actions {
+            margin-bottom: 32px;
+        }
+        
+        .btn-primary {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin-right: 12px;
+        }
+        
+        .btn-secondary {
+            padding: 12px 24px;
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .clients-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 24px;
+        }
+        
+        .client-card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .client-card:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+        }
+        
+        .client-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+        
+        .client-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 4px;
+        }
+        
+        .client-id {
+            font-size: 12px;
+            color: #6b7280;
+            font-family: monospace;
+        }
+        
+        .client-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #e5e7eb;
+        }
+        
+        .btn-small {
+            padding: 8px 12px;
+            font-size: 13px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            text-decoration: none;
+            flex: 1;
+            text-align: center;
+        }
+        
+        .btn-manage {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-analytics {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-customize {
+            background: #f59e0b;
+            color: white;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+            background: white;
+            border-radius: 12px;
+        }
+        
+        .empty-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+        
+        .empty-state h2 {
+            font-size: 24px;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+        
+        .empty-state p {
+            color: #6b7280;
+            margin-bottom: 24px;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6b7280;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #374151;
+        }
+        
+        .form-group input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-brand">💬 FAQ Chatbot</div>
+        <div class="navbar-right">
+            <span class="user-email">{{ user.email }}</span>
+            <span class="plan-badge">{{ user.plan_type }}</span>
+            <a href="/logout" class="btn-logout">Logout</a>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="header">
+    <h1>Dashboard</h1>
+    <p>Manage your chatbot clients</p>
+    <div style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-top: 16px; display: inline-block;">
+        <strong>Plan:</strong> {{ user.plan_type|title }} | 
+        <strong>Clients:</strong> {{ clients|length }} / 
+        {% if user.plan_type == 'starter' %}5
+        {% elif user.plan_type == 'agency' %}15
+        {% else %}Unlimited{% endif %}
+        {% if user.plan_type == 'starter' and clients|length >= 5 %}
+            <span style="color: #ef4444; margin-left: 8px;">⚠️ Limit Reached</span>
+        {% elif user.plan_type == 'agency' and clients|length >= 15 %}
+            <span style="color: #ef4444; margin-left: 8px;">⚠️ Limit Reached</span>
+        {% endif %}
+    </div>
+</div>
+        
+        <div class="actions">
+    {% set limit_reached = (user.plan_type == 'starter' and clients|length >= 5) or (user.plan_type == 'agency' and clients|length >= 15) %}
+    
+    {% if limit_reached %}
+        <a href="/upgrade" class="btn-primary" style="background: #f59e0b;">
+            🚀 Upgrade to Add More Clients
+        </a>
+    {% else %}
+        <button class="btn-primary" onclick="openNewClientModal()">+ New Client</button>
+    {% endif %}
+    
+    <a href="/sales" class="btn-secondary">View Sales Page</a>
+    <a href="/affiliate-dashboard" class="btn-secondary" style="background: #10b981; color: white; border: none;">
+        💰 Affiliate Program
+    </a>
+</div>
+        
+        {% if clients %}
+        <div class="clients-grid">
+            {% for client in clients %}
+            <div class="client-card">
+                <div class="client-header">
+                    <div>
+                        <div class="client-name">{{ client.company_name }}</div>
+                        <div class="client-id">{{ client.client_id }}</div>
+                    </div>
+                </div>
+                
+                <div class="client-actions">
+                    <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-small btn-manage">📝 FAQs</a>
+    
+                    {% if user.plan_type != 'free' %}
+                        <!-- UNLOCKED buttons for paid plans -->
+                        <a href="/analytics?client_id={{ client.client_id }}" class="btn-small btn-analytics">📊 Analytics</a>
+                        <a href="/customize?client_id={{ client.client_id }}" class="btn-small btn-customize">🎨 Theme</a>
+                    {% else %}
+                        <!-- LOCKED buttons for free plan -->
+                        <button class="btn-small" style="background: #d1d5db; color: #6b7280; cursor: not-allowed;" title="Upgrade to unlock Analytics">
+                        📊 Analytics 🔒
+                        </button>
+                        <button class="btn-small" style="background: #d1d5db; color: #6b7280; cursor: not-allowed;" title="Upgrade to unlock Theme customization">
+                        🎨 Theme 🔒
+                        </button>
+                        {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">🚀</div>
+            <h2>No Clients Yet</h2>
+            <p>Create your first client to get started with your chatbot</p>
+            <button class="btn-primary" onclick="openNewClientModal()">+ Create First Client</button>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- New Client Modal -->
+    <div class="modal" id="new-client-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create New Client</h2>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            
+            <form method="POST" action="/create-client">
+                <div class="form-group">
+                    <label>Company Name</label>
+                    <input type="text" name="company_name" placeholder="Acme Corporation" required autofocus>
+                </div>
+                
+                <button type="submit" class="btn-primary" style="width: 100%;">Create Client</button>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        function openNewClientModal() {
+            document.getElementById('new-client-modal').style.display = 'flex';
+        }
+        
+        function closeModal() {
+            document.getElementById('new-client-modal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

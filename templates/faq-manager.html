@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAQ Manager - Chatbot Admin</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f9fafb;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 20px 40px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            color: #1f2937;
+        }
+        
+        .header p {
+            color: #6b7280;
+            margin-top: 4px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px;
+        }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .controls-left {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+        
+        .controls label {
+            font-weight: 600;
+            color: #374151;
+        }
+        
+        .controls select {
+            padding: 8px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-size: 14px;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+        
+        .btn-success {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
+        }
+        
+        .success-message {
+            background: #d1fae5;
+            color: #065f46;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            display: none;
+            font-weight: 600;
+        }
+        
+        .error-message {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            display: none;
+            font-weight: 600;
+        }
+        
+        .faq-list {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+        }
+        
+        .faq-item {
+            padding: 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+        }
+        
+        .faq-item:hover {
+            border-color: #667eea;
+        }
+        
+        .faq-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+        
+        .faq-question {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+            flex: 1;
+        }
+        
+        .faq-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: none;
+            font-weight: 600;
+        }
+        
+        .btn-edit {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .btn-delete {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .faq-answer {
+            color: #6b7280;
+            margin-bottom: 12px;
+            line-height: 1.6;
+        }
+        
+        .faq-triggers {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .trigger-tag {
+            background: #e0e7ff;
+            color: #4338ca;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        
+        .modal-header h2 {
+            font-size: 24px;
+            color: #1f2937;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6b7280;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #374151;
+        }
+        
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        .hint {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+        
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+        
+        .btn-cancel {
+            background: #e5e7eb;
+            color: #374151;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6b7280;
+        }
+        
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📝 FAQ Manager</h1>
+        <p>Add, edit, and manage your chatbot's FAQs</p>
+                <!-- ADD THIS -->
+        <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin-top: 12px; display: inline-block;">
+        <strong>Plan:</strong> <span id="user-plan">Loading...</span> | 
+        <strong>FAQs:</strong> <span id="faq-count">0</span> / <span id="faq-limit">0</span>
+        <span id="limit-warning" style="color: #ef4444; margin-left: 8px; display: none;">⚠️ Limit Reached</span>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="controls">
+            <div class="controls-left">
+                <label for="client-select">Client:</label>
+                <select id="client-select">
+                    <option value="default">Default</option>
+                    <option value="demo">Demo</option>
+                </select>
+                <button class="btn btn-primary" onclick="loadFAQs()">🔄 Refresh</button>
+            </div>
+            <button class="btn btn-success" onclick="openAddModal()">+ Add New FAQ</button>
+        </div>
+        
+        <div class="success-message" id="success-message">
+            ✅ Changes saved successfully!
+        </div>
+        
+        <div class="error-message" id="error-message">
+            ❌ Error saving changes. Please try again.
+        </div>
+        
+        <div class="faq-list" id="faq-list">
+            <div class="empty-state">
+                <div class="empty-state-icon">⏳</div>
+                <p>Loading FAQs...</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add/Edit Modal -->
+    <div class="modal" id="faq-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Add New FAQ</h2>
+                <button class="modal-close" onclick="closeModal()">×</button>
+            </div>
+            
+            <form id="faq-form">
+                <input type="hidden" id="faq-id">
+                
+                <div class="form-group">
+                    <label>Question</label>
+                    <input type="text" id="faq-question" placeholder="What are your business hours?" required>
+                    <div class="hint">The question your customers will ask</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Answer</label>
+                    <textarea id="faq-answer" placeholder="We're open Monday to Friday, 9 AM - 6 PM EST." required></textarea>
+                    <div class="hint">The response the chatbot will give</div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Trigger Keywords</label>
+                    <input type="text" id="faq-triggers" placeholder="hours, time, open, available" required>
+                    <div class="hint">Keywords that trigger this answer (comma-separated)</div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-success">Save FAQ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        let userPlan = 'free';
+        let faqLimit = 5;
+        let currentFAQs = [];
+        let editingIndex = -1;
+
+        
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const clientId = urlParams.get('client_id') || 'demo';
+            document.getElementById('client-select').value = clientId;
+            loadFAQs();
+        };
+        
+        async function loadFAQs() {
+            const clientId = document.getElementById('client-select').value;
+            
+            try {
+                const response = await fetch(`/api/faqs?client_id=${clientId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentFAQs = data.faqs;
+                    renderFAQs();
+                    updateFaqCount();
+                }
+            } catch (error) {
+                console.error('Error loading FAQs:', error);
+                showError();
+            }
+        }
+        
+            // Add this new function (doesn't replace anything)
+        function updateFaqCount() {
+            document.getElementById('faq-count').textContent = currentFAQs.length;
+            document.getElementById('faq-limit').textContent = faqLimit;
+    
+            const warning = document.getElementById('limit-warning');
+            if (currentFAQs.length >= faqLimit) {
+                warning.style.display = 'inline';
+            } else {
+                warning.style.display = 'none';
+            }
+        }
+
+        function renderFAQs() {
+            const container = document.getElementById('faq-list');
+            
+            if (currentFAQs.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📝</div>
+                        <p>No FAQs yet. Click "Add New FAQ" to get started!</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = currentFAQs.map((faq, index) => `
+                <div class="faq-item">
+                    <div class="faq-header">
+                        <div class="faq-question">${escapeHtml(faq.question)}</div>
+                        <div class="faq-actions">
+                            <button class="btn-small btn-edit" onclick="editFAQ(${index})">✏️ Edit</button>
+                            <button class="btn-small btn-delete" onclick="deleteFAQ(${index})">🗑️ Delete</button>
+                        </div>
+                    </div>
+                    <div class="faq-answer">${escapeHtml(faq.answer)}</div>
+                    <div class="faq-triggers">
+                        ${faq.triggers.map(t => `<span class="trigger-tag">${escapeHtml(t)}</span>`).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function openAddModal() {
+            document.getElementById('modal-title').textContent = 'Add New FAQ';
+            document.getElementById('faq-form').reset();
+            document.getElementById('faq-id').value = '';
+            editingIndex = -1;
+            document.getElementById('faq-modal').style.display = 'flex';
+        }
+        
+        function editFAQ(index) {
+            const faq = currentFAQs[index];
+            document.getElementById('modal-title').textContent = 'Edit FAQ';
+            document.getElementById('faq-id').value = faq.id;
+            document.getElementById('faq-question').value = faq.question;
+            document.getElementById('faq-answer').value = faq.answer;
+            document.getElementById('faq-triggers').value = faq.triggers.join(', ');
+            editingIndex = index;
+            document.getElementById('faq-modal').style.display = 'flex';
+        }
+        
+        async function deleteFAQ(index) {
+            if (!confirm('Are you sure you want to delete this FAQ?')) {
+                return;
+            }
+            
+            const clientId = document.getElementById('client-select').value;
+            const updatedFAQs = currentFAQs.filter((_, i) => i !== index);
+            
+            try {
+                const response = await fetch('/api/faqs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        client_id: clientId,
+                        faqs: updatedFAQs
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentFAQs = updatedFAQs;
+                    renderFAQs();
+                    showSuccess();
+                } else {
+                    showError();
+                }
+            } catch (error) {
+                showError();
+            }
+        }
+        
+        function closeModal() {
+            document.getElementById('faq-modal').style.display = 'none';
+        }
+        
+        document.getElementById('faq-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            if (editingIndex < 0 && currentFAQs.length >= faqLimit) {
+                showError();
+                document.getElementById('error-message').textContent = `⚠️ Plan limit: Maximum ${faqLimit} FAQs allowed. Upgrade your plan to add more.`;
+                return;
+            }
+            
+            const clientId = document.getElementById('client-select').value;
+            const question = document.getElementById('faq-question').value.trim();
+            const answer = document.getElementById('faq-answer').value.trim();
+            const triggers = document.getElementById('faq-triggers').value.split(',').map(t => t.trim()).filter(Boolean);
+            
+            const newFAQ = {
+                id: editingIndex >= 0 ? currentFAQs[editingIndex].id : `faq_${Date.now()}`,
+                question: question,
+                answer: answer,
+                triggers: triggers
+            };
+            
+            let updatedFAQs;
+            if (editingIndex >= 0) {
+                updatedFAQs = [...currentFAQs];
+                updatedFAQs[editingIndex] = newFAQ;
+            } else {
+                updatedFAQs = [...currentFAQs, newFAQ];
+            }
+            
+            try {
+                const response = await fetch('/api/faqs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        client_id: clientId,
+                        faqs: updatedFAQs
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentFAQs = updatedFAQs;
+                    renderFAQs();
+                    closeModal();
+                    showSuccess();
+                } else {
+                    showError();
+                }
+            } catch (error) {
+                showError();
+            }
+        });
+        
+        function showSuccess() {
+            const el = document.getElementById('success-message');
+            el.style.display = 'block';
+            setTimeout(() => { el.style.display = 'none'; }, 3000);
+        }
+        
+        function showError() {
+            const el = document.getElementById('error-message');
+            el.style.display = 'block';
+            setTimeout(() => { el.style.display = 'none'; }, 3000);
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
