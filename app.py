@@ -1700,6 +1700,30 @@ def affiliate_dashboard():
     
     return render_template('affiliate-dashboard.html', stats=stats, commissions=commissions)
 
+@app.route('/admin/init-db-production', methods=['GET', 'POST'])
+def init_db_production():
+    """One-time database initialization for production"""
+    if request.method == 'POST':
+        secret = request.form.get('secret')
+        if secret == 'your-secret-password-here':
+            models.init_db()
+            # Add affiliate tables
+            conn = models.get_db()
+            cursor = conn.cursor()
+            # ... run affiliate table creation SQL ...
+            conn.commit()
+            conn.close()
+            return "✅ Database initialized!"
+        else:
+            return "❌ Invalid secret"
+    
+    return '''
+    <form method="POST">
+        <input type="password" name="secret" placeholder="Admin secret">
+        <button type="submit">Initialize DB</button>
+    </form>
+    '''
+
 # =====================================================================
 # RUN SERVER
 # =====================================================================
