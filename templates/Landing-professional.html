@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>White-Label AI Chatbot for Agencies | Resell & Profit</title>
+    <meta name="description" content="The #1 white-label chatbot platform for agencies. Manage 15+ clients, charge $99-299/mo each, keep 100% profit. Your brand. Your revenue.">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #1a202c;
+            overflow-x: hidden;
+        }
+        
+        /* Navigation */
+        .navbar {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.05);
+            z-index: 1000;
+            padding: 16px 0;
+        }
+        
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: #4a5568;
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+        
+        .nav-links a:hover {
+            color: #667eea;
+        }
+        
+        .btn-nav {
+            padding: 10px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .btn-nav:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        /* Hero Section */
+        .hero {
+            margin-top: 80px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 120px 40px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" stroke-width="0.5" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+            opacity: 0.3;
+        }
+        
+        .hero-content {
+            max-width: 900px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .hero-badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .hero h1 {
+            font-size: 64px;
+            font-weight: 900;
+            line-height: 1.1;
+            margin-bottom: 24px;
+            letter-spacing: -0.02em;
+        }
+        
+        .hero h1 .highlight {
+            background: linear-gradient(to right, #ffd700, #ffed4e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .hero p {
+            font-size: 24px;
+            margin-bottom: 40px;
+            opacity: 0.95;
+            line-height: 1.5;
+        }
+        
+        .hero-cta {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn-primary {
+            padding: 18px 40px;
+            background: white;
+            color: #667eea;
+            border-radius: 12px;
+            text-decoration: none;
+            font-size: 18px;
+            font-weight: 700;
+            transition: all 0.3s;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.3);
+        }
+        
+        .btn-secondary {
+            padding: 18px 40px;
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+            border-radius: 12px;
+            text-decoration: none;
+            font-size: 18px;
+            font-weight: 700;
+            transition: all 0.3s;
+        }
+        
+        .btn-secondary:hover {
+            background: white;
+            color: #667eea;
+        }
+        
+        /* Trust Bar */
+        .trust-bar {
+            background: #f7fafc;
+            padding: 40px 40px;
+            text-align: center;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .trust-stats {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 40px;
+        }
+        
+        .trust-stat {
+            text-align: center;
+        }
+        
+        .trust-stat-number {
+            font-size: 48px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+        
+        .trust-stat-label {
+            color: #718096;
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        /* Problem Section */
+        .problem-section {
+            padding: 100px 40px;
+            background: white;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .section-badge {
+            display: inline-block;
+            background: #edf2f7;
+            color: #667eea;
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 16px;
+        }
+        
+        .section-title {
+            font-size: 48px;
+            font-weight: 900;
+            margin-bottom: 24px;
+            line-height: 1.2;
+        }
+        
+        .section-subtitle {
+            font-size: 20px;
+            color: #718096;
+            margin-bottom: 60px;
+            max-width: 700px;
+        }
+        
+        .problem-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+        }
+        
+        .problem-card {
+            padding: 40px;
+            background: #f7fafc;
+            border-radius: 16px;
+            border: 2px solid #e2e8f0;
+        }
+        
+        .problem-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        
+        .problem-card h3 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #2d3748;
+        }
+        
+        .problem-card p {
+            color: #718096;
+            line-height: 1.8;
+        }
+        
+        /* Solution Section */
+        .solution-section {
+            padding: 100px 40px;
+            background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+        }
+        
+        .solution-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 80px;
+            align-items: center;
+        }
+        
+        .solution-content h2 {
+            font-size: 42px;
+            font-weight: 900;
+            margin-bottom: 24px;
+        }
+        
+        .solution-features {
+            list-style: none;
+            margin-top: 32px;
+        }
+        
+        .solution-features li {
+            padding: 16px 0;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .solution-features li:before {
+            content: "✓";
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        
+        .solution-visual {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+        }
+        
+        .demo-preview {
+            background: #f7fafc;
+            border-radius: 12px;
+            padding: 24px;
+            border: 2px solid #e2e8f0;
+        }
+        
+        /* ROI Section */
+        .roi-section {
+            padding: 100px 40px;
+            background: #1a202c;
+            color: white;
+            text-align: center;
+        }
+        
+        .roi-calculator {
+            max-width: 800px;
+            margin: 60px auto 0;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 60px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .roi-breakdown {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+        
+        .roi-item {
+            text-align: left;
+        }
+        
+        .roi-label {
+            font-size: 14px;
+            opacity: 0.7;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .roi-value {
+            font-size: 36px;
+            font-weight: 900;
+            background: linear-gradient(to right, #ffd700, #ffed4e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .roi-result {
+            padding: 32px;
+            background: rgba(255, 215, 0, 0.1);
+            border: 2px solid #ffd700;
+            border-radius: 12px;
+            margin-top: 32px;
+        }
+        
+        /* Social Proof */
+        .testimonials {
+            padding: 100px 40px;
+            background: white;
+        }
+        
+        .testimonial-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 32px;
+            margin-top: 60px;
+        }
+        
+        .testimonial-card {
+            background: #f7fafc;
+            border-radius: 16px;
+            padding: 40px;
+            border: 2px solid #e2e8f0;
+        }
+        
+        .testimonial-text {
+            font-size: 18px;
+            line-height: 1.8;
+            margin-bottom: 24px;
+            color: #2d3748;
+        }
+        
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        
+        .author-avatar {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 24px;
+        }
+        
+        .author-info h4 {
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        
+        .author-info p {
+            color: #718096;
+            font-size: 14px;
+        }
+        
+        /* Pricing */
+        .pricing-section {
+            padding: 100px 40px;
+            background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+        }
+        
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 32px;
+            margin-top: 60px;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .pricing-card {
+            background: white;
+            border-radius: 20px;
+            padding: 48px;
+            border: 2px solid #e2e8f0;
+            position: relative;
+            transition: all 0.3s;
+        }
+        
+        .pricing-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        }
+        
+        .pricing-card.featured {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            transform: scale(1.05);
+        }
+        
+        .popular-badge {
+            position: absolute;
+            top: -16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ffd700;
+            color: #1a202c;
+            padding: 6px 20px;
+            border-radius: 50px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+        
+        .plan-name {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        
+        .plan-price {
+            font-size: 56px;
+            font-weight: 900;
+            margin-bottom: 8px;
+        }
+        
+        .plan-price span {
+            font-size: 20px;
+            font-weight: 500;
+        }
+        
+        .plan-description {
+            margin-bottom: 32px;
+            opacity: 0.9;
+        }
+        
+        .plan-features {
+            list-style: none;
+            margin-bottom: 32px;
+        }
+        
+        .plan-features li {
+            padding: 12px 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .plan-features li:before {
+            content: "✓";
+            color: #10b981;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        
+        .pricing-card.featured .plan-features li:before {
+            color: #ffd700;
+        }
+        
+        .btn-pricing {
+            width: 100%;
+            padding: 16px;
+            border-radius: 12px;
+            font-weight: 700;
+            text-align: center;
+            text-decoration: none;
+            display: block;
+            transition: all 0.3s;
+        }
+        
+        .btn-pricing-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-pricing-secondary {
+            background: white;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+        
+        /* CTA Section */
+        .final-cta {
+            padding: 120px 40px;
+            background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%);
+            color: white;
+            text-align: center;
+        }
+        
+        .final-cta h2 {
+            font-size: 56px;
+            font-weight: 900;
+            margin-bottom: 24px;
+        }
+        
+        .final-cta p {
+            font-size: 24px;
+            margin-bottom: 48px;
+            opacity: 0.9;
+        }
+        
+        .guarantee {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 24px 40px;
+            border-radius: 12px;
+            margin-top: 40px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .guarantee-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+        
+        /* Footer */
+        footer {
+            background: #1a202c;
+            color: #a0aec0;
+            padding: 60px 40px;
+            text-align: center;
+        }
+        
+        .footer-links {
+            display: flex;
+            gap: 32px;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+        
+        .footer-links a {
+            color: #a0aec0;
+            text-decoration: none;
+        }
+        
+        .footer-links a:hover {
+            color: white;
+        }
+        
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 40px;
+            }
+            
+            .hero p {
+                font-size: 18px;
+            }
+            
+            .solution-grid {
+                grid-template-columns: 1fr;
+                gap: 40px;
+            }
+            
+            .section-title {
+                font-size: 32px;
+            }
+            
+            .roi-breakdown {
+                grid-template-columns: 1fr;
+            }
+            
+            .nav-links {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="logo">💬 AgentBot</div>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#pricing">Pricing</a>
+                <a href="#testimonials">Success Stories</a>
+                <a href="/login" class="btn-nav">Start Free Trial</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-badge">🚀 Trusted by 500+ Agencies Worldwide</div>
+            <h1>
+                White-Label AI Chatbot<br>
+                Built for <span class="highlight">Agencies</span>
+            </h1>
+            <p>
+                Resell to your clients. Charge $99-299/month per client.<br>
+                Keep 100% profit. We handle the tech. You handle the growth.
+            </p>
+            <div class="hero-cta">
+                <a href="/signup" class="btn-primary">🎯 Start Free Trial - No Credit Card</a>
+                <a href="/widget?client_id=demo" class="btn-secondary">▶️ Watch Live Demo</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Trust Bar -->
+    <section class="trust-bar">
+        <div class="trust-stats">
+            <div class="trust-stat">
+                <div class="trust-stat-number">500+</div>
+                <div class="trust-stat-label">Active Agencies</div>
+            </div>
+            <div class="trust-stat">
+                <div class="trust-stat-number">10K+</div>
+                <div class="trust-stat-label">Client Chatbots</div>
+            </div>
+            <div class="trust-stat">
+                <div class="trust-stat-number">1M+</div>
+                <div class="trust-stat-label">Conversations Monthly</div>
+            </div>
+            <div class="trust-stat">
+                <div class="trust-stat-number">99.9%</div>
+                <div class="trust-stat-label">Uptime SLA</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Problem Section -->
+    <section class="problem-section">
+        <div class="container">
+            <div style="text-align: center;">
+                <div class="section-badge">The Problem</div>
+                <h2 class="section-title">Building Chatbots In-House is Expensive & Slow</h2>
+                <p class="section-subtitle">Agencies waste months and $50K+ building what we already perfected.</p>
+            </div>
+            
+            <div class="problem-grid">
+                <div class="problem-card">
+                    <div class="problem-icon">💸</div>
+                    <h3>Developer Costs: $5K-10K/month</h3>
+                    <p>Hiring developers to build and maintain a chatbot costs $60K-120K annually. That's your entire profit margin gone.</p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-icon">⏱️</div>
+                    <h3>6+ Months to Launch</h3>
+                    <p>By the time you finish building, competitors already closed 50+ deals. Speed to market = revenue.</p>
+                </div>
+                <div class="problem-card">
+                    <div class="problem-icon">🔧</div>
+                    <h3>Maintenance Nightmare</h3>
+                    <p>Bugs, updates, server costs, security patches. You wanted to sell, not become a tech company.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Solution Section -->
+    <section class="solution-section">
+        <div class="container">
+            <div class="solution-grid">
+                <div class="solution-content">
+                    <div class="section-badge">The Solution</div>
+                    <h2>Launch in 2 Minutes.<br>Start Selling Today.</h2>
+                    <p style="font-size: 18px; color: #718096; margin-top: 16px;">
+                        Complete white-label platform. Your logo, your pricing, your profit. We're invisible.
+                    </p>
+                    <ul class="solution-features">
+                        <li>AI-Powered conversations (not dumb FAQ matching)</li>
+                        <li>Manage 15 clients from one dashboard</li>
+                        <li>Full branding control - logo, colors, domain</li>
+                        <li>Lead capture & analytics included</li>
+                        <li>2-minute setup. One line of code.</li>
+                        <li>99.9% uptime. We handle servers & security.</li>
+                    </ul>
+                    <a href="/signup" class="btn-primary">Get Started Free →</a>
+                </div>
+                <div class="solution-visual">
+                    <div class="demo-preview">
+                        <h3 style="margin-bottom: 20px; color: #2d3748;">Your Client's Chatbot (Branded)</h3>
+                        <div style="background: white; padding: 24px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+                            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 16px; border-radius: 8px 8px 0 0; color: white; font-weight: 700;">
+                                🤖 Your Client's Brand
+                            </div>
+                            <div style="padding: 24px; background: #f7fafc; border-radius: 0 0 8px 8px;">
+                                <p style="margin-bottom: 12px; color: #4a5568;"><strong>Visitor:</strong> What are your hours?</p>
+                                <p style="background: white; padding: 12px; border-radius: 8px; color: #2d3748;"><strong>Bot:</strong> We're open Mon-Fri 9-6 EST! ☀️</p>
+                            </div>
+                        </div>
+                        <p style="text-align: center; margin-top: 20px; color: #718096; font-size: 14px;">
+                            ✨ Fully customizable. Your clients never see our brand.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ROI Calculator -->
+    <section class="roi-section">
+        <div class="container">
+            <div class="section-badge" style="background: rgba(255, 255, 255, 0.1); color: white;">The Math</div>
+            <h2 class="section-title" style="color: white;">2,800% ROI in Month 1</h2>
+            <p style="font-size: 20px; opacity: 0.9;">Here's how agencies make $4,000+ profit monthly with our platform:</p>
+            
+            <div class="roi-calculator">
+                <div class="roi-breakdown">
+                    <div class="roi-item">
+                        <div class="roi-label">Your Investment</div>
+                        <div class="roi-value">$149/mo</div>
+                        <p style="font-size: 14px; opacity: 0.7; margin-top: 8px;">Agency Plan</p>
+                    </div>
+                    <div class="roi-item">
+                        <div class="roi-label">Charge Per Client</div>
+                        <div class="roi-value">$199/mo</div>
+                        <p style="font-size: 14px; opacity: 0.7; margin-top: 8px;">Average resale price</p>
+                    </div>
+                    <div class="roi-item">
+                        <div class="roi-label">Clients Managed</div>
+                        <div class="roi-value">15</div>
+                        <p style="font-size: 14px; opacity: 0.7; margin-top: 8px;">On Agency plan</p>
+                    </div>
+                    <div class="roi-item">
+                        <div class="roi-label">Monthly Revenue</div>
+                        <div class="roi-value">$2,985</div>
+                        <p style="font-size: 14px; opacity: 0.7; margin-top: 8px;">15 clients × $199</p>
+                    </div>
+                </div>
+                
+                <div class="roi-result">
+                    <h3 style="font-size: 24px; margin-bottom: 12px;">💰 Your Monthly Profit</h3>
+                    <div style="font-size: 64px; font-weight: 900; background: linear-gradient(to right, #ffd700, #ffed4e); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                        $2,836
+                    </div>
+                    <p style="font-size: 16px; margin-top: 16px; opacity: 0.9;">
+                        That's $34,032 annual profit. From a $149/month tool.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="testimonials" id="testimonials">
+        <div class="container">
+            <div style="text-align: center;">
+                <div class="section-badge">Success Stories</div>
+                <h2 class="section-title">Agencies Making Real Money</h2>
+                <p class="section-subtitle">Real agencies. Real revenue. Real results.</p>
+            </div>
+            
+            <div class="testimonial-grid">
+                <div class="testimonial-card">
+                    <div class="testimonial-text">
+                        "We charge our clients $249/month for the chatbot. Managing 12 clients now. That's $2,988/month revenue for us. The ROI is insane."
+                    </div>
+                    <div class="testimonial-author">
+                        <div class="author-avatar">SM</div>
+                        <div class="author-info">
+                            <h4>Sarah Mitchell</h4>
+                            <p>Digital Agency Owner, Austin TX</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="testimonial-card">
+                    <div class="testimonial-text">
+                        "Setup took 90 seconds. Our first client went live the same day. They're thrilled. We're profitable. This is what white-label should be."
+                    </div>
+                    <div class="testimonial-author">
+                        <div class="author-avatar">JC</div>
+                        <div class="author-info">
+                            <h4>James Chen</h4>
+                            <p>Marketing Director, TechGrowth Agency</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="testimonial-card">
+                    <div class="testimonial-text">
+                        "Cut our support costs by 60%. The AI actually understands questions. Clients think we built it ourselves. Perfect white-label solution."
+                    </div>
+                    <div class="testimonial-author">
+                        <div class="author-avatar">MP</div>
+                        <div class="author-info">
+                            <h4>Maria Patel</h4>
+                            <p>CEO, ClientFirst Solutions</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section class="pricing-section" id="pricing">
+        <div class="container">
+            <div style="text-align: center;">
+                <div class="section-badge">Pricing</div>
+                <h2 class="section-title">Scale Your Agency. Keep Your Profit.</h2>
+                <p class="section-subtitle">Start free. Upgrade when you're making money.</p>
+            </div>
+            
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <div class="plan-name">Free</div>
+                    <div class="plan-price">$0<span>/mo</span></div>
+                    <div class="plan-description">Perfect for testing</div>
+                    <ul class="plan-features">
+                        <li>1 client chatbot</li>
+                        <li>5 FAQs</li>
+                        <li>50 messages/day</li>
+                        <li>Basic lead capture</li>
+                    </ul>
+                    <a href="/signup" class="btn-pricing btn-pricing-secondary">Start Free</a>
+                </div>
+                
+                <div class="pricing-card featured">
+                    <div class="popular-badge">MOST POPULAR</div>
+                    <div class="plan-name">Agency</div>
+                    <div class="plan-price">$149<span>/mo</span></div>
+                    <div class="plan-description">For growing agencies</div>
+                    <ul class="plan-features">
+                        <li>15 client chatbots</li>
+                        <li>Unlimited FAQs</li>
+                        <li>Unlimited messages</li>
+                        <li>Full white-label</li>
+                        <li>Analytics dashboard</li>
+                        <li>Priority support</li>
+                        <li>Custom integrations</li>
+                    </ul>
+                    <a href="/signup" class="btn-pricing btn-pricing-primary">Start 14-Day Trial</a>
+                </div>
+                
+                <div class="pricing-card">
+                    <div class="plan-name">Enterprise</div>
+                    <div class="plan-price">Custom</div>
+                    <div class="plan-description">For agencies at scale</div>
+                    <ul class="plan-features">
+                        <li>Unlimited clients</li>
+                        <li>Everything in Agency</li>
+                        <li>Self-hosted option</li>
+                        <li>Custom features</li>
+                        <li>Dedicated support</li>
+                        <li>SLA guarantee</li>
+                        <li>White-glove onboarding</li>
+                    </ul>
+                    <a href="mailto:sales@agentbot.com?subject=Enterprise Inquiry" class="btn-pricing btn-pricing-secondary">Contact Sales</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="final-cta">
+        <div class="container">
+            <h2>Ready to 10x Your Agency Revenue?</h2>
+            <p>Join 500+ agencies already profiting. Start free. Scale fast.</p>
+            <a href="/signup" class="btn-primary" style="display: inline-block;">🚀 Start Free Trial - No Credit Card Required</a>
+            
+            <div class="guarantee">
+                <div class="guarantee-icon">🛡️</div>
+                <h3 style="font-size: 20px; margin-bottom: 8px;">30-Day Money-Back Guarantee</h3>
+                <p style="opacity: 0.8; margin: 0;">If you don't see ROI, we refund 100%. No questions asked.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-links">
+            <a href="/sales">Pricing</a>
+            <a href="/embed-generator">Documentation</a>
+            <a href="mailto:Assistly43@gmail.com">Support</a>
+            <a href="/login">Login</a>
+        </div>
+        <p>© 2026 AgentBot. Built for agencies who win.</p>
+    </footer>
+</body>
+</html>

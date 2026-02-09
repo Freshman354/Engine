@@ -15,12 +15,22 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from functools import wraps
 import models
 from io import StringIO
-
+from config import Config
+from ai_helper import get_ai_helper
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
+
+# Initialize AI helper at app startup
+#After creating app
+ai_helper = get_ai_helper(Config.GEMINI_API_KEY, Config.GEMINI_MODEL)
+
+if ai_helper and ai_helper.enabled:
+    app.logger.info("✅ Gemini AI initialized")
+
+USE_AI = Config.USE_AI
 
 # Plan limits
 PLAN_LIMITS = {
@@ -393,13 +403,14 @@ def sanitize_input(text, max_length=500):
 @app.route('/api/chat', methods=['POST'])
 @limiter.limit("30 per minute")
 def chat():
-    """Handle chat messages"""
+    """Handle chat messages with FAST hybrid intelligence"""
     try:
         data = request.json
         
         # Sanitize inputs
         message = sanitize_input(data.get('message', ''))
         client_id = sanitize_input(data.get('client_id', 'demo'), max_length=50)
+        conversation_history = data.get('history', [])
         
         if not message:
             return jsonify({
@@ -407,80 +418,106 @@ def chat():
                 'error': 'Message is required'
             }), 400
         
-        # Get client from database
+        # Get client and FAQs from database
         try:
             client = models.get_client_by_id(client_id)
             if not client:
-                # If client doesn't exist in database, use demo FAQs
                 app.logger.warning(f'Client not found: {client_id}, using demo FAQs')
                 faqs_list = [
                     {
                         "id": "demo_1",
                         "question": "What are your hours?",
-                        "answer": "We're here Monday-Friday, 9 AM - 6 PM EST! 🕒",
-                        "triggers": ["hours", "time", "open", "available", "when"]
+                        "answer": "We're open Monday-Friday, 9 AM - 6 PM EST. Weekend hours: Saturday 10 AM - 4 PM. Closed Sundays. 🕒",
+                        "triggers": ["hours", "time", "open", "available", "when", "schedule"]
                     },
                     {
                         "id": "demo_2",
                         "question": "What are your prices?",
-                        "answer": "Starter: $49/mo | Agency: $149/mo | Enterprise: Custom pricing. Want details? Type 'contact'!",
-                        "triggers": ["price", "pricing", "cost", "how much", "payment"]
+                        "answer": "Starter: $49/mo | Agency: $149/mo | Enterprise: Custom pricing! 💰",
+                        "triggers": ["price", "pricing", "cost", "how much", "payment", "charge"]
+                    },
+                    {
+                        "id": "demo_3",
+                        "question": "Do you offer discounts?",
+                        "answer": "Yes! Annual plans get 20% off. Students/nonprofits get 30% off. 🎉",
+                        "triggers": ["discount", "sale", "promo", "coupon", "deal", "cheaper"]
                     }
                 ]
                 config = {}
             else:
-                # Parse config
                 config = json.loads(client['branding_settings']) if client['branding_settings'] else {}
-                # Get FAQs from database
                 faqs_list = models.get_faqs(client_id)
         except Exception as db_error:
             app.logger.error(f'Database error: {db_error}')
-            # Fallback to demo FAQs
-            faqs_list = [
-                {
-                    "id": "demo_1",
-                    "question": "What are your hours?",
-                    "answer": "We're here Monday-Friday, 9 AM - 6 PM EST! 🕒",
-                    "triggers": ["hours", "time", "open", "available", "when"]
-                }
-            ]
+            faqs_list = []
             config = {}
         
-        faqs = {'faqs': faqs_list}
+        # Get lead triggers
+        lead_triggers = config.get('bot_settings', {}).get('lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk'])
         
-        # Get lead triggers from config
-        lead_triggers = config.get('bot_settings', {}).get('lead_triggers', ['contact', 'sales', 'demo'])
+        # ============================================
+        # HYBRID INTELLIGENCE (FAST + SMART)
+        # ============================================
         
-        # Match FAQ
-        response, extracted_email = match_faq(message, faqs, lead_triggers)
+        message_lower = message.lower()
         
-        # Handle lead collection trigger
-        if response == "TRIGGER_LEAD_COLLECTION":
-            return jsonify({
-                'success': True,
-                'response': "I'd be happy to connect you with our team! To help us serve you better, may I have your name?",
-                'trigger_lead_collection': True,
-                'extracted_email': extracted_email,
-                'contact_info': config.get('contact', {})
-            })
+        # Step 1: INSTANT lead detection (no AI needed)
+        for trigger in lead_triggers:
+            if trigger.lower() in message_lower:
+                return jsonify({
+                    'success': True,
+                    'response': "I'd be happy to connect you with our team! What's the best email to reach you?",
+                    'trigger_lead_collection': True,
+                    'method': 'instant',
+                    'contact_info': config.get('contact', {})
+                })
         
-        # Handle no match
-        if response == "NO_MATCH_WITH_SUGGESTIONS" or not response:
-            fallback = config.get('bot_settings', {}).get('fallback_message', 
-                "I'm not sure about that. Would you like to speak with a human? Type 'contact'!")
+        # Step 2: INSTANT keyword matching (no AI - super fast!)
+        for faq in faqs_list:
+            triggers = faq.get('triggers', [])
+            # Check if ANY trigger word is in the message
+            for trigger in triggers:
+                if trigger.lower() in message_lower:
+                    app.logger.info(f"Instant match: {faq.get('id')} via keyword '{trigger}'")
+                    return jsonify({
+                        'success': True,
+                        'response': faq.get('answer'),
+                        'confidence': 0.95,
+                        'method': 'keyword'  # Debug: shows it was instant
+                    })
+        
+        # Step 3: AI-powered matching (only if keyword matching failed)
+        if ai_helper and ai_helper.enabled:
+            app.logger.info("No keyword match, using AI...")
             
-            return jsonify({
-                'success': True,
-                'response': fallback,
-                'trigger_lead_collection': False,
-                'show_contact_button': True
-            })
+            try:
+                # Single AI call for FAQ matching
+                best_faq, confidence = ai_helper.find_best_faq(message, faqs_list)
+                
+                if best_faq and confidence > 0.5:
+                    # Return FAQ answer DIRECTLY (don't generate - faster!)
+                    return jsonify({
+                        'success': True,
+                        'response': best_faq.get('answer'),
+                        'confidence': confidence,
+                        'method': 'ai'
+                    })
+            except Exception as ai_error:
+                app.logger.error(f"AI error: {ai_error}")
+                # Fall through to fallback
         
-        # Return matched FAQ response
+        # Step 4: Fallback response
+        fallback = config.get('bot_settings', {}).get(
+            'fallback_message',
+            "I'm not sure about that. Would you like to speak with our team? Type 'contact'!"
+        )
+        
         return jsonify({
             'success': True,
-            'response': response,
-            'trigger_lead_collection': False
+            'response': fallback,
+            'confidence': 0.0,
+            'show_contact_button': True,
+            'method': 'fallback'
         })
         
     except Exception as e:
@@ -819,392 +856,8 @@ def admin_leads():
 
 @app.route('/landing')
 def landing_page():
-    """Public landing page with value proposition"""
-    return '''
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>White-Label FAQ Chatbot - Deploy & Manage</title>
-        <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-            
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
-                padding: 20px;
-            }
-            
-            /* Navigation */
-            .navbar {
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                background: rgba(255, 255, 255, 0.95);
-                backdrop-filter: blur(10px);
-                padding: 16px 40px;
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-                z-index: 1000;
-            }
-            
-            .logo {
-                font-size: 24px;
-                font-weight: 700;
-                color: #667eea;
-            }
-            
-            .hamburger {
-                display: none;
-                flex-direction: column;
-                cursor: pointer;
-                gap: 5px;
-            }
-            
-            .hamburger span {
-                width: 25px;
-                height: 3px;
-                background: #667eea;
-                border-radius: 3px;
-                transition: 0.3s;
-            }
-            
-            .nav-menu {
-                display: flex;
-                gap: 24px;
-                align-items: center;
-            }
-            
-            .nav-menu a {
-                color: #374151;
-                text-decoration: none;
-                font-weight: 600;
-                transition: color 0.2s;
-            }
-            
-            .nav-menu a:hover {
-                color: #667eea;
-            }
-            
-            .btn-login {
-                padding: 8px 20px;
-                background: white;
-                color: #667eea;
-                border: 2px solid #667eea;
-                border-radius: 6px;
-                font-weight: 600;
-                text-decoration: none;
-                transition: all 0.2s;
-            }
-            
-            .btn-login:hover {
-                background: #667eea;
-                color: white;
-            }
-            
-            .btn-signup {
-                padding: 8px 20px;
-                background: #667eea;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-weight: 600;
-                text-decoration: none;
-                transition: all 0.2s;
-            }
-            
-            .btn-signup:hover {
-                background: #5568d3;
-            }
-            
-            /* Mobile Menu */
-            @media (max-width: 768px) {
-                .hamburger {
-                    display: flex;
-                }
-                
-                .nav-menu {
-                    position: fixed;
-                    top: 64px;
-                    left: -100%;
-                    flex-direction: column;
-                    background: white;
-                    width: 100%;
-                    padding: 20px;
-                    gap: 16px;
-                    align-items: flex-start;
-                    transition: left 0.3s;
-                    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-                }
-                
-                .nav-menu.active {
-                    left: 0;
-                }
-                
-                .navbar {
-                    padding: 16px 20px;
-                }
-            }
-            
-            /* Hero Section */
-            .container {
-                max-width: 1200px;
-                margin: 100px auto 40px;
-                background: white;
-                border-radius: 24px;
-                padding: 60px 40px;
-                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-            }
-            
-            .hero {
-                text-align: center;
-                margin-bottom: 60px;
-            }
-            
-            .hero-icon {
-                font-size: 64px;
-                margin-bottom: 20px;
-            }
-            
-            .hero h1 {
-                font-size: 48px;
-                color: #1f2937;
-                margin-bottom: 16px;
-                line-height: 1.2;
-            }
-            
-            .hero p {
-                font-size: 20px;
-                color: #6b7280;
-                margin-bottom: 32px;
-            }
-            
-            .cta-buttons {
-                display: flex;
-                gap: 16px;
-                justify-content: center;
-                flex-wrap: wrap;
-            }
-            
-            .btn-primary {
-                padding: 16px 32px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                border: none;
-                border-radius: 8px;
-                font-size: 18px;
-                font-weight: 600;
-                cursor: pointer;
-                text-decoration: none;
-                display: inline-block;
-                transition: transform 0.2s;
-            }
-            
-            .btn-primary:hover {
-                transform: translateY(-2px);
-            }
-            
-            .btn-secondary {
-                padding: 16px 32px;
-                background: white;
-                color: #667eea;
-                border: 2px solid #667eea;
-                border-radius: 8px;
-                font-size: 18px;
-                font-weight: 600;
-                cursor: pointer;
-                text-decoration: none;
-                display: inline-block;
-                transition: all 0.2s;
-            }
-            
-            .btn-secondary:hover {
-                background: #f0f9ff;
-            }
-            
-            /* Stats */
-            .stats {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 20px;
-                margin-bottom: 60px;
-                padding: 40px 0;
-                border-top: 2px solid #e5e7eb;
-                border-bottom: 2px solid #e5e7eb;
-            }
-            
-            .stat {
-                text-align: center;
-            }
-            
-            .stat-value {
-                font-size: 48px;
-                font-weight: 700;
-                color: #667eea;
-                margin-bottom: 8px;
-            }
-            
-            .stat-label {
-                font-size: 14px;
-                color: #6b7280;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-            }
-            
-            /* Features */
-            .features {
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-                gap: 32px;
-            }
-            
-            .feature {
-                text-align: center;
-            }
-            
-            .feature-icon {
-                font-size: 48px;
-                margin-bottom: 16px;
-            }
-            
-            .feature h3 {
-                font-size: 20px;
-                color: #1f2937;
-                margin-bottom: 12px;
-            }
-            
-            .feature p {
-                color: #6b7280;
-                line-height: 1.6;
-            }
-            
-            @media (max-width: 768px) {
-                .container {
-                    padding: 40px 20px;
-                    margin-top: 80px;
-                }
-                
-                .hero h1 {
-                    font-size: 32px;
-                }
-                
-                .hero p {
-                    font-size: 16px;
-                }
-                
-                .stat-value {
-                    font-size: 32px;
-                }
-            }
-        </style>
-    </head>
-    <body>
-        <!-- Navigation -->
-        <nav class="navbar">
-            <div class="logo">💬 FAQ Chatbot</div>
-            
-            <div class="hamburger" onclick="toggleMenu()">
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
-            
-            <div class="nav-menu" id="navMenu">
-                <a href="/sales">Pricing</a>
-                <a href="/embed-generator">Embed Generator</a>
-                <a href="mailto:support@example.com">Contact Us</a>
-                <a href="/login" class="btn-login">Login</a>
-                <a href="/signup" class="btn-signup">Sign Up Free</a>
-            </div>
-        </nav>
-        
-        <!-- Main Content -->
-        <div class="container">
-            <div class="hero">
-                <div class="hero-icon">💬</div>
-                <h1>White-Label FAQ Chatbot</h1>
-                <p>Deploy a customizable chatbot — white-label, embeddable, and easy to manage</p>
-                
-                <div class="cta-buttons">
-                    <a href="/widget?client_id=demo" class="btn-primary">🎯 Try Live Demo</a>
-                    <a href="/embed-generator" class="btn-secondary">📋 Get Embed Code</a>
-                </div>
-            </div>
-            
-            <div class="stats">
-                <div class="stat">
-                    <div class="stat-value">10 min</div>
-                    <div class="stat-label">Setup Time</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value">∞</div>
-                    <div class="stat-label">Clients Supported</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value">1 line</div>
-                    <div class="stat-label">To Embed</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value">100%</div>
-                    <div class="stat-label">White-Label</div>
-                </div>
-            </div>
-            
-            <div class="features">
-                <div class="feature">
-                    <div class="feature-icon">🎨</div>
-                    <h3>Fully Customizable</h3>
-                    <p>Each client gets their own colors, logo, bot name, and personality. Zero branding from us.</p>
-                </div>
-                
-                <div class="feature">
-                    <div class="feature-icon">📊</div>
-                    <h3>Lead Collection</h3>
-                    <p>Conversational lead capture that feels natural. Collect name, email, phone, and custom fields.</p>
-                </div>
-                
-                <div class="feature">
-                    <div class="feature-icon">⚡</div>
-                    <h3>Easy Embedding</h3>
-                    <p>One line of code on any website. Works with WordPress, Shopify, Webflow, or plain HTML.</p>
-                </div>
-                
-                <div class="feature">
-                    <div class="feature-icon">🔒</div>
-                    <h3>Secure & Fast</h3>
-                    <p>Rate limiting, input validation, CORS protection, and automatic backups included.</p>
-                </div>
-            </div>
-        </div>
-        
-        <script>
-            function toggleMenu() {
-                const menu = document.getElementById('navMenu');
-                menu.classList.toggle('active');
-            }
-            
-            // Close menu when clicking outside
-            document.addEventListener('click', function(event) {
-                const menu = document.getElementById('navMenu');
-                const hamburger = document.querySelector('.hamburger');
-                
-                if (!menu.contains(event.target) && !hamburger.contains(event.target)) {
-                    menu.classList.remove('active');
-                }
-            });
-        </script>
-    </body>
-    </html>
-    '''
+    """Professional landing page - agency focused"""
+    return render_template('landing-professional.html')
  
 
 # =====================================================================
