@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for
+from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for, session, flash
 from flask_cors import CORS
 from dotenv import load_dotenv
 import os
@@ -17,6 +17,7 @@ import models
 from io import StringIO
 from config import Config
 from ai_helper import get_ai_helper
+from paypalrestsdk import Payment, configure
 
 # Load environment variables
 load_dotenv()
@@ -24,11 +25,18 @@ load_dotenv()
 app = Flask(__name__)
 
 # Initialize AI helper at app startup
-#After creating app
 ai_helper = get_ai_helper(Config.GEMINI_API_KEY, Config.GEMINI_MODEL)
 
 if ai_helper and ai_helper.enabled:
     app.logger.info("✅ Gemini AI initialized")
+
+    # Initialize PayPal SDK
+
+configure({
+    "mode": os.getenv('PAYPAL_MODE', 'sandbox'),  # sandbox or live
+    "client_id": os.getenv('PAYPAL_CLIENT_ID'),
+    "client_secret": os.getenv('PAYPAL_CLIENT_SECRET')
+})
 
 USE_AI = Config.USE_AI
 
@@ -400,6 +408,17 @@ def sanitize_input(text, max_length=500):
     
     return text.strip()
 
+@app.route('/api/user/info')
+@login_required
+def user_info():
+    """Get current user's plan info"""
+    return jsonify({
+        'success': True,
+        'plan_type': current_user.plan_type,
+        'email': current_user.email,
+        'id': current_user.id
+    })
+
 @app.route('/api/chat', methods=['POST'])
 @limiter.limit("30 per minute")
 def chat():
@@ -416,7 +435,7 @@ def chat():
             return jsonify({
                 'success': False,
                 'error': 'Message is required'
-            }), 400
+            }),
         
         # Get client and FAQs from database
         try:
@@ -829,8 +848,22 @@ def index():
 
 @app.route('/widget')
 def widget():
-    """Serve embeddable widget HTML"""
-    return render_template('chat.html')
+    client_id = request.args.get('client_id', 'demo')
+    
+    # Get client from database
+    client = models.get_client_by_id(client_id)
+    
+    if not client:
+        # Create default client object if not found
+        client = {
+            'client_id': 'demo',
+            'company_name': 'Demo Company',
+            'widget_color': '#667eea',
+            'welcome_message': 'Hi! How can I help you today?',
+            'remove_branding': 0  # Show branding by default
+        }
+    
+    return render_template('chat.html', client=client)
 
 
 @app.route('/admin/leads')
@@ -966,7 +999,7 @@ def customize_page():
         </html>
         ''', 403
     
-    return render_template('customize.html')
+    return render_template('customize.html', user=current_user)
 
 @app.route('/api/admin/customize', methods=['POST'])
 @login_required
@@ -1020,6 +1053,40 @@ def save_customization():
             'success': False,
             'error': 'Failed to save customization'
         }), 500
+    
+@app.route('/api/admin/customize', methods=['POST'])
+@login_required
+def admin_customize():
+    data = request.json
+    client_id = data.get('client_id')
+    
+    # Get remove_branding value (only for Agency/Enterprise)
+    remove_branding = 0
+    if current_user.plan_type in ['agency', 'enterprise']:
+        remove_branding = 1 if data.get('remove_branding') else 0
+    
+    # Update database
+    conn = models.get_db_connection()
+    conn.execute('''
+        UPDATE clients 
+        SET 
+            company_name = ?,
+            widget_color = ?,
+            welcome_message = ?,
+            remove_branding = ?
+        WHERE client_id = ? AND user_id = ?
+    ''', (
+        data['branding']['company_name'],
+        data['branding']['primary_color'],
+        data['bot_settings']['welcome_message'],
+        remove_branding,  # NEW
+        client_id,
+        current_user.id
+    ))
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True})
 
 @app.route('/analytics')
 @login_required
@@ -1313,6 +1380,178 @@ def upgrade_page():
     """Plan upgrade page"""
     return render_template('upgrade.html', user=current_user)
 
+# Line 1322 (your existing closing brace)
+
+# ==========================================
+# PAYMENT ROUTES - PAYPAL
+# ==========================================
+
+@app.route('/payment/paypal/create', methods=['POST'])
+@login_required
+def create_paypal_payment():
+    """Create PayPal payment for plan upgrade"""
+    try:
+        data = request.json
+        plan = data.get('plan')  # starter, agency, enterprise
+        
+        # Plan pricing
+        PLAN_PRICES = {
+            'starter': 49.00,
+            'agency': 149.00,
+            'enterprise': 499.00
+        }
+        
+        amount = PLAN_PRICES.get(plan)
+        if not amount:
+            return jsonify({'success': False, 'error': 'Invalid plan'}), 400
+        
+        # Create PayPal payment
+        payment = Payment({
+            "intent": "sale",
+            "payer": {
+                "payment_method": "paypal"
+            },
+            "redirect_urls": {
+                "return_url": f"{request.host_url}payment/paypal/success",
+                "cancel_url": f"{request.host_url}payment/paypal/cancel"
+            },
+            "transactions": [{
+                "item_list": {
+                    "items": [{
+                        "name": f"{plan.capitalize()} Plan - Monthly Subscription",
+                        "sku": f"plan_{plan}",
+                        "price": f"{amount:.2f}",
+                        "currency": "USD",
+                        "quantity": 1
+                    }]
+                },
+                "amount": {
+                    "total": f"{amount:.2f}",
+                    "currency": "USD"
+                },
+                "description": f"Upgrade to {plan.capitalize()} Plan"
+            }]
+        })
+        
+        if payment.create():
+            # Save pending payment in session
+            session['pending_payment'] = {
+                'user_id': current_user.id,
+                'plan': plan,
+                'amount': amount,
+                'payment_id': payment.id
+            }
+            
+            # Get approval URL
+            approval_url = next(
+                (link.href for link in payment.links if link.rel == 'approval_url'),
+                None
+            )
+            
+            return jsonify({
+                'success': True,
+                'approval_url': approval_url,
+                'payment_id': payment.id
+            })
+        else:
+            app.logger.error(f"PayPal payment creation failed: {payment.error}")
+            return jsonify({
+                'success': False,
+                'error': 'Payment creation failed'
+            }), 500
+            
+    except Exception as e:
+        app.logger.error(f"PayPal error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/payment/paypal/success')
+@login_required
+def paypal_success():
+    """Handle successful PayPal payment"""
+    try:
+        payment_id = request.args.get('paymentId')
+        payer_id = request.args.get('PayerID')
+        
+        # Get pending payment from session
+        pending_payment = session.get('pending_payment', {})
+        
+        if not pending_payment or pending_payment.get('payment_id') != payment_id:
+            flash("⚠️ Payment session expired. Please try again.", 'warning')
+            return redirect(url_for('upgrade_page'))
+        
+        # Execute the payment
+        payment = Payment.find(payment_id)
+        
+        if payment.execute({"payer_id": payer_id}):
+            # Payment successful - upgrade user
+            plan = pending_payment['plan']
+            
+            # Update user's plan in database
+            conn = models.get_db_connection()
+            conn.execute(
+                'UPDATE users SET plan = ?, upgraded_at = datetime("now") WHERE id = ?',
+                (plan, current_user.id)
+            )
+            conn.commit()
+            conn.close()
+            
+            # Clear session
+            session.pop('pending_payment', None)
+            
+            flash(f"✅ Payment successful! You've been upgraded to {plan.capitalize()} plan.", 'success')
+            return redirect(url_for('dashboard'))
+        else:
+            app.logger.error(f"PayPal execution failed: {payment.error}")
+            flash("❌ Payment execution failed. Please try again.", 'error')
+            return redirect(url_for('upgrade_page'))
+            
+    except Exception as e:
+        app.logger.error(f"PayPal success handler error: {e}")
+        import traceback
+        traceback.print_exc()
+        flash("❌ Payment processing error. Contact support.", 'error')
+        return redirect(url_for('dashboard'))
+
+
+@app.route('/payment/paypal/cancel')
+@login_required
+def paypal_cancel():
+    """Handle cancelled PayPal payment"""
+    # Clear session
+    session.pop('pending_payment', None)
+    
+    flash("💳 Payment cancelled. You can try again anytime.", 'info')
+    return redirect(url_for('upgrade_page'))
+
+
+@app.route('/payment/paypal/webhook', methods=['POST'])
+def paypal_webhook():
+    """Handle PayPal webhook notifications"""
+    try:
+        event = request.json
+        event_type = event.get('event_type')
+        
+        app.logger.info(f"PayPal webhook: {event_type}")
+        
+        # Handle different event types
+        if event_type == 'PAYMENT.SALE.COMPLETED':
+            # Payment completed
+            app.logger.info("Payment completed via webhook")
+        
+        elif event_type == 'BILLING.SUBSCRIPTION.CANCELLED':
+            # Subscription cancelled
+            app.logger.info("Subscription cancelled via webhook")
+        
+        return jsonify({'success': True}), 200
+        
+    except Exception as e:
+        app.logger.error(f"PayPal webhook error: {e}")
+        return jsonify({'success': False}), 500
+
+
 # =====================================================================
 # AFFILIATE ROUTES
 # =====================================================================
@@ -1376,6 +1615,25 @@ def init_db_production():
         <button type="submit">Initialize DB</button>
     </form>
     '''
+
+# ==========================================
+# LEGAL PAGES
+# ==========================================
+
+@app.route('/terms')
+def terms():
+    """Terms and Conditions page"""
+    return render_template('terms.html')
+
+@app.route('/privacy-policy')
+def privacy_policy():
+    """Privacy Policy page"""
+    return render_template('privacy-policy.html')
+
+@app.route('/refund-policy')
+def refund_policy():
+    """Refund Policy page"""
+    return render_template('refund-policy.html')
 
 # =====================================================================
 # RUN SERVER

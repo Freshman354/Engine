@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - FAQ Chatbot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 36px;
+            margin-bottom: 8px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: white;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            color: #667eea;
+            margin-top: 32px;
+            margin-bottom: 16px;
+            font-size: 24px;
+        }
+
+        h3 {
+            color: #333;
+            margin-top: 24px;
+            margin-bottom: 12px;
+            font-size: 20px;
+        }
+
+        p {
+            margin-bottom: 16px;
+            color: #555;
+        }
+
+        ul {
+            margin-bottom: 16px;
+            margin-left: 24px;
+        }
+
+        li {
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        .last-updated {
+            background: #f1f5f9;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .back-link {
+            text-align: center;
+            margin: 32px 0;
+        }
+
+        .back-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .important {
+            background: #dcfce7;
+            border-left: 4px solid #10b981;
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Privacy Policy</h1>
+        <p>Your privacy is important to us</p>
+    </div>
+
+    <div class="container">
+        <div class="last-updated">
+            Last Updated: February 9, 2026
+        </div>
+
+        <h2>1. Introduction</h2>
+        <p>FAQ Chatbot ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our chatbot service.</p>
+
+        <h2>2. Information We Collect</h2>
+        
+        <h3>2.1 Information You Provide</h3>
+        <ul>
+            <li><strong>Account Information:</strong> Email address, name, password, company name</li>
+            <li><strong>Payment Information:</strong> Processed securely through third-party payment providers (we do not store complete credit card numbers)</li>
+            <li><strong>Chatbot Configuration:</strong> FAQs, responses, branding settings, widget customizations</li>
+            <li><strong>Communication Data:</strong> Messages you send to our support team</li>
+        </ul>
+
+        <h3>2.2 Automatically Collected Information</h3>
+        <ul>
+            <li><strong>Usage Data:</strong> Pages visited, features used, time spent on platform</li>
+            <li><strong>Device Information:</strong> Browser type, operating system, IP address</li>
+            <li><strong>Cookies:</strong> Session cookies, preference cookies, analytics cookies</li>
+            <li><strong>Chatbot Interactions:</strong> Messages sent to your chatbots, lead data collected</li>
+        </ul>
+
+        <h3>2.3 Information from Third Parties</h3>
+        <ul>
+            <li>Payment providers (transaction confirmations)</li>
+            <li>Analytics services (Google Analytics, if enabled)</li>
+        </ul>
+
+        <h2>3. How We Use Your Information</h2>
+        <p>We use collected information to:</p>
+        <ul>
+            <li>Provide and maintain our Service</li>
+            <li>Process your transactions and send receipts</li>
+            <li>Improve and personalize your experience</li>
+            <li>Send service updates and announcements</li>
+            <li>Respond to your inquiries and support requests</li>
+            <li>Monitor usage and analyze trends</li>
+            <li>Detect and prevent fraud or abuse</li>
+            <li>Comply with legal obligations</li>
+        </ul>
+
+        <h2>4. Data Sharing and Disclosure</h2>
+        
+        <h3>4.1 We Share Your Information With:</h3>
+        <ul>
+            <li><strong>Service Providers:</strong> Hosting (Render), payment processing (Flutterwave), email services</li>
+            <li><strong>Analytics Partners:</strong> To understand how our Service is used</li>
+            <li><strong>Legal Requirements:</strong> When required by law or to protect our rights</li>
+        </ul>
+
+        <h3>4.2 We Do NOT:</h3>
+        <ul>
+            <li>Sell your personal information to third parties</li>
+            <li>Share your data for marketing purposes without consent</li>
+            <li>Use your chatbot data to train our AI models</li>
+            <li>Access your conversations without your permission (except for support)</li>
+        </ul>
+
+        <h2>5. Data Security</h2>
+        <p>We implement industry-standard security measures:</p>
+        <ul>
+            <li>Encryption in transit (HTTPS/TLS)</li>
+            <li>Encrypted password storage (bcrypt hashing)</li>
+            <li>Secure database access controls</li>
+            <li>Regular security updates and patches</li>
+            <li>Limited employee access to personal data</li>
+        </ul>
+
+        <div class="important">
+            <strong>Note:</strong> No method of transmission over the internet is 100% secure. While we strive to protect your data, we cannot guarantee absolute security.
+        </div>
+
+        <h2>6. Data Retention</h2>
+        <ul>
+            <li><strong>Active Accounts:</strong> Data retained while your account is active</li>
+            <li><strong>Deleted Accounts:</strong> Data deleted within 30 days of account deletion</li>
+            <li><strong>Backups:</strong> May persist in backups for up to 90 days</li>
+            <li><strong>Legal Requirements:</strong> Some data may be retained longer to comply with legal obligations</li>
+        </ul>
+
+        <h2>7. Your Rights and Choices</h2>
+        
+        <h3>7.1 Access and Control</h3>
+        <p>You have the right to:</p>
+        <ul>
+            <li>Access your personal information</li>
+            <li>Correct inaccurate data</li>
+            <li>Delete your account and data</li>
+            <li>Export your data</li>
+            <li>Opt-out of marketing communications</li>
+            <li>Disable cookies (may affect functionality)</li>
+        </ul>
+
+        <h3>7.2 How to Exercise Your Rights</h3>
+        <p>Contact us at <strong>assistly43@gmail.com</strong> to:</p>
+        <ul>
+            <li>Request a copy of your data</li>
+            <li>Request data deletion</li>
+            <li>Update your information</li>
+            <li>Ask questions about our privacy practices</li>
+        </ul>
+
+        <h2>8. Cookies and Tracking</h2>
+        <p>We use cookies for:</p>
+        <ul>
+            <li><strong>Essential Cookies:</strong> Authentication, security (required)</li>
+            <li><strong>Functionality Cookies:</strong> Remember your preferences</li>
+            <li><strong>Analytics Cookies:</strong> Understand usage patterns (optional)</li>
+        </ul>
+        <p>You can control cookies through your browser settings, but disabling essential cookies may affect functionality.</p>
+
+        <h2>9. Third-Party Services</h2>
+        <p>Our Service uses third-party providers:</p>
+        <ul>
+            <li><strong>Render:</strong> Hosting (Privacy Policy: render.com/privacy)</li>
+            <li><strong>Flutterwave:</strong> Payment processing (Privacy Policy: flutterwave.com/privacy)</li>
+            <li><strong>Google Gemini AI:</strong> AI-powered responses (Privacy Policy: ai.google.dev/privacy)</li>
+        </ul>
+        <p>These providers have their own privacy policies, which we encourage you to review.</p>
+
+        <h2>10. International Data Transfers</h2>
+        <p>Your data may be transferred to and stored in countries outside your residence. We ensure appropriate safeguards are in place to protect your data during international transfers.</p>
+
+        <h2>11. Children's Privacy</h2>
+        <p>Our Service is not intended for users under 18. We do not knowingly collect personal information from children. If you believe we have collected data from a minor, please contact us immediately.</p>
+
+        <h2>12. Marketing Communications</h2>
+        <p>We may send you:</p>
+        <ul>
+            <li>Service updates and announcements (cannot opt-out)</li>
+            <li>Feature updates and tips (can opt-out)</li>
+            <li>Promotional offers (can opt-out)</li>
+        </ul>
+        <p>Unsubscribe links are included in all marketing emails.</p>
+
+        <h2>13. Data Breach Notification</h2>
+        <p>In the unlikely event of a data breach affecting your personal information, we will:</p>
+        <ul>
+            <li>Notify affected users within 72 hours</li>
+            <li>Describe the nature of the breach</li>
+            <li>Explain steps we're taking to address it</li>
+            <li>Provide guidance on protecting yourself</li>
+        </ul>
+
+        <h2>14. California Privacy Rights (CCPA)</h2>
+        <p>California residents have additional rights:</p>
+        <ul>
+            <li>Right to know what data we collect</li>
+            <li>Right to delete personal information</li>
+            <li>Right to opt-out of data sales (we don't sell data)</li>
+            <li>Right to non-discrimination for exercising rights</li>
+        </ul>
+
+        <h2>15. European Privacy Rights (GDPR)</h2>
+        <p>European users have rights under GDPR:</p>
+        <ul>
+            <li>Right to access your data</li>
+            <li>Right to rectification</li>
+            <li>Right to erasure ("right to be forgotten")</li>
+            <li>Right to restrict processing</li>
+            <li>Right to data portability</li>
+            <li>Right to object to processing</li>
+        </ul>
+
+        <h2>16. Changes to This Privacy Policy</h2>
+        <p>We may update this Privacy Policy from time to time. Changes will be posted on this page with an updated "Last Updated" date. Material changes will be notified via email.</p>
+
+        <h2>17. Contact Us</h2>
+        <p>For privacy-related questions or concerns:</p>
+        <ul>
+            <li><strong>Email:</strong> assistly43@gmail.com</li>
+            <li><strong>Subject Line:</strong> "Privacy Inquiry"</li>
+            <li><strong>Response Time:</strong> Within 48 hours</li>
+        </ul>
+
+        <div class="important">
+            <strong>Your Consent:</strong> By using our Service, you consent to this Privacy Policy.
+        </div>
+
+        <div class="back-link">
+            <a href="/dashboard">← Back to Dashboard</a> | 
+            <a href="/terms">Terms & Conditions</a> | 
+            <a href="/refund-policy">Refund Policy</a>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Refund Policy - FAQ Chatbot</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 36px;
+            margin-bottom: 8px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: white;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        h2 {
+            color: #667eea;
+            margin-top: 32px;
+            margin-bottom: 16px;
+            font-size: 24px;
+        }
+
+        h3 {
+            color: #333;
+            margin-top: 24px;
+            margin-bottom: 12px;
+            font-size: 20px;
+        }
+
+        p {
+            margin-bottom: 16px;
+            color: #555;
+        }
+
+        ul {
+            margin-bottom: 16px;
+            margin-left: 24px;
+        }
+
+        li {
+            margin-bottom: 8px;
+            color: #555;
+        }
+
+        .last-updated {
+            background: #f1f5f9;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .back-link {
+            text-align: center;
+            margin: 32px 0;
+        }
+
+        .back-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .guarantee-badge {
+            background: #10b981;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            font-size: 20px;
+            font-weight: 700;
+            margin: 24px 0;
+        }
+
+        .important {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .example {
+            background: #f1f5f9;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 16px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Refund Policy</h1>
+        <p>Fair and transparent refund terms</p>
+    </div>
+
+    <div class="container">
+        <div class="last-updated">
+            Last Updated: February 9, 2026
+        </div>
+
+        <div class="guarantee-badge">
+            ✅ 7-Day Money-Back Guarantee
+        </div>
+
+        <h2>1. Our Commitment</h2>
+        <p>We want you to be completely satisfied with FAQ Chatbot. If you're not happy with our service, we offer a straightforward refund process.</p>
+
+        <h2>2. 7-Day Money-Back Guarantee</h2>
+        
+        <h3>2.1 Eligibility</h3>
+        <p>You are eligible for a full refund if:</p>
+        <ul>
+            <li>You are a <strong>first-time subscriber</strong> (new customer)</li>
+            <li>You request a refund within <strong>7 days</strong> of your initial payment</li>
+            <li>You have not violated our Terms of Service</li>
+            <li>You provide a brief reason for the refund request</li>
+        </ul>
+
+        <h3>2.2 What's Covered</h3>
+        <ul>
+            <li>Starter Plan - First payment only</li>
+            <li>Agency Plan - First payment only</li>
+            <li>Enterprise Plan (Lifetime) - Full refund within 7 days</li>
+        </ul>
+
+        <div class="example">
+            <strong>Example:</strong> You subscribe to the Agency plan on January 1st. You can request a full refund until January 8th (7 days later). After January 8th, the refund guarantee expires.
+        </div>
+
+        <h2>3. Non-Refundable Situations</h2>
+        <p>Refunds are <strong>NOT available</strong> in these cases:</p>
+        <ul>
+            <li>After the 7-day guarantee period has expired</li>
+            <li>For renewal payments (only first payment is covered)</li>
+            <li>If your account was terminated for Terms of Service violations</li>
+            <li>For partial months (no pro-rated refunds)</li>
+            <li>For promotional or discounted subscriptions (50% OFF early bird deals - still eligible for 7-day guarantee)</li>
+            <li>If you've been previously refunded for the same plan</li>
+        </ul>
+
+        <div class="important">
+            <strong>Important:</strong> The 7-day guarantee applies to your FIRST payment only. Subsequent monthly payments are non-refundable.
+        </div>
+
+        <h2>4. How to Request a Refund</h2>
+        
+        <h3>Step-by-Step Process:</h3>
+        <ol>
+            <li><strong>Email us:</strong> Send a request to <code>assistly43@gmail.com</code></li>
+            <li><strong>Subject Line:</strong> "Refund Request - [Your Email]"</li>
+            <li><strong>Include:</strong>
+                <ul>
+                    <li>Your account email address</li>
+                    <li>Date of payment</li>
+                    <li>Plan you purchased (Starter/Agency/Enterprise)</li>
+                    <li>Brief reason for refund (helps us improve)</li>
+                </ul>
+            </li>
+            <li><strong>We respond:</strong> Within 24-48 hours</li>
+            <li><strong>Refund processed:</strong> Within 5-10 business days</li>
+        </ol>
+
+        <div class="example">
+            <strong>Email Template:</strong><br><br>
+            Subject: Refund Request - john@example.com<br><br>
+            Hi,<br><br>
+            I would like to request a refund for my subscription.<br><br>
+            Account Email: john@example.com<br>
+            Payment Date: February 1, 2026<br>
+            Plan: Agency Plan ($75/month)<br>
+            Reason: [Your reason]<br><br>
+            Thank you!
+        </div>
+
+        <h2>5. Refund Processing Time</h2>
+        <ul>
+            <li><strong>Approval:</strong> Within 24-48 hours of request</li>
+            <li><strong>Bank Transfer:</strong> 3-5 business days</li>
+            <li><strong>Flutterwave/Card:</strong> 5-10 business days</li>
+            <li><strong>PayPal:</strong> 1-3 business days</li>
+            <li><strong>Cryptocurrency:</strong> 1-2 business days</li>
+        </ul>
+        <p><em>Processing times depend on your payment provider and may vary.</em></p>
+
+        <h2>6. Account Access After Refund</h2>
+        <p>Once a refund is processed:</p>
+        <ul>
+            <li>Your paid subscription is downgraded to the Free plan</li>
+            <li>You lose access to paid features immediately</li>
+            <li>Your data is retained for 30 days in case you change your mind</li>
+            <li>You can re-subscribe at any time (no additional refund guarantee)</li>
+        </ul>
+
+        <h2>7. Cancellation vs. Refund</h2>
+        
+        <h3>7.1 Cancellation (No Refund)</h3>
+        <p>You can cancel your subscription at any time:</p>
+        <ul>
+            <li>Go to Dashboard → Settings → Cancel Subscription</li>
+            <li>Cancellation takes effect at end of current billing period</li>
+            <li>No refund for remaining days in the billing period</li>
+            <li>You keep access until the end of the paid period</li>
+        </ul>
+
+        <h3>7.2 Refund (Money Back)</h3>
+        <p>Request a refund within 7 days:</p>
+        <ul>
+            <li>Email assistly43@gmail.com with refund request</li>
+            <li>Full payment refunded</li>
+            <li>Immediate loss of paid features</li>
+            <li>Account downgraded to Free plan</li>
+        </ul>
+
+        <h2>8. Promotional/Early Bird Pricing</h2>
+        <p>Our current 50% OFF early bird promotion:</p>
+        <ul>
+            <li>Still eligible for 7-day money-back guarantee</li>
+            <li>Refund amount: The discounted price you paid</li>
+            <li>If you re-subscribe later, early bird pricing may no longer be available</li>
+        </ul>
+
+        <div class="example">
+            <strong>Example:</strong> You pay $25 (early bird Starter price, normally $49). If you request a refund within 7 days, you get back $25, not $49.
+        </div>
+
+        <h2>9. Chargebacks and Disputes</h2>
+        <p>We prefer to resolve issues directly:</p>
+        <ul>
+            <li>Contact us before filing a chargeback</li>
+            <li>Chargebacks result in immediate account termination</li>
+            <li>Chargeback fees may be charged to your account</li>
+            <li>We will provide transaction evidence to payment providers</li>
+        </ul>
+        <p><strong>Please email us first - we're happy to help!</strong></p>
+
+        <h2>10. Technical Issues</h2>
+        <p>If you experience service outages or technical problems:</p>
+        <ul>
+            <li>Contact support immediately</li>
+            <li>We will extend your subscription to compensate for downtime</li>
+            <li>Refunds available for extended outages (>48 hours)</li>
+            <li>We maintain 99.9% uptime commitment</li>
+        </ul>
+
+        <h2>11. Questions About Refunds</h2>
+        <p>Have questions? We're here to help!</p>
+        <ul>
+            <li><strong>Email:</strong> assistly43@gmail.com</li>
+            <li><strong>Subject:</strong> "Refund Policy Question"</li>
+            <li><strong>Response Time:</strong> Within 24 hours</li>
+        </ul>
+
+        <h2>12. Changes to This Policy</h2>
+        <p>We may update this Refund Policy. Changes will be posted here with an updated date. Material changes will be communicated via email.</p>
+
+        <div class="important">
+            <strong>Bottom Line:</strong> We want you to succeed with our Service. If it's not right for you within the first 7 days, we'll give you your money back, no questions asked.
+        </div>
+
+        <div class="back-link">
+            <a href="/dashboard">← Back to Dashboard</a> | 
+            <a href="/terms">Terms & Conditions</a> | 
+            <a href="/privacy-policy">Privacy Policy</a>
+        </div>
+    </div>
+</body>
+</html>

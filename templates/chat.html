@@ -7,7 +7,14 @@
     <link rel="stylesheet" href="/static/widget.css">
 </head>
 <body>
-    <div id="chatbot-container"></div>
+    <div id="chatbot-container">
+        <!-- Powered By Branding (only show if not removed) -->
+        {% if not client or not client.remove_branding %}
+        <div style="text-align: center; padding: 10px; font-size: 11px; color: #999; border-top: 1px solid #eee; margin-top: 10px;">
+            Powered by <a href="https://your-site.com" target="_blank" style="color: #667eea; text-decoration: none; font-weight: 600;">FAQ Chatbot</a>
+        </div>
+        {% endif %}
+    </div>
     <script src="/static/widget.js"></script>
     <script>
         // Initialize chatbot with client_id from URL

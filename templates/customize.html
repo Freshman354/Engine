@@ -114,6 +114,99 @@
             color: #6b7280;
             margin-top: 4px;
         }
+
+        /* White-Label Checkbox Styles */
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border: 2px solid #e5e7eb;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .checkbox-container:hover {
+            border-color: #667eea;
+            background: #f3f4f6;
+        }
+
+        .checkbox-container input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .checkbox-label {
+            font-size: 15px;
+            color: #1f2937;
+            font-weight: 500;
+        }
+
+        .checkbox-label.grayed {
+            color: #9ca3af;
+        }
+
+        .checkbox-container.disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .checkbox-container.disabled:hover {
+            border-color: #e5e7eb;
+            background: #f9fafb;
+        }
+
+        .help-text {
+            display: block;
+            margin-top: 8px;
+            font-size: 13px;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+
+        .help-text.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .help-text.warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .upgrade-link {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 8px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            transition: transform 0.2s;
+        }
+
+        .upgrade-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .plan-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #10b981;
+            color: white;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-left: 8px;
+            text-transform: uppercase;
+        }
         
         .preview-panel {
             position: sticky;
@@ -175,6 +268,25 @@
             font-size: 14px;
             line-height: 1.5;
             color: #374151;
+        }
+
+        .preview-branding {
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            font-size: 11px;
+            color: #9ca3af;
+        }
+
+        .preview-branding a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .preview-branding.hidden {
+            display: none;
         }
         
         .button-group {
@@ -312,6 +424,25 @@
                 <textarea id="welcome-message" placeholder="Hi! How can I help you today?"></textarea>
             </div>
             
+            <!-- NEW: White-Label Branding Section -->
+            <div class="section-title">
+                White-Label Options
+                <span class="plan-badge" id="plan-badge" style="display: none;"></span>
+            </div>
+            
+            <!-- Branding checkbox (will be enabled/disabled by JavaScript) -->
+            <div class="form-group" id="branding-group">
+                <label class="checkbox-container" id="branding-container">
+                    <input type="checkbox" 
+                           name="remove_branding" 
+                           id="remove-branding"
+                           onchange="updateBrandingPreview()">
+                    <span class="checkbox-label">Remove "Powered by FAQ Chatbot" branding</span>
+                </label>
+                <div class="help-text" id="branding-help-text"></div>
+                <a href="/upgrade" class="upgrade-link" id="upgrade-link" style="display: none;">Upgrade to Agency Plan →</a>
+            </div>
+            
             <div class="section-title">Contact Information</div>
             
             <div class="form-group">
@@ -349,6 +480,11 @@
                         <div class="preview-message" id="preview-message">
                             Hi! How can I help you today?
                         </div>
+
+                        <!-- Branding preview -->
+                        <div class="preview-branding" id="preview-branding">
+                            Powered by <a href="#" onclick="return false;">FAQ Chatbot</a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -357,12 +493,58 @@
     
     <script>
         let currentConfig = {};
+        let userPlanType = 'free'; // Will be loaded from server
         
         // Load config on page load
         window.onload = function() {
+            loadUserInfo();
             loadConfig();
             attachEventListeners();
+            updateBrandingPreview();
         };
+
+        async function loadUserInfo() {
+            try {
+                const response = await fetch('/api/user/info');
+                const data = await response.json();
+                
+                if (data.success) {
+                    userPlanType = data.plan_type || 'free';
+                    configureBrandingControls();
+                }
+            } catch (error) {
+                console.log('Could not load user info, using default');
+                configureBrandingControls();
+            }
+        }
+
+        function configureBrandingControls() {
+            const checkbox = document.getElementById('remove-branding');
+            const container = document.getElementById('branding-container');
+            const helpText = document.getElementById('branding-help-text');
+            const upgradeLink = document.getElementById('upgrade-link');
+            const planBadge = document.getElementById('plan-badge');
+
+            if (userPlanType === 'agency' || userPlanType === 'enterprise') {
+                // Agency/Enterprise: Enable checkbox
+                checkbox.disabled = false;
+                container.classList.remove('disabled');
+                helpText.className = 'help-text success';
+                helpText.textContent = '✅ White-label is available on your ' + userPlanType + ' plan';
+                upgradeLink.style.display = 'none';
+                planBadge.textContent = userPlanType.toUpperCase();
+                planBadge.style.display = 'inline-block';
+            } else {
+                // Free/Starter: Disable checkbox
+                checkbox.disabled = true;
+                container.classList.add('disabled');
+                const labelSpan = container.querySelector('.checkbox-label');
+                labelSpan.classList.add('grayed');
+                helpText.className = 'help-text warning';
+                helpText.textContent = '🔒 Upgrade to Agency plan ($120/mo) to remove branding and fully white-label your chatbot';
+                upgradeLink.style.display = 'inline-block';
+            }
+        }
         
         function attachEventListeners() {
             // Update preview on any input change
@@ -396,6 +578,17 @@
                 }
             });
         }
+
+        function updateBrandingPreview() {
+            const removeBrandingCheckbox = document.getElementById('remove-branding');
+            const previewBranding = document.getElementById('preview-branding');
+            
+            if (removeBrandingCheckbox && removeBrandingCheckbox.checked) {
+                previewBranding.classList.add('hidden');
+            } else {
+                previewBranding.classList.remove('hidden');
+            }
+        }
         
         async function loadConfig() {
             const clientId = document.getElementById('client-id').value || 'demo';
@@ -408,6 +601,7 @@
                     currentConfig = data.config;
                     populateForm(currentConfig);
                     updatePreview();
+                    updateBrandingPreview();
                 }
             } catch (error) {
                 console.error('Error loading config:', error);
@@ -448,9 +642,12 @@
         
         async function saveChanges() {
             const clientId = document.getElementById('client-id').value || 'demo';
+            const removeBrandingCheckbox = document.getElementById('remove-branding');
+            const removeBranding = removeBrandingCheckbox ? removeBrandingCheckbox.checked : false;
             
             const updatedConfig = {
                 client_id: clientId,
+                remove_branding: removeBranding,
                 branding: {
                     company_name: document.getElementById('company-name').value,
                     logo_url: document.getElementById('logo-url').value,
