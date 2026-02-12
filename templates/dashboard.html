@@ -335,6 +335,9 @@
                         <!-- UNLOCKED buttons for paid plans -->
                         <a href="/analytics?client_id={{ client.client_id }}" class="btn-small btn-analytics">📊 Analytics</a>
                         <a href="/customize?client_id={{ client.client_id }}" class="btn-small btn-customize">🎨 Theme</a>
+                        <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-small" style="background: #10b981; color: white;">
+                        📋 Embed Code
+                        </button>
                     {% else %}
                         <!-- LOCKED buttons for free plan -->
                         <button class="btn-small" style="background: #d1d5db; color: #6b7280; cursor: not-allowed;" title="Upgrade to unlock Analytics">
@@ -385,6 +388,95 @@
         function closeModal() {
             document.getElementById('new-client-modal').style.display = 'none';
         }
+    </script>
+        <!-- ADD ALL THIS BEFORE </body> -->
+
+            <!-- Embed Code Modal -->
+    <div id="embedModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 9999; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 40px; border-radius: 16px; max-width: 700px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+            <h2 style="margin-bottom: 10px; color: #1f2937;">📋 Embed Code for Your Website</h2>
+            <p style="color: #6b7280; margin-bottom: 24px; line-height: 1.6;">Copy this code and paste it into your website, just before the closing <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px; color: #ef4444;">&lt;/body&gt;</code> tag:</p>
+        
+            <div style="position: relative;">
+                <textarea id="embedCodeText" readonly style="width: 100%; height: 220px; padding: 20px; border: 2px solid #e5e7eb; border-radius: 12px; font-family: 'Courier New', monospace; font-size: 13px; background: #f9fafb; color: #1f2937; resize: none; line-height: 1.6;"></textarea>
+                <div style="position: absolute; top: 12px; right: 12px; background: #667eea; color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;">
+                    HTML
+                </div>
+            </div>
+        
+            <div style="margin-top: 24px; display: flex; gap: 12px;">
+                <button onclick="copyEmbedCode()" style="flex: 1; padding: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 15px; transition: transform 0.2s;">
+                    ✅ Copy to Clipboard
+                </button>
+                <button onclick="closeEmbedModal()" style="padding: 14px 24px; background: #f3f4f6; color: #374151; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 15px; transition: all 0.2s;">
+                Close
+                </button>
+            </div>
+        
+            <div style="margin-top: 20px; padding: 16px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px;">
+                <p style="margin: 0; color: #92400e; font-size: 13px; line-height: 1.6;">
+                    💡 <strong>Tip:</strong> The chatbot will automatically appear on the bottom-right corner of your website. You can customize colors and messages in the Theme settings.
+                </p>
+            </div>
+        </div>
+    </div>
+
+        <script>
+            function showEmbedCode(clientId) {
+            const baseUrl = window.location.origin;
+            const embedCode = `<!-- FAQ Chatbot Widget -->
+        <script>
+            (function() {
+            var chatbotScript = document.createElement('script');
+            chatbotScript.src = '${baseUrl}/static/widget.js';
+            chatbotScript.setAttribute('data-client-id', '${clientId}');
+            document.body.appendChild(chatbotScript);
+            })();
+        <\/script>`;
+    
+            document.getElementById('embedCodeText').value = embedCode;
+            document.getElementById('embedModal').style.display = 'flex';
+        }
+
+        function closeEmbedModal() {
+            document.getElementById('embedModal').style.display = 'none';
+        }
+
+        function copyEmbedCode() {
+            const textarea = document.getElementById('embedCodeText');
+            textarea.select();
+            textarea.setSelectionRange(0, 99999);
+    
+            try {
+                document.execCommand('copy');
+        
+                const btn = event.target;
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '✅ Copied!';
+                btn.style.background = '#10b981';
+        
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                }, 2000);
+        
+            } catch (err) {
+                alert('❌ Failed to copy. Please select and copy manually.');
+            }
+        }
+
+        document.addEventListener('click', function(event) {
+            const modal = document.getElementById('embedModal');
+            if (event.target === modal) {
+                closeEmbedModal();
+            }
+        });
+
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeEmbedModal();
+            }
+        });
     </script>
 </body>
 </html>
