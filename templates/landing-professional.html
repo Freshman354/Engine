@@ -55,23 +55,19 @@
         .hero {
             margin-top: 80px;
             padding: 140px 0 100px;
-            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
             text-align: center;
-        }
-        .hero h1 {
-            font-size: 64px;
-            font-weight: 900;
-            line-height: 1.1;
-            margin-bottom: 24px;
-            letter-spacing: -0.02em;
-            color: #1a202c;
-        }
-        .hero p {
-            font-size: 24px;
-            color: #4a5568;
-            max-width: 800px;
-            margin: 0 auto 40px;
-            line-height: 1.5;
+            color: #080d16;
+
+            /* --- BACKGROUND IMAGE SETUP --- */
+            /* We use two layers:
+            1. A semi-transparent white gradient overlay so text is readable.
+            2. The actual background image URL. */
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.5), rgba(240, 242, 245, 0.6)),
+                url("{{url_for('static', filename='hero.jpg')}}");
+                /* Ensures the image covers the whole section and stays centered */
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
         }
         .cta-group { display: flex; justify-content: center; gap: 20px; margin-bottom: 24px; }
         .btn-primary {
@@ -89,7 +85,7 @@
         .btn-secondary {
             padding: 18px 40px;
             background: white;
-            color: #4a5568;
+            color: #041e4a;
             border: 2px solid #e2e8f0;
             border-radius: 12px;
             text-decoration: none;
@@ -98,7 +94,7 @@
             transition: all 0.2s;
         }
         .btn-secondary:hover { border-color: #667eea; color: #667eea; }
-        .trust-line { color: #718096; font-size: 14px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+        .trust-line { color: #0d1827; font-size: 14px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
 
         /* 2. VALUE PROP (3 Columns) */
         .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; margin-top: 60px; }
@@ -457,6 +453,16 @@
             <p>&copy; 2026 Lumvi White-Label Platform. All rights reserved.</p>
         </div>
     </footer>
+    
+<!-- FAQ Chatbot Widget -->
+        <script>
+            (function() {
+            var chatbotScript = document.createElement('script');
+            chatbotScript.src = 'https://lumvi.net/static/widget.js';
+            chatbotScript.setAttribute('data-client-id', 'demo');
+            document.body.appendChild(chatbotScript);
+            })();
+        </script>
 
 </body>
 </html>
