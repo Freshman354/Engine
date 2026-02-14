@@ -3,693 +3,373 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Upgrade Plan - FAQ Chatbot</title>
+    <title>Upgrade Plan | Lumvi</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        /* --- PREMIUM DARK THEME (MATCHES LANDING PAGE) --- */
+        :root {
+            --primary: #6366f1;       /* Indigo-500 */
+            --primary-dark: #4f46e5;  /* Indigo-600 */
+            --secondary: #ec4899;     /* Pink-500 */
+            --dark-bg: #0f172a;       /* Slate-900 */
+            --card-bg: rgba(30, 41, 59, 0.7); /* Glass Slate */
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.5);
         }
-        
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: 'Inter', sans-serif;
+            background-color: var(--dark-bg);
+            color: var(--text-main);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             padding: 40px 20px;
         }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 48px;
-        }
-        
-        .header h1 {
-            font-size: 42px;
-            margin-bottom: 12px;
-        }
 
-        .header p {
-            font-size: 18px;
-            opacity: 0.95;
-        }
-        
-        .pricing-cards {
+        /* HEADER */
+        .header { text-align: center; margin-bottom: 60px; max-width: 800px; }
+        .header h1 { font-size: 42px; font-weight: 800; margin-bottom: 16px; letter-spacing: -1px; }
+        .header p { font-size: 18px; color: var(--text-muted); }
+
+        /* GRID LAYOUT */
+        .pricing-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 24px;
-            margin-bottom: 32px;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 32px;
+            max-width: 1280px;
+            width: 100%;
+            margin-bottom: 60px;
         }
-        
+
+        /* CARD STYLES */
         .pricing-card {
-            background: white;
-            border-radius: 12px;
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
             padding: 40px;
-            text-align: center;
-            position: relative;
-            transition: transform 0.3s;
-        }
-
-        .pricing-card:hover {
-            transform: translateY(-5px);
-        }
-        
-        .pricing-card.recommended {
-            border: 3px solid #10b981;
-            transform: scale(1.05);
-        }
-
-        .pricing-card.recommended:hover {
-            transform: scale(1.08);
-        }
-        
-        .badge {
-            position: absolute;
-            top: -12px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #10b981;
-            color: white;
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
-        }
-        
-        .plan-name {
-            font-size: 24px;
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: 16px;
-        }
-        
-        .plan-price {
-            font-size: 48px;
-            font-weight: 700;
-            color: #667eea;
-            margin-bottom: 8px;
-        }
-        
-        .plan-price span {
-            font-size: 18px;
-            color: #6b7280;
-        }
-
-        .old-price {
-            text-decoration: line-through;
-            color: #999;
-            font-size: 24px;
-            display: block;
-            margin-bottom: 8px;
-        }
-
-        .discount-badge {
-            background: #10b981;
-            color: white;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 12px;
-            margin-top: 10px;
-            display: inline-block;
-            font-weight: 600;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.05); }
-        }
-
-        .lifetime-badge {
-            background: #ef4444;
-        }
-        
-        .plan-features {
-            list-style: none;
-            margin: 32px 0;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
             text-align: left;
+            transition: transform 0.3s ease;
+            position: relative;
+            display: flex;
+            flex-direction: column;
         }
-        
-        .plan-features li {
-            padding: 12px 0;
-            color: #374151;
-            border-bottom: 1px solid #e5e7eb;
+
+        .pricing-card:hover { transform: translateY(-8px); border-color: var(--primary); }
+
+        /* FEATURED CARD */
+        .pricing-card.featured {
+            background: rgba(30, 41, 59, 0.9);
+            border: 2px solid var(--primary);
+            box-shadow: var(--shadow-glow);
+            z-index: 10;
         }
-        
-        .plan-features li:before {
-            content: "✓ ";
-            color: #10b981;
-            font-weight: bold;
-            margin-right: 8px;
+
+        .popular-badge {
+            background: #ffd700; color: black; font-weight: 800;
+            padding: 6px 16px; border-radius: 20px;
+            position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+            text-transform: uppercase; font-size: 12px; letter-spacing: 1px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
         }
+
+        /* TEXT STYLES */
+        h3 { font-size: 24px; margin-bottom: 10px; color: white; font-weight: 700; }
         
-        .btn {
-            display: block;
-            width: 100%;
-            padding: 16px;
+        .price { font-size: 48px; font-weight: 800; margin: 20px 0; color: white; letter-spacing: -1px; }
+        .price span { font-size: 16px; color: var(--text-muted); font-weight: 500; letter-spacing: normal; }
+        .old-price { text-decoration: line-through; color: #64748b; font-size: 24px; margin-right: 10px; font-weight: 400; }
+
+        .discount-tag {
+            display: inline-block;
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+            padding: 6px 12px;
             border-radius: 8px;
-            font-weight: 600;
-            text-decoration: none;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-            transition: all 0.3s;
-        }
-        
-        .btn-upgrade {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 24px;
+            align-self: flex-start;
         }
 
-        .btn-upgrade:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        /* LIST STYLES */
+        .features-list { list-style: none; margin-bottom: 30px; flex-grow: 1; }
+        .features-list li {
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #cbd5e1;
+            font-size: 15px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .features-list li:last-child { border-bottom: none; }
+        .check { color: var(--success); font-weight: bold; font-size: 18px; }
+
+        /* BUTTONS */
+        .btn {
+            display: block; width: 100%; padding: 16px;
+            border-radius: 12px; font-weight: 700; text-align: center;
+            text-decoration: none; transition: all 0.2s;
+            font-size: 16px; border: none; cursor: pointer;
         }
         
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(99, 102, 241, 0.6); }
+
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: white; }
+
         .btn-current {
-            background: #e5e7eb;
-            color: #6b7280;
-            cursor: not-allowed;
-        }
-        
-        .back-link {
-            text-align: center;
-            margin-top: 32px;
-        }
-        
-        .back-link a {
-            color: white;
-            text-decoration: none;
-            font-weight: 600;
-            margin: 0 12px;
+            background: rgba(255,255,255,0.1); color: var(--text-muted); cursor: not-allowed;
         }
 
-        .back-link a:hover {
-            text-decoration: underline;
-        }
-
-        /* Payment Modal Styles */
+        /* MODAL STYLES (UPDATED) */
         .payment-modal {
-            display: none;
-            position: fixed;
-            z-index: 10000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.85);
+            display: none; position: fixed; z-index: 10000; left: 0; top: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(15, 23, 42, 0.9); /* Dark backdrop */
+            backdrop-filter: blur(5px);
             overflow-y: auto;
             animation: fadeIn 0.3s;
         }
 
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
         .payment-modal-content {
-            background: white;
-            margin: 3% auto;
-            padding: 40px;
-            border-radius: 20px;
-            max-width: 650px;
-            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.3);
-            position: relative;
-            animation: slideUp 0.4s;
-        }
-
-        @keyframes slideUp {
-            from { transform: translateY(50px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
+            background: #1e293b; /* Dark Slate Card */
+            border: 1px solid rgba(255,255,255,0.1);
+            color: white;
+            margin: 5% auto; padding: 40px;
+            border-radius: 24px; max-width: 600px;
+            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.5);
+            position: relative; animation: slideUp 0.4s;
         }
 
         .payment-close {
-            position: absolute;
-            right: 25px;
-            top: 25px;
-            font-size: 35px;
-            font-weight: bold;
-            color: #999;
-            cursor: pointer;
-            transition: color 0.2s;
+            position: absolute; right: 25px; top: 25px;
+            font-size: 28px; color: #64748b; cursor: pointer;
         }
-
-        .payment-close:hover {
-            color: #333;
-        }
-
-        .payment-modal-content h2 {
-            text-align: center;
-            color: #333;
-            margin-bottom: 30px;
-            font-size: 32px;
-        }
-
-        .plan-summary {
-            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 30px;
-            text-align: center;
-            border: 2px solid #667eea30;
-        }
-
-        .plan-summary p {
-            margin: 8px 0;
-            font-size: 18px;
-            color: #333;
-        }
-
-        .plan-summary strong {
-            color: #667eea;
-        }
-
-        .payment-instructions h3 {
-            color: #333;
-            margin-bottom: 25px;
-            text-align: center;
-            font-size: 24px;
-        }
+        .payment-close:hover { color: white; }
 
         .payment-option {
-            background: #fff;
-            border: 2px solid #e5e7eb;
-            padding: 25px;
-            border-radius: 12px;
-            margin-bottom: 16px;
-            transition: all 0.3s;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 20px; border-radius: 12px;
+            margin-bottom: 16px; transition: all 0.3s;
         }
+        .payment-option:hover { border-color: var(--primary); background: rgba(99, 102, 241, 0.1); }
+        .payment-option h4 { color: white; margin-bottom: 8px; font-size: 16px; }
+        .payment-option p { color: #94a3b8; font-size: 14px; margin-bottom: 12px; }
 
-        .payment-option:hover {
-            border-color: #667eea;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
-        }
+        /* FOOTER LINKS */
+        .back-link { text-align: center; margin-top: 40px; }
+        .back-link a { color: #94a3b8; text-decoration: none; margin: 0 10px; font-size: 14px; }
+        .back-link a:hover { color: white; }
 
-        .payment-option h4 {
-            color: #667eea;
-            margin-bottom: 12px;
-            font-size: 18px;
-        }
-
-        .payment-option p {
-            color: #666;
-            font-size: 14px;
-            margin-bottom: 15px;
-        }
-
-        .btn-payment-option {
-            display: block;
-            width: 100%;
-            padding: 15px;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            text-decoration: none;
-            text-align: center;
-        }
-
-        .btn-payment-option:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-        }
-
-        .btn-payment-option.card {
-            background: linear-gradient(135deg, #f5a623 0%, #f76b1c 100%);
-            color: white;
-        }
-
-        .btn-payment-option.email {
-            background: #10b981;
-            color: white;
-        }
-
-        .btn-payment-option.paypal {
-            background: #0070ba;
-            color: white;
-        }
-
-        .terms-agreement {
-            margin-top: 24px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 12px;
-            border: 2px solid #e5e7eb;
-        }
-
-        .terms-agreement label {
-            display: flex;
-            align-items: start;
-            cursor: pointer;
-        }
-
-        .terms-agreement input[type="checkbox"] {
-            margin-right: 12px;
-            margin-top: 4px;
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-        }
-
-        .terms-agreement span {
-            font-size: 14px;
-            color: #555;
-            line-height: 1.6;
-        }
-
-        .terms-agreement a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
-        }
-
-        .terms-agreement a:hover {
-            text-decoration: underline;
-        }
-
-        .guarantee {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 2px dashed #e0e0e0;
-        }
-
-        .guarantee p {
-            color: #10b981;
-            font-weight: 600;
-            margin: 8px 0;
-            font-size: 15px;
-        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
         @media (max-width: 768px) {
-            .header h1 {
-                font-size: 32px;
-            }
-
-            .pricing-card.recommended {
-                transform: scale(1);
-            }
-
-            .payment-modal-content {
-                margin: 10% 20px;
-                padding: 30px 20px;
-            }
+            .pricing-grid { grid-template-columns: 1fr; }
+            .header h1 { font-size: 32px; }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🚀 Upgrade Your Plan</h1>
-            <p>⚡ Limited Time: 50% OFF for First 10 Customers!</p>
-        </div>
+
+    <div class="header">
+        <h1>🚀 Upgrade Your Plan</h1>
+        <p>Scale your agency with our premium white-label features. <span style="color: #ffd700; font-weight: bold;">50% OFF for First 10 Customers!</span></p>
+    </div>
+
+    <div class="pricing-grid">
         
-        <div class="pricing-cards">
-            <!-- Free Plan -->
-            <div class="pricing-card">
-                <div class="plan-name">Free</div>
-                <div class="plan-price">$0<span>/forever</span></div>
-    
-                <ul class="plan-features">
-                    <li>1 client only</li>
-                    <li>5 FAQs maximum</li>
-                    <li>50 messages/day</li>
-                    <li>Basic lead collection</li>
-                    <li>No analytics</li>
-                    <li>No customization</li>
-                </ul>
-    
-                {% if user.plan_type == 'free' %}
-                    <button class="btn btn-current">Current Plan</button>
-                {% else %}
-                    <button class="btn btn-current">Cannot Downgrade</button>
-                {% endif %}
+        <div class="pricing-card">
+            <h3>Starter</h3>
+            <div class="price">
+                <span class="old-price">$30</span>$15<span>/mo</span>
             </div>
+            <div class="discount-tag">🔥 50% OFF - Limited Time</div>
+
+            <ul class="features-list">
+                <li><span class="check">✓</span> Up to 5 Clients</li>
+                <li><span class="check">✓</span> Unlimited Conversations</li>
+                <li><span class="check">✓</span> AI-Powered Responses</li>
+                <li><span class="check">✓</span> Basic Lead Collection</li>
+                <li><span class="check">✓</span> Basic Analytics</li>
+                <li><span class="check">✓</span> Email Support</li>
+            </ul>
             
-            <!-- Starter Plan -->
-            <div class="pricing-card">
-                <div class="plan-name">Starter</div>
-                <div class="plan-price">
-                    <span class="old-price">$30</span>
-                    $15<span>/month</span>
-                    <div class="discount-badge">🔥 50% OFF - First 10 Only!</div>
-                </div>
-                
-                <ul class="plan-features">
-                    <li>Up to 5 clients</li>
-                    <li>Unlimited conversations</li>
-                    <li>AI-powered responses</li>
-                    <li>Lead collection</li>
-                    <li>Basic analytics</li>
-                    <li>Email support</li>
-                </ul>
-                
-                {% if user.plan_type == 'starter' %}
-                    <button class="btn btn-current">Current Plan</button>
-                {% else %}
-                    <button onclick="startPayment('starter')" class="btn btn-upgrade">🚀 Get Started - $15/month</button>
-                {% endif %}
-            </div>
-            
-            <!-- Agency Plan -->
-            <div class="pricing-card recommended">
-                <div class="badge">RECOMMENDED</div>
-                <div class="plan-name">Agency</div>
-                <div class="plan-price">
-                    <span class="old-price">$120</span>
-                    $60<span>/month</span>
-                    <div class="discount-badge">🔥 50% OFF - First 10 Only!</div>
-                </div>
-                
-                <ul class="plan-features">
-                    <li>Up to 20 clients</li>
-                    <li>Unlimited conversations</li>
-                    <li>AI-powered responses</li>
-                    <li>Advanced analytics</li>
-                    <li>Priority support</li>
-                    <li>Custom integrations</li>
-                    <li>Onboarding call</li>
-                    <li>White-label options</li>
-                </ul>
-                
-                {% if user.plan_type == 'agency' %}
-                    <button class="btn btn-current">Current Plan</button>
-                {% else %}
-                    <button onclick="startPayment('agency')" class="btn btn-upgrade">🚀 Get Started - $60/month</button>
-                {% endif %}
-            </div>
-            
-            <!-- Enterprise Plan -->
-            <div class="pricing-card">
-                <div class="plan-name">Enterprise</div>
-                <div class="plan-price">
-                    $199<span> one-time</span>
-                    <div class="discount-badge lifetime-badge">🔥 LIFETIME ACCESS</div>
-                </div>
-    
-                <ul class="plan-features">
-                    <li>Unlimited clients</li>
-                    <li>Everything in Agency</li>
-                    <li>Lifetime access</li>
-                    <li>Self-hosted option</li>
-                    <li>Custom features</li>
-                    <li>Dedicated support</li>
-                    <li>SLA guarantee</li>
-                    <li>White-glove onboarding</li>
-                    <li>Priority development</li>
-                </ul>
-    
-                {% if user.plan_type == 'enterprise' %}
-                    <button class="btn btn-current">Current Plan</button>
-                {% else %}
-                    <button onclick="startPayment('enterprise')" class="btn btn-upgrade">🚀 Get Lifetime Access - $199</button>
-                {% endif %}
-            </div>
-        </div>
-        
-        <!-- Payment Modal -->
-        <div id="paymentModal" class="payment-modal">
-            <div class="payment-modal-content">
-                <span class="payment-close" onclick="closePaymentModal()">&times;</span>
-                
-                <h2>🎉 Almost There!</h2>
-                
-                <div class="plan-summary">
-                    <p><strong>Plan:</strong> <span id="selectedPlanName"></span></p>
-                    <p><strong>Price:</strong> <span id="selectedPlanPrice"></span></p>
-                </div>
-                
-                <div class="payment-instructions">
-                    <h3>💳 Choose Payment Method</h3>
-                    
-                    <!-- Option 1: Flutterwave Card Payment -->
-                    <div class="payment-option">
-                        <h4>💳 Pay with Card (Recommended)</h4>
-                        <p>Secure international payment • All major cards accepted</p>
-                        <a id="flutterwaveLink" href="#" target="_blank" class="btn-payment-option card">
-                            Pay <span id="cardAmount">$15</span> Now
-                        </a>
-                    </div>
-                    
-                    <!-- Option 2: Bank Transfer -->
-                    <div class="payment-option">
-                        <h4>🏦 Bank Transfer</h4>
-                        <p>Direct bank transfer (Nigeria & International)</p>
-                        <button onclick="contactForBankTransfer()" class="btn-payment-option email">
-                            Get Bank Details
-                        </button>
-                    </div>
-                    
-                    <!-- Option 3: Other Payment Methods -->
-                    <div class="payment-option">
-                        <h4>💰 Other Payment Methods</h4>
-                        <p>PayPal, Crypto (USDT), or custom arrangement</p>
-                        <button onclick="contactForOther()" class="btn-payment-option paypal">
-                            Contact for Options
-                        </button>
-                    </div>
-                </div>
-                
-                <!-- Terms and Conditions Agreement -->
-                <div class="terms-agreement">
-                    <label>
-                        <input type="checkbox" id="agreeTerms">
-                        <span>
-                            I agree to the <a href="/terms" target="_blank">Terms & Conditions</a>, 
-                            <a href="/privacy-policy" target="_blank">Privacy Policy</a>, and 
-                            <a href="/refund-policy" target="_blank">Refund Policy</a>
-                        </span>
-                    </label>
-                </div>
-                
-                <div class="guarantee">
-                    <p>✅ Instant activation after payment confirmation</p>
-                    <p>✅ 7-day money-back guarantee</p>
-                    <p>✅ Cancel anytime, no questions asked</p>
-                </div>
-            </div>
+            {% if user.plan_type == 'starter' %}
+                <button class="btn btn-current">Current Plan</button>
+            {% else %}
+                <button onclick="startPayment('starter')" class="btn btn-secondary">Upgrade to Starter</button>
+            {% endif %}
         </div>
 
-        <div class="back-link">
-            <a href="/dashboard">← Back to Dashboard</a>
-            <span style="color: rgba(255,255,255,0.5);">|</span>
-            <a href="/terms">Terms & Conditions</a>
-            <span style="color: rgba(255,255,255,0.5);">|</span>
-            <a href="/privacy-policy">Privacy Policy</a>
-            <span style="color: rgba(255,255,255,0.5);">|</span>
-            <a href="/refund-policy">Refund Policy</a>
+        <div class="pricing-card featured">
+            <div class="popular-badge">MOST POPULAR</div>
+            <h3>Agency Growth</h3>
+            <div class="price">
+                <span class="old-price">$120</span>$60<span>/mo</span>
+            </div>
+            <div class="discount-tag" style="background: rgba(255, 215, 0, 0.15); color: #ffd700;">
+                ⚡ Best Value for Agencies
+            </div>
+
+            <ul class="features-list">
+                <li><span class="check">✓</span> <strong>20 Client Bots</strong></li>
+                <li><span class="check">✓</span> <strong>Unlimited Conversations</strong></li>
+                <li><span class="check">✓</span> <strong>Full White-Labeling</strong></li>
+                <li><span class="check">✓</span> Advanced Analytics</li>
+                <li><span class="check">✓</span> Priority Support</li>
+                <li><span class="check">✓</span> Custom Integrations</li>
+                <li><span class="check">✓</span> Onboarding Call</li>
+            </ul>
+
+            {% if user.plan_type == 'agency' %}
+                <button class="btn btn-current">Current Plan</button>
+            {% else %}
+                <button onclick="startPayment('agency')" class="btn btn-primary">🚀 Get Started - $60/mo</button>
+            {% endif %}
         </div>
+
+        <div class="pricing-card">
+            <h3>Enterprise</h3>
+            <div class="price">$199<span>/life</span></div>
+            <div class="discount-tag" style="background: rgba(236, 72, 153, 0.2); color: #ec4899;">
+                💎 Lifetime Access
+            </div>
+
+            <ul class="features-list">
+                <li><span class="check">✓</span> Unlimited Clients</li>
+                <li><span class="check">✓</span> Everything in Agency</li>
+                <li><span class="check">✓</span> Self-Hosted Option</li>
+                <li><span class="check">✓</span> Custom Features</li>
+                <li><span class="check">✓</span> SLA Guarantee</li>
+                <li><span class="check">✓</span> White-Glove Onboarding</li>
+            </ul>
+
+            {% if user.plan_type == 'enterprise' %}
+                <button class="btn btn-current">Current Plan</button>
+            {% else %}
+                <button onclick="startPayment('enterprise')" class="btn btn-secondary">Get Lifetime Access</button>
+            {% endif %}
+        </div>
+
+    </div>
+
+    <div id="paymentModal" class="payment-modal">
+        <div class="payment-modal-content">
+            <span class="payment-close" onclick="closePaymentModal()">&times;</span>
+            
+            <h2 style="text-align: center; margin-bottom: 20px;">🎉 Complete Your Upgrade</h2>
+            
+            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; text-align: center; margin-bottom: 30px;">
+                <p style="color: #cbd5e1; font-size: 16px;">You are selecting: <strong style="color: white; font-size: 18px;" id="selectedPlanName">Plan</strong></p>
+                <p style="color: var(--primary); font-size: 24px; font-weight: 800; margin-top: 5px;" id="selectedPlanPrice">$0</p>
+            </div>
+            
+            <div class="payment-option">
+                <h4>💳 Pay with Card (Instant)</h4>
+                <p>Secure payment via Flutterwave. All cards accepted.</p>
+                <a id="flutterwaveLink" href="#" target="_blank" class="btn btn-primary" style="text-decoration: none;">
+                    Pay <span id="cardAmount">$0</span> Securely
+                </a>
+            </div>
+            
+            <div class="payment-option">
+                <h4>🏦 Bank Transfer / Crypto</h4>
+                <p>Prefer to transfer manually? Contact support.</p>
+                <button onclick="contactForBankTransfer()" class="btn btn-secondary" style="padding: 10px; font-size: 14px;">Request Bank Details</button>
+            </div>
+
+            <div style="margin-top: 20px; font-size: 14px; color: #94a3b8; display: flex; gap: 10px; align-items: start;">
+                <input type="checkbox" id="agreeTerms" style="margin-top: 4px;">
+                <label for="agreeTerms">I agree to the <a href="/terms" target="_blank" style="color: var(--primary);">Terms & Conditions</a> and Refund Policy.</label>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="back-link">
+        <a href="/dashboard">← Back to Dashboard</a>
+        <a href="/terms">Terms</a>
+        <a href="/privacy-policy">Privacy</a>
     </div>
 
     <script>
         let selectedPlan = '';
-        let selectedPrice = '';
-
-        // ⚠️ IMPORTANT: REPLACE THESE WITH YOUR ACTUAL FLUTTERWAVE PAYMENT LINKS
-        // Get them from: https://dashboard.flutterwave.com/payment-links
+        
+        // YOUR FLUTTERWAVE LINKS
         const flutterwaveLinks = {
             'starter': 'https://flutterwave.com/pay/1q2ra2vpnh4y',
             'agency': 'https://flutterwave.com/pay/vrrfifwlldpl',
             'enterprise': 'https://flutterwave.com/pay/ehhc5k94jceb'
         };
-
+        
         const planPrices = {
-            'starter': { price: '$15/month', amount: 25 },
-            'agency': { price: '$60/month', amount: 75 },
+            'starter': { price: '$15/month', amount: 15 }, // Updated to match displayed price
+            'agency': { price: '$60/month', amount: 60 },  // Updated to match displayed price
             'enterprise': { price: '$199 one-time', amount: 199 }
         };
 
         function startPayment(plan) {
             selectedPlan = plan;
             const planInfo = planPrices[plan];
-            selectedPrice = planInfo.price;
             
-            // Update modal content
-            document.getElementById('selectedPlanName').textContent = 
-                plan.charAt(0).toUpperCase() + plan.slice(1);
+            // Update Modal UI
+            document.getElementById('selectedPlanName').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + " Plan";
             document.getElementById('selectedPlanPrice').textContent = planInfo.price;
             document.getElementById('cardAmount').textContent = '$' + planInfo.amount;
-            
-            // Set Flutterwave payment link
             document.getElementById('flutterwaveLink').href = flutterwaveLinks[plan];
             
-            // Reset checkbox
+            // Reset & Show
             document.getElementById('agreeTerms').checked = false;
-            
-            // Show modal
             document.getElementById('paymentModal').style.display = 'block';
-            document.body.style.overflow = 'hidden'; // Prevent background scroll
+            document.body.style.overflow = 'hidden';
         }
 
         function closePaymentModal() {
             document.getElementById('paymentModal').style.display = 'none';
-            document.body.style.overflow = 'auto'; // Restore scroll
+            document.body.style.overflow = 'auto';
         }
 
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            const modal = document.getElementById('paymentModal');
-            if (event.target == modal) {
-                closePaymentModal();
-            }
-        }
-
-        // Close modal with Escape key
-        document.addEventListener('keydown', function(event) {
-            if (event.key === 'Escape') {
-                closePaymentModal();
+        // Terms Validation
+        document.getElementById('flutterwaveLink').addEventListener('click', function(e) {
+            if (!document.getElementById('agreeTerms').checked) {
+                e.preventDefault();
+                alert('⚠️ Please agree to the Terms & Conditions first.');
             }
         });
 
+        // Bank Transfer Logic
         function contactForBankTransfer() {
-            if (!document.getElementById('agreeTerms').checked) {
-                alert('⚠️ Please agree to the Terms & Conditions before continuing.');
-                return;
-            }
-            
-            const plan = selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1);
-            const amount = planPrices[selectedPlan].amount;
-            const subject = `Bank Transfer - ${plan} Plan ($${amount})`;
-            const body = `Hi!%0A%0AI want to subscribe to the ${plan} plan ($${amount}).%0A%0APayment Method: Bank Transfer%0A%0AMy Details:%0AEmail: %0ACompany Name: %0ACountry: %0A%0APlease send me your bank account details so I can complete the payment.%0A%0AThank you!`;
-            
-            window.location.href = `mailto:assistly43@gmail.com?subject=${subject}&body=${body}`;
+            const subject = `Bank Transfer Request - ${selectedPlan.toUpperCase()}`;
+            const body = `Hi Team,\n\nI would like to pay for the ${selectedPlan} plan via Bank Transfer.\n\nPlease send me the details.`;
+            window.location.href = `mailto:assistly43@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
         }
 
-        function contactForOther() {
-            if (!document.getElementById('agreeTerms').checked) {
-                alert('⚠️ Please agree to the Terms & Conditions before continuing.');
-                return;
+        // Close on Click Outside
+        window.onclick = function(event) {
+            if (event.target == document.getElementById('paymentModal')) {
+                closePaymentModal();
             }
-            
-            const plan = selectedPlan.charAt(0).toUpperCase() + selectedPlan.slice(1);
-            const amount = planPrices[selectedPlan].amount;
-            const subject = `Payment Options - ${plan} Plan ($${amount})`;
-            const body = `Hi!%0A%0AI want to subscribe to the ${plan} plan ($${amount}).%0A%0AMy Preferred Payment Method:%0A[ ] PayPal%0A[ ] Cryptocurrency (USDT/BTC/ETH)%0A[ ] Wise Transfer%0A[ ] Remitly%0A[ ] Other: ____________%0A%0AMy Details:%0AEmail: %0ACompany Name: %0ACountry: %0A%0APlease send me payment details for my preferred method.%0A%0AThank you!`;
-            
-            window.location.href = `mailto:assistly43@gmail.com?subject=${subject}&body=${body}`;
         }
-
-        // Add click handler to Flutterwave link to check terms
-        document.addEventListener('DOMContentLoaded', function() {
-            const flutterwaveLink = document.getElementById('flutterwaveLink');
-            if (flutterwaveLink) {
-                flutterwaveLink.addEventListener('click', function(e) {
-                    if (!document.getElementById('agreeTerms').checked) {
-                        e.preventDefault();
-                        alert('⚠️ Please agree to the Terms & Conditions before continuing.');
-                        return false;
-                    }
-                });
-            }
-        });
     </script>
 </body>
 </html>

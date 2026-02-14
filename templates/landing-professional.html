@@ -6,166 +6,397 @@
     <title>Launch Your Own AI Chatbot SaaS | White-Label Platform</title>
     <meta name="description" content="Lumvi allows agencies to create, brand, and resell AI-powered FAQ chatbots to your clients under your own name. No coding. No revenue sharing.">
     <style>
-        /* CORE RESET & TYPOGRAPHY */
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #1a202c;
-            overflow-x: hidden;
-            background-color: #fff;
-        }
+        /* ==============================================
+   PREMIUM AI SAAS 2026 AESTHETIC – DARK MODE BASE
+   Glassmorphism + Neon Glow + Depth + Gradients
+   ============================================== */
 
-        /* UTILITIES */
-        .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
-        .text-center { text-align: center; }
-        .highlight {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        .section-padding { padding: 100px 0; }
-        .bg-gray { background-color: #f7fafc; }
-        .bg-dark { background-color: #1a202c; color: white; }
+:root {
+    --primary: #6366f1;          /* Indigo-500 – core brand */
+    --primary-dark: #4f46e5;      /* Indigo-600 */
+    --primary-glow: rgba(99, 102, 241, 0.45);
 
-        /* NAVIGATION */
-        .navbar {
-            position: fixed; top: 0; width: 100%;
-            background: rgba(255, 255, 255, 0.98);
-            backdrop-filter: blur(10px);
-            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.05);
-            z-index: 1000; padding: 16px 0;
-        }
-        .nav-container { display: flex; justify-content: space-between; align-items: center; }
-        .logo { font-size: 24px; font-weight: 800; color: #1a202c; text-decoration: none; }
-        .nav-links { display: flex; gap: 32px; align-items: center; }
-        .nav-links a { color: #4a5568; text-decoration: none; font-weight: 600; transition: color 0.2s; }
-        .nav-links a:hover { color: #667eea; }
-        .btn-nav {
-            padding: 10px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white !important;
-            border-radius: 8px;
-            transition: transform 0.2s;
-        }
-        .btn-nav:hover { transform: translateY(-2px); }
+    --accent: #06b6d4;            /* Cyan-500 – AI energy / highlights */
+    --accent-glow: rgba(6, 182, 212, 0.4);
 
-        /* 1. HERO SECTION */
-        .hero {
-            margin-top: 80px;
-            padding: 140px 0 100px;
-            text-align: center;
-            color: #080d16;
+    --dark-bg: #0a0f1a;           /* Deeper slate for premium feel */
+    --dark-card: rgba(15, 23, 42, 0.75);  /* Glass base */
+    --dark-border: rgba(255, 255, 255, 0.08);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
 
-            /* --- BACKGROUND IMAGE SETUP --- */
-            /* We use two layers:
-            1. A semi-transparent white gradient overlay so text is readable.
-            2. The actual background image URL. */
-            background: linear-gradient(to bottom, rgba(255, 255, 255, 0.5), rgba(240, 242, 245, 0.6)),
-                url("{{url_for('static', filename='hero.jpg')}}");
-                /* Ensures the image covers the whole section and stays centered */
-            background-size: cover;
-            background-position: center center;
-            background-repeat: no-repeat;
-        }
-        .cta-group { display: flex; justify-content: center; gap: 20px; margin-bottom: 24px; }
-        .btn-primary {
-            padding: 18px 40px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 12px;
-            text-decoration: none;
-            font-size: 18px;
-            font-weight: 700;
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
-            transition: transform 0.2s;
-        }
-        .btn-primary:hover { transform: translateY(-3px); }
-        .btn-secondary {
-            padding: 18px 40px;
-            background: white;
-            color: #041e4a;
-            border: 2px solid #e2e8f0;
-            border-radius: 12px;
-            text-decoration: none;
-            font-size: 18px;
-            font-weight: 700;
-            transition: all 0.2s;
-        }
-        .btn-secondary:hover { border-color: #667eea; color: #667eea; }
-        .trust-line { color: #0d1827; font-size: 14px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; }
+    --shadow-glass: 0 8px 32px rgba(0, 0, 0, 0.45);
+    --shadow-glow: 0 0 25px var(--primary-glow);
+    --shadow-glow-accent: 0 0 30px var(--accent-glow);
+}
 
-        /* 2. VALUE PROP (3 Columns) */
-        .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 40px; margin-top: 60px; }
-        .value-card {
-            background: white; padding: 40px; border-radius: 16px; border: 1px solid #e2e8f0;
-            transition: transform 0.3s;
-        }
-        .value-card:hover { transform: translateY(-5px); box-shadow: 0 20px 40px rgba(0,0,0,0.05); }
-        .icon-box { font-size: 40px; margin-bottom: 20px; }
-        .value-card h3 { font-size: 24px; margin-bottom: 16px; font-weight: 700; }
-        .value-card ul { list-style: none; color: #4a5568; }
-        .value-card li { margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
-        .value-card li::before { content: "•"; color: #667eea; font-weight: bold; font-size: 24px; line-height: 0; }
+/* Reset & Base */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
 
-        /* 3. HOW AI WORKS */
-        .feature-split { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
-        .ai-features li { margin-bottom: 16px; font-size: 18px; display: flex; align-items: center; gap: 12px; }
-        .ai-features li svg { width: 24px; height: 24px; color: #667eea; flex-shrink: 0; }
-        
-        /* 4. SHOWCASE */
-        .showcase-img {
-            width: 100%; border-radius: 12px; box-shadow: 0 20px 50px rgba(0,0,0,0.1); border: 1px solid #e2e8f0;
-        }
-        .caption-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 30px; text-align: center; }
-        .caption-item h4 { color: #2d3748; margin-bottom: 8px; }
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: var(--dark-bg);
+    min-height: 100vh;
+    overflow-x: hidden;
+}
 
-        /* 5. USE CASES */
-        .use-case-card { padding: 30px; background: #f8fafc; border-left: 4px solid #667eea; border-radius: 0 12px 12px 0; }
+/* Font smoothing & subtle grain (optional – remove if too heavy) */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(circle at 10% 20%, rgba(99,102,241,0.03) 0%, transparent 25%);
+    pointer-events: none;
+    z-index: -2;
+}
 
-        /* 6. HOW IT WORKS (STEPS) */
-        .step-card { position: relative; padding: 40px 20px; }
-        .step-number {
-            font-size: 80px; font-weight: 900; color: #e2e8f0; position: absolute; top: 0; left: 50%; transform: translateX(-50%); z-index: 0; opacity: 0.5;
-        }
-        .step-content { position: relative; z-index: 1; margin-top: 40px; }
+/* Utilities */
+.container { max-width: 1400px; margin: 0 auto; padding: 0 24px; }
+.text-center { text-align: center; }
+.section-padding { padding: 140px 0; }
 
-        /* 7. PRICING */
-        .pricing-card {
-            background: white; padding: 48px; border-radius: 20px; border: 2px solid #e2e8f0; text-align: left; position: relative;
-        }
-        .pricing-card.featured { border-color: #667eea; transform: scale(1.05); box-shadow: 0 20px 40px rgba(102, 126, 234, 0.15); z-index: 2; }
-        .price { font-size: 48px; font-weight: 800; margin: 20px 0; color: #1a202c; }
-        .price span { font-size: 18px; color: #718096; font-weight: 500; }
-        .check-list li { margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+/* Gradient text – AI futuristic feel */
+.highlight, .highlight-gradient {
+    background: linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 800;
+}
 
-        /* 8. FAQ */
-        .faq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 40px; text-align: left; }
-        .faq-item { background: white; padding: 24px; border-radius: 12px; border: 1px solid #e2e8f0; }
-        .faq-item h4 { margin-bottom: 10px; color: #2d3748; }
-        .faq-item p { font-size: 15px; color: #718096; }
+/* ==============================================
+   1. GLASSMORPHISM NAVBAR (Sticky + Blur)
+   ============================================== */
+.navbar {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    background: rgba(10, 15, 26, 0.65);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--dark-border);
+    z-index: 1000;
+    padding: 18px 0;
+    transition: all 0.4s ease;
+}
 
-        /* 9. TRUST & FOOTER */
-        .trust-badges { display: flex; justify-content: center; gap: 40px; margin-top: 40px; opacity: 0.7; }
-        
-        /* 10. FINAL CTA */
-        .final-cta { background: linear-gradient(135deg, #1a202c 0%, #2d3748 100%); color: white; padding: 100px 20px; text-align: center; }
+.navbar.scrolled {
+    background: rgba(10, 15, 26, 0.85);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
 
-        /* MOBILE RESPONSIVE */
-        @media (max-width: 768px) {
-            .hero h1 { font-size: 40px; }
-            .grid-3, .feature-split, .caption-grid, .faq-grid { grid-template-columns: 1fr; }
-            .nav-links { display: none; } /* Hide nav on mobile for simplicity */
-            .pricing-card.featured { transform: scale(1); }
-        }
+.nav-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    font-size: 24px;
+    font-weight: 800;
+    color: white;
+    text-decoration: none;
+    letter-spacing: -0.8px;
+}
+
+.nav-links {
+    display: flex;
+    gap: 36px;
+    align-items: center;
+}
+
+.nav-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 15px;
+    transition: color 0.25s ease;
+}
+
+.nav-links a:hover {
+    color: var(--accent);
+}
+
+.btn-nav {
+    padding: 12px 28px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white;
+    border-radius: 10px;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: var(--shadow-glow);
+    transition: all 0.3s ease;
+}
+
+.btn-nav:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 35px var(--primary-glow);
+}
+
+.profile-pic {
+    width: 40px;           /* 1. Force a square size */
+    height: 40px;
+    border-radius: 50%;    /* 2. Makes it a perfect circle */
+    object-fit: cover;     /* 3. Crops the image so it doesn't squish */
+    border: 2px solid #e2e8f0; /* Optional: adds a nice border */
+}
+
+/* ==============================================
+   2. HERO – Deep gradient + glass CTA + floating mockup
+   ============================================== */
+.hero {
+    padding: 220px 0 160px;
+    position: relative;
+    text-align: center;
+    background: linear-gradient(135deg, #0a0f1a 0%, #111827 50%, #1e293b 100%);
+    overflow: hidden;
+}
+
+.hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 70% 30%, rgba(6,182,212,0.12), transparent 45%);
+    pointer-events: none;
+}
+
+.hero h1 {
+    font-size: clamp(3.8rem, 9vw, 7.2rem);
+    font-weight: 800;
+    line-height: 1.05;
+    margin-bottom: 28px;
+    letter-spacing: -0.04em;
+}
+
+.hero p {
+    font-size: 1.35rem;
+    color: var(--text-secondary);
+    max-width: 720px;
+    margin: 0 auto 48px;
+}
+
+.cta-group {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.btn-primary {
+    padding: 18px 40px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    color: white;
+    border-radius: 14px;
+    font-size: 1.15rem;
+    font-weight: 600;
+    text-decoration: none;
+    box-shadow: var(--shadow-glow), var(--shadow-glow-accent);
+    border: 1px solid rgba(255,255,255,0.12);
+    transition: all 0.35s ease;
+}
+
+.btn-primary:hover {
+    transform: translateY(-4px) scale(1.03);
+    box-shadow: 0 0 50px var(--primary-glow), 0 0 70px var(--accent-glow);
+}
+
+.btn-secondary {
+    padding: 18px 40px;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 14px;
+    font-size: 1.15rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.35s ease;
+}
+
+.btn-secondary:hover {
+    background: rgba(6,182,212,0.12);
+    transform: translateY(-3px);
+}
+
+/* Floating mockup example (add .mockup-laptop / .mockup-phone in HTML) */
+.mockup-container {
+    position: relative;
+    margin: 100px auto 0;
+    max-width: 900px;
+}
+
+.mockup-laptop {
+    width: 100%;
+    border-radius: 20px;
+    border: 1px solid var(--dark-border);
+    box-shadow: var(--shadow-glass), 0 0 40px rgba(99,102,241,0.25);
+    transform: perspective(1200px) rotateX(8deg);
+    transition: transform 0.6s ease;
+}
+
+.mockup-laptop:hover {
+    transform: perspective(1200px) rotateX(4deg) translateY(-20px);
+}
+
+/* ==============================================
+   3. FEATURE / VALUE CARDS – Glassmorphism + Hover Glow
+   ============================================== */
+.grid-3 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 32px;
+    margin-top: 80px;
+}
+
+.value-card {
+    background: var(--dark-card);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--dark-border);
+    border-radius: 24px;
+    padding: 48px 36px;
+    transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.value-card:hover {
+    transform: translateY(-14px);
+    box-shadow: var(--shadow-glass), var(--shadow-glow);
+    border-color: rgba(99,102,241,0.35);
+}
+
+.value-card::before {
+    content: "";
+    position: absolute;
+    inset: -50%;
+    background: radial-gradient(circle at 30% 20%, rgba(99,102,241,0.08), transparent 60%);
+    opacity: 0;
+    transition: opacity 0.5s;
+    pointer-events: none;
+}
+
+.value-card:hover::before {
+    opacity: 1;
+}
+
+.icon-box {
+    width: 70px;
+    height: 70px;
+    background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(6,182,212,0.15));
+    border-radius: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    margin-bottom: 32px;
+    color: var(--accent);
+    border: 1px solid rgba(255,255,255,0.08);
+}
+
+/* ==============================================
+   4. PRICING CARDS – Featured with neon edge glow
+   ============================================== */
+.pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 40px;
+    margin-top: 80px;
+}
+
+.pricing-card {
+    background: var(--dark-card);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--dark-border);
+    border-radius: 28px;
+    padding: 52px 40px;
+    text-align: center;
+    transition: all 0.4s ease;
+}
+
+.pricing-card.featured {
+    border: 2px solid var(--accent);
+    box-shadow: var(--shadow-glow-accent), var(--shadow-glass);
+    transform: scale(1.06);
+    position: relative;
+    z-index: 10;
+}
+
+.pricing-card h3 {
+    font-size: 1.8rem;
+    margin-bottom: 16px;
+}
+
+.price {
+    font-size: 4.2rem;
+    font-weight: 800;
+    color: white;
+    margin: 24px 0;
+}
+
+.price span {
+    font-size: 1.4rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* --- FIX FOR GIANT CHECKMARKS --- */
+.ai-features {
+    list-style: none;
+    margin-top: 24px;
+}
+
+.ai-features li {
+    display: flex;
+    align-items: flex-start; /* Aligns icon with top of text */
+    gap: 16px;               /* Space between icon and text */
+    margin-bottom: 20px;
+    font-size: 18px;
+    color: #475569;
+}
+
+.ai-features li svg {
+    width: 24px !important;  /* Forces the icon to be small */
+    height: 24px !important;
+    color: var(--primary);   /* Uses your new indigo brand color */
+    flex-shrink: 0;          /* Prevents icon from getting squished */
+}
+
+/* ==============================================
+   5. Responsive Adjustments
+   ============================================== */
+@media (max-width: 1024px) {
+    .section-padding { padding: 100px 0; }
+    .hero { padding: 180px 0 120px; }
+}
+
+@media (max-width: 768px) {
+    .hero h1 { font-size: 3.2rem; }
+    .nav-links { display: none; } /* → add mobile menu if needed */
+    .pricing-card.featured { transform: scale(1); }
+    .cta-group { flex-direction: column; }
+}
+    
     </style>
 </head>
 <body>
 
     <nav class="navbar">
         <div class="container nav-container">
-            <a href="#" class="logo">💬 Lumvi</a>
+            <a href="#" class="logo" style="display: flex; align-items: center; gap: 12px; text-decoration: none;">
+                <img src="{{ url_for('static', filename='logo.jpg') }}" 
+                alt="Lumvi Logo" 
+                style="height: 40px; width: 40px; border-radius: 50%; object-fit: cover;">
+    
+                <span style="font-weight: 800; font-size: 22px; color: #0f172a; letter-spacing: -0.5px;">
+                    Lumvi
+                </span>
+            </a>
             <div class="nav-links">
                 <a href="#features">Features</a>
                 <a href="#showcase">Demo</a>
@@ -348,12 +579,19 @@
             <div class="grid-3">
                 <div class="pricing-card">
                     <h3>Starter</h3>
-                    <div class="price">$49<span>/mo</span></div>
+                    <div class="price">
+                        <span style="text-decoration: line-through; font-size: 24px; color: #64748b; margin-right: 8px;">$30</span>$15<span>/mo</span>
+                    </div>
+        
+                    <div style="background: rgba(16, 185, 129, 0.2); color: #10b981; display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 20px;">
+                        🔥 50% OFF - First 10 Only
+                    </div>
+
                     <ul class="check-list" style="list-style: none;">
-                        <li><span style="color: green">✓</span> 3 Client Bots</li>
-                        <li><span style="color: green">✓</span> 1,000 Messages/mo</li>
-                        <li><span style="color: green">✓</span> Basic Branding</li>
-                        <li><span style="color: green">✓</span> Email Support</li>
+                        <li><span style="color: #10b981; margin-right: 8px;">✓</span> 3 Client Bots</li>
+                        <li><span style="color: #10b981; margin-right: 8px;">✓</span> 1,000 Messages/mo</li>
+                        <li><span style="color: #10b981; margin-right: 8px;">✓</span> Basic Branding</li>
+                        <li><span style="color: #10b981; margin-right: 8px;">✓</span> Email Support</li>
                     </ul>
                     <a href="/signup?plan=starter" class="btn-secondary" style="display: block; text-align: center; margin-top: 30px;">Start Free Trial</a>
                 </div>
@@ -361,30 +599,41 @@
                 <div class="pricing-card featured">
                     <div style="background: #ffd700; color: black; font-weight: bold; padding: 4px 12px; border-radius: 20px; position: absolute; top: -15px; left: 50%; transform: translateX(-50%); text-transform: uppercase; font-size: 12px;">Most Popular</div>
                     <h3>Growth Agency</h3>
-                    <div class="price">$149<span>/mo</span></div>
-                    <ul class="check-list" style="list-style: none;">
-                        <li><span style="color: green">✓</span> 15 Client Bots</li>
-                        <li><span style="color: green">✓</span> Unlimited Messages</li>
-                        <li><span style="color: green">✓</span> <strong>Full White-Labeling</strong></li>
-                        <li><span style="color: green">✓</span> Custom Domain (CNAME)</li>
-                        <li><span style="color: green">✓</span> Priority Support</li>
-                    </ul>
-                    <a href="/signup?plan=agency" class="btn-primary" style="display: block; text-align: center; margin-top: 30px; box-shadow: none;">Start Free Trial</a>
+        
+                    <div class="price">
+                        <span style="text-decoration: line-through; font-size: 24px; color: #94a3b8; margin-right: 8px;">$120</span>$60<span>/mo</span>
+                    </div>
+
+                <div style="background: rgba(255, 215, 0, 0.2); color: #ffd700; display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 20px;">
+                    🔥 50% OFF - Limited Time
                 </div>
 
-                <div class="pricing-card">
-                    <h3>Scale</h3>
-                    <div class="price">$399<span>/mo</span></div>
-                    <ul class="check-list" style="list-style: none;">
-                        <li><span style="color: green">✓</span> Unlimited Bots</li>
-                        <li><span style="color: green">✓</span> Unlimited Messages</li>
-                        <li><span style="color: green">✓</span> Everything in Growth</li>
-                        <li><span style="color: green">✓</span> API Access</li>
-                        <li><span style="color: green">✓</span> Dedicated Account Mgr</li>
-                    </ul>
-                    <a href="/signup?plan=scale" class="btn-secondary" style="display: block; text-align: center; margin-top: 30px;">Start Free Trial</a>
+                <ul class="check-list" style="list-style: none;">
+                    <li><span style="color: #10b981; margin-right: 8px;">✓</span> <strong>15 Client Bots</strong></li>
+                    <li><span style="color: #10b981; margin-right: 8px;">✓</span> <strong>Unlimited Messages</strong></li>
+                    <li><span style="color: #10b981; margin-right: 8px;">✓</span> Full White-Labeling</li>
+                    <li><span style="color: #10b981; margin-right: 8px;">✓</span> Custom Domain</li>
+                    <li><span style="color: #10b981; margin-right: 8px;">✓</span> Priority Support</li>
+                </ul>
+                <a href="/signup?plan=agency" class="btn-primary" style="display: block; text-align: center; margin-top: 30px; box-shadow: none;">Start Free Trial</a>
+            </div>
+
+            <div class="pricing-card">
+                <h3>Enterprise</h3>
+                <div class="price">$199<span>/life</span></div>
+                <div style="background: rgba(236, 72, 153, 0.2); color: #ec4899; display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 20px;">
+                    💎 Lifetime Access
+                </div>
+                <ul class="check-list" style="list-style: none;">
+                    <li><span style="color: #10b981; margin-right: 8px;">✓</span> Unlimited Clients</li>
+                    <li><span style="color: #10b981; margin-right: 8px;">✓</span> Everything in Agency</li>
+                    <li><span style="color: #10b981; margin-right: 8px;">✓</span> Self-Hosted Option</li>
+                    <li><span style="color: #10b981; margin-right: 8px;">✓</span> SLA Guarantee</li>
+                </ul>
+                <a href="/signup?plan=enterprise" class="btn-secondary" style="display: block; text-align: center; margin-top: 30px;">Start Free Trial</a>
                 </div>
             </div>
+        </div>
             
             <p class="text-center" style="margin-top: 20px; font-size: 14px; color: #718096; font-weight: bold;">Early access pricing available for a limited time.</p>
         </div>
@@ -429,7 +678,7 @@
                 <div>🔒 256-bit SSL Secure</div>
                 <div>🛡️ GDPR Compliant</div>
                 <div>⚡ 99.9% Uptime SLA</div>
-                <div>🧠 Powered by GPT-4</div>
+                <div>🧠 Powered by Advanced AI</div>
             </div>
         </div>
     </section>
