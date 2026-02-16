@@ -15,7 +15,12 @@
     
     // Get client ID from script tag
     const currentScript = document.currentScript || document.querySelector('script[data-client-id]');
-    const clientId = currentScript ? currentScript.getAttribute('data-client-id') || 'demo' : 'demo';
+    // ALWAYS use demo on landing page, or use specified client ID
+    const clientId = window.LUMVI_CLIENT_ID || 
+                    (currentScript ? currentScript.getAttribute('data-client-id') : null) || 
+                    'demo';
+
+    console.log('🎯 Widget initializing for client:', clientId);
     
     // Get base URL
     const baseUrl = window.location.origin;

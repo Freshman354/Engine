@@ -239,6 +239,12 @@ def get_client_by_id(client_id):
     
     return dict(client) if client else None
 
+def get_db_connection():
+    """Get database connection"""
+    conn = sqlite3.connect('chatbot.db')
+    conn.row_factory = sqlite3.Row
+    return conn
+
 def verify_client_ownership(user_id, client_id):
     """Verify that a user owns a client"""
     conn = get_db()

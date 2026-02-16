@@ -3,28 +3,410 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Widget</title>
-    <link rel="stylesheet" href="/static/widget.css">
+    <title>{{ client.company_name or 'Chat Support' }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #ffffff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-header {
+            background: {{ client.widget_color or '#6366f1' }};
+            color: white;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .bot-avatar-header {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+        .header-text h1 { font-size: 16px; font-weight: 600; }
+        .header-text .status { font-size: 12px; opacity: 0.9; }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f9fafb;
+        }
+        .timestamp {
+            text-align: center;
+            color: #9ca3af;
+            font-size: 11px;
+            margin-bottom: 16px;
+        }
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+            gap: 10px;
+        }
+        .message.user { flex-direction: row-reverse; }
+        .message-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: {{ client.widget_color or '#6366f1' }};
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            color: white;
+            flex-shrink: 0;
+        }
+        .message-bubble { max-width: 75%; }
+        .sender-name { font-size: 12px; color: #6b7280; margin-bottom: 4px; }
+        .message-content {
+            background: white;
+            padding: 12px 16px;
+            border-radius: 18px;
+            border-bottom-left-radius: 4px;
+            font-size: 14px;
+            color: #1f2937;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            white-space: pre-line;
+        }
+        .message.user .message-content {
+            background: {{ client.widget_color or '#6366f1' }};
+            color: white;
+            border-bottom-left-radius: 18px;
+            border-bottom-right-radius: 4px;
+        }
+        .message-time { font-size: 10px; color: #9ca3af; margin-top: 4px; }
+        .quick-replies {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .quick-reply-btn {
+            background: white;
+            border: 1.5px solid {{ client.widget_color or '#6366f1' }};
+            color: {{ client.widget_color or '#6366f1' }};
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .quick-reply-btn:hover {
+            background: {{ client.widget_color or '#6366f1' }};
+            color: white;
+        }
+        .typing-indicator {
+            display: none;
+            gap: 4px;
+            padding: 12px 16px;
+            background: white;
+            border-radius: 18px;
+            border-bottom-left-radius: 4px;
+            width: fit-content;
+        }
+        .typing-indicator.active { display: flex; }
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #d1d5db;
+            animation: typing 1.4s infinite;
+        }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing {
+            0%, 60%, 100% { opacity: 0.3; }
+            30% { opacity: 1; }
+        }
+        .chat-input-area {
+            padding: 16px 20px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
+            display: flex;
+            gap: 12px;
+        }
+        .chat-input {
+            flex: 1;
+            padding: 10px 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 24px;
+            font-size: 14px;
+            outline: none;
+            background: #f9fafb;
+        }
+        .chat-input:focus {
+            border-color: {{ client.widget_color or '#6366f1' }};
+            background: white;
+        }
+        .send-button {
+            width: 36px;
+            height: 36px;
+            background: {{ client.widget_color or '#6366f1' }};
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .send-button:disabled { opacity: 0.5; }
+        {% if client.remove_branding %}
+        .powered-by { display: none; }
+        {% endif %}
+        .powered-by {
+            text-align: center;
+            padding: 10px;
+            font-size: 11px;
+            color: #9ca3af;
+            background: #f9fafb;
+            border-top: 1px solid #e5e7eb;
+        }
+        .powered-by a {
+            color: {{ client.widget_color or '#6366f1' }};
+            text-decoration: none;
+            font-weight: 600;
+        }
+    </style>
 </head>
 <body>
-    <div id="chatbot-container">
-        <!-- Powered By Branding (only show if not removed) -->
-        {% if not client or not client.remove_branding %}
-        <div style="text-align: center; padding: 10px; font-size: 11px; color: #999; border-top: 1px solid #eee; margin-top: 10px;">
-            Powered by <a href="https://Lumvi.net" target="_blank" style="color: #667eea; text-decoration: none; font-weight: 600;">FAQ Chatbot</a>
+    <div class="chat-header">
+        <div class="bot-avatar-header">🤖</div>
+        <div class="header-text">
+            <h1>{{ client.bot_name or client.company_name or 'Support' }}</h1>
+            <div class="status">● Online • Typically replies instantly</div>
         </div>
-        {% endif %}
     </div>
-    <script src="/static/widget.js"></script>
+    <div class="chat-messages" id="messages">
+        <div class="timestamp" id="current-time"></div>
+        <div class="message bot">
+            <div class="message-avatar">🤖</div>
+            <div class="message-bubble">
+                <div class="sender-name">{{ client.bot_name or 'Team Support' }}</div>
+                <div class="message-content">{{ client.welcome_message or "Welcome! 😊 Please choose an option below that best describes what you need." }}</div>
+                <div class="quick-replies" id="quick-replies">
+                    <button class="quick-reply-btn" onclick="sendQuickReply('What are your business hours?')">What are your business hours?</button>
+                    <button class="quick-reply-btn" onclick="sendQuickReply('Can I get a demo?')">Can I get a demo?</button>
+                    <button class="quick-reply-btn" onclick="sendQuickReply('Contact us')">Contact us</button>
+                </div>
+                <div class="message-time">Just now</div>
+            </div>
+        </div>
+        <div class="message bot">
+            <div class="message-avatar">🤖</div>
+            <div class="typing-indicator" id="typing">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        </div>
+    </div>
+    <div class="chat-input-area">
+        <input type="text" class="chat-input" id="messageInput" placeholder="Type a message" autocomplete="off">
+        <button class="send-button" id="sendButton">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path>
+            </svg>
+        </button>
+    </div>
+    {% if not client.remove_branding %}
+    <div class="powered-by">Powered by <a href="https://lumvi.net" target="_blank">Lumvi</a></div>
+    {% endif %}
     <script>
-        // Initialize chatbot with client_id from URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const clientId = urlParams.get('client_id') || 'default';
-        
-        window.ChatbotWidget.init({
-            clientId: clientId,
-            apiUrl: window.location.origin
-        });
+        const CLIENT_ID = '{{ client.client_id }}';
+        const messagesContainer = document.getElementById('messages');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const typingIndicator = document.getElementById('typing');
+        const quickRepliesContainer = document.getElementById('quick-replies');
+        let conversationHistory = [];
+        let leadCollectionMode = false;
+        let leadData = {};
+
+        function setCurrentTime() {
+            const now = new Date();
+            const hours = now.getHours() % 12 || 12;
+            const minutes = now.getMinutes() < 10 ? '0' + now.getMinutes() : now.getMinutes();
+            const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+            document.getElementById('current-time').textContent = `${hours}:${minutes} ${ampm}`;
+        }
+        setCurrentTime();
+
+        function addUserMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message user';
+            messageDiv.innerHTML = `
+                <div class="message-avatar">You</div>
+                <div class="message-bubble">
+                    <div class="message-content">${escapeHtml(text)}</div>
+                    <div class="message-time">Just now</div>
+                </div>
+            `;
+            messagesContainer.insertBefore(messageDiv, messagesContainer.lastElementChild);
+            scrollToBottom();
+        }
+
+        function addBotMessage(text) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message bot';
+            messageDiv.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div class="message-bubble">
+                    <div class="sender-name">{{ client.bot_name or 'Support Team' }}</div>
+                    <div class="message-content">${escapeHtml(text)}</div>
+                    <div class="message-time">Just now</div>
+                </div>
+            `;
+            messagesContainer.insertBefore(messageDiv, messagesContainer.lastElementChild);
+            scrollToBottom();
+        }
+
+        function showTyping() { typingIndicator.classList.add('active'); scrollToBottom(); }
+        function hideTyping() { typingIndicator.classList.remove('active'); }
+        function scrollToBottom() { messagesContainer.scrollTop = messagesContainer.scrollHeight; }
+        function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
+        function isValidEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
+
+        window.sendQuickReply = function(text) {
+            if (quickRepliesContainer) quickRepliesContainer.style.display = 'none';
+            messageInput.value = text;
+            sendMessage();
+        };
+
+        async function handleLeadCollection(message) {
+            const lower = message.toLowerCase().trim();
+
+            // Allow user to cancel
+            if (lower === 'cancel' || lower === 'nevermind') {
+                leadCollectionMode = false;
+                leadData = {};
+                addBotMessage("No problem! Feel free to ask me any questions about our services!");
+                return;
+            }
+
+            // Step 1: Collect name
+            if (!leadData.hasOwnProperty('name')) {
+                leadData.name = message;
+                addBotMessage("Great! And what's your email address?");
+                return;
+             }
+
+            // Step 2: Collect email
+            if (!leadData.hasOwnProperty('email')) {
+                if (isValidEmail(message)) {
+                    leadData.email = message;
+                    addBotMessage("Perfect! And your phone number? (Type 'skip' if you'd prefer not to share)");
+                } else {
+                     addBotMessage("That doesn't look like a valid email. Can you try again? (Or type 'cancel' to stop)");
+                }
+                return;
+            }
+
+            // Step 3: Collect phone
+            if (!leadData.hasOwnProperty('phone')) {
+                leadData.phone = lower === 'skip' ? '' : message;
+                addBotMessage("Thanks! What company do you represent? (Type 'skip' if not applicable)");
+                return;
+            }
+
+            // Step 4: Collect company and submit
+            if (!leadData.hasOwnProperty('company')) {
+                 leadData.company = lower === 'skip' ? '' : message;
+                 await submitLead();
+            }
+        }
+
+        async function submitLead() {
+            showTyping();
+            try {
+                const response = await fetch('/api/lead', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        client_id: CLIENT_ID,
+                        name: leadData.name,
+                        email: leadData.email,
+                        phone: leadData.phone,
+                        company: leadData.company,
+                        conversation_snippet: conversationHistory.slice(-5).map(m => m.content).join(' | '),
+                        source_url: window.location.href
+                    })
+                });
+                const data = await response.json();
+                hideTyping();
+                if (data.success) {
+                    addBotMessage(data.message);
+                    leadCollectionMode = false;
+                    leadData = {};
+                } else {
+                    addBotMessage('Sorry, there was an error. Please try again or email us directly.');
+                }
+            } catch (error) {
+                hideTyping();
+                addBotMessage('Sorry, something went wrong. Please try emailing us directly.');
+            }
+        }
+
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message) return;
+            addUserMessage(message);
+            conversationHistory.push({ role: 'user', content: message });
+            messageInput.value = '';
+            sendButton.disabled = true;
+            if (leadCollectionMode) {
+                await handleLeadCollection(message);
+                sendButton.disabled = false;
+                messageInput.focus();
+                return;
+            }
+            showTyping();
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: message,
+                        client_id: CLIENT_ID,
+                        history: conversationHistory
+                    })
+                });
+                const data = await response.json();
+                hideTyping();
+                if (data.success) {
+                    addBotMessage(data.response);
+                    conversationHistory.push({ role: 'bot', content: data.response });
+                    if (data.trigger_lead_collection) {
+                        leadCollectionMode = true;
+                        leadData = {};
+                        addBotMessage("What's your name?");
+                    }
+                } else {
+                    addBotMessage('Sorry, something went wrong. Please try again.');
+                }
+            } catch (error) {
+                hideTyping();
+                addBotMessage('Sorry, I\'m having trouble connecting. Please try again.');
+            } finally {
+                sendButton.disabled = false;
+                messageInput.focus();
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+        messageInput.focus();
+        scrollToBottom();
+        console.log('✅ Chat widget with lead capture loaded');
     </script>
 </body>
 </html>

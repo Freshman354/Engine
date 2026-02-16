@@ -13,6 +13,7 @@ import shutil
 from datetime import datetime, timedelta
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from functools import wraps
+import sqlite3
 import models
 from io import StringIO
 from config import Config
@@ -350,6 +351,41 @@ def match_faq(message, faqs, lead_triggers):
     
     return None, None
 
+
+def log_conversation(client_id, user_message, bot_response, matched=False, method='unknown'):
+    """Log conversation to database for analytics"""
+    try:
+        # ✅ Direct connection
+        conn = sqlite3.connect('chatbot.db')
+        cursor = conn.cursor()
+        
+        # Create conversations table if it doesn't exist
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_id TEXT NOT NULL,
+                user_message TEXT NOT NULL,
+                bot_response TEXT NOT NULL,
+                matched BOOLEAN DEFAULT 0,
+                method TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Insert conversation
+        cursor.execute('''
+            INSERT INTO conversations (client_id, user_message, bot_response, matched, method)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (client_id, user_message, bot_response, matched, method))
+        
+        conn.commit()
+        conn.close()
+        
+        app.logger.info(f'✅ Logged conversation for {client_id}')
+        
+    except Exception as e:
+        app.logger.error(f'❌ Error logging conversation: {e}')
+
 # =====================================================================
 # API ENDPOINTS
 # =====================================================================
@@ -419,6 +455,7 @@ def user_info():
         'id': current_user.id
     })
 
+
 @app.route('/api/chat', methods=['POST'])
 @limiter.limit("30 per minute")
 def chat():
@@ -435,7 +472,7 @@ def chat():
             return jsonify({
                 'success': False,
                 'error': 'Message is required'
-            }),
+            }), 400
         
         # Get client and FAQs from database
         try:
@@ -483,9 +520,14 @@ def chat():
         # Step 1: INSTANT lead detection (no AI needed)
         for trigger in lead_triggers:
             if trigger.lower() in message_lower:
+                response_text = "I'd be happy to connect you with our team! What's the best email to reach you?"
+                
+                # ✅ LOG CONVERSATION
+                log_conversation(client_id, message, response_text, matched=True, method='lead_trigger')
+                
                 return jsonify({
                     'success': True,
-                    'response': "I'd be happy to connect you with our team! What's the best email to reach you?",
+                    'response': response_text,
                     'trigger_lead_collection': True,
                     'method': 'instant',
                     'contact_info': config.get('contact', {})
@@ -494,15 +536,19 @@ def chat():
         # Step 2: INSTANT keyword matching (no AI - super fast!)
         for faq in faqs_list:
             triggers = faq.get('triggers', [])
-            # Check if ANY trigger word is in the message
             for trigger in triggers:
                 if trigger.lower() in message_lower:
                     app.logger.info(f"Instant match: {faq.get('id')} via keyword '{trigger}'")
+                    response_text = faq.get('answer')
+                    
+                    # ✅ LOG CONVERSATION
+                    log_conversation(client_id, message, response_text, matched=True, method='keyword')
+                    
                     return jsonify({
                         'success': True,
-                        'response': faq.get('answer'),
+                        'response': response_text,
                         'confidence': 0.95,
-                        'method': 'keyword'  # Debug: shows it was instant
+                        'method': 'keyword'
                     })
         
         # Step 3: AI-powered matching (only if keyword matching failed)
@@ -510,26 +556,31 @@ def chat():
             app.logger.info("No keyword match, using AI...")
             
             try:
-                # Single AI call for FAQ matching
                 best_faq, confidence = ai_helper.find_best_faq(message, faqs_list)
                 
                 if best_faq and confidence > 0.5:
-                    # Return FAQ answer DIRECTLY (don't generate - faster!)
+                    response_text = best_faq.get('answer')
+                    
+                    # ✅ LOG CONVERSATION
+                    log_conversation(client_id, message, response_text, matched=True, method='ai')
+                    
                     return jsonify({
                         'success': True,
-                        'response': best_faq.get('answer'),
+                        'response': response_text,
                         'confidence': confidence,
                         'method': 'ai'
                     })
             except Exception as ai_error:
                 app.logger.error(f"AI error: {ai_error}")
-                # Fall through to fallback
         
         # Step 4: Fallback response
         fallback = config.get('bot_settings', {}).get(
             'fallback_message',
             "I'm not sure about that. Would you like to speak with our team? Type 'contact'!"
         )
+        
+        # ✅ LOG CONVERSATION (unanswered)
+        log_conversation(client_id, message, fallback, matched=False, method='fallback')
         
         return jsonify({
             'success': True,
@@ -546,8 +597,7 @@ def chat():
         return jsonify({
             'success': False,
             'error': 'Internal server error'
-        }), 500
-        
+        }), 500        
         
 
 @app.route('/api/lead', methods=['POST'])
@@ -1176,78 +1226,107 @@ def get_analytics():
         else:  # all
             start_date = datetime(2020, 1, 1)
         
-        # Load conversation logs
-        analytics_dir = os.path.join('clients', client_id, 'analytics')
-        all_conversations = []
+        # ✅ FIXED: Direct database connection
+        conn = sqlite3.connect('chatbot.db')
+        cursor = conn.cursor()
         
-        if os.path.exists(analytics_dir):
-            for filename in os.listdir(analytics_dir):
-                if filename.startswith('conversations_'):
-                    file_path = os.path.join(analytics_dir, filename)
-                    try:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                            all_conversations.extend(data.get('conversations', []))
-                    except:
-                        continue
+        # Count total conversations (if table exists)
+        try:
+            cursor.execute('''
+                SELECT COUNT(*) FROM conversations 
+                WHERE client_id = ? AND timestamp >= ?
+            ''', (client_id, start_date.isoformat()))
+            total_conversations = cursor.fetchone()[0]
+        except sqlite3.OperationalError:
+            # Table doesn't exist yet
+            total_conversations = 0
         
-        # Filter by date range
-        filtered_conversations = [
-            c for c in all_conversations
-            if datetime.fromisoformat(c['timestamp']) >= start_date
-        ]
-        
-        # Load leads
-        leads_path = os.path.join(get_client_path(client_id), 'leads.json')
-        total_leads = 0
-        if os.path.exists(leads_path):
-            with open(leads_path, 'r', encoding='utf-8') as f:
-                leads_data = json.load(f)
-                leads = [
-                    l for l in leads_data.get('leads', [])
-                    if datetime.fromisoformat(l['timestamp']) >= start_date
-                ]
-                total_leads = len(leads)
-        
-        # Calculate stats
-        total_conversations = len(filtered_conversations)
-        answered = sum(1 for c in filtered_conversations if c.get('matched'))
+        # Count answered vs unanswered
+        try:
+            cursor.execute('''
+                SELECT COUNT(*) FROM conversations 
+                WHERE client_id = ? AND timestamp >= ? AND matched = 1
+            ''', (client_id, start_date.isoformat()))
+            answered = cursor.fetchone()[0]
+        except sqlite3.OperationalError:
+            answered = 0
+            
         unanswered = total_conversations - answered
         answer_rate = int((answered / total_conversations * 100)) if total_conversations > 0 else 0
+        
+        # Count total leads
+        cursor.execute('''
+            SELECT COUNT(*) FROM leads 
+            WHERE client_id = ? AND created_at >= ?
+        ''', (client_id, start_date.isoformat()))
+        total_leads = cursor.fetchone()[0]
         
         # Timeline data (last 7 days)
         timeline = []
         for i in range(7):
-            date = (now - timedelta(days=6-i)).strftime('%Y-%m-%d')
-            count = sum(1 for c in filtered_conversations if c['timestamp'].startswith(date))
+            date = (now - timedelta(days=6-i))
+            date_str = date.strftime('%Y-%m-%d')
+            
+            # Count conversations for this day
+            try:
+                cursor.execute('''
+                    SELECT COUNT(*) FROM conversations
+                    WHERE client_id = ? AND DATE(timestamp) = DATE(?)
+                ''', (client_id, date_str))
+                conv_count = cursor.fetchone()[0]
+            except sqlite3.OperationalError:
+                conv_count = 0
+            
+            # Count leads for this day
+            cursor.execute('''
+                SELECT COUNT(*) FROM leads
+                WHERE client_id = ? AND DATE(created_at) = DATE(?)
+            ''', (client_id, date_str))
+            lead_count = cursor.fetchone()[0]
+            
             timeline.append({
-                'date': date,
-                'count': count
+                'date': date_str,
+                'count': conv_count,
+                'leads': lead_count
             })
         
-        # Top questions (group by user message)
-        question_counts = {}
-        for conv in filtered_conversations:
-            if conv.get('matched'):
-                msg = conv['user_message']
-                question_counts[msg] = question_counts.get(msg, 0) + 1
-        
-        top_questions = [
-            {'question': q, 'count': c}
-            for q, c in sorted(question_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-        ]
+        # Top questions
+        try:
+            cursor.execute('''
+                SELECT user_message, COUNT(*) as count
+                FROM conversations
+                WHERE client_id = ? AND timestamp >= ? AND matched = 1
+                GROUP BY user_message
+                ORDER BY count DESC
+                LIMIT 10
+            ''', (client_id, start_date.isoformat()))
+            
+            top_questions = [
+                {'question': row[0], 'count': row[1]}
+                for row in cursor.fetchall()
+            ]
+        except sqlite3.OperationalError:
+            top_questions = []
         
         # Unanswered questions
-        unanswered_counts = {}
-        for conv in filtered_conversations:
-            if not conv.get('matched'):
-                msg = conv['user_message']
-                unanswered_counts[msg] = unanswered_counts.get(msg, 0) + 1
+        try:
+            cursor.execute('''
+                SELECT user_message, COUNT(*) as count
+                FROM conversations
+                WHERE client_id = ? AND timestamp >= ? AND matched = 0
+                GROUP BY user_message
+                ORDER BY count DESC
+                LIMIT 10
+            ''', (client_id, start_date.isoformat()))
+            
+            unanswered_questions = [
+                {'question': row[0], 'count': row[1]}
+                for row in cursor.fetchall()
+            ]
+        except sqlite3.OperationalError:
+            unanswered_questions = []
         
-        unanswered_questions = [
-            {'question': q, 'count': c}
-            for q, c in sorted(unanswered_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-        ]
+        conn.close()
         
         return jsonify({
             'success': True,
@@ -1264,9 +1343,11 @@ def get_analytics():
         
     except Exception as e:
         app.logger.error(f'Error getting analytics: {e}')
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
-            'error': 'Failed to load analytics'
+            'error': str(e)
         }), 500
 
 @app.route('/sales')

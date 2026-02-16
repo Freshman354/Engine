@@ -703,15 +703,24 @@ body::before {
         </div>
     </footer>
     
-<!-- FAQ Chatbot Widget -->
-        <script>
-            (function() {
-            var chatbotScript = document.createElement('script');
-            chatbotScript.src = 'https://lumvi.net/static/widget.js';
-            chatbotScript.setAttribute('data-client-id', 'demo');
-            document.body.appendChild(chatbotScript);
-            })();
-        </script>
+        <!-- Lumvi Chatbot Widget - HARDCODED DEMO -->
+    <script>
+        (function() {
+        // Prevent any other client ID from being used
+        window.LUMVI_CLIENT_ID = 'demo';
+    
+        var chatbotScript = document.createElement('script');
+        chatbotScript.src = '/static/widget.js';
+        chatbotScript.setAttribute('data-client-id', 'demo');
+    
+        // Ensure it uses demo client
+        chatbotScript.onload = function() {
+        console.log('✅ Widget loaded for demo client');
+        };
+    
+        document.body.appendChild(chatbotScript);
+    })();
+    </script>
 
 </body>
 </html>
