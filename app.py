@@ -1454,7 +1454,274 @@ def manage_faqs():
             'success': False,
             'error': 'Failed to manage FAQs'
         }), 500
+
+
+@app.route('/api/faq/upload', methods=['POST'])
+@login_required
+def upload_faqs():
+    """Upload FAQs from CSV or PDF"""
+    try:
+        client_id = request.form.get('client_id')
+        
+        # Verify ownership
+        if not models.verify_client_ownership(current_user.id, client_id):
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+        
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file uploaded'}), 400
+        
+        file = request.files['file']
+        
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        # Get file extension
+        filename = file.filename.lower()
+        
+        if filename.endswith('.csv'):
+            faqs = process_csv_upload(file)
+        elif filename.endswith('.pdf'):
+            faqs = process_pdf_upload(file)
+        elif filename.endswith(('.xlsx', '.xls')):
+            faqs = process_excel_upload(file)
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Unsupported file type. Please upload CSV, Excel, or PDF.'
+            }), 400
+        
+        if not faqs:
+            return jsonify({
+                'success': False,
+                'error': 'No FAQs found in file. Please check the format.'
+            }), 400
+        
+        # Save FAQs to database
+        conn = sqlite3.connect('chatbot.db')
+        cursor = conn.cursor()
+        
+        saved_count = 0
+        for faq in faqs:
+            try:
+                cursor.execute('''
+                    INSERT INTO faqs (client_id, question, answer, category, triggers)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (
+                    client_id,
+                    faq['question'],
+                    faq['answer'],
+                    faq.get('category', 'General'),
+                    json.dumps(faq.get('triggers', []))
+                ))
+                saved_count += 1
+            except Exception as e:
+                app.logger.error(f'Error saving FAQ: {e}')
+                continue
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully imported {saved_count} FAQs!',
+            'count': saved_count
+        })
+        
+    except Exception as e:
+        app.logger.error(f'Error uploading FAQs: {e}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+def process_csv_upload(file):
+    """Process CSV file and extract FAQs"""
+    import pandas as pd
+    import io
     
+    try:
+        # Read CSV
+        df = pd.read_csv(io.StringIO(file.stream.read().decode('utf-8')))
+        
+        # Expected columns: question, answer, category (optional), triggers (optional)
+        if 'question' not in df.columns or 'answer' not in df.columns:
+            return []
+        
+        faqs = []
+        for _, row in df.iterrows():
+            # Extract triggers from text
+            triggers = extract_keywords(row['question'])
+            
+            faq = {
+                'question': str(row['question']).strip(),
+                'answer': str(row['answer']).strip(),
+                'category': str(row.get('category', 'General')).strip(),
+                'triggers': triggers
+            }
+            
+            # Skip empty rows
+            if faq['question'] and faq['answer']:
+                faqs.append(faq)
+        
+        return faqs
+        
+    except Exception as e:
+        app.logger.error(f'Error processing CSV: {e}')
+        return []
+
+
+def process_excel_upload(file):
+    """Process Excel file and extract FAQs"""
+    import pandas as pd
+    
+    try:
+        # Read Excel
+        df = pd.read_excel(file)
+        
+        # Expected columns: question, answer, category (optional), triggers (optional)
+        if 'question' not in df.columns or 'answer' not in df.columns:
+            return []
+        
+        faqs = []
+        for _, row in df.iterrows():
+            triggers = extract_keywords(row['question'])
+            
+            faq = {
+                'question': str(row['question']).strip(),
+                'answer': str(row['answer']).strip(),
+                'category': str(row.get('category', 'General')).strip(),
+                'triggers': triggers
+            }
+            
+            if faq['question'] and faq['answer']:
+                faqs.append(faq)
+        
+        return faqs
+        
+    except Exception as e:
+        app.logger.error(f'Error processing Excel: {e}')
+        return []
+
+
+def process_pdf_upload(file):
+    """Process PDF file and extract FAQs using AI"""
+    import PyPDF2
+    import io
+    
+    try:
+        # Read PDF
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(file.read()))
+        
+        # Extract all text
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+        
+        # Use AI to extract Q&A pairs
+        if ai_helper and ai_helper.enabled:
+            faqs = extract_faqs_from_text(text)
+            return faqs
+        else:
+            # Fallback: Try to parse structured text
+            return parse_structured_faq_text(text)
+        
+    except Exception as e:
+        app.logger.error(f'Error processing PDF: {e}')
+        return []
+
+
+def extract_faqs_from_text(text):
+    """Use AI to extract FAQs from text"""
+    try:
+        prompt = f"""Extract FAQ pairs from this text. Return a JSON array of objects with 'question' and 'answer' fields.
+
+Text:
+{text[:3000]}  # Limit to first 3000 chars
+
+Return ONLY valid JSON array like:
+[
+  {{"question": "What are your hours?", "answer": "We're open 9-5 Monday-Friday"}},
+  {{"question": "How much does it cost?", "answer": "$50 per month"}}
+]
+"""
+        
+        response = ai_helper.model.generate_content(prompt)
+        
+        # Parse JSON response
+        import re
+        json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
+        if json_match:
+            faqs_data = json.loads(json_match.group())
+            
+            # Add triggers to each FAQ
+            for faq in faqs_data:
+                faq['triggers'] = extract_keywords(faq['question'])
+                faq['category'] = 'Imported'
+            
+            return faqs_data
+        
+        return []
+        
+    except Exception as e:
+        app.logger.error(f'Error extracting FAQs with AI: {e}')
+        return []
+
+
+def parse_structured_faq_text(text):
+    """Parse text that has Q: and A: format"""
+    faqs = []
+    lines = text.split('\n')
+    
+    current_q = None
+    current_a = None
+    
+    for line in lines:
+        line = line.strip()
+        
+        if line.startswith(('Q:', 'Question:', 'q:', 'question:')):
+            if current_q and current_a:
+                faqs.append({
+                    'question': current_q,
+                    'answer': current_a,
+                    'category': 'Imported',
+                    'triggers': extract_keywords(current_q)
+                })
+            current_q = line.split(':', 1)[1].strip()
+            current_a = None
+            
+        elif line.startswith(('A:', 'Answer:', 'a:', 'answer:')):
+            current_a = line.split(':', 1)[1].strip()
+    
+    # Add last Q&A
+    if current_q and current_a:
+        faqs.append({
+            'question': current_q,
+            'answer': current_a,
+            'category': 'Imported',
+            'triggers': extract_keywords(current_q)
+        })
+    
+    return faqs
+
+
+def extract_keywords(text):
+    """Extract keywords from text for triggers"""
+    import re
+    
+    # Remove common words
+    stop_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'what', 'how', 'when', 'where', 'who', 'why', 'do', 'does', 'did', 'can', 'could', 'would', 'should'}
+    
+    # Extract words
+    words = re.findall(r'\b\w+\b', text.lower())
+    keywords = [w for w in words if len(w) > 3 and w not in stop_words]
+    
+    # Return unique keywords (max 10)
+    return list(set(keywords))[:10]
+
 @app.route('/upgrade')
 @login_required
 def upgrade_page():

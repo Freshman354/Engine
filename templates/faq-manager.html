@@ -5,11 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FAQ Manager - Chatbot Admin</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -24,21 +20,10 @@
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
         
-        .header h1 {
-            font-size: 24px;
-            color: #1f2937;
-        }
+        .header h1 { font-size: 24px; color: #1f2937; }
+        .header p { color: #6b7280; margin-top: 4px; }
         
-        .header p {
-            color: #6b7280;
-            margin-top: 4px;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 40px;
-        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 40px; }
         
         .controls {
             background: white;
@@ -52,16 +37,8 @@
             justify-content: space-between;
         }
         
-        .controls-left {
-            display: flex;
-            gap: 16px;
-            align-items: center;
-        }
-        
-        .controls label {
-            font-weight: 600;
-            color: #374151;
-        }
+        .controls-left { display: flex; gap: 16px; align-items: center; }
+        .controls label { font-weight: 600; color: #374151; }
         
         .controls select {
             padding: 8px 12px;
@@ -80,23 +57,14 @@
             font-size: 14px;
         }
         
-        .btn-primary {
-            background: #667eea;
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: #5568d3;
-        }
-        
-        .btn-success {
-            background: #10b981;
-            color: white;
-        }
-        
-        .btn-success:hover {
-            background: #059669;
-        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover { background: #5568d3; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+
+        /* ✅ NEW */
+        .btn-upload { background: #0ea5e9; color: white; }
+        .btn-upload:hover { background: #0284c7; }
         
         .success-message {
             background: #d1fae5;
@@ -134,9 +102,7 @@
             transition: all 0.2s;
         }
         
-        .faq-item:hover {
-            border-color: #667eea;
-        }
+        .faq-item:hover { border-color: #667eea; }
         
         .faq-header {
             display: flex;
@@ -145,17 +111,8 @@
             margin-bottom: 12px;
         }
         
-        .faq-question {
-            font-size: 16px;
-            font-weight: 600;
-            color: #1f2937;
-            flex: 1;
-        }
-        
-        .faq-actions {
-            display: flex;
-            gap: 8px;
-        }
+        .faq-question { font-size: 16px; font-weight: 600; color: #1f2937; flex: 1; }
+        .faq-actions { display: flex; gap: 8px; }
         
         .btn-small {
             padding: 6px 12px;
@@ -166,27 +123,10 @@
             font-weight: 600;
         }
         
-        .btn-edit {
-            background: #3b82f6;
-            color: white;
-        }
-        
-        .btn-delete {
-            background: #ef4444;
-            color: white;
-        }
-        
-        .faq-answer {
-            color: #6b7280;
-            margin-bottom: 12px;
-            line-height: 1.6;
-        }
-        
-        .faq-triggers {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
+        .btn-edit { background: #3b82f6; color: white; }
+        .btn-delete { background: #ef4444; color: white; }
+        .faq-answer { color: #6b7280; margin-bottom: 12px; line-height: 1.6; }
+        .faq-triggers { display: flex; flex-wrap: wrap; gap: 8px; }
         
         .trigger-tag {
             background: #e0e7ff;
@@ -200,10 +140,8 @@
         .modal {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.5);
             z-index: 1000;
             align-items: center;
@@ -227,22 +165,10 @@
             margin-bottom: 24px;
         }
         
-        .modal-header h2 {
-            font-size: 24px;
-            color: #1f2937;
-        }
+        .modal-header h2 { font-size: 24px; color: #1f2937; }
+        .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #6b7280; }
         
-        .modal-close {
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: #6b7280;
-        }
-        
-        .form-group {
-            margin-bottom: 20px;
-        }
+        .form-group { margin-bottom: 20px; }
         
         .form-group label {
             display: block;
@@ -251,8 +177,7 @@
             color: #374151;
         }
         
-        .form-group input,
-        .form-group textarea {
+        .form-group input, .form-group textarea {
             width: 100%;
             padding: 12px 16px;
             border: 1px solid #d1d5db;
@@ -261,49 +186,95 @@
             font-family: inherit;
         }
         
-        .form-group textarea {
-            resize: vertical;
-            min-height: 100px;
+        .form-group textarea { resize: vertical; min-height: 100px; }
+        .hint { font-size: 12px; color: #6b7280; margin-top: 4px; }
+        .modal-actions { display: flex; gap: 12px; margin-top: 24px; }
+        .btn-cancel { background: #e5e7eb; color: #374151; }
+        .empty-state { text-align: center; padding: 60px 20px; color: #6b7280; }
+        .empty-state-icon { font-size: 64px; margin-bottom: 16px; }
+
+        /* ✅ NEW: Upload modal styles */
+        .format-box {
+            padding: 14px 18px;
+            border-radius: 8px;
+            margin-bottom: 14px;
+            font-size: 13px;
+            line-height: 1.7;
         }
-        
-        .hint {
-            font-size: 12px;
-            color: #6b7280;
-            margin-top: 4px;
-        }
-        
-        .modal-actions {
-            display: flex;
-            gap: 12px;
-            margin-top: 24px;
-        }
-        
-        .btn-cancel {
-            background: #e5e7eb;
-            color: #374151;
-        }
-        
-        .empty-state {
+
+        .format-box.blue { background: #eff6ff; border-left: 4px solid #3b82f6; }
+        .format-box.yellow { background: #fef3c7; border-left: 4px solid #f59e0b; }
+        .format-box strong { display: block; margin-bottom: 6px; color: #1f2937; font-size: 14px; }
+        .format-box ul { margin-left: 18px; color: #374151; }
+        .format-box code { background: rgba(0,0,0,0.07); padding: 1px 5px; border-radius: 3px; font-family: monospace; font-size: 12px; }
+
+        .upload-dropzone {
+            border: 2px dashed #d1d5db;
+            border-radius: 10px;
+            padding: 36px 20px;
             text-align: center;
-            padding: 60px 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 16px 0;
+        }
+
+        .upload-dropzone:hover, .upload-dropzone.dragover {
+            border-color: #667eea;
+            background: #f5f3ff;
+        }
+
+        .upload-dropzone .drop-icon { font-size: 44px; margin-bottom: 12px; }
+        .upload-dropzone p { color: #6b7280; font-size: 14px; margin-bottom: 4px; }
+        .upload-dropzone .file-types { color: #9ca3af; font-size: 12px; }
+
+        .progress-area { display: none; margin-top: 16px; }
+
+        .progress-bar-bg {
+            background: #e5e7eb;
+            border-radius: 20px;
+            height: 8px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            height: 100%;
+            width: 0%;
+            transition: width 0.4s ease;
+            border-radius: 20px;
+        }
+
+        .progress-status {
+            text-align: center;
+            font-size: 13px;
             color: #6b7280;
+            margin-top: 10px;
+            font-weight: 500;
         }
-        
-        .empty-state-icon {
-            font-size: 64px;
-            margin-bottom: 16px;
+
+        .download-template-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: #667eea;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 4px 0;
+            margin-bottom: 4px;
         }
+
+        .download-template-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>📝 FAQ Manager</h1>
         <p>Add, edit, and manage your chatbot's FAQs</p>
-                <!-- ADD THIS -->
         <div style="background: #fef3c7; padding: 12px; border-radius: 8px; margin-top: 12px; display: inline-block;">
-        <strong>Plan:</strong> <span id="user-plan">Loading...</span> | 
-        <strong>FAQs:</strong> <span id="faq-count">0</span> / <span id="faq-limit">0</span>
-        <span id="limit-warning" style="color: #ef4444; margin-left: 8px; display: none;">⚠️ Limit Reached</span>
+            <strong>Plan:</strong> <span id="user-plan">Loading...</span> | 
+            <strong>FAQs:</strong> <span id="faq-count">0</span> / <span id="faq-limit">0</span>
+            <span id="limit-warning" style="color: #ef4444; margin-left: 8px; display: none;">⚠️ Limit Reached</span>
         </div>
     </div>
     
@@ -317,16 +288,15 @@
                 </select>
                 <button class="btn btn-primary" onclick="loadFAQs()">🔄 Refresh</button>
             </div>
-            <button class="btn btn-success" onclick="openAddModal()">+ Add New FAQ</button>
+            <!-- ✅ CHANGED: Added Upload button -->
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-upload" onclick="showUploadModal()">📤 Upload FAQs</button>
+                <button class="btn btn-success" onclick="openAddModal()">+ Add New FAQ</button>
+            </div>
         </div>
         
-        <div class="success-message" id="success-message">
-            ✅ Changes saved successfully!
-        </div>
-        
-        <div class="error-message" id="error-message">
-            ❌ Error saving changes. Please try again.
-        </div>
+        <div class="success-message" id="success-message">✅ Changes saved successfully!</div>
+        <div class="error-message" id="error-message">❌ Error saving changes. Please try again.</div>
         
         <div class="faq-list" id="faq-list">
             <div class="empty-state">
@@ -336,7 +306,7 @@
         </div>
     </div>
     
-    <!-- Add/Edit Modal -->
+    <!-- Add/Edit Modal (UNCHANGED FROM YOUR ORIGINAL) -->
     <div class="modal" id="faq-modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -372,23 +342,72 @@
             </form>
         </div>
     </div>
+
+    <!-- ✅ NEW: Upload FAQs Modal -->
+    <div class="modal" id="upload-modal">
+        <div class="modal-content" style="max-width: 560px;">
+            <div class="modal-header">
+                <h2>📤 Upload FAQs</h2>
+                <button class="modal-close" onclick="closeUploadModal()">×</button>
+            </div>
+
+            <div class="format-box blue">
+                <strong>📋 CSV / Excel Format</strong>
+                <ul>
+                    <li>Column 1: <code>question</code> (required)</li>
+                    <li>Column 2: <code>answer</code> (required)</li>
+                    <li>Column 3: <code>category</code> (optional)</li>
+                </ul>
+            </div>
+
+            <div class="format-box yellow">
+                <strong>📄 PDF Format</strong>
+                <ul>
+                    <li>Use <code>Q:</code> or <code>Question:</code> before each question</li>
+                    <li>Use <code>A:</code> or <code>Answer:</code> before each answer</li>
+                    <li>Or upload any document — AI will extract FAQs automatically!</li>
+                </ul>
+            </div>
+
+            <span class="download-template-link" onclick="downloadCSVTemplate()">⬇️ Download CSV Template</span>
+
+            <div class="upload-dropzone" id="drop-zone" onclick="document.getElementById('faq-file-input').click()">
+                <div class="drop-icon">📁</div>
+                <p>Click to upload or drag and drop</p>
+                <p id="selected-file-name" style="color: #667eea; font-weight: 600; display: none;"></p>
+                <p class="file-types">CSV, Excel (.xlsx), or PDF — max 10MB</p>
+                <input type="file" id="faq-file-input" accept=".csv,.xlsx,.xls,.pdf" style="display: none;" onchange="handleFileSelect(event)">
+            </div>
+
+            <div class="progress-area" id="progress-area">
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="progress-fill"></div>
+                </div>
+                <p class="progress-status" id="progress-status">Processing...</p>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-cancel" onclick="closeUploadModal()">Cancel</button>
+                <button class="btn btn-upload" id="upload-submit-btn" onclick="startUpload()" disabled>Upload FAQs</button>
+            </div>
+        </div>
+    </div>
     
     <script>
-        // Get client_id from URL
         const urlParams = new URLSearchParams(window.location.search);
         const CLIENT_ID = urlParams.get('client_id');
     
         if (!CLIENT_ID) {
-        alert('Error: No client ID provided');
-        window.location.href = '/dashboard';
+            alert('Error: No client ID provided');
+            window.location.href = '/dashboard';
         }
     
         let currentFAQs = [];
         let editingIndex = -1;
         let userPlan = 'free';
         let faqLimit = 999;
+        let selectedFile = null;
 
-        
         window.onload = function() {
             const urlParams = new URLSearchParams(window.location.search);
             const clientId = urlParams.get('client_id') || 'demo';
@@ -397,17 +416,12 @@
         };
         
         async function loadFAQs() {
-            const clientId = CLIENT_ID;  // Use the constant from URL
-    
-            if (!clientId) {
-                console.error('No client ID selected');
-                return;
-            }
+            const clientId = CLIENT_ID;
+            if (!clientId) { console.error('No client ID selected'); return; }
     
             try {
                 const response = await fetch(`/api/faqs?client_id=${clientId}`);
                 const data = await response.json();
-        
                 if (data.success) {
                     currentFAQs = data.faqs || [];
                     renderFAQs();
@@ -422,17 +436,11 @@
             }
         }
         
-            // Add this new function (doesn't replace anything)
         function updateFaqCount() {
             document.getElementById('faq-count').textContent = currentFAQs.length;
             document.getElementById('faq-limit').textContent = faqLimit;
-    
             const warning = document.getElementById('limit-warning');
-            if (currentFAQs.length >= faqLimit) {
-                warning.style.display = 'inline';
-            } else {
-                warning.style.display = 'none';
-            }
+            warning.style.display = currentFAQs.length >= faqLimit ? 'inline' : 'none';
         }
 
         function renderFAQs() {
@@ -442,7 +450,7 @@
                 container.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">📝</div>
-                        <p>No FAQs yet. Click "Add New FAQ" to get started!</p>
+                        <p>No FAQs yet. Click "Add New FAQ" or "📤 Upload FAQs" to get started!</p>
                     </div>
                 `;
                 return;
@@ -485,27 +493,15 @@
         }
         
         async function deleteFAQ(index) {
-            if (!confirm('Are you sure you want to delete this FAQ?')) {
-                return;
-            }
-    
-            const clientId = CLIENT_ID;  // Use the constant from URL
+            if (!confirm('Are you sure you want to delete this FAQ?')) return;
             const updatedFAQs = currentFAQs.filter((_, i) => i !== index);
-    
             try {
                 const response = await fetch('/api/faqs', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'  // ← THIS IS CRITICAL
-                    },
-                    body: JSON.stringify({
-                        client_id: clientId,
-                        faqs: updatedFAQs
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: CLIENT_ID, faqs: updatedFAQs })
                 });
-        
                 const data = await response.json();
-        
                 if (data.success) {
                     currentFAQs = updatedFAQs;
                     renderFAQs();
@@ -526,41 +522,26 @@
         
         document.getElementById('faq-form').addEventListener('submit', async function(e) {
             e.preventDefault();
-    
-            const clientId = CLIENT_ID;  // Use the constant from URL
             const question = document.getElementById('faq-question').value.trim();
             const answer = document.getElementById('faq-answer').value.trim();
             const triggers = document.getElementById('faq-triggers').value.split(',').map(t => t.trim()).filter(Boolean);
     
             const newFAQ = {
                 id: editingIndex >= 0 ? currentFAQs[editingIndex].id : `faq_${Date.now()}`,
-                question: question,
-                answer: answer,
-                triggers: triggers
+                question, answer, triggers
             };
     
-            let updatedFAQs;
-            if (editingIndex >= 0) {
-                updatedFAQs = [...currentFAQs];
-                updatedFAQs[editingIndex] = newFAQ;
-            } else {
-                updatedFAQs = [...currentFAQs, newFAQ];
-            }
+            const updatedFAQs = editingIndex >= 0
+                ? currentFAQs.map((f, i) => i === editingIndex ? newFAQ : f)
+                : [...currentFAQs, newFAQ];
     
             try {
                 const response = await fetch('/api/faqs', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'  // ← THIS IS CRITICAL
-                    },
-                    body: JSON.stringify({
-                        client_id: clientId,
-                        faqs: updatedFAQs
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: CLIENT_ID, faqs: updatedFAQs })
                 });
-        
                 const data = await response.json();
-        
                 if (data.success) {
                     currentFAQs = updatedFAQs;
                     renderFAQs();
@@ -568,8 +549,7 @@
                     showSuccess();
                     updateFaqCount();
                 } else {
-                    showError();
-                    document.getElementById('error-message').textContent = data.error || 'Failed to save FAQ';
+                    showError(data.error || 'Failed to save FAQ');
                 }
             } catch (error) {
                 console.error('Error saving FAQ:', error);
@@ -577,22 +557,144 @@
             }
         });
         
-        function showSuccess() {
+        function showSuccess(msg) {
             const el = document.getElementById('success-message');
+            el.textContent = '✅ ' + (msg || 'Changes saved successfully!');
             el.style.display = 'block';
-            setTimeout(() => { el.style.display = 'none'; }, 3000);
+            setTimeout(() => { el.style.display = 'none'; }, 3500);
         }
         
-        function showError() {
+        function showError(msg) {
             const el = document.getElementById('error-message');
+            el.textContent = '❌ ' + (msg || 'Error saving changes. Please try again.');
             el.style.display = 'block';
-            setTimeout(() => { el.style.display = 'none'; }, 3000);
+            setTimeout(() => { el.style.display = 'none'; }, 3500);
         }
         
         function escapeHtml(text) {
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // =============================================
+        // ✅ NEW: UPLOAD FUNCTIONS
+        // =============================================
+
+        function showUploadModal() {
+            document.getElementById('upload-modal').style.display = 'flex';
+            resetUploadModal();
+        }
+
+        function closeUploadModal() {
+            document.getElementById('upload-modal').style.display = 'none';
+            resetUploadModal();
+        }
+
+        function resetUploadModal() {
+            selectedFile = null;
+            document.getElementById('faq-file-input').value = '';
+            document.getElementById('selected-file-name').style.display = 'none';
+            document.getElementById('selected-file-name').textContent = '';
+            document.getElementById('progress-area').style.display = 'none';
+            document.getElementById('progress-fill').style.width = '0%';
+            document.getElementById('progress-status').textContent = 'Processing...';
+            document.getElementById('progress-status').style.color = '#6b7280';
+            document.getElementById('upload-submit-btn').disabled = true;
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (file.size > 10 * 1024 * 1024) {
+                showError('File too large! Maximum size is 10MB.');
+                return;
+            }
+
+            selectedFile = file;
+            const nameEl = document.getElementById('selected-file-name');
+            nameEl.textContent = '📎 ' + file.name;
+            nameEl.style.display = 'block';
+            document.getElementById('upload-submit-btn').disabled = false;
+        }
+
+        async function startUpload() {
+            if (!selectedFile) return;
+
+            document.getElementById('progress-area').style.display = 'block';
+            document.getElementById('progress-fill').style.width = '30%';
+            document.getElementById('progress-status').textContent = 'Uploading file...';
+            document.getElementById('upload-submit-btn').disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('client_id', CLIENT_ID);
+
+            try {
+                document.getElementById('progress-fill').style.width = '60%';
+                document.getElementById('progress-status').textContent = 'Processing FAQs...';
+
+                const response = await fetch('/api/faq/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                document.getElementById('progress-fill').style.width = '100%';
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('progress-status').textContent = '✅ ' + data.message;
+                    document.getElementById('progress-status').style.color = '#065f46';
+                    setTimeout(() => {
+                        closeUploadModal();
+                        loadFAQs();
+                        showSuccess(data.message);
+                    }, 1500);
+                } else {
+                    document.getElementById('progress-status').textContent = '❌ ' + data.error;
+                    document.getElementById('progress-status').style.color = '#991b1b';
+                    document.getElementById('upload-submit-btn').disabled = false;
+                }
+            } catch (error) {
+                document.getElementById('progress-status').textContent = '❌ Upload failed. Please try again.';
+                document.getElementById('progress-status').style.color = '#991b1b';
+                document.getElementById('upload-submit-btn').disabled = false;
+            }
+        }
+
+        // Drag and drop
+        const dropZone = document.getElementById('drop-zone');
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                document.getElementById('faq-file-input').files = dt.files;
+                handleFileSelect({ target: { files: [file] } });
+            }
+        });
+
+        // Download CSV template
+        function downloadCSVTemplate() {
+            const csv = `question,answer,category
+What are your business hours?,"We're open Monday-Friday 9 AM - 6 PM EST. Saturday 10 AM - 4 PM. Closed Sundays.",General
+How much does it cost?,"Starter: $15/mo | Agency: $60/mo | Enterprise: $199 lifetime",Pricing
+Do you offer refunds?,"Yes! We offer a 7-day money-back guarantee no questions asked.",Policies
+Can I get a demo?,"Absolutely! Visit lumvi.net/demo to schedule a live demo.",Sales
+How do I get started?,"Simply sign up at lumvi.net and follow the setup wizard.",Getting Started`;
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'faq-template.csv';
+            a.click();
+            URL.revokeObjectURL(url);
         }
     </script>
 </body>
