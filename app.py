@@ -30,7 +30,7 @@ app = Flask(__name__)
 # Add this line!
 # It attempts to get the key from the environment, 
 # or falls back to a dev key if running locally.
-app.secret_key = os.environ.get("SECRET_KEY", "dev_key_change_this_in_prod")
+app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev_key_change_this_in_prod")  # ✅
 
 # Initialize AI helper at app startup
 ai_helper = get_ai_helper(Config.GEMINI_API_KEY, Config.GEMINI_MODEL)
@@ -291,9 +291,8 @@ def notify_webhook(client_id, lead_data):
         # Don't crash the main flow if webhook fails!
 
 
-from flask import Flask, request, jsonify, render_template
-
-app = Flask(__name__)
+#from flask import Flask, request, jsonify, render_template
+#app = Flask(__name__)
 
 # ADD THIS IMMEDIATELY AFTER app = Flask(__name__)
 @app.after_request
