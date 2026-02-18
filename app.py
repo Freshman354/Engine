@@ -15,6 +15,8 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from functools import wraps
 import sqlite3
 import models
+import requests
+from collections import Counter
 from io import StringIO
 from config import Config
 from ai_helper import get_ai_helper
@@ -128,6 +130,190 @@ limiter = Limiter(
     default_limits=["200 per day", "50 per hour"],
     storage_uri="memory://"
 )
+
+
+
+
+STOP_WORDS = {
+    # Articles & Pronouns
+    'a', 'an', 'the', 'this', 'that', 'these', 'those',
+    'i', 'me', 'my', 'we', 'our', 'you', 'your', 'it', 'its',
+    'he', 'she', 'they', 'them', 'their',
+    # Generic verbs
+    'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'do', 'does', 'did', 'have', 'has', 'had',
+    'can', 'could', 'will', 'would', 'should', 'shall', 'may', 'might',
+    'go', 'get', 'got', 'make', 'made', 'use', 'used',
+    # Prepositions & conjunctions
+    'in', 'on', 'at', 'by', 'for', 'with', 'about',
+    'to', 'from', 'into', 'through', 'before', 'after',
+    'of', 'off', 'out', 'over', 'under', 'and', 'or', 'but',
+    'if', 'as', 'than', 'because', 'while',
+    # Generic adverbs
+    'just', 'also', 'too', 'very', 'really', 'quite', 'already',
+    'still', 'ever', 'never', 'always', 'often',
+    # ⚠️ TIME NOISE - these caused your Business Hours false positives!
+    'anytime', 'sometime', 'whenever', 'now', 'then', 'when',
+    'today', 'tomorrow', 'time', 'times',
+    # Other noise
+    'please', 'thanks', 'thank', 'hello', 'hi', 'hey',
+    'like', 'want', 'need', 'know', 'tell', 'show', 'help',
+    'what', 'where', 'which', 'who', 'why', 'how',
+    'any', 'all', 'some', 'more', 'most', 'many', 'much',
+    'no', 'not', 'nor', 'there', 'per', 'each'
+}
+
+# Tags that appear in many FAQs - matching these scores LOW
+GENERIC_TAGS = {
+    'schedule', 'appointment', 'book', 'available', 'availability',
+    'open', 'closed', 'contact', 'reach', 'support', 'help',
+    'information', 'info', 'details', 'more', 'learn'
+}
+
+
+def extract_keywords(text):
+    """Extract meaningful keywords - removes stop words and short words"""
+    words = re.findall(r'\b[a-z]+\b', text.lower())
+    return [w for w in words if w not in STOP_WORDS and len(w) >= 3]
+
+
+def compute_tag_weights(faqs_list):
+    """Rare tags score HIGH, common tags score LOW"""
+    tag_frequency = Counter()
+    for faq in faqs_list:
+        for tag in faq.get('triggers', []):
+            tag_frequency[tag.lower()] += 1
+
+    tag_weights = {}
+    for tag, freq in tag_frequency.items():
+        if tag in GENERIC_TAGS:
+            tag_weights[tag] = 0.2  # Generic = low weight
+        else:
+            tag_weights[tag] = round(1.0 / freq, 2)  # Rare = high weight
+    return tag_weights
+
+
+def find_best_match(user_query, faqs_list, confidence_threshold=0.15):
+    """
+    Smart FAQ matching with stop word filtering and confidence threshold.
+    Returns (faq, score) or (None, 0.0) if no confident match found.
+    """
+    if not user_query or not faqs_list:
+        return None, 0.0
+
+    # Step 1: Filter noise from user query
+    # "Can I modify FAQs anytime?" → ['modify', 'faqs']
+    query_keywords = extract_keywords(user_query)
+
+    if not query_keywords:
+        return None, 0.0  # All words were noise
+
+    query_keyword_set = set(query_keywords)
+
+    # Step 2: Calculate how rare each tag is
+    tag_weights = compute_tag_weights(faqs_list)
+
+    # Step 3: Score every FAQ
+    best_faq = None
+    best_score = 0.0
+
+    for faq in faqs_list:
+        # Combine explicit triggers + keywords from the question text
+        raw_tags = [t.lower().strip() for t in faq.get('triggers', [])]
+        question_keywords = extract_keywords(faq.get('question', ''))
+        all_tags = set(raw_tags + question_keywords)
+
+        # Find overlapping keywords
+        matched_tags = query_keyword_set.intersection(all_tags)
+        if not matched_tags:
+            continue
+
+        # Score = sum of weights of matched tags
+        raw_score = sum(tag_weights.get(tag, 0.5) for tag in matched_tags)
+
+        # Normalize against max possible score for this FAQ
+        max_possible = sum(tag_weights.get(tag, 0.5) for tag in all_tags)
+        normalized = raw_score / max_possible if max_possible > 0 else 0.0
+
+        # Bonus for matching more of the user's keywords
+        coverage = len(matched_tags) / len(query_keyword_set)
+        final_score = (normalized * 0.7) + (coverage * 0.3)
+
+        if final_score > best_score:
+            best_score = final_score
+            best_faq = faq
+
+    # Step 4: Only return if confident enough
+    if best_score < confidence_threshold:
+        app.logger.info(f"[Matcher] Low confidence ({best_score:.2f}) for: '{user_query}'")
+        return None, 0.0
+
+    app.logger.info(f"[Matcher] Matched '{best_faq.get('question')}' | score: {best_score:.2f}")
+    return best_faq, round(best_score, 2)
+
+
+
+
+def notify_webhook(client_id, lead_data):
+    """Send lead data to client's configured webhook (Zapier/Make)"""
+    try:
+        conn = sqlite3.connect('chatbot.db')
+        cursor = conn.cursor()
+
+        # Get client's webhook URL (store this in branding_settings)
+        cursor.execute("SELECT branding_settings FROM clients WHERE client_id = ?", (client_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return
+
+        config = json.loads(row[0]) if row[0] else {}
+        webhook_url = config.get('integrations', {}).get('webhook_url')
+
+        if not webhook_url:
+            return  # Client hasn't set up a webhook
+
+        # Send lead to their Zapier/Make webhook
+        requests.post(webhook_url, json={
+            'event': 'new_lead',
+            'client_id': client_id,
+            'lead': lead_data,
+            'timestamp': datetime.now().isoformat()
+        }, timeout=5)
+
+        app.logger.info(f'✅ Webhook fired for {client_id}')
+
+    except Exception as e:
+        app.logger.error(f'Webhook error: {e}')
+        # Don't crash the main flow if webhook fails!
+
+
+from flask import Flask, request, jsonify, render_template
+
+app = Flask(__name__)
+
+# ADD THIS IMMEDIATELY AFTER app = Flask(__name__)
+@app.after_request
+def allow_widget_embedding(response):
+    """Allow the Lumvi widget to be embedded on any website"""
+    response.headers.pop('X-Frame-Options', None)
+    response.headers['Content-Security-Policy'] = "frame-ancestors *"
+    
+    origin = request.headers.get('Origin')
+    if origin:
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+    
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+    
+    return response
+
+# Your existing routes continue below
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 # =====================================================================
 # LOGGING CONFIGURATION
@@ -484,19 +670,19 @@ def chat():
                         "id": "demo_1",
                         "question": "What are your hours?",
                         "answer": "We're open Monday-Friday, 9 AM - 6 PM EST. Weekend hours: Saturday 10 AM - 4 PM. Closed Sundays. 🕒",
-                        "triggers": ["hours", "time", "open", "available", "when", "schedule"]
+                        "triggers": ["hours", "open", "opening", "closing", "working"]
                     },
                     {
                         "id": "demo_2",
                         "question": "What are your prices?",
                         "answer": "Starter: $49/mo | Agency: $149/mo | Enterprise: Custom pricing! 💰",
-                        "triggers": ["price", "pricing", "cost", "how much", "payment", "charge"]
+                        "triggers": ["price", "pricing", "cost", "fee", "payment", "charge", "afford", "subscription"]
                     },
                     {
                         "id": "demo_3",
                         "question": "Do you offer discounts?",
                         "answer": "Yes! Annual plans get 20% off. Students/nonprofits get 30% off. 🎉",
-                        "triggers": ["discount", "sale", "promo", "coupon", "deal", "cheaper"]
+                        "triggers": ["discount", "sale", "promo", "coupon", "deal", "cheaper", "reduce", "saving"]
                     }
                 ]
                 config = {}
@@ -517,14 +703,11 @@ def chat():
         
         message_lower = message.lower()
         
-        # Step 1: INSTANT lead detection (no AI needed)
+        # ── Step 1: INSTANT lead detection (unchanged) ──────────────────
         for trigger in lead_triggers:
             if trigger.lower() in message_lower:
                 response_text = "I'd be happy to connect you with our team! What's the best email to reach you?"
-                
-                # ✅ LOG CONVERSATION
                 log_conversation(client_id, message, response_text, matched=True, method='lead_trigger')
-                
                 return jsonify({
                     'success': True,
                     'response': response_text,
@@ -533,55 +716,46 @@ def chat():
                     'contact_info': config.get('contact', {})
                 })
         
-        # Step 2: INSTANT keyword matching (no AI - super fast!)
-        for faq in faqs_list:
-            triggers = faq.get('triggers', [])
-            for trigger in triggers:
-                if trigger.lower() in message_lower:
-                    app.logger.info(f"Instant match: {faq.get('id')} via keyword '{trigger}'")
-                    response_text = faq.get('answer')
-                    
-                    # ✅ LOG CONVERSATION
-                    log_conversation(client_id, message, response_text, matched=True, method='keyword')
-                    
-                    return jsonify({
-                        'success': True,
-                        'response': response_text,
-                        'confidence': 0.95,
-                        'method': 'keyword'
-                    })
+        # ── Step 2: SMART keyword matching (replaces old simple loop) ───
+        # Old code matched ANY trigger word — "anytime" matched Business Hours.
+        # New code filters stop words, weights rare tags, and requires a
+        # minimum confidence score before returning a match.
+        best_faq, confidence = find_best_match(message, faqs_list)
         
-        # Step 3: AI-powered matching (only if keyword matching failed)
+        if best_faq:
+            app.logger.info(f"Smart match: '{best_faq.get('id')}' | confidence: {confidence}")
+            response_text = best_faq.get('answer')
+            log_conversation(client_id, message, response_text, matched=True, method='smart_keyword')
+            return jsonify({
+                'success': True,
+                'response': response_text,
+                'confidence': confidence,
+                'method': 'smart_keyword'
+            })
+        
+        # ── Step 3: AI-powered matching (only if smart matching failed) ─
         if ai_helper and ai_helper.enabled:
-            app.logger.info("No keyword match, using AI...")
-            
+            app.logger.info("No smart match found, trying AI...")
             try:
-                best_faq, confidence = ai_helper.find_best_faq(message, faqs_list)
-                
-                if best_faq and confidence > 0.5:
-                    response_text = best_faq.get('answer')
-                    
-                    # ✅ LOG CONVERSATION
+                ai_faq, ai_confidence = ai_helper.find_best_faq(message, faqs_list)
+                if ai_faq and ai_confidence > 0.5:
+                    response_text = ai_faq.get('answer')
                     log_conversation(client_id, message, response_text, matched=True, method='ai')
-                    
                     return jsonify({
                         'success': True,
                         'response': response_text,
-                        'confidence': confidence,
+                        'confidence': ai_confidence,
                         'method': 'ai'
                     })
             except Exception as ai_error:
                 app.logger.error(f"AI error: {ai_error}")
         
-        # Step 4: Fallback response
+        # ── Step 4: Fallback (no match found anywhere) ──────────────────
         fallback = config.get('bot_settings', {}).get(
             'fallback_message',
             "I'm not sure about that. Would you like to speak with our team? Type 'contact'!"
         )
-        
-        # ✅ LOG CONVERSATION (unanswered)
         log_conversation(client_id, message, fallback, matched=False, method='fallback')
-        
         return jsonify({
             'success': True,
             'response': fallback,
@@ -597,7 +771,7 @@ def chat():
         return jsonify({
             'success': False,
             'error': 'Internal server error'
-        }), 500        
+        }), 500    
         
 
 @app.route('/api/lead', methods=['POST'])
@@ -650,6 +824,14 @@ def submit_lead():
         
         # Save lead to database
         models.save_lead(client_id, lead_data)
+        
+        # ✅ ADD THIS RIGHT HERE (3 lines below save_lead)
+        notify_webhook(client_id, {
+            'name': name,
+            'email': email,
+            'phone': phone,
+            'company': company
+        })
         
         app.logger.info(f'Lead captured for client: {client_id}')
         
@@ -1863,6 +2045,102 @@ def paypal_success():
         flash("❌ Payment processing error. Contact support.", 'error')
         return redirect(url_for('dashboard'))
 
+
+@app.route('/api/webhook/lead', methods=['POST'])
+def webhook_new_lead():
+    """
+    Fires when a new lead is captured.
+    Make/Zapier polls this OR you push to their webhook URL.
+    """
+    try:
+        # Verify webhook secret (security!)
+        secret = request.headers.get('X-Webhook-Secret')
+        if secret != os.environ.get('WEBHOOK_SECRET', 'lumvi-secret'):
+            return jsonify({'error': 'Unauthorized'}), 401
+
+        data = request.json
+        client_id = data.get('client_id')
+
+        # Get latest leads for this client
+        conn = sqlite3.connect('chatbot.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT name, email, phone, company, created_at
+            FROM leads
+            WHERE client_id = ?
+            ORDER BY created_at DESC
+            LIMIT 10
+        ''', (client_id,))
+
+        leads = [
+            {
+                'name': row[0],
+                'email': row[1],
+                'phone': row[2],
+                'company': row[3],
+                'created_at': row[4]
+            }
+            for row in cursor.fetchall()
+        ]
+        conn.close()
+
+        return jsonify({'success': True, 'leads': leads})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/webhook/faq-import', methods=['POST'])
+def webhook_faq_import():
+    """
+    Zapier/Make sends FAQs from Google Sheets/Notion.
+    Format: { "client_id": "xxx", "faqs": [{"question": "", "answer": ""}] }
+    """
+    try:
+        # Verify secret
+        secret = request.headers.get('X-Webhook-Secret')
+        if secret != os.environ.get('WEBHOOK_SECRET', 'lumvi-secret'):
+            return jsonify({'error': 'Unauthorized'}), 401
+
+        data = request.json
+        client_id = data.get('client_id')
+        incoming_faqs = data.get('faqs', [])
+
+        if not client_id or not incoming_faqs:
+            return jsonify({'error': 'client_id and faqs required'}), 400
+
+        # Save each FAQ
+        conn = sqlite3.connect('chatbot.db')
+        cursor = conn.cursor()
+        saved = 0
+
+        for faq in incoming_faqs:
+            question = faq.get('question', '').strip()
+            answer = faq.get('answer', '').strip()
+
+            if not question or not answer:
+                continue
+
+            # Auto-generate triggers from question keywords
+            triggers = extract_keywords(question)
+
+            cursor.execute('''
+                INSERT INTO faqs (client_id, question, answer, triggers)
+                VALUES (?, ?, ?, ?)
+            ''', (client_id, question, answer, json.dumps(triggers)))
+            saved += 1
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'Imported {saved} FAQs successfully',
+            'count': saved
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/payment/paypal/cancel')
 @login_required

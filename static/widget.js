@@ -23,7 +23,7 @@
     console.log('🎯 Widget initializing for client:', clientId);
     
     // Get base URL
-    const baseUrl = window.location.origin;
+    const baseUrl = 'https://lumvi.net';
     
     console.log('🚀 Loading Lumvi chatbot for client:', clientId);
     
