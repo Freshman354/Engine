@@ -310,11 +310,6 @@ def allow_widget_embedding(response):
     
     return response
 
-# Your existing routes continue below
-@app.route('/')
-def index():
-    return render_template('index.html')
-
 # =====================================================================
 # LOGGING CONFIGURATION
 # =====================================================================
