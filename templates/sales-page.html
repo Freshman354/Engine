@@ -4,315 +4,476 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>White-Label FAQ Chatbot for Agencies</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #ec4899;
+            --dark-bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.5);
         }
-        
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--dark-bg);
+            color: var(--text-main);
             line-height: 1.6;
         }
-        
+
+        /* ── HERO ── */
         .hero {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 100px 20px;
+            background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 50%, #1e1b4b 100%);
+            border-bottom: 1px solid rgba(99, 102, 241, 0.3);
+            padding: 120px 20px;
             text-align: center;
+            position: relative;
+            overflow: hidden;
         }
-        
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
         .hero h1 {
-            font-size: 48px;
+            font-size: 52px;
+            font-weight: 800;
+            letter-spacing: -1.5px;
             margin-bottom: 20px;
-            line-height: 1.2;
+            line-height: 1.15;
+            position: relative;
         }
-        
+
+        .hero h1 span {
+            background: linear-gradient(135deg, var(--primary), #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
         .hero p {
-            font-size: 24px;
+            font-size: 20px;
+            color: var(--text-muted);
             margin-bottom: 40px;
-            opacity: 0.95;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            position: relative;
         }
-        
-        .cta-button {
+
+        .hero-cta {
             display: inline-block;
-            padding: 18px 40px;
-            background: white;
-            color: #667eea;
+            padding: 18px 44px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
             text-decoration: none;
-            border-radius: 8px;
+            border-radius: 12px;
             font-size: 18px;
-            font-weight: 600;
-            transition: transform 0.2s;
+            font-weight: 700;
+            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.5);
+            transition: all 0.2s;
+            position: relative;
         }
-        
-        .cta-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+
+        .hero-cta:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.7);
         }
-        
+
+        /* ── CONTAINER ── */
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 80px 20px;
+            padding: 90px 20px;
         }
-        
+
+        /* ── PROBLEM ── */
         .problem {
             text-align: center;
-            margin-bottom: 80px;
+            margin-bottom: 70px;
         }
-        
+
         .problem h2 {
-            font-size: 36px;
-            color: #1f2937;
+            font-size: 38px;
+            font-weight: 800;
+            letter-spacing: -1px;
             margin-bottom: 20px;
         }
-        
+
         .problem p {
-            font-size: 20px;
-            color: #6b7280;
-            max-width: 800px;
+            font-size: 18px;
+            color: var(--text-muted);
+            max-width: 760px;
             margin: 0 auto;
         }
-        
+
+        /* ── FEATURES ── */
         .features {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 40px;
-            margin-bottom: 80px;
+            gap: 24px;
         }
-        
+
         .feature {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 20px;
+            padding: 36px;
             text-align: center;
-            padding: 40px;
-            background: #f9fafb;
-            border-radius: 12px;
+            transition: transform 0.3s, border-color 0.3s;
         }
-        
-        .feature-icon {
-            font-size: 48px;
-            margin-bottom: 20px;
+
+        .feature:hover {
+            transform: translateY(-6px);
+            border-color: var(--primary);
         }
-        
+
+        .feature-icon { font-size: 44px; margin-bottom: 18px; }
+
         .feature h3 {
-            font-size: 24px;
-            color: #1f2937;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            color: white;
+        }
+
+        .feature p { color: var(--text-muted); font-size: 15px; }
+
+        /* ── PRICING SECTION ── */
+        .pricing {
+            padding: 90px 20px;
+            text-align: center;
+        }
+
+        .pricing-header { margin-bottom: 60px; }
+
+        .pricing-header h2 {
+            font-size: 38px;
+            font-weight: 800;
+            letter-spacing: -1px;
             margin-bottom: 12px;
         }
-        
-        .feature p {
-            color: #6b7280;
-            font-size: 16px;
-        }
-        
-        .pricing {
-            background: #f9fafb;
-            padding: 80px 20px;
-            text-align: center;
-        }
-        
-        .pricing h2 {
-            font-size: 36px;
-            color: #1f2937;
-            margin-bottom: 60px;
-        }
-        
-        .pricing-cards {
+
+        .pricing-header p { font-size: 18px; color: var(--text-muted); }
+        .pricing-header p span { color: #ffd700; font-weight: 700; }
+
+        .pricing-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 32px;
             max-width: 1200px;
             margin: 0 auto;
         }
-        
+
+        /* ── PRICING CARDS ── */
         .pricing-card {
-            background: white;
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
             padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-        
-        .pricing-card.popular {
-            border: 3px solid #667eea;
+            border-radius: 24px;
+            border: 1px solid rgba(255,255,255,0.1);
+            text-align: left;
+            transition: transform 0.3s ease;
             position: relative;
+            display: flex;
+            flex-direction: column;
         }
-        
+
+        .pricing-card:hover { transform: translateY(-8px); border-color: var(--primary); }
+
+        .pricing-card.featured {
+            background: rgba(30, 41, 59, 0.9);
+            border: 2px solid var(--primary);
+            box-shadow: var(--shadow-glow);
+            z-index: 10;
+        }
+
         .popular-badge {
+            background: #ffd700;
+            color: black;
+            font-weight: 800;
+            padding: 6px 16px;
+            border-radius: 20px;
             position: absolute;
-            top: -15px;
+            top: -16px;
             left: 50%;
             transform: translateX(-50%);
-            background: #667eea;
-            color: white;
-            padding: 6px 20px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
             text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 1px;
+            white-space: nowrap;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
         }
-        
+
         .plan-name {
             font-size: 24px;
-            color: #1f2937;
-            margin-bottom: 10px;
-            font-weight: 600;
-        }
-        
-        .plan-price {
-            font-size: 48px;
-            color: #667eea;
             font-weight: 700;
+            color: white;
             margin-bottom: 10px;
         }
-        
-        .plan-price span {
-            font-size: 18px;
-            color: #6b7280;
+
+        .price {
+            font-size: 52px;
+            font-weight: 800;
+            color: white;
+            letter-spacing: -2px;
+            margin: 16px 0 4px;
         }
-        
-        .plan-features {
-            list-style: none;
-            margin: 30px 0;
-            text-align: left;
+
+        .price .period { font-size: 18px; color: var(--text-muted); font-weight: 500; letter-spacing: normal; }
+        .old-price { text-decoration: line-through; color: #64748b; font-size: 24px; margin-right: 8px; font-weight: 400; }
+
+        .discount-tag {
+            display: inline-block;
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 28px;
+            align-self: flex-start;
         }
-        
-        .plan-features li {
+
+        .plan-tagline {
+            font-size: 15px;
+            color: var(--text-muted);
+            margin-bottom: 24px;
+        }
+
+        /* ── FEATURE LIST ── */
+        .features-list { list-style: none; margin-bottom: 32px; flex-grow: 1; }
+
+        .features-list li {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #cbd5e1;
+            font-size: 15px;
             padding: 12px 0;
-            color: #374151;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
         }
-        
-        .plan-features li:before {
-            content: "✓ ";
-            color: #10b981;
-            font-weight: bold;
-            margin-right: 8px;
-        }
-        
-        .plan-button {
+
+        .features-list li:last-child { border-bottom: none; }
+        .check { color: var(--success); font-weight: bold; font-size: 18px; flex-shrink: 0; }
+
+        /* ── BUTTONS ── */
+        .btn {
             display: block;
             width: 100%;
             padding: 16px;
-            background: #667eea;
-            color: white;
+            border-radius: 12px;
+            font-weight: 700;
+            text-align: center;
             text-decoration: none;
-            border-radius: 8px;
-            font-weight: 600;
-            margin-top: 20px;
-            transition: background 0.2s;
+            transition: all 0.2s;
+            font-size: 16px;
+            border: none;
+            cursor: pointer;
+            font-family: 'Inter', sans-serif;
         }
-        
-        .plan-button:hover {
-            background: #5568d3;
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
         }
-        
-        .testimonials {
-            padding: 80px 20px;
-            max-width: 1200px;
+
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(99, 102, 241, 0.6); }
+
+        .btn-secondary {
+            background: transparent;
+            color: white;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: white; }
+
+        /* ── TESTIMONIALS ── */
+        .testimonials { padding: 0 20px 90px; }
+
+        .testimonials-inner {
+            max-width: 1000px;
             margin: 0 auto;
         }
-        
+
         .testimonials h2 {
-            font-size: 36px;
-            color: #1f2937;
+            font-size: 38px;
+            font-weight: 800;
+            letter-spacing: -1px;
             text-align: center;
-            margin-bottom: 60px;
+            margin-bottom: 50px;
         }
-        
+
         .testimonial {
-            background: white;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 36px 40px;
+            border-radius: 20px;
+            margin-bottom: 24px;
+            transition: border-color 0.3s;
         }
-        
+
+        .testimonial:hover { border-color: var(--primary); }
+
         .testimonial-text {
-            font-size: 18px;
-            color: #374151;
+            font-size: 17px;
+            color: #cbd5e1;
             font-style: italic;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
+            line-height: 1.7;
         }
-        
+
+        .testimonial-text::before {
+            content: '"';
+            font-size: 40px;
+            color: var(--primary);
+            line-height: 0;
+            vertical-align: -14px;
+            margin-right: 4px;
+        }
+
         .testimonial-author {
-            font-weight: 600;
-            color: #1f2937;
+            font-weight: 700;
+            color: var(--text-muted);
+            font-size: 14px;
         }
-        
+
+        /* ── CTA SECTION ── */
         .cta-section {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 80px 20px;
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%);
+            border-top: 1px solid rgba(99, 102, 241, 0.3);
+            padding: 100px 20px;
             text-align: center;
+            position: relative;
+            overflow: hidden;
         }
-        
+
+        .cta-section::before {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
         .cta-section h2 {
-            font-size: 42px;
-            margin-bottom: 20px;
+            font-size: 44px;
+            font-weight: 800;
+            letter-spacing: -1.5px;
+            margin-bottom: 16px;
+            position: relative;
         }
-        
+
         .cta-section p {
-            font-size: 20px;
+            font-size: 18px;
+            color: var(--text-muted);
             margin-bottom: 40px;
-            opacity: 0.95;
+            position: relative;
         }
-        
+
+        .cta-demo-btn {
+            display: inline-block;
+            padding: 18px 44px;
+            background: white;
+            color: var(--primary-dark);
+            text-decoration: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 700;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .cta-demo-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 30px rgba(255,255,255,0.2);
+        }
+
+        /* ── FOOTER ── */
+        .footer {
+            padding: 30px 20px;
+            text-align: center;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .footer a {
+            color: var(--text-muted);
+            text-decoration: none;
+            margin: 0 12px;
+            font-size: 14px;
+        }
+
+        .footer a:hover { color: white; }
+
         @media (max-width: 768px) {
-            .hero h1 {
-                font-size: 32px;
-            }
-            
-            .hero p {
-                font-size: 18px;
-            }
+            .hero h1 { font-size: 34px; }
+            .pricing-grid { grid-template-columns: 1fr; }
+            .cta-section h2 { font-size: 30px; }
         }
     </style>
 </head>
 <body>
+
+    <!-- HERO -->
     <div class="hero">
-        <h1>White-Label FAQ Chatbot<br>Built for Agencies</h1>
+        <h1>White-Label FAQ Chatbot<br><span>Built for Agencies</span></h1>
         <p>One deployment. Unlimited clients. Complete customization.</p>
-        <a href="#pricing" class="cta-button">View Pricing →</a>
+        <a href="#pricing" class="hero-cta">View Pricing →</a>
     </div>
-    
+
+    <!-- PROBLEM + FEATURES -->
     <div class="container">
         <div class="problem">
             <h2>The Problem with Current Chatbots</h2>
-            <p>Tools like Intercom and Drift charge $74-$300 per client. If you manage 10 clients, that's $740-$3,000/month. Plus, they're complex, time-consuming, and not truly white-label.</p>
+            <p>Tools like Intercom and Drift charge $74–$300 per client. If you manage 10 clients, that's $740–$3,000/month. Plus, they're complex, time-consuming, and not truly white-label.</p>
         </div>
-        
+
         <div class="features">
             <div class="feature">
                 <div class="feature-icon">🎨</div>
                 <h3>True White-Label</h3>
                 <p>Your logo, colors, domain. Zero mention of us anywhere. Complete ownership.</p>
             </div>
-            
             <div class="feature">
                 <div class="feature-icon">⚡</div>
                 <h3>10-Minute Setup</h3>
                 <p>One line of code. Works on any website. WordPress, Shopify, custom sites.</p>
             </div>
-            
             <div class="feature">
                 <div class="feature-icon">📊</div>
                 <h3>Built-In Analytics</h3>
                 <p>Show clients ROI with conversation tracking, lead capture, and insights.</p>
             </div>
-            
             <div class="feature">
                 <div class="feature-icon">💬</div>
                 <h3>Smart Lead Collection</h3>
                 <p>Conversational lead capture that feels natural, not pushy forms.</p>
             </div>
-            
             <div class="feature">
                 <div class="feature-icon">🔧</div>
                 <h3>Visual Customization</h3>
                 <p>No coding needed. Color picker, logo upload, instant preview.</p>
             </div>
-            
             <div class="feature">
                 <div class="feature-icon">∞</div>
                 <h3>Unlimited Clients</h3>
@@ -320,103 +481,119 @@
             </div>
         </div>
     </div>
-    
+
+    <!-- PRICING -->
     <div class="pricing" id="pricing">
-        <h2>Simple, Transparent Pricing</h2>
-        
-        <div class="pricing-cards">
+        <div class="pricing-header">
+            <h2>🚀 Simple, Transparent Pricing</h2>
+            <p>Scale your agency with our premium features. <span>50% OFF for First 10 Customers!</span></p>
+        </div>
+
+        <div class="pricing-grid">
+
+            <!-- STARTER -->
             <div class="pricing-card">
                 <div class="plan-name">Starter</div>
                 <div class="price">
-                    <span style="text-decoration: line-through; color: #999;">$60</span>
-                    $30/month
-                    <div style="font-size: 12px; color: #10b981; margin-top: 4px;">
-                        🔥 50% OFF - First 10 Only!
-                    </div>
-                    </div>
-                <ul class="plan-features">
-                    <li>Up to 5 clients</li>
-                    <li>Unlimited conversations</li>
-                    <li>Lead collection</li>
-                    <li>Basic analytics</li>
-                    <li>Email support</li>
-                </ul>
-                <a href="https://flutterwave.com/pay/1q2ra2vpnh4y" class="plan-button">Get Started</a>
-            </div>
-            
-            <div class="pricing-card popular">
-                <div class="popular-badge">Most Popular</div>
-                <div class="plan-name">Agency</div>
-                <!-- NEW -->
-                <div class="price">
-                    <span style="text-decoration: line-through; color: #999;">$240</span>
-                    $120/month
-                    <div style="font-size: 12px; color: #10b981; margin-top: 4px;">
-                        🔥 50% OFF - First 10 Only!
-                    </div>
+                    <span class="old-price">$60</span>$30<span class="period">/month</span>
                 </div>
-                <ul class="plan-features">
-                    <li>Up to 20 clients</li>
-                    <li>Unlimited conversations</li>
-                    <li>Advanced analytics</li>
-                    <li>Priority support</li>
-                    <li>Custom integrations</li>
-                    <li>Onboarding call</li>
-                </ul>
-                <a href="https://flutterwave.com/pay/vrrfifwlldpl" class="plan-button">Get Started</a>
-            </div>
-            
-            <div class="pricing-card">
-                <div class="plan-name">Enterprise</div>
-                <!-- NEW -->
-                <div class="price">
-                    $199 <span style="font-size: 16px;">one-time</span>
-                    <div style="font-size: 12px; color: #ef4444; margin-top: 4px;">
-                        🔥 LIFETIME ACCESS
-                    </div>
-                </div>
-                <span style="font-size: 16px; display: block; margin-top: 8px; font-weight: 400;">Tailored to your needs</span>
-                </div>
-    
-                <ul class="plan-features">
-                    <li>Unlimited clients</li>
-                    <li>Everything in Agency</li>
-                    <li>Self-hosted option</li>
-                    <li>Custom features</li>
-                    <li>Dedicated support</li>
-                    <li>SLA guarantee</li>
-                    <li>White-glove onboarding</li>
-                    <li>Priority development</li>
+                <div class="discount-tag">🔥 50% OFF - First 10 Only!</div>
+
+                <ul class="features-list">
+                    <li><span class="check">✓</span> Up to 5 clients</li>
+                    <li><span class="check">✓</span> Unlimited conversations</li>
+                    <li><span class="check">✓</span> AI-Powered Responses</li>
+                    <li><span class="check">✓</span> Lead collection</li>
+                    <li><span class="check">✓</span> Basic analytics</li>
+                    <li><span class="check">✓</span> Email support</li>
                 </ul>
 
-                <a href="https://flutterwave.com/pay/ehhc5k94jceb" class="btn btn-upgrade">
-                Get Started
-                </a>
+                <a href="https://flutterwave.com/pay/1q2ra2vpnh4y" class="btn btn-secondary">Get Started</a>
+            </div>
+
+            <!-- AGENCY (FEATURED) -->
+            <div class="pricing-card featured">
+                <div class="popular-badge">MOST POPULAR</div>
+                <div class="plan-name">Agency</div>
+                <div class="price">
+                    <span class="old-price">$240</span>$120<span class="period">/month</span>
+                </div>
+                <div class="discount-tag" style="background: rgba(255,215,0,0.15); color: #ffd700;">
+                    ⚡ Best Value for Agencies
+                </div>
+
+                <ul class="features-list">
+                    <li><span class="check">✓</span> <strong>Up to 20 clients</strong></li>
+                    <li><span class="check">✓</span> <strong>Unlimited conversations</strong></li>
+                    <li><span class="check">✓</span> <strong>Full White-Labeling</strong></li>
+                    <li><span class="check">✓</span> Advanced analytics</li>
+                    <li><span class="check">✓</span> Priority support</li>
+                    <li><span class="check">✓</span> Custom integrations</li>
+                    <li><span class="check">✓</span> Onboarding call</li>
+                </ul>
+
+                <a href="https://flutterwave.com/pay/vrrfifwlldpl" class="btn btn-primary">🚀 Get Started - $120/mo</a>
+            </div>
+
+            <!-- ENTERPRISE -->
+            <div class="pricing-card">
+                <div class="plan-name">Enterprise</div>
+                <div class="price">$199<span class="period"> one-time</span></div>
+                <div class="discount-tag" style="background: rgba(236,72,153,0.2); color: #ec4899;">
+                    💎 Lifetime Access
+                </div>
+                <p class="plan-tagline">Tailored to your needs</p>
+
+                <ul class="features-list">
+                    <li><span class="check">✓</span> Unlimited clients</li>
+                    <li><span class="check">✓</span> Everything in Agency</li>
+                    <li><span class="check">✓</span> Self-hosted option</li>
+                    <li><span class="check">✓</span> Custom features</li>
+                    <li><span class="check">✓</span> Dedicated support</li>
+                    <li><span class="check">✓</span> SLA guarantee</li>
+                    <li><span class="check">✓</span> White-glove onboarding</li>
+                    <li><span class="check">✓</span> Priority development</li>
+                </ul>
+
+                <a href="https://flutterwave.com/pay/ehhc5k94jceb" class="btn btn-secondary">Get Lifetime Access</a>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- TESTIMONIALS -->
+    <div class="testimonials">
+        <div class="testimonials-inner">
+            <h2>What Agencies Say</h2>
+
+            <div class="testimonial">
+                <div class="testimonial-text">We were spending $370/month on Intercom for 5 clients. Now we pay $149 for all 15 clients. The ROI was immediate, and our clients love it.</div>
+                <div class="testimonial-author">— Sarah M., Digital Marketing Agency</div>
+            </div>
+
+            <div class="testimonial">
+                <div class="testimonial-text">Setup took literally 10 minutes. We've added it to all our client sites and they think we built it custom for them. Perfect white-label solution.</div>
+                <div class="testimonial-author">— Mike R., Web Development Agency</div>
             </div>
         </div>
     </div>
-    
-    <div class="testimonials">
-        <h2>What Agencies Say</h2>
-        
-        <div class="testimonial">
-            <div class="testimonial-text">"We were spending $370/month on Intercom for 5 clients. Now we pay $149 for all 15 clients. The ROI was immediate, and our clients love it."</div>
-            <div class="testimonial-author">— Sarah M., Digital Marketing Agency</div>
-        </div>
-        
-        <div class="testimonial">
-            <div class="testimonial-text">"Setup took literally 10 minutes. We've added it to all our client sites and they think we built it custom for them. Perfect white-label solution."</div>
-            <div class="testimonial-author">— Mike R., Web Development Agency</div>
-        </div>
-    </div>
-    
+
+    <!-- CTA SECTION -->
     <div class="cta-section">
         <h2>Ready to Add Recurring Revenue?</h2>
         <p>Start offering chatbots to your clients today. No long-term contracts.</p>
-        <a href="https://faqbot-bvsm.onrender.com/widget?client_id=demo" class="cta-button" style="color: #667eea;">Try Live Demo</a>
+        <a href="https://faqbot-bvsm.onrender.com/widget?client_id=demo" class="cta-demo-btn">Try Live Demo →</a>
     </div>
-    
-    <!-- Add your own chatbot -->
+
+    <!-- FOOTER -->
+    <div class="footer">
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/dashboard">Dashboard</a>
+    </div>
+
+    <!-- Chatbot -->
     <script src="https://faqbot-bvsm.onrender.com/static/embed.js?client_id=demo"></script>
+
 </body>
 </html>

@@ -4,275 +4,553 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - FAQ Chatbot</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #ec4899;
+            --dark-bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --card-solid: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --border: rgba(255, 255, 255, 0.08);
+            --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.4);
         }
-        
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f9fafb;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--dark-bg);
+            color: var(--text-main);
             min-height: 100vh;
         }
-        
+
+        /* ── NAVBAR ── */
         .navbar {
-            background: white;
-            border-bottom: 1px solid #e5e7eb;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
             padding: 16px 40px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
         }
-        
+
         .navbar-brand {
             font-size: 20px;
-            font-weight: 700;
-            color: #667eea;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
         }
-        
+
         .navbar-right {
             display: flex;
-            gap: 16px;
+            gap: 12px;
             align-items: center;
         }
-        
+
         .user-email {
-            color: #6b7280;
+            color: var(--text-muted);
             font-size: 14px;
         }
-        
+
+        .plan-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            background: rgba(99, 102, 241, 0.2);
+            color: #a78bfa;
+            border: 1px solid rgba(99, 102, 241, 0.3);
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
         .btn-logout {
             padding: 8px 16px;
-            background: #ef4444;
-            color: white;
-            border: none;
-            border-radius: 6px;
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 8px;
             font-weight: 600;
             cursor: pointer;
             text-decoration: none;
-            font-size: 14px;
+            font-size: 13px;
+            transition: all 0.2s;
         }
-        
+
+        .btn-logout:hover {
+            background: rgba(239, 68, 68, 0.3);
+            border-color: #ef4444;
+        }
+
+        /* ── CONTAINER ── */
         .container {
             max-width: 1200px;
             margin: 0 auto;
             padding: 40px 20px;
         }
-        
+
+        /* ── HEADER ── */
         .header {
             margin-bottom: 32px;
         }
-        
+
         .header h1 {
-            font-size: 32px;
-            color: #1f2937;
-            margin-bottom: 8px;
+            font-size: 34px;
+            font-weight: 800;
+            letter-spacing: -1px;
+            margin-bottom: 6px;
         }
-        
+
         .header p {
-            color: #6b7280;
+            color: var(--text-muted);
             font-size: 16px;
+            margin-bottom: 16px;
         }
-        
-        .plan-badge {
-            display: inline-block;
-            padding: 6px 12px;
-            background: #667eea;
-            color: white;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            margin-left: 12px;
+
+        .plan-status-bar {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-size: 14px;
+            color: #cbd5e1;
         }
-        
+
+        .plan-status-bar strong { color: white; }
+
+        .limit-warning {
+            color: #fca5a5;
+            font-weight: 700;
+            margin-left: 4px;
+        }
+
+        /* ── ACTIONS ── */
         .actions {
             margin-bottom: 32px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
         }
-        
-        .btn-primary {
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+
+        .btn {
+            padding: 12px 22px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 14px;
+            transition: all 0.2s;
             border: none;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            margin-right: 12px;
+            font-family: 'Inter', sans-serif;
         }
-        
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.35);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.55);
+        }
+
         .btn-secondary {
-            padding: 12px 24px;
-            background: white;
-            color: #667eea;
-            border: 2px solid #667eea;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
+            background: var(--card-bg);
+            color: var(--text-main);
+            border: 1px solid var(--border);
         }
-        
+
+        .btn-secondary:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.2);
+        }
+
+        .btn-upgrade {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+            box-shadow: 0 4px 15px rgba(245, 158, 11, 0.35);
+        }
+
+        .btn-upgrade:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.55);
+        }
+
+        .btn-affiliate {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-affiliate:hover {
+            background: rgba(16, 185, 129, 0.25);
+            border-color: var(--success);
+        }
+
+        /* ── CLIENTS GRID ── */
         .clients-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
             gap: 24px;
         }
-        
+
+        /* ── CLIENT CARD ── */
         .client-card {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            border: 2px solid transparent;
-            transition: all 0.2s;
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 28px;
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
         }
-        
+
         .client-card:hover {
-            border-color: #667eea;
-            transform: translateY(-2px);
+            transform: translateY(-6px);
+            border-color: var(--primary);
+            box-shadow: var(--shadow-glow);
         }
-        
+
         .client-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
         }
-        
-        .client-name {
+
+        .client-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--primary), #a78bfa);
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-size: 18px;
-            font-weight: 600;
-            color: #1f2937;
+            font-weight: 800;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .client-info { flex: 1; margin-left: 14px; }
+
+        .client-name {
+            font-size: 17px;
+            font-weight: 700;
+            color: white;
             margin-bottom: 4px;
         }
-        
+
         .client-id {
-            font-size: 12px;
-            color: #6b7280;
-            font-family: monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: 'Courier New', monospace;
+            background: rgba(255,255,255,0.05);
+            padding: 2px 8px;
+            border-radius: 4px;
+            display: inline-block;
         }
-        
+
         .client-actions {
-            display: flex;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
             gap: 8px;
-            margin-top: 16px;
-            padding-top: 16px;
-            border-top: 1px solid #e5e7eb;
+            margin-top: auto;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
         }
-        
+
         .btn-small {
-            padding: 8px 12px;
-            font-size: 13px;
-            border-radius: 6px;
+            padding: 9px 10px;
+            font-size: 12px;
+            border-radius: 8px;
             border: none;
             cursor: pointer;
             font-weight: 600;
             text-decoration: none;
-            flex: 1;
             text-align: center;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            font-family: 'Inter', sans-serif;
         }
-        
+
         .btn-manage {
-            background: #667eea;
-            color: white;
+            background: rgba(99, 102, 241, 0.2);
+            color: #a78bfa;
+            border: 1px solid rgba(99, 102, 241, 0.3);
         }
-        
+        .btn-manage:hover { background: rgba(99, 102, 241, 0.35); }
+
         .btn-analytics {
-            background: #10b981;
-            color: white;
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.25);
         }
-        
+        .btn-analytics:hover { background: rgba(16, 185, 129, 0.3); }
+
         .btn-customize {
-            background: #f59e0b;
-            color: white;
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.25);
         }
-        
+        .btn-customize:hover { background: rgba(245, 158, 11, 0.3); }
+
+        .btn-embed {
+            background: rgba(236, 72, 153, 0.15);
+            color: #f472b6;
+            border: 1px solid rgba(236, 72, 153, 0.25);
+        }
+        .btn-embed:hover { background: rgba(236, 72, 153, 0.3); }
+
+        .btn-locked {
+            background: rgba(255,255,255,0.04);
+            color: #475569;
+            border: 1px solid rgba(255,255,255,0.06);
+            cursor: not-allowed;
+        }
+
+        /* ── EMPTY STATE ── */
         .empty-state {
             text-align: center;
             padding: 80px 20px;
-            background: white;
-            border-radius: 12px;
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
         }
-        
-        .empty-icon {
-            font-size: 64px;
-            margin-bottom: 16px;
-        }
-        
+
+        .empty-icon { font-size: 64px; margin-bottom: 20px; }
+
         .empty-state h2 {
-            font-size: 24px;
-            color: #1f2937;
-            margin-bottom: 8px;
+            font-size: 26px;
+            font-weight: 800;
+            margin-bottom: 10px;
         }
-        
+
         .empty-state p {
-            color: #6b7280;
-            margin-bottom: 24px;
+            color: var(--text-muted);
+            margin-bottom: 28px;
+            font-size: 16px;
         }
-        
+
+        /* ── MODAL BASE ── */
         .modal {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
             z-index: 1000;
             align-items: center;
             justify-content: center;
         }
-        
+
         .modal-content {
-            background: white;
-            border-radius: 12px;
-            padding: 32px;
+            background: var(--card-solid);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 24px;
+            padding: 36px;
             max-width: 500px;
             width: 90%;
+            box-shadow: 0 25px 70px rgba(0,0,0,0.5);
+            animation: slideUp 0.35s ease;
         }
-        
+
         .modal-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
+            margin-bottom: 28px;
         }
-        
+
+        .modal-header h2 {
+            font-size: 22px;
+            font-weight: 800;
+        }
+
         .modal-close {
-            background: none;
+            background: rgba(255,255,255,0.08);
             border: none;
-            font-size: 24px;
+            font-size: 20px;
             cursor: pointer;
-            color: #6b7280;
+            color: var(--text-muted);
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
         }
-        
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
+
+        .modal-close:hover { background: rgba(255,255,255,0.15); color: white; }
+
+        .form-group { margin-bottom: 20px; }
+
         .form-group label {
             display: block;
             font-weight: 600;
             margin-bottom: 8px;
-            color: #374151;
+            color: #cbd5e1;
+            font-size: 14px;
         }
-        
+
         .form-group input {
             width: 100%;
             padding: 12px 16px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 10px;
+            font-size: 15px;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
+        }
+
+        .form-group input::placeholder { color: #475569; }
+
+        /* ── EMBED MODAL ── */
+        .embed-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .embed-modal-content {
+            background: var(--card-solid);
+            border: 1px solid rgba(255,255,255,0.1);
+            padding: 40px;
+            border-radius: 24px;
+            max-width: 700px;
+            width: 90%;
+            box-shadow: 0 25px 70px rgba(0,0,0,0.5);
+            animation: slideUp 0.35s ease;
+        }
+
+        .embed-modal-content h2 {
+            margin-bottom: 8px;
+            font-size: 22px;
+            font-weight: 800;
+        }
+
+        .embed-modal-content > p {
+            color: var(--text-muted);
+            margin-bottom: 24px;
             font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .embed-modal-content > p code {
+            background: rgba(255,255,255,0.08);
+            padding: 2px 8px;
+            border-radius: 4px;
+            color: #f472b6;
+            font-family: 'Courier New', monospace;
+        }
+
+        .embed-textarea-wrapper { position: relative; }
+
+        #embedCodeText {
+            width: 100%;
+            height: 220px;
+            padding: 20px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #a78bfa;
+            resize: none;
+            line-height: 1.6;
+        }
+
+        #embedCodeText:focus { outline: none; border-color: var(--primary); }
+
+        .embed-lang-tag {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: var(--primary);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .embed-actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 12px;
+        }
+
+        .embed-tip {
+            margin-top: 20px;
+            padding: 14px 18px;
+            background: rgba(245, 158, 11, 0.1);
+            border-left: 3px solid var(--warning);
+            border-radius: 8px;
+            font-size: 13px;
+            color: #fcd34d;
+            line-height: 1.6;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(40px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        @media (max-width: 768px) {
+            .navbar { padding: 14px 20px; }
+            .user-email { display: none; }
+            .actions { flex-direction: column; }
+            .btn { width: 100%; justify-content: center; }
         }
     </style>
 </head>
 <body>
+
+    <!-- NAVBAR -->
     <div class="navbar">
         <div class="navbar-brand">💬 FAQ Chatbot</div>
         <div class="navbar-right">
@@ -281,159 +559,144 @@
             <a href="/logout" class="btn-logout">Logout</a>
         </div>
     </div>
-    
+
     <div class="container">
+
+        <!-- HEADER -->
         <div class="header">
-    <h1>Dashboard</h1>
-    <p>Manage your chatbot clients</p>
-    <div style="background: #f9fafb; padding: 16px; border-radius: 8px; margin-top: 16px; display: inline-block;">
-        <strong>Plan:</strong> {{ user.plan_type|title }} | 
-        <strong>Clients:</strong> {{ clients|length }} / 
-        {% if user.plan_type == 'starter' %}5
-        {% elif user.plan_type == 'agency' %}15
-        {% else %}Unlimited{% endif %}
-        {% if user.plan_type == 'starter' and clients|length >= 5 %}
-            <span style="color: #ef4444; margin-left: 8px;">⚠️ Limit Reached</span>
-        {% elif user.plan_type == 'agency' and clients|length >= 15 %}
-            <span style="color: #ef4444; margin-left: 8px;">⚠️ Limit Reached</span>
-        {% endif %}
-    </div>
-</div>
-        
+            <h1>Dashboard</h1>
+            <p>Manage your chatbot clients</p>
+
+            <div class="plan-status-bar">
+                <strong>Plan:</strong> {{ user.plan_type|title }} &nbsp;·&nbsp;
+                <strong>Clients:</strong> {{ clients|length }} /
+                {% if user.plan_type == 'starter' %}5
+                {% elif user.plan_type == 'agency' %}15
+                {% else %}Unlimited{% endif %}
+                {% if user.plan_type == 'starter' and clients|length >= 5 %}
+                    <span class="limit-warning">⚠️ Limit Reached</span>
+                {% elif user.plan_type == 'agency' and clients|length >= 15 %}
+                    <span class="limit-warning">⚠️ Limit Reached</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ACTIONS -->
         <div class="actions">
-    {% set limit_reached = (user.plan_type == 'starter' and clients|length >= 5) or (user.plan_type == 'agency' and clients|length >= 15) %}
-    
-    {% if limit_reached %}
-        <a href="/upgrade" class="btn-primary" style="background: #f59e0b;">
-            🚀 Upgrade to Add More Clients
-        </a>
-    {% else %}
-        <button class="btn-primary" onclick="openNewClientModal()">+ New Client</button>
-    {% endif %}
-    
-    <a href="/sales" class="btn-secondary">View Sales Page</a>
-    <a href="/affiliate-dashboard" class="btn-secondary" style="background: #10b981; color: white; border: none;">
-        💰 Affiliate Program
-    </a>
-</div>
-        
+            {% set limit_reached = (user.plan_type == 'starter' and clients|length >= 5) or (user.plan_type == 'agency' and clients|length >= 15) %}
+            {% if limit_reached %}
+                <a href="/upgrade" class="btn btn-upgrade">🚀 Upgrade to Add More Clients</a>
+            {% else %}
+                <button class="btn btn-primary" onclick="openNewClientModal()">+ New Client</button>
+            {% endif %}
+            <a href="/sales" class="btn btn-secondary">🌐 View Sales Page</a>
+            <a href="/affiliate-dashboard" class="btn btn-affiliate">💰 Affiliate Program</a>
+        </div>
+
+        <!-- CLIENTS GRID -->
         {% if clients %}
         <div class="clients-grid">
             {% for client in clients %}
             <div class="client-card">
                 <div class="client-header">
-                    <div>
+                    <div class="client-avatar">{{ client.company_name[0]|upper }}</div>
+                    <div class="client-info">
                         <div class="client-name">{{ client.company_name }}</div>
                         <div class="client-id">{{ client.client_id }}</div>
                     </div>
                 </div>
-                
+
                 <div class="client-actions">
                     <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-small btn-manage">📝 FAQs</a>
-    
+
                     {% if user.plan_type != 'free' %}
-                        <!-- UNLOCKED buttons for paid plans -->
                         <a href="/analytics?client_id={{ client.client_id }}" class="btn-small btn-analytics">📊 Analytics</a>
                         <a href="/customize?client_id={{ client.client_id }}" class="btn-small btn-customize">🎨 Theme</a>
-                        <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-small" style="background: #10b981; color: white;">
-                        📋 Embed Code
-                        </button>
+                        <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-small btn-embed">📋 Embed</button>
                     {% else %}
-                        <!-- LOCKED buttons for free plan -->
-                        <button class="btn-small" style="background: #d1d5db; color: #6b7280; cursor: not-allowed;" title="Upgrade to unlock Analytics">
-                        📊 Analytics 🔒
-                        </button>
-                        <button class="btn-small" style="background: #d1d5db; color: #6b7280; cursor: not-allowed;" title="Upgrade to unlock Theme customization">
-                        🎨 Theme 🔒
-                        </button>
-                        {% endif %}
+                        <button class="btn-small btn-locked" title="Upgrade to unlock">📊 Analytics 🔒</button>
+                        <button class="btn-small btn-locked" title="Upgrade to unlock">🎨 Theme 🔒</button>
+                    {% endif %}
                 </div>
             </div>
             {% endfor %}
         </div>
+
         {% else %}
         <div class="empty-state">
             <div class="empty-icon">🚀</div>
             <h2>No Clients Yet</h2>
             <p>Create your first client to get started with your chatbot</p>
-            <button class="btn-primary" onclick="openNewClientModal()">+ Create First Client</button>
+            <button class="btn btn-primary" onclick="openNewClientModal()">+ Create First Client</button>
         </div>
         {% endif %}
+
     </div>
-    
-    <!-- New Client Modal -->
+
+    <!-- NEW CLIENT MODAL -->
     <div class="modal" id="new-client-modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2>Create New Client</h2>
                 <button class="modal-close" onclick="closeModal()">×</button>
             </div>
-            
             <form method="POST" action="/create-client">
                 <div class="form-group">
                     <label>Company Name</label>
                     <input type="text" name="company_name" placeholder="Acme Corporation" required autofocus>
                 </div>
-                
-                <button type="submit" class="btn-primary" style="width: 100%;">Create Client</button>
+                <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Create Client</button>
             </form>
         </div>
     </div>
-    
+
+    <!-- EMBED CODE MODAL -->
+    <div id="embedModal" class="embed-modal">
+        <div class="embed-modal-content">
+            <h2>📋 Embed Code for Your Website</h2>
+            <p>Copy this code and paste it into your website, just before the closing <code>&lt;/body&gt;</code> tag:</p>
+
+            <div class="embed-textarea-wrapper">
+                <textarea id="embedCodeText" readonly></textarea>
+                <div class="embed-lang-tag">HTML</div>
+            </div>
+
+            <div class="embed-actions">
+                <button onclick="copyEmbedCode()" class="btn btn-primary" style="flex: 1; justify-content: center;">
+                    ✅ Copy to Clipboard
+                </button>
+                <button onclick="closeEmbedModal()" class="btn btn-secondary" style="justify-content: center;">
+                    Close
+                </button>
+            </div>
+
+            <div class="embed-tip">
+                💡 <strong>Tip:</strong> The chatbot will automatically appear on the bottom-right corner of your website. You can customize colors and messages in the Theme settings.
+            </div>
+        </div>
+    </div>
+
     <script>
         function openNewClientModal() {
             document.getElementById('new-client-modal').style.display = 'flex';
         }
-        
+
         function closeModal() {
             document.getElementById('new-client-modal').style.display = 'none';
         }
-    </script>
-        <!-- ADD ALL THIS BEFORE </body> -->
 
-            <!-- Embed Code Modal -->
-    <div id="embedModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 9999; align-items: center; justify-content: center;">
-        <div style="background: white; padding: 40px; border-radius: 16px; max-width: 700px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
-            <h2 style="margin-bottom: 10px; color: #1f2937;">📋 Embed Code for Your Website</h2>
-            <p style="color: #6b7280; margin-bottom: 24px; line-height: 1.6;">Copy this code and paste it into your website, just before the closing <code style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px; color: #ef4444;">&lt;/body&gt;</code> tag:</p>
-        
-            <div style="position: relative;">
-                <textarea id="embedCodeText" readonly style="width: 100%; height: 220px; padding: 20px; border: 2px solid #e5e7eb; border-radius: 12px; font-family: 'Courier New', monospace; font-size: 13px; background: #f9fafb; color: #1f2937; resize: none; line-height: 1.6;"></textarea>
-                <div style="position: absolute; top: 12px; right: 12px; background: #667eea; color: white; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;">
-                    HTML
-                </div>
-            </div>
-        
-            <div style="margin-top: 24px; display: flex; gap: 12px;">
-                <button onclick="copyEmbedCode()" style="flex: 1; padding: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 15px; transition: transform 0.2s;">
-                    ✅ Copy to Clipboard
-                </button>
-                <button onclick="closeEmbedModal()" style="padding: 14px 24px; background: #f3f4f6; color: #374151; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 15px; transition: all 0.2s;">
-                Close
-                </button>
-            </div>
-        
-            <div style="margin-top: 20px; padding: 16px; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 8px;">
-                <p style="margin: 0; color: #92400e; font-size: 13px; line-height: 1.6;">
-                    💡 <strong>Tip:</strong> The chatbot will automatically appear on the bottom-right corner of your website. You can customize colors and messages in the Theme settings.
-                </p>
-            </div>
-        </div>
-    </div>
-
-        <script>
-            function showEmbedCode(clientId) {
+        function showEmbedCode(clientId) {
             const baseUrl = window.location.origin;
             const embedCode = `<!-- FAQ Chatbot Widget -->
-        <script>
-            (function() {
-            var chatbotScript = document.createElement('script');
-            chatbotScript.src = '${baseUrl}/static/widget.js';
-            chatbotScript.setAttribute('data-client-id', '${clientId}');
-            document.body.appendChild(chatbotScript);
-            })();
-        <\/script>`;
-    
+<script>
+    (function() {
+        var chatbotScript = document.createElement('script');
+        chatbotScript.src = '${baseUrl}/static/widget.js';
+        chatbotScript.setAttribute('data-client-id', '${clientId}');
+        document.body.appendChild(chatbotScript);
+    })();
+<\/script>`;
+
             document.getElementById('embedCodeText').value = embedCode;
             document.getElementById('embedModal').style.display = 'flex';
         }
@@ -446,36 +709,29 @@
             const textarea = document.getElementById('embedCodeText');
             textarea.select();
             textarea.setSelectionRange(0, 99999);
-    
+
             try {
                 document.execCommand('copy');
-        
                 const btn = event.target;
                 const originalText = btn.innerHTML;
                 btn.innerHTML = '✅ Copied!';
                 btn.style.background = '#10b981';
-        
                 setTimeout(() => {
                     btn.innerHTML = originalText;
-                    btn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                    btn.style.background = '';
                 }, 2000);
-        
             } catch (err) {
                 alert('❌ Failed to copy. Please select and copy manually.');
             }
         }
 
-        document.addEventListener('click', function(event) {
-            const modal = document.getElementById('embedModal');
-            if (event.target === modal) {
-                closeEmbedModal();
-            }
+        document.addEventListener('click', function(e) {
+            if (e.target === document.getElementById('embedModal')) closeEmbedModal();
+            if (e.target === document.getElementById('new-client-modal')) closeModal();
         });
 
-        document.addEventListener('keydown', function(event) {
-            if (event.key === 'Escape') {
-                closeEmbedModal();
-            }
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') { closeEmbedModal(); closeModal(); }
         });
     </script>
 </body>

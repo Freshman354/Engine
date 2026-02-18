@@ -16,6 +16,7 @@ from functools import wraps
 import sqlite3
 import models
 import requests
+import uuid
 from collections import Counter
 from io import StringIO
 from config import Config
@@ -1683,9 +1684,10 @@ def upload_faqs():
         for faq in faqs:
             try:
                 cursor.execute('''
-                    INSERT INTO faqs (client_id, question, answer, category, triggers)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO faqs (faq_id, client_id, question, answer, category, triggers)
+                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (
+                    str(__import__('uuid').uuid4()),
                     client_id,
                     faq['question'],
                     faq['answer'],
