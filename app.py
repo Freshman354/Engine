@@ -27,6 +27,17 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# Load SECRET_KEY from environment variable with debug logging
+SECRET_KEY = os.environ.get('SECRET_KEY', 'NOT_SET')
+
+if SECRET_KEY == 'NOT_SET':
+    print("⚠️ WARNING: SECRET_KEY not found in environment variables!")
+    SECRET_KEY = 'dev-fallback-insecure-key-change-this-12345'
+else:
+    print(f"✅ SECRET_KEY loaded from environment: {SECRET_KEY[:10]}...")
+
+app.config['SECRET_KEY'] = SECRET_KEY
+
 # Initialize AI helper at app startup
 ai_helper = get_ai_helper(Config.GEMINI_API_KEY, Config.GEMINI_MODEL)
 
@@ -78,9 +89,6 @@ PLAN_LIMITS = {
         'priority_support': True
     }
 }
-
-# SECRET KEY for sessions (IMPORTANT!)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
 
 # Initialize Flask-Login
 login_manager = LoginManager()
