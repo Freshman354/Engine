@@ -27,16 +27,10 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Load SECRET_KEY from environment variable with debug logging
-SECRET_KEY = os.environ.get('SECRET_KEY', 'NOT_SET')
-
-if SECRET_KEY == 'NOT_SET':
-    print("⚠️ WARNING: SECRET_KEY not found in environment variables!")
-    SECRET_KEY = 'dev-fallback-insecure-key-change-this-12345'
-else:
-    print(f"✅ SECRET_KEY loaded from environment: {SECRET_KEY[:10]}...")
-
-app.config['SECRET_KEY'] = SECRET_KEY
+# Add this line!
+# It attempts to get the key from the environment, 
+# or falls back to a dev key if running locally.
+app.secret_key = os.environ.get("SECRET_KEY", "dev_key_change_this_in_prod")
 
 # Initialize AI helper at app startup
 ai_helper = get_ai_helper(Config.GEMINI_API_KEY, Config.GEMINI_MODEL)
