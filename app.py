@@ -1079,7 +1079,6 @@ def index():
 def widget():
     client_id = request.args.get('client_id', 'demo')
     
-    # Get client from database
     client = models.get_client_by_id(client_id)
     
     if not client:
@@ -1092,14 +1091,16 @@ def widget():
             'remove_branding': 0
         }
     else:
-        # ✅ Extract bot_name, colors etc from branding_settings JSON
-        client = dict(client)  # make it mutable
+        # Convert to regular dict so we can edit it
+        client = dict(client)
+        
+        # branding_settings is a JSON string, unpack it
         branding_settings = json.loads(client.get('branding_settings') or '{}')
         
         bot_settings = branding_settings.get('bot_settings', {})
         branding = branding_settings.get('branding', {})
         
-        # Merge into client dict so template can access them directly
+        # Add the unpacked values so chat.html can use them
         client['bot_name'] = bot_settings.get('bot_name') or client.get('company_name') or 'Team Support'
         client['welcome_message'] = bot_settings.get('welcome_message') or client.get('welcome_message') or 'Hi! How can I help you today?'
         client['widget_color'] = branding.get('primary_color') or client.get('widget_color') or '#667eea'
@@ -1254,81 +1255,53 @@ def save_customization():
         if not client_id:
             return jsonify({'success': False, 'error': 'Client ID required'}), 400
         
-        # Verify ownership
         if not models.verify_client_ownership(current_user.id, client_id):
             return jsonify({'success': False, 'error': 'Unauthorized'}), 403
         
-        # Get existing client
         client = models.get_client_by_id(client_id)
         if not client:
             return jsonify({'success': False, 'error': 'Client not found'}), 404
         
-        # Update branding settings
+        # Build branding settings JSON
         branding_settings = {
             'branding': data.get('branding', {}),
             'contact': data.get('contact', {}),
             'bot_settings': data.get('bot_settings', {})
         }
-        
-        # Save to database
-        conn = models.get_db()
-        cursor = conn.cursor()
-        
-        cursor.execute(
-            'UPDATE clients SET branding_settings = ? WHERE client_id = ?',
-            (json.dumps(branding_settings), client_id)
-        )
-        
+
+        remove_branding = 0
+        if current_user.plan_type in ['agency', 'enterprise']:
+            remove_branding = 1 if data.get('remove_branding') else 0
+
+        # ✅ Use get_db_connection() not get_db()
+        conn = models.get_db_connection()
+        conn.execute('''
+            UPDATE clients 
+            SET 
+                branding_settings = ?,
+                company_name = ?,
+                widget_color = ?,
+                welcome_message = ?,
+                remove_branding = ?
+            WHERE client_id = ? AND user_id = ?
+        ''', (
+            json.dumps(branding_settings),
+            data.get('branding', {}).get('company_name'),
+            data.get('branding', {}).get('primary_color'),
+            data.get('bot_settings', {}).get('welcome_message'),
+            remove_branding,
+            client_id,
+            current_user.id
+        ))
         conn.commit()
         conn.close()
         
         app.logger.info(f'Customization saved for client: {client_id}')
-        
-        return jsonify({
-            'success': True,
-            'message': 'Customization saved successfully'
-        })
+        return jsonify({'success': True, 'message': 'Customization saved successfully'})
         
     except Exception as e:
         app.logger.error(f'Error saving customization: {e}')
-        return jsonify({
-            'success': False,
-            'error': 'Failed to save customization'
-        }), 500
-    
-@app.route('/api/admin/customize', methods=['POST'])
-@login_required
-def admin_customize():
-    data = request.json
-    client_id = data.get('client_id')
-    
-    # Get remove_branding value (only for Agency/Enterprise)
-    remove_branding = 0
-    if current_user.plan_type in ['agency', 'enterprise']:
-        remove_branding = 1 if data.get('remove_branding') else 0
-    
-    # Update database
-    conn = models.get_db_connection()
-    conn.execute('''
-        UPDATE clients 
-        SET 
-            company_name = ?,
-            widget_color = ?,
-            welcome_message = ?,
-            remove_branding = ?
-        WHERE client_id = ? AND user_id = ?
-    ''', (
-        data['branding']['company_name'],
-        data['branding']['primary_color'],
-        data['bot_settings']['welcome_message'],
-        remove_branding,  # NEW
-        client_id,
-        current_user.id
-    ))
-    conn.commit()
-    conn.close()
-    
-    return jsonify({'success': True})
+        return jsonify({'success': False, 'error': 'Failed to save customization'}), 500
 
 @app.route('/analytics')
 @login_required
