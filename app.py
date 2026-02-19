@@ -13,7 +13,9 @@ import shutil
 from datetime import datetime, timedelta
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from functools import wraps
-import sqlite3
+# sqlite3 is no longer used after migrating to PostgreSQL
+# import sqlite3
+
 import models
 import requests
 import uuid
@@ -107,7 +109,12 @@ def load_user(user_id):
 # Initialize database on startup
 try:
     models.init_db()
-    print("✅ Database initialized successfully!")
+    # ensure any schema changes are applied
+    if hasattr(models, 'migrate_clients_table'):
+        models.migrate_clients_table()
+    if hasattr(models, 'migrate_faqs_table'):
+        models.migrate_faqs_table()
+    print("✅ Database initialized/migrated successfully!")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
 
@@ -260,18 +267,12 @@ def find_best_match(user_query, faqs_list, confidence_threshold=0.15):
 def notify_webhook(client_id, lead_data):
     """Send lead data to client's configured webhook (Zapier/Make)"""
     try:
-        conn = sqlite3.connect('chatbot.db')
-        cursor = conn.cursor()
-
-        # Get client's webhook URL (store this in branding_settings)
-        cursor.execute("SELECT branding_settings FROM clients WHERE client_id = ?", (client_id,))
-        row = cursor.fetchone()
-        conn.close()
-
-        if not row:
+        # use models helper to fetch client record from PostgreSQL
+        client = models.get_client_by_id(client_id)
+        if not client:
             return
 
-        config = json.loads(row[0]) if row[0] else {}
+        config = json.loads(client.get('branding_settings') or '{}')
         webhook_url = config.get('integrations', {}).get('webhook_url')
 
         if not webhook_url:
@@ -536,36 +537,35 @@ def match_faq(message, faqs, lead_triggers):
 
 
 def log_conversation(client_id, user_message, bot_response, matched=False, method='unknown'):
-    """Log conversation to database for analytics"""
+    """Log conversation to database for analytics (PostgreSQL)."""
     try:
-        # ✅ Direct connection
-        conn = sqlite3.connect('chatbot.db')
-        cursor = conn.cursor()
-        
-        # Create conversations table if it doesn't exist
+        conn, cursor = models.get_db()
+        # Create conversations table if it doesn't exist (Postgres syntax)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS conversations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 client_id TEXT NOT NULL,
                 user_message TEXT NOT NULL,
                 bot_response TEXT NOT NULL,
-                matched BOOLEAN DEFAULT 0,
+                matched BOOLEAN DEFAULT FALSE,
                 method TEXT,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
-        # Insert conversation
-        cursor.execute('''
+
+        cursor.execute(
+            '''
             INSERT INTO conversations (client_id, user_message, bot_response, matched, method)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (client_id, user_message, bot_response, matched, method))
-        
+            VALUES (%s, %s, %s, %s, %s)
+            ''',
+            (client_id, user_message, bot_response, matched, method)
+        )
+
         conn.commit()
+        cursor.close()
         conn.close()
-        
+
         app.logger.info(f'✅ Logged conversation for {client_id}')
-        
     except Exception as e:
         app.logger.error(f'❌ Error logging conversation: {e}')
 
@@ -1385,8 +1385,7 @@ def get_analytics():
     try:
         client_id = request.args.get('client_id', 'demo')
         date_range = request.args.get('range', 'week')
-        
-        # Calculate date range
+        # calculate date range
         now = datetime.now()
         if date_range == 'today':
             start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1394,111 +1393,96 @@ def get_analytics():
             start_date = now - timedelta(days=7)
         elif date_range == 'month':
             start_date = now - timedelta(days=30)
-        else:  # all
+        else:
             start_date = datetime(2020, 1, 1)
-        
-        # ✅ FIXED: Direct database connection
-        conn = sqlite3.connect('chatbot.db')
-        cursor = conn.cursor()
-        
-        # Count total conversations (if table exists)
-        try:
-            cursor.execute('''
-                SELECT COUNT(*) FROM conversations 
-                WHERE client_id = ? AND timestamp >= ?
-            ''', (client_id, start_date.isoformat()))
-            total_conversations = cursor.fetchone()[0]
-        except sqlite3.OperationalError:
-            # Table doesn't exist yet
-            total_conversations = 0
-        
-        # Count answered vs unanswered
-        try:
-            cursor.execute('''
-                SELECT COUNT(*) FROM conversations 
-                WHERE client_id = ? AND timestamp >= ? AND matched = 1
-            ''', (client_id, start_date.isoformat()))
-            answered = cursor.fetchone()[0]
-        except sqlite3.OperationalError:
-            answered = 0
-            
+
+        conn, cursor = models.get_db()
+
+        # total conversations
+        cursor.execute(
+            '''
+            SELECT COUNT(*) FROM conversations
+            WHERE client_id = %s AND timestamp >= %s
+            ''', (client_id, start_date)
+        )
+        total_conversations = cursor.fetchone()[0]
+
+        # answered vs unanswered
+        cursor.execute(
+            '''
+            SELECT COUNT(*) FROM conversations
+            WHERE client_id = %s AND timestamp >= %s AND matched = TRUE
+            ''', (client_id, start_date)
+        )
+        answered = cursor.fetchone()[0]
         unanswered = total_conversations - answered
         answer_rate = int((answered / total_conversations * 100)) if total_conversations > 0 else 0
-        
-        # Count total leads
-        cursor.execute('''
-            SELECT COUNT(*) FROM leads 
-            WHERE client_id = ? AND created_at >= ?
-        ''', (client_id, start_date.isoformat()))
+
+        # total leads
+        cursor.execute(
+            '''
+            SELECT COUNT(*) FROM leads
+            WHERE client_id = %s AND created_at >= %s
+            ''', (client_id, start_date)
+        )
         total_leads = cursor.fetchone()[0]
-        
-        # Timeline data (last 7 days)
+
+        # timeline for last 7 days
         timeline = []
         for i in range(7):
-            date = (now - timedelta(days=6-i))
+            date = (now - timedelta(days=6 - i))
             date_str = date.strftime('%Y-%m-%d')
-            
-            # Count conversations for this day
-            try:
-                cursor.execute('''
-                    SELECT COUNT(*) FROM conversations
-                    WHERE client_id = ? AND DATE(timestamp) = DATE(?)
-                ''', (client_id, date_str))
-                conv_count = cursor.fetchone()[0]
-            except sqlite3.OperationalError:
-                conv_count = 0
-            
-            # Count leads for this day
-            cursor.execute('''
+            cursor.execute(
+                '''
+                SELECT COUNT(*) FROM conversations
+                WHERE client_id = %s AND DATE(timestamp) = %s
+                ''', (client_id, date_str)
+            )
+            conv_count = cursor.fetchone()[0]
+
+            cursor.execute(
+                '''
                 SELECT COUNT(*) FROM leads
-                WHERE client_id = ? AND DATE(created_at) = DATE(?)
-            ''', (client_id, date_str))
+                WHERE client_id = %s AND DATE(created_at) = %s
+                ''', (client_id, date_str)
+            )
             lead_count = cursor.fetchone()[0]
-            
+
             timeline.append({
                 'date': date_str,
                 'count': conv_count,
                 'leads': lead_count
             })
-        
-        # Top questions
-        try:
-            cursor.execute('''
-                SELECT user_message, COUNT(*) as count
-                FROM conversations
-                WHERE client_id = ? AND timestamp >= ? AND matched = 1
-                GROUP BY user_message
-                ORDER BY count DESC
-                LIMIT 10
-            ''', (client_id, start_date.isoformat()))
-            
-            top_questions = [
-                {'question': row[0], 'count': row[1]}
-                for row in cursor.fetchall()
-            ]
-        except sqlite3.OperationalError:
-            top_questions = []
-        
-        # Unanswered questions
-        try:
-            cursor.execute('''
-                SELECT user_message, COUNT(*) as count
-                FROM conversations
-                WHERE client_id = ? AND timestamp >= ? AND matched = 0
-                GROUP BY user_message
-                ORDER BY count DESC
-                LIMIT 10
-            ''', (client_id, start_date.isoformat()))
-            
-            unanswered_questions = [
-                {'question': row[0], 'count': row[1]}
-                for row in cursor.fetchall()
-            ]
-        except sqlite3.OperationalError:
-            unanswered_questions = []
-        
+
+        # top questions (matched)
+        cursor.execute(
+            '''
+            SELECT user_message, COUNT(*) as count
+            FROM conversations
+            WHERE client_id = %s AND timestamp >= %s AND matched = TRUE
+            GROUP BY user_message
+            ORDER BY count DESC
+            LIMIT 10
+            ''', (client_id, start_date)
+        )
+        top_questions = [{'question': r[0], 'count': r[1]} for r in cursor.fetchall()]
+
+        # unanswered questions
+        cursor.execute(
+            '''
+            SELECT user_message, COUNT(*) as count
+            FROM conversations
+            WHERE client_id = %s AND timestamp >= %s AND matched = FALSE
+            GROUP BY user_message
+            ORDER BY count DESC
+            LIMIT 10
+            ''', (client_id, start_date)
+        )
+        unanswered_questions = [{'question': r[0], 'count': r[1]} for r in cursor.fetchall()]
+
+        cursor.close()
         conn.close()
-        
+
         return jsonify({
             'success': True,
             'analytics': {
@@ -1668,30 +1652,32 @@ def upload_faqs():
                 'error': 'No FAQs found in file. Please check the format.'
             }), 400
         
-        # Save FAQs to database
-        conn = sqlite3.connect('chatbot.db')
-        cursor = conn.cursor()
-        
+        # Save FAQs to PostgreSQL via models
+        conn, cursor = models.get_db()
         saved_count = 0
         for faq in faqs:
             try:
-                cursor.execute('''
-                    INSERT INTO faqs (faq_id, client_id, question, answer, category, triggers)
-                     VALUES (?, ?, ?, ?, ?, ?)
-                ''', (
-                    str(__import__('uuid').uuid4()),
-                    client_id,
-                    faq['question'],
-                    faq['answer'],
-                    faq.get('category', 'General'),
-                    json.dumps(faq.get('triggers', []))
-                ))
+                faq_id = str(uuid.uuid4())
+                cursor.execute(
+                    '''
+                    INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ''',
+                    (
+                        client_id,
+                        faq_id,
+                        faq['question'],
+                        faq['answer'],
+                        faq.get('category', 'General'),
+                        json.dumps(faq.get('triggers', []))
+                    )
+                )
                 saved_count += 1
             except Exception as e:
-                app.logger.error(f'Error saving FAQ: {e}')
+                app.logger.error(f'Error saving FAQ during upload: {e}')
                 continue
-        
         conn.commit()
+        cursor.close()
         conn.close()
         
         return jsonify({
@@ -1997,12 +1983,13 @@ def paypal_success():
             plan = pending_payment['plan']
             
             # Update user's plan in database
-            conn = models.get_db_connection()
-            conn.execute(
-                'UPDATE users SET plan = ?, upgraded_at = datetime("now") WHERE id = ?',
+            conn, cursor = models.get_db()
+            cursor.execute(
+                'UPDATE users SET plan_type = %s, upgraded_at = CURRENT_TIMESTAMP WHERE id = %s',
                 (plan, current_user.id)
             )
             conn.commit()
+            cursor.close()
             conn.close()
             
             # Clear session
@@ -2038,29 +2025,9 @@ def webhook_new_lead():
         data = request.json
         client_id = data.get('client_id')
 
-        # Get latest leads for this client
-        conn = sqlite3.connect('chatbot.db')
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT name, email, phone, company, created_at
-            FROM leads
-            WHERE client_id = ?
-            ORDER BY created_at DESC
-            LIMIT 10
-        ''', (client_id,))
-
-        leads = [
-            {
-                'name': row[0],
-                'email': row[1],
-                'phone': row[2],
-                'company': row[3],
-                'created_at': row[4]
-            }
-            for row in cursor.fetchall()
-        ]
-        conn.close()
-
+        leads = models.get_leads(client_id)
+        # only return latest 10
+        leads = leads[:10]
         return jsonify({'success': True, 'leads': leads})
 
     except Exception as e:
@@ -2086,9 +2053,7 @@ def webhook_faq_import():
         if not client_id or not incoming_faqs:
             return jsonify({'error': 'client_id and faqs required'}), 400
 
-        # Save each FAQ
-        conn = sqlite3.connect('chatbot.db')
-        cursor = conn.cursor()
+        conn, cursor = models.get_db()
         saved = 0
 
         for faq in incoming_faqs:
@@ -2101,13 +2066,24 @@ def webhook_faq_import():
             # Auto-generate triggers from question keywords
             triggers = extract_keywords(question)
 
-            cursor.execute('''
-                INSERT INTO faqs (client_id, question, answer, triggers)
-                VALUES (?, ?, ?, ?)
-            ''', (client_id, question, answer, json.dumps(triggers)))
+            cursor.execute(
+                '''
+                INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ''',
+                (
+                    client_id,
+                    str(uuid.uuid4()),
+                    question,
+                    answer,
+                    faq.get('category', 'General') if isinstance(faq, dict) else 'General',
+                    json.dumps(triggers)
+                )
+            )
             saved += 1
 
         conn.commit()
+        cursor.close()
         conn.close()
 
         return jsonify({

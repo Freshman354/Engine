@@ -100,16 +100,18 @@ def migrate_faqs():
     count = 0
     for faq in faqs:
         try:
+            # SQLite may or may not have a category column; default to 'General'
+            category = faq.get('category', 'General') if isinstance(faq, dict) else 'General'
             pg_cursor.execute(
-                '''INSERT INTO faqs (id, client_id, faq_id, question, answer, triggers, created_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s)
+                '''INSERT INTO faqs (id, client_id, faq_id, question, answer, category, triggers, created_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT DO NOTHING''',
                 (faq['id'], faq['client_id'], faq['faq_id'],
-                 faq['question'], faq['answer'], faq['triggers'], faq['created_at'])
+                 faq['question'], faq['answer'], category, faq['triggers'], faq['created_at'])
             )
             count += 1
         except Exception as e:
-            print(f"  ⚠️ Skipped FAQ {faq['faq_id']}: {e}")
+            print(f"  ⚠️ Skipped FAQ {faq.get('faq_id','?')}: {e}")
 
     print(f"  ✅ Migrated {count} FAQs")
 

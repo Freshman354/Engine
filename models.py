@@ -53,6 +53,7 @@ def init_db():
             faq_id TEXT NOT NULL,
             question TEXT NOT NULL,
             answer TEXT NOT NULL,
+            category TEXT DEFAULT 'General',
             triggers TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (client_id) REFERENCES clients (client_id)
@@ -208,7 +209,45 @@ def get_user_by_email(email):
     
     return dict(user) if user else None
 
+
+# === migrations ===
+
+def migrate_clients_table():
+    """One‑time schema migration for the clients table.
+
+    This is split out from `init_db` so that the application startup
+    doesn't block for several minutes while Postgres rewrites a large
+    table. Call this manually via a script or the admin route.
+    """
+    conn, cursor = get_db()
+    print("🔧 Running clients table migration...")
+    # Add any missing columns without rewriting the table if possible
+    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS widget_color TEXT")
+    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS welcome_message TEXT")
+    # BOOLEAN DEFAULT FALSE is safe on Postgres 11+, but may still take time
+    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS remove_branding BOOLEAN DEFAULT FALSE")
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("✅ Clients table migration complete")
+
+# new migration for faqs table
+
+def migrate_faqs_table():
+    """One‑time schema migration for the faqs table.
+
+    Adds a `category` column with default 'General' if it doesn't exist.
+    """
+    conn, cursor = get_db()
+    print("🔧 Running faqs table migration...")
+    cursor.execute("ALTER TABLE faqs ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'General'")
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("✅ FAQs table migration complete")
+
 # Client functions
+
 def create_client(user_id, company_name, branding_settings=None):
     """Create a new client for a user"""
     conn, cursor = get_db()
@@ -291,8 +330,15 @@ def save_faqs(client_id, faqs):
     
     for faq in faqs:
         cursor.execute(
-            'INSERT INTO faqs (client_id, faq_id, question, answer, triggers) VALUES (%s, %s, %s, %s, %s)',
-            (client_id, faq['id'], faq['question'], faq['answer'], json.dumps(faq['triggers']))
+            'INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers) VALUES (%s, %s, %s, %s, %s, %s)',
+            (
+                client_id,
+                faq['id'],
+                faq['question'],
+                faq['answer'],
+                faq.get('category', 'General'),
+                json.dumps(faq['triggers'])
+            )
         )
     
     conn.commit()
@@ -313,6 +359,7 @@ def get_faqs(client_id):
             'id': faq['faq_id'],
             'question': faq['question'],
             'answer': faq['answer'],
+            'category': faq.get('category', 'General'),
             'triggers': json.loads(faq['triggers'])
         }
         for faq in faqs
