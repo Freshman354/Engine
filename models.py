@@ -76,6 +76,20 @@ def init_db():
             FOREIGN KEY (client_id) REFERENCES clients (client_id)
         )
     ''')
+
+    # Conversations table (analytics)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS conversations (
+            id SERIAL PRIMARY KEY,
+            client_id TEXT NOT NULL,
+            user_message TEXT NOT NULL,
+            bot_response TEXT NOT NULL,
+            matched BOOLEAN DEFAULT FALSE,
+            method TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (client_id) REFERENCES clients (client_id)
+        )
+    ''')
     
     # Affiliates table
     cursor.execute('''

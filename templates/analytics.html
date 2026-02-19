@@ -192,6 +192,9 @@
         <div class="controls">
             <label for="client-select">Client:</label>
             <select id="client-select">
+                {% for c in clients %}
+                    <option value="{{ c.client_id }}">{{ c.company_name or c.client_id }}</option>
+                {% endfor %}
                 <option value="default">Default</option>
                 <option value="demo">Demo</option>
             </select>
@@ -263,8 +266,13 @@
         let conversationsChart = null;
         
         window.onload = function() {
+            // prefer server-provided value (comes from query param after access control)
+            let clientId = '{{ client_id or "demo" }}';
             const urlParams = new URLSearchParams(window.location.search);
-            const clientId = urlParams.get('client_id') || 'demo';
+            // override if query string explicitly specifies something else (e.g. refresh button)
+            if (urlParams.has('client_id')) {
+                clientId = urlParams.get('client_id');
+            }
             document.getElementById('client-select').value = clientId;
             loadAnalytics();
         };

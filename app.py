@@ -386,42 +386,6 @@ def backup_all_clients():
         app.logger.error(f'Backup all failed: {e}')
         return False
     
-def log_conversation(client_id, message, response, matched_faq_id=None):
-    """Log conversation for analytics"""
-    try:
-        log_dir = os.path.join('clients', client_id, 'analytics')
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
-        
-        # Use daily log files
-        today = datetime.now().strftime('%Y-%m-%d')
-        log_file = os.path.join(log_dir, f'conversations_{today}.json')
-        
-        # Load existing logs
-        if os.path.exists(log_file):
-            with open(log_file, 'r', encoding='utf-8') as f:
-                logs = json.load(f)
-        else:
-            logs = {'conversations': []}
-        
-        # Add new conversation
-        logs['conversations'].append({
-            'timestamp': datetime.now().isoformat(),
-            'user_message': message,
-            'bot_response': response[:200],  # Truncate long responses
-            'matched_faq': matched_faq_id,
-            'matched': matched_faq_id is not None
-        })
-        
-        # Save
-        with open(log_file, 'w', encoding='utf-8') as f:
-            json.dump(logs, f, indent=2)
-        
-        return True
-    except Exception as e:
-        app.logger.error(f'Error logging conversation: {e}')
-        return False   
-
 # =====================================================================
 # UTILITY FUNCTIONS
 # =====================================================================
@@ -1313,15 +1277,15 @@ def save_customization():
 @login_required
 def analytics_page():
     """Analytics dashboard page"""
+    # ensure current user owns the client (query param must be provided)
     client_id = request.args.get('client_id')
-    
     if not client_id or not models.verify_client_ownership(current_user.id, client_id):
         return "Unauthorized", 403
-    
+
     # Check if user plan has analytics access
     user = models.get_user_by_id(current_user.id)
     plan_limits = PLAN_LIMITS.get(user['plan_type'], PLAN_LIMITS['free'])
-    
+
     if not plan_limits['analytics']:
         return f'''
         <!DOCTYPE html>
@@ -1376,14 +1340,29 @@ def analytics_page():
         </body>
         </html>
         ''', 403
-    
-    return render_template('analytics.html')
+
+    # load all clients for the user and pass them to template so the
+    # dropdown can show real client IDs instead of only default/demo
+    clients = models.get_user_clients(current_user.id)
+    for c in clients:
+        if c.get('branding_settings'):
+            try:
+                c['branding_settings'] = json.loads(c['branding_settings'])
+            except Exception:
+                c['branding_settings'] = {}
+
+    return render_template('analytics.html', clients=clients, client_id=client_id)
 
 @app.route('/api/admin/analytics', methods=['GET'])
+@login_required
 def get_analytics():
-    """Get analytics data for a client"""
+    """Get analytics data for a client. Only accessible by the client owner."""
     try:
         client_id = request.args.get('client_id', 'demo')
+        # verify ownership before doing any expensive queries
+        if not models.verify_client_ownership(current_user.id, client_id):
+            return jsonify({'success': False, 'error': 'unauthorized'}), 403
+
         date_range = request.args.get('range', 'week')
         # calculate date range
         now = datetime.now()
@@ -1397,6 +1376,19 @@ def get_analytics():
             start_date = datetime(2020, 1, 1)
 
         conn, cursor = models.get_db()
+
+        # make sure the conversations table exists (init_db may not have been run yet)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS conversations (
+                id SERIAL PRIMARY KEY,
+                client_id TEXT NOT NULL,
+                user_message TEXT NOT NULL,
+                bot_response TEXT NOT NULL,
+                matched BOOLEAN DEFAULT FALSE,
+                method TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
 
         # total conversations
         cursor.execute(
