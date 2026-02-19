@@ -6,4 +6,8 @@ bcrypt
 psycopg2-binary
 gunicorn
 requests
-python-dotenv
+python-dotenv 
+paypalrestsdk 
+pandas 
+PyPDF2
+flask-limiter
