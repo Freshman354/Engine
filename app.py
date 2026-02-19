@@ -1503,52 +1503,6 @@ def get_analytics():
             'error': str(e)
         }), 500
 
-# ------------------- leads API endpoint ------------------
-@app.route('/api/admin/leads', methods=['GET'])
-@login_required
-def api_get_leads():
-    """Return leads data for a client (JSON)."""
-    try:
-        client_id = request.args.get('client_id', 'demo')
-        if not models.verify_client_ownership(current_user.id, client_id):
-            return jsonify({'success': False, 'error': 'unauthorized'}), 403
-
-        date_range = request.args.get('range', 'week')
-        now = datetime.now()
-        if date_range == 'today':
-            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        elif date_range == 'week':
-            start_date = now - timedelta(days=7)
-        elif date_range == 'month':
-            start_date = now - timedelta(days=30)
-        else:
-            start_date = datetime(2020, 1, 1)
-
-        conn, cursor = models.get_db()
-        cursor.execute(
-            '''
-            SELECT * FROM leads
-            WHERE client_id = %s AND created_at >= %s
-            ORDER BY created_at DESC
-            ''', (client_id, start_date)
-        )
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        # Convert to plain dicts and serialize dates
-        leads = []
-        for r in rows:
-            lead = dict(r)
-            if isinstance(lead.get('created_at'), datetime):
-                lead['created_at'] = lead['created_at'].isoformat()
-            leads.append(lead)
-        return jsonify({'success': True, 'leads': leads})
-    except Exception as e:
-        app.logger.error(f'Error getting leads: {e}')
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
 @app.route('/sales')
 def sales_page():
     return render_template('sales-page.html')
