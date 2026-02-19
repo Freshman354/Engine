@@ -60,12 +60,23 @@ def migrate_clients():
     count = 0
     for client in clients:
         try:
+            # derive new columns from the JSON if possible
+            branding = {}
+            try:
+                branding = json.loads(client['branding_settings'] or '{}')
+            except Exception:
+                branding = {}
+            primary = branding.get('branding', {}).get('primary_color')
+            welcome = branding.get('bot_settings', {}).get('welcome_message')
+            remove = branding.get('branding', {}).get('remove_branding', 0)
+
             pg_cursor.execute(
-                '''INSERT INTO clients (id, user_id, client_id, company_name, branding_settings, created_at)
-                   VALUES (%s, %s, %s, %s, %s, %s)
+                '''INSERT INTO clients (id, user_id, client_id, company_name, branding_settings, widget_color, welcome_message, remove_branding, created_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT (client_id) DO NOTHING''',
                 (client['id'], client['user_id'], client['client_id'],
-                 client['company_name'], client['branding_settings'], client['created_at'])
+                 client['company_name'], client['branding_settings'],
+                 primary, welcome, remove, client['created_at'])
             )
             count += 1
         except Exception as e:

@@ -37,10 +37,17 @@ def init_db():
             client_id TEXT UNIQUE NOT NULL,
             company_name TEXT NOT NULL,
             branding_settings TEXT,
+            widget_color TEXT,
+            welcome_message TEXT,
+            remove_branding BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
+    # make sure older installations get the new columns too
+    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS widget_color TEXT")
+    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS welcome_message TEXT")
+    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS remove_branding BOOLEAN DEFAULT FALSE")
     
     # FAQs table
     cursor.execute('''
@@ -203,9 +210,15 @@ def create_client(user_id, company_name, branding_settings=None):
             "welcome_message": "Hi! How can I help you today?"
         }
     
+    # derive column values from the branding_settings JSON
+    primary_color = branding_settings.get('branding', {}).get('primary_color')
+    welcome_msg = branding_settings.get('bot_settings', {}).get('welcome_message')
+    remove_flag = branding_settings.get('branding', {}).get('remove_branding', 0)
+
     cursor.execute(
-        'INSERT INTO clients (user_id, client_id, company_name, branding_settings) VALUES (%s, %s, %s, %s)',
-        (user_id, client_id, company_name, json.dumps(branding_settings))
+        '''INSERT INTO clients (user_id, client_id, company_name, branding_settings, widget_color, welcome_message, remove_branding)
+           VALUES (%s, %s, %s, %s, %s, %s, %s)''',
+        (user_id, client_id, company_name, json.dumps(branding_settings), primary_color, welcome_msg, remove_flag)
     )
     
     conn.commit()

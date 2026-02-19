@@ -1283,11 +1283,17 @@ def save_customization():
             UPDATE clients 
             SET 
                 branding_settings = %s,
-                company_name = %s
+                company_name = %s,
+                widget_color = %s,
+                welcome_message = %s,
+                remove_branding = %s
             WHERE client_id = %s AND user_id = %s
             ''', (
                 json.dumps(branding_settings),
                 data.get('branding', {}).get('company_name'),
+                data.get('branding', {}).get('primary_color'),
+                data.get('bot_settings', {}).get('welcome_message'),
+                remove_branding,
                 client_id,
                 current_user.id
             ))
