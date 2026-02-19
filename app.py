@@ -1083,14 +1083,27 @@ def widget():
     client = models.get_client_by_id(client_id)
     
     if not client:
-        # Create default client object if not found
         client = {
             'client_id': 'demo',
             'company_name': 'Demo Company',
             'widget_color': '#667eea',
+            'bot_name': 'Team Support',
             'welcome_message': 'Hi! How can I help you today?',
-            'remove_branding': 0  # Show branding by default
+            'remove_branding': 0
         }
+    else:
+        # ✅ Extract bot_name, colors etc from branding_settings JSON
+        client = dict(client)  # make it mutable
+        branding_settings = json.loads(client.get('branding_settings') or '{}')
+        
+        bot_settings = branding_settings.get('bot_settings', {})
+        branding = branding_settings.get('branding', {})
+        
+        # Merge into client dict so template can access them directly
+        client['bot_name'] = bot_settings.get('bot_name') or client.get('company_name') or 'Team Support'
+        client['welcome_message'] = bot_settings.get('welcome_message') or client.get('welcome_message') or 'Hi! How can I help you today?'
+        client['widget_color'] = branding.get('primary_color') or client.get('widget_color') or '#667eea'
+        client['remove_branding'] = branding.get('remove_branding', client.get('remove_branding', 0))
     
     return render_template('chat.html', client=client)
 
@@ -2239,6 +2252,12 @@ def init_db_production():
         <button type="submit">Initialize DB</button>
     </form>
     '''
+
+
+@app.route('/demo')
+def demo_page():
+    """Interactive demo page"""
+    return render_template('demo.html')
 
 # ==========================================
 # LEGAL PAGES

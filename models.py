@@ -1,26 +1,27 @@
-import sqlite3
+import psycopg2
+import psycopg2.extras
 import bcrypt
 import secrets
 from datetime import datetime
 import json
+import os
 
-DATABASE = 'chatbot.db'
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db():
     """Get database connection"""
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
+    conn = psycopg2.connect(DATABASE_URL)
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    return conn, cursor
 
 def init_db():
     """Initialize database with tables"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
     # Users table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -31,7 +32,7 @@ def init_db():
     # Clients table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS clients (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             client_id TEXT UNIQUE NOT NULL,
             company_name TEXT NOT NULL,
@@ -44,7 +45,7 @@ def init_db():
     # FAQs table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS faqs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             client_id TEXT NOT NULL,
             faq_id TEXT NOT NULL,
             question TEXT NOT NULL,
@@ -58,7 +59,7 @@ def init_db():
     # Leads table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS leads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             client_id TEXT NOT NULL,
             name TEXT NOT NULL,
             email TEXT NOT NULL,
@@ -72,12 +73,10 @@ def init_db():
         )
     ''')
     
-    # ... existing tables (users, clients, faqs, leads) ...
-    
     # Affiliates table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS affiliates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             user_id INTEGER NOT NULL,
             referral_code TEXT UNIQUE NOT NULL,
             commission_rate REAL DEFAULT 0.30,
@@ -92,10 +91,10 @@ def init_db():
         )
     ''')
     
-    # Referrals table (tracks who referred whom)
+    # Referrals table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS referrals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             affiliate_id INTEGER NOT NULL,
             referred_user_id INTEGER NOT NULL,
             referral_code TEXT NOT NULL,
@@ -107,10 +106,10 @@ def init_db():
         )
     ''')
     
-    # Commissions table (tracks each payment)
+    # Commissions table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS commissions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             affiliate_id INTEGER NOT NULL,
             referred_user_id INTEGER NOT NULL,
             amount REAL NOT NULL,
@@ -125,6 +124,7 @@ def init_db():
     ''')
 
     conn.commit()
+    cursor.close()
     conn.close()
     print("✅ Database initialized successfully!")
 
@@ -132,32 +132,31 @@ def init_db():
 def create_user(email, password, plan_type='starter'):
     """Create a new user"""
     try:
-        conn = get_db()
-        cursor = conn.cursor()
+        conn, cursor = get_db()
         
-        # Hash password
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         
         cursor.execute(
-            'INSERT INTO users (email, password_hash, plan_type) VALUES (?, ?, ?)',
+            'INSERT INTO users (email, password_hash, plan_type) VALUES (%s, %s, %s) RETURNING id',
             (email, password_hash, plan_type)
         )
         
-        user_id = cursor.lastrowid
+        user_id = cursor.fetchone()['id']
         conn.commit()
+        cursor.close()
         conn.close()
         
         return user_id
-    except sqlite3.IntegrityError:
+    except psycopg2.IntegrityError:
         return None  # Email already exists
 
 def verify_user(email, password):
     """Verify user credentials"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    cursor.execute('SELECT * FROM users WHERE email = ?', (email,))
+    cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
     user = cursor.fetchone()
+    cursor.close()
     conn.close()
     
     if user and bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
@@ -166,22 +165,22 @@ def verify_user(email, password):
 
 def get_user_by_id(user_id):
     """Get user by ID"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
+    cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))
     user = cursor.fetchone()
+    cursor.close()
     conn.close()
     
     return dict(user) if user else None
 
 def get_user_by_email(email):
     """Get user by email"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    cursor.execute('SELECT * FROM users WHERE email = ?', (email,))
+    cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
     user = cursor.fetchone()
+    cursor.close()
     conn.close()
     
     return dict(user) if user else None
@@ -189,13 +188,10 @@ def get_user_by_email(email):
 # Client functions
 def create_client(user_id, company_name, branding_settings=None):
     """Create a new client for a user"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    # Generate unique client_id
     client_id = f"{company_name.lower().replace(' ', '-')}-{secrets.token_hex(4)}"
     
-    # Default branding
     if branding_settings is None:
         branding_settings = {
             "company_name": company_name,
@@ -208,50 +204,51 @@ def create_client(user_id, company_name, branding_settings=None):
         }
     
     cursor.execute(
-        'INSERT INTO clients (user_id, client_id, company_name, branding_settings) VALUES (?, ?, ?, ?)',
+        'INSERT INTO clients (user_id, client_id, company_name, branding_settings) VALUES (%s, %s, %s, %s)',
         (user_id, client_id, company_name, json.dumps(branding_settings))
     )
     
     conn.commit()
+    cursor.close()
     conn.close()
     
     return client_id
 
 def get_user_clients(user_id):
     """Get all clients for a user"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    cursor.execute('SELECT * FROM clients WHERE user_id = ?', (user_id,))
+    cursor.execute('SELECT * FROM clients WHERE user_id = %s', (user_id,))
     clients = cursor.fetchall()
+    cursor.close()
     conn.close()
     
     return [dict(client) for client in clients]
 
 def get_client_by_id(client_id):
     """Get client by client_id"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    cursor.execute('SELECT * FROM clients WHERE client_id = ?', (client_id,))
+    cursor.execute('SELECT * FROM clients WHERE client_id = %s', (client_id,))
     client = cursor.fetchone()
+    cursor.close()
     conn.close()
     
     return dict(client) if client else None
 
 def get_db_connection():
-    """Get database connection"""
-    conn = sqlite3.connect('chatbot.db')
-    conn.row_factory = sqlite3.Row
+    """Get database connection (legacy alias)"""
+    conn = psycopg2.connect(DATABASE_URL)
+    conn.cursor_factory = psycopg2.extras.RealDictCursor
     return conn
 
 def verify_client_ownership(user_id, client_id):
     """Verify that a user owns a client"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    cursor.execute('SELECT * FROM clients WHERE client_id = ? AND user_id = ?', (client_id, user_id))
+    cursor.execute('SELECT * FROM clients WHERE client_id = %s AND user_id = %s', (client_id, user_id))
     client = cursor.fetchone()
+    cursor.close()
     conn.close()
     
     return client is not None
@@ -259,29 +256,27 @@ def verify_client_ownership(user_id, client_id):
 # FAQ functions
 def save_faqs(client_id, faqs):
     """Save FAQs for a client"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    # Delete existing FAQs
-    cursor.execute('DELETE FROM faqs WHERE client_id = ?', (client_id,))
+    cursor.execute('DELETE FROM faqs WHERE client_id = %s', (client_id,))
     
-    # Insert new FAQs
     for faq in faqs:
         cursor.execute(
-            'INSERT INTO faqs (client_id, faq_id, question, answer, triggers) VALUES (?, ?, ?, ?, ?)',
+            'INSERT INTO faqs (client_id, faq_id, question, answer, triggers) VALUES (%s, %s, %s, %s, %s)',
             (client_id, faq['id'], faq['question'], faq['answer'], json.dumps(faq['triggers']))
         )
     
     conn.commit()
+    cursor.close()
     conn.close()
 
 def get_faqs(client_id):
     """Get all FAQs for a client"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    cursor.execute('SELECT * FROM faqs WHERE client_id = ?', (client_id,))
+    cursor.execute('SELECT * FROM faqs WHERE client_id = %s', (client_id,))
     faqs = cursor.fetchall()
+    cursor.close()
     conn.close()
     
     return [
@@ -297,12 +292,11 @@ def get_faqs(client_id):
 # Lead functions
 def save_lead(client_id, lead_data):
     """Save a lead for a client"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
     cursor.execute(
         '''INSERT INTO leads (client_id, name, email, phone, company, message, conversation_snippet, source_url)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
         (
             client_id,
             lead_data['name'],
@@ -316,40 +310,37 @@ def save_lead(client_id, lead_data):
     )
     
     conn.commit()
+    cursor.close()
     conn.close()
 
 def get_leads(client_id):
     """Get all leads for a client"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    cursor.execute('SELECT * FROM leads WHERE client_id = ? ORDER BY created_at DESC', (client_id,))
+    cursor.execute('SELECT * FROM leads WHERE client_id = %s ORDER BY created_at DESC', (client_id,))
     leads = cursor.fetchall()
+    cursor.close()
     conn.close()
     
     return [dict(lead) for lead in leads]
 
-
 # Affiliate functions
 def create_affiliate(user_id, payment_email, commission_rate=0.30):
     """Create affiliate account for a user"""
-    import secrets
+    conn, cursor = get_db()
     
-    conn = get_db()
-    cursor = conn.cursor()
-    
-    # Generate unique referral code
     referral_code = f"{secrets.token_hex(4).upper()}"
     
     try:
         cursor.execute(
             '''INSERT INTO affiliates (user_id, referral_code, commission_rate, payment_email)
-               VALUES (?, ?, ?, ?)''',
+               VALUES (%s, %s, %s, %s) RETURNING id''',
             (user_id, referral_code, commission_rate, payment_email)
         )
         
-        affiliate_id = cursor.lastrowid
+        affiliate_id = cursor.fetchone()['id']
         conn.commit()
+        cursor.close()
         conn.close()
         
         return {
@@ -357,123 +348,114 @@ def create_affiliate(user_id, payment_email, commission_rate=0.30):
             'referral_code': referral_code,
             'commission_rate': commission_rate
         }
-    except sqlite3.IntegrityError:
+    except psycopg2.IntegrityError:
+        cursor.close()
         conn.close()
         return None
 
 def get_affiliate_by_user_id(user_id):
     """Get affiliate account by user ID"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    cursor.execute('SELECT * FROM affiliates WHERE user_id = ?', (user_id,))
+    cursor.execute('SELECT * FROM affiliates WHERE user_id = %s', (user_id,))
     affiliate = cursor.fetchone()
+    cursor.close()
     conn.close()
     
     return dict(affiliate) if affiliate else None
 
 def get_affiliate_by_code(referral_code):
     """Get affiliate by referral code"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    cursor.execute('SELECT * FROM affiliates WHERE referral_code = ?', (referral_code,))
+    cursor.execute('SELECT * FROM affiliates WHERE referral_code = %s', (referral_code,))
     affiliate = cursor.fetchone()
+    cursor.close()
     conn.close()
     
     return dict(affiliate) if affiliate else None
 
 def create_referral(affiliate_id, referred_user_id, referral_code):
     """Track a new referral"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
     cursor.execute(
         '''INSERT INTO referrals (affiliate_id, referred_user_id, referral_code, status)
-           VALUES (?, ?, ?, ?)''',
+           VALUES (%s, %s, %s, %s)''',
         (affiliate_id, referred_user_id, referral_code, 'pending')
     )
     
-    # Update total referrals count
     cursor.execute(
-        'UPDATE affiliates SET total_referrals = total_referrals + 1 WHERE id = ?',
+        'UPDATE affiliates SET total_referrals = total_referrals + 1 WHERE id = %s',
         (affiliate_id,)
     )
     
     conn.commit()
+    cursor.close()
     conn.close()
 
 def create_commission(affiliate_id, referred_user_id, subscription_amount, plan_type):
     """Create commission record when referred user pays"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    # Get affiliate's commission rate
-    cursor.execute('SELECT commission_rate FROM affiliates WHERE id = ?', (affiliate_id,))
+    cursor.execute('SELECT commission_rate FROM affiliates WHERE id = %s', (affiliate_id,))
     result = cursor.fetchone()
     commission_rate = result['commission_rate'] if result else 0.30
     
-    # Calculate commission
     commission_amount = subscription_amount * commission_rate
     
-    # Create commission record
     cursor.execute(
         '''INSERT INTO commissions (affiliate_id, referred_user_id, amount, subscription_amount, plan_type, status)
-           VALUES (?, ?, ?, ?, ?, ?)''',
+           VALUES (%s, %s, %s, %s, %s, %s)''',
         (affiliate_id, referred_user_id, commission_amount, subscription_amount, plan_type, 'pending')
     )
     
-    # Update affiliate's total earnings
     cursor.execute(
-        'UPDATE affiliates SET total_earnings = total_earnings + ? WHERE id = ?',
+        'UPDATE affiliates SET total_earnings = total_earnings + %s WHERE id = %s',
         (commission_amount, affiliate_id)
     )
     
-    # Mark referral as converted
     cursor.execute(
         '''UPDATE referrals SET status = 'converted', converted_at = CURRENT_TIMESTAMP
-           WHERE affiliate_id = ? AND referred_user_id = ?''',
+           WHERE affiliate_id = %s AND referred_user_id = %s''',
         (affiliate_id, referred_user_id)
     )
     
     conn.commit()
+    cursor.close()
     conn.close()
 
 def get_affiliate_stats(affiliate_id):
     """Get affiliate's statistics"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
-    # Get basic stats
-    cursor.execute('SELECT * FROM affiliates WHERE id = ?', (affiliate_id,))
+    cursor.execute('SELECT * FROM affiliates WHERE id = %s', (affiliate_id,))
     affiliate = dict(cursor.fetchone())
     
-    # Get referral count by status
     cursor.execute(
         '''SELECT status, COUNT(*) as count FROM referrals 
-           WHERE affiliate_id = ? GROUP BY status''',
+           WHERE affiliate_id = %s GROUP BY status''',
         (affiliate_id,)
     )
     referral_stats = {row['status']: row['count'] for row in cursor.fetchall()}
     
-    # Get pending commissions
     cursor.execute(
         '''SELECT SUM(amount) as pending FROM commissions 
-           WHERE affiliate_id = ? AND status = 'pending' ''',
+           WHERE affiliate_id = %s AND status = 'pending' ''',
         (affiliate_id,)
     )
     pending_result = cursor.fetchone()
     pending_earnings = pending_result['pending'] if pending_result['pending'] else 0
     
-    # Get paid commissions
     cursor.execute(
         '''SELECT SUM(amount) as paid FROM commissions 
-           WHERE affiliate_id = ? AND status = 'paid' ''',
+           WHERE affiliate_id = %s AND status = 'paid' ''',
         (affiliate_id,)
     )
     paid_result = cursor.fetchone()
     paid_earnings = paid_result['paid'] if paid_result['paid'] else 0
     
+    cursor.close()
     conn.close()
     
     return {
@@ -486,22 +468,22 @@ def get_affiliate_stats(affiliate_id):
 
 def get_affiliate_commissions(affiliate_id):
     """Get all commissions for an affiliate"""
-    conn = get_db()
-    cursor = conn.cursor()
+    conn, cursor = get_db()
     
     cursor.execute(
         '''SELECT c.*, u.email as referred_email 
            FROM commissions c
            JOIN users u ON c.referred_user_id = u.id
-           WHERE c.affiliate_id = ?
+           WHERE c.affiliate_id = %s
            ORDER BY c.created_at DESC''',
         (affiliate_id,)
     )
     
     commissions = [dict(row) for row in cursor.fetchall()]
+    cursor.close()
     conn.close()
     
-    return commissions    
+    return commissions
 
 if __name__ == '__main__':
     init_db()
