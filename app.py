@@ -1284,7 +1284,7 @@ def save_customization():
                 widget_color = %s,
                 welcome_message = %s,
                 remove_branding = %s
-                WHERE client_id = %s AND user_id = %s
+            WHERE client_id = %s AND user_id = %s
             ''', (
                 json.dumps(branding_settings),
                 data.get('branding', {}).get('company_name'),
@@ -1876,19 +1876,6 @@ def parse_structured_faq_text(text):
     return faqs
 
 
-def extract_keywords(text):
-    """Extract keywords from text for triggers"""
-    import re
-    
-    # Remove common words
-    stop_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'what', 'how', 'when', 'where', 'who', 'why', 'do', 'does', 'did', 'can', 'could', 'would', 'should'}
-    
-    # Extract words
-    words = re.findall(r'\b\w+\b', text.lower())
-    keywords = [w for w in words if len(w) > 3 and w not in stop_words]
-    
-    # Return unique keywords (max 10)
-    return list(set(keywords))[:10]
 
 @app.route('/upgrade')
 @login_required
