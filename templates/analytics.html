@@ -145,6 +145,65 @@
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
         
+        /* leads table styling (copied from admin.html) */
+        .leads-section {
+            background: white;
+            padding: 32px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            margin-bottom: 24px;
+        }
+        .leads-section h2 {
+            font-size: 18px;
+            color: #1f2937;
+            margin-bottom: 16px;
+            font-weight: 600;
+            display: inline-block;
+            margin-right: 12px;
+        }
+        .leads-section button {
+            padding: 6px 12px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            font-size: 14px;
+            margin-right: 8px;
+        }
+        .leads-section button:hover { background: #5568d3; }
+        .leads-table {
+            overflow-x: auto;
+        }
+        .leads-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .leads-table th {
+            background: #f9fafb;
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 12px;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        .leads-table td {
+            padding: 16px;
+            border-bottom: 1px solid #e5e7eb;
+            color: #374151;
+        }
+        .leads-table tr:hover { background: #f9fafb; }
+        .email { color: #667eea; text-decoration: none; }
+        .email:hover { text-decoration: underline; }
+        .timestamp { color: #6b7280; font-size: 13px; }
+        .no-leads { text-align: center; padding: 60px; color: #6b7280; }
+        .loading { text-align: center; padding: 60px; color: #6b7280; }
+        
         .question-item {
             padding: 16px;
             border-bottom: 1px solid #e5e7eb;
@@ -260,6 +319,31 @@
                 <div class="loading">Loading...</div>
             </div>
         </div>
+
+        <!-- Leads section added to analytics -->
+        <div class="leads-section" style="margin-top: 24px;">
+            <h2>📥 Leads</h2>
+            <button id="exportLeadsBtn" onclick="exportLeadsCSV()">Export CSV</button>
+            <div class="leads-table" style="margin-top: 16px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Company</th>
+                            <th>Message</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leads-tbody">
+                        <tr>
+                            <td colspan="6" class="loading">Loading leads...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
     
     <script>
@@ -302,6 +386,9 @@
             } catch (error) {
                 console.error('Error loading analytics:', error);
             }
+
+            // always load leads after analytics
+            loadLeads(clientId, dateRange);
         }
         
         function updateStats(analytics) {
@@ -387,6 +474,78 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        // --- leads support --------------------------------------------------
+        let currentLeads = [];
+
+        async function loadLeads(clientId, dateRange) {
+            try {
+                const resp = await fetch(`/api/admin/leads?client_id=${clientId}&range=${dateRange}`);
+                const data = await resp.json();
+                if (data.success) {
+                    currentLeads = data.leads;
+                    renderLeads(currentLeads);
+                    updateLeadStats(currentLeads);
+                } else {
+                    document.getElementById('leads-tbody').innerHTML =
+                        '<tr><td colspan="6" class="no-leads">Error loading leads</td></tr>';
+                }
+            } catch (e) {
+                console.error('Error loading leads', e);
+                document.getElementById('leads-tbody').innerHTML =
+                    '<tr><td colspan="6" class="no-leads">Error loading leads</td></tr>';
+            }
+        }
+
+        function renderLeads(leads) {
+            const tbody = document.getElementById('leads-tbody');
+            if (leads.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="no-leads">No leads yet.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = leads.map(lead => `
+                <tr>
+                    <td><strong>${escapeHtml(lead.name)}</strong></td>
+                    <td><a href="mailto:${escapeHtml(lead.email)}" class="email">${escapeHtml(lead.email)}</a></td>
+                    <td>${escapeHtml(lead.phone || '-')}</td>
+                    <td>${escapeHtml(lead.company || '-')}</td>
+                    <td>${escapeHtml(lead.message || '-')}</td>
+                    <td class="timestamp">${formatDate(lead.created_at || lead.timestamp)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function updateLeadStats(leads) {
+            // could extend stats grid or ignore since analytics already shows total leads
+            // not used for now
+        }
+
+        function exportLeadsCSV() {
+            if (!currentLeads || currentLeads.length === 0) {
+                alert('No leads to export');
+                return;
+            }
+            const headers = ['Name','Email','Phone','Company','Message','Date'];
+            const rows = currentLeads.map(l => [
+                l.name,
+                l.email,
+                l.phone || '',
+                l.company || '',
+                l.message || '',
+                formatDate(l.created_at || l.timestamp)
+            ]);
+            let csv = headers.join(',') + '\n';
+            rows.forEach(r => {
+                csv += r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',') + '\n';
+            });
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `leads_${document.getElementById('client-select').value}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
         }
     </script>
 </body>
