@@ -482,14 +482,26 @@
         async function loadLeads(clientId, dateRange) {
             try {
                 const resp = await fetch(`/api/admin/leads?client_id=${clientId}&range=${dateRange}`);
-                const data = await resp.json();
+                if (!resp.ok) {
+                    const txt = await resp.text();
+                    console.error('leads fetch failed', resp.status, txt);
+                    throw new Error(`status ${resp.status}`);
+                }
+                const text = await resp.text();
+                let data;
+                try { data = JSON.parse(text); }
+                catch (parseErr) {
+                    console.error('failed to parse leads JSON', text);
+                    throw parseErr;
+                }
                 if (data.success) {
                     currentLeads = data.leads;
                     renderLeads(currentLeads);
                     updateLeadStats(currentLeads);
                 } else {
+                    console.error('leads endpoint error', data.error);
                     document.getElementById('leads-tbody').innerHTML =
-                        '<tr><td colspan="6" class="no-leads">Error loading leads</td></tr>';
+                        `<tr><td colspan="6" class="no-leads">Error loading leads${data.error ? ': ' + data.error : ''}</td></tr>`;
                 }
             } catch (e) {
                 console.error('Error loading leads', e);

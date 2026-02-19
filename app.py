@@ -1535,7 +1535,13 @@ def api_get_leads():
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
-        leads = [dict(r) for r in rows]
+        # Convert to plain dicts and serialize dates
+        leads = []
+        for r in rows:
+            lead = dict(r)
+            if isinstance(lead.get('created_at'), datetime):
+                lead['created_at'] = lead['created_at'].isoformat()
+            leads.append(lead)
         return jsonify({'success': True, 'leads': leads})
     except Exception as e:
         app.logger.error(f'Error getting leads: {e}')
