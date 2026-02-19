@@ -290,6 +290,14 @@
                     updateChart(data.analytics.timeline);
                     updateTopQuestions(data.analytics.top_questions);
                     updateUnansweredQuestions(data.analytics.unanswered);
+                } else {
+                    // show error message to user
+                    const container = document.querySelector('.container');
+                    const err = document.createElement('div');
+                    err.style.color = '#ef4444';
+                    err.style.margin = '20px 0';
+                    err.textContent = '⚠️ Failed to load analytics: ' + (data.error || 'unknown');
+                    container.insertBefore(err, container.firstChild);
                 }
             } catch (error) {
                 console.error('Error loading analytics:', error);

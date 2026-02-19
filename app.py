@@ -1390,34 +1390,37 @@ def get_analytics():
             )
         ''')
 
-        # total conversations
+        # total conversations (RealDictCursor returns a dict)
         cursor.execute(
             '''
-            SELECT COUNT(*) FROM conversations
+            SELECT COUNT(*) AS total FROM conversations
             WHERE client_id = %s AND timestamp >= %s
             ''', (client_id, start_date)
         )
-        total_conversations = cursor.fetchone()[0]
+        row = cursor.fetchone() or {}
+        total_conversations = row.get('total', 0)
 
         # answered vs unanswered
         cursor.execute(
             '''
-            SELECT COUNT(*) FROM conversations
+            SELECT COUNT(*) AS matched_count FROM conversations
             WHERE client_id = %s AND timestamp >= %s AND matched = TRUE
             ''', (client_id, start_date)
         )
-        answered = cursor.fetchone()[0]
+        row = cursor.fetchone() or {}
+        answered = row.get('matched_count', 0)
         unanswered = total_conversations - answered
         answer_rate = int((answered / total_conversations * 100)) if total_conversations > 0 else 0
 
         # total leads
         cursor.execute(
             '''
-            SELECT COUNT(*) FROM leads
+            SELECT COUNT(*) AS total_leads FROM leads
             WHERE client_id = %s AND created_at >= %s
             ''', (client_id, start_date)
         )
-        total_leads = cursor.fetchone()[0]
+        row = cursor.fetchone() or {}
+        total_leads = row.get('total_leads', 0)
 
         # timeline for last 7 days
         timeline = []
@@ -1426,19 +1429,21 @@ def get_analytics():
             date_str = date.strftime('%Y-%m-%d')
             cursor.execute(
                 '''
-                SELECT COUNT(*) FROM conversations
+                SELECT COUNT(*) AS daily_count FROM conversations
                 WHERE client_id = %s AND DATE(timestamp) = %s
                 ''', (client_id, date_str)
             )
-            conv_count = cursor.fetchone()[0]
+            row = cursor.fetchone() or {}
+            conv_count = row.get('daily_count', 0)
 
             cursor.execute(
                 '''
-                SELECT COUNT(*) FROM leads
+                SELECT COUNT(*) AS daily_leads FROM leads
                 WHERE client_id = %s AND DATE(created_at) = %s
                 ''', (client_id, date_str)
             )
-            lead_count = cursor.fetchone()[0]
+            row = cursor.fetchone() or {}
+            lead_count = row.get('daily_leads', 0)
 
             timeline.append({
                 'date': date_str,
@@ -1457,7 +1462,8 @@ def get_analytics():
             LIMIT 10
             ''', (client_id, start_date)
         )
-        top_questions = [{'question': r[0], 'count': r[1]} for r in cursor.fetchall()]
+        # RealDictCursor returns dicts, so just map keys
+        top_questions = [{'question': r['user_message'], 'count': r['count']} for r in cursor.fetchall()]
 
         # unanswered questions
         cursor.execute(
@@ -1470,7 +1476,7 @@ def get_analytics():
             LIMIT 10
             ''', (client_id, start_date)
         )
-        unanswered_questions = [{'question': r[0], 'count': r[1]} for r in cursor.fetchall()]
+        unanswered_questions = [{'question': r['user_message'], 'count': r['count']} for r in cursor.fetchall()]
 
         cursor.close()
         conn.close()

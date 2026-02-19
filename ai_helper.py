@@ -25,16 +25,15 @@ class AIHelper:
 
                 # Test it works
                 test_response = self.model.generate_content("Say 'OK'")
-                logger.info(f"✅ AI Helper initialized with {model_name}")
-                print(f"✅ Gemini initialized: {test_response.text[:50]}")
+                logger.info(f"AI Helper initialized with {model_name}")
+                # don't print emojis to console; they can cause encoding errors
+                logger.debug(f"Gemini test response: {test_response.text[:50]}")
 
             except Exception as e:
-                logger.error(f"❌ Failed to initialize Gemini: {e}")
-                print(f"❌ Gemini initialization error: {e}")
+                logger.error(f"Failed to initialize Gemini: {e}")
                 self.enabled = False
         else:
-            logger.warning("⚠️ AI Helper disabled - no API key provided")
-            print("⚠️ AI Helper disabled - no API key provided")
+            logger.warning("AI Helper disabled - no API key provided")
 
     def find_best_faq(self, user_message: str, faqs: List[Dict]) -> Tuple[Optional[Dict], float]:
         """Find the most relevant FAQ using AI understanding"""
