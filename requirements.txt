@@ -11,3 +11,4 @@ paypalrestsdk
 pandas 
 PyPDF2
 flask-limiter
+google-generativeai
