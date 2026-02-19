@@ -1275,25 +1275,27 @@ def save_customization():
 
         # ✅ Use get_db_connection() not get_db()
         conn = models.get_db_connection()
-        conn.execute('''
+        cursor = conn.cursor()  # ✅ psycopg2 needs an explicit cursor
+        cursor.execute('''
             UPDATE clients 
             SET 
-                branding_settings = ?,
-                company_name = ?,
-                widget_color = ?,
-                welcome_message = ?,
-                remove_branding = ?
-            WHERE client_id = ? AND user_id = ?
-        ''', (
-            json.dumps(branding_settings),
-            data.get('branding', {}).get('company_name'),
-            data.get('branding', {}).get('primary_color'),
-            data.get('bot_settings', {}).get('welcome_message'),
-            remove_branding,
-            client_id,
-            current_user.id
-        ))
+                branding_settings = %s,
+                company_name = %s,
+                widget_color = %s,
+                welcome_message = %s,
+                remove_branding = %s
+                WHERE client_id = %s AND user_id = %s
+            ''', (
+                json.dumps(branding_settings),
+                data.get('branding', {}).get('company_name'),
+                data.get('branding', {}).get('primary_color'),
+                data.get('bot_settings', {}).get('welcome_message'),
+                remove_branding,
+                client_id,
+                current_user.id
+            ))
         conn.commit()
+        cursor.close()
         conn.close()
         
         app.logger.info(f'Customization saved for client: {client_id}')
