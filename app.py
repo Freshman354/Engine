@@ -1273,6 +1273,9 @@ def save_customization():
         if current_user.plan_type in ['agency', 'enterprise']:
             remove_branding = 1 if data.get('remove_branding') else 0
 
+        # Ensure the value is saved in the JSON payload (it’s how the widget code reads it)
+        branding_settings['branding']['remove_branding'] = remove_branding
+
         # ✅ Use get_db_connection() not get_db()
         conn = models.get_db_connection()
         cursor = conn.cursor()  # ✅ psycopg2 needs an explicit cursor
@@ -1280,17 +1283,11 @@ def save_customization():
             UPDATE clients 
             SET 
                 branding_settings = %s,
-                company_name = %s,
-                widget_color = %s,
-                welcome_message = %s,
-                remove_branding = %s
+                company_name = %s
             WHERE client_id = %s AND user_id = %s
             ''', (
                 json.dumps(branding_settings),
                 data.get('branding', {}).get('company_name'),
-                data.get('branding', {}).get('primary_color'),
-                data.get('bot_settings', {}).get('welcome_message'),
-                remove_branding,
                 client_id,
                 current_user.id
             ))
