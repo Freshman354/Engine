@@ -1269,9 +1269,10 @@ def save_customization():
             'bot_settings': data.get('bot_settings', {})
         }
 
-        remove_branding = 0
+        # boolean flag (PostgreSQL BOOLEAN) – convert from form value
+        remove_branding = False
         if current_user.plan_type in ['agency', 'enterprise']:
-            remove_branding = 1 if data.get('remove_branding') else 0
+            remove_branding = bool(data.get('remove_branding'))
 
         # Ensure the value is saved in the JSON payload (it’s how the widget code reads it)
         branding_settings['branding']['remove_branding'] = remove_branding

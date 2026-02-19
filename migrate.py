@@ -68,7 +68,7 @@ def migrate_clients():
                 branding = {}
             primary = branding.get('branding', {}).get('primary_color')
             welcome = branding.get('bot_settings', {}).get('welcome_message')
-            remove = branding.get('branding', {}).get('remove_branding', 0)
+            remove = bool(branding.get('branding', {}).get('remove_branding', False))
 
             pg_cursor.execute(
                 '''INSERT INTO clients (id, user_id, client_id, company_name, branding_settings, widget_color, welcome_message, remove_branding, created_at)

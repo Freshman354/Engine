@@ -213,7 +213,7 @@ def create_client(user_id, company_name, branding_settings=None):
     # derive column values from the branding_settings JSON
     primary_color = branding_settings.get('branding', {}).get('primary_color')
     welcome_msg = branding_settings.get('bot_settings', {}).get('welcome_message')
-    remove_flag = branding_settings.get('branding', {}).get('remove_branding', 0)
+    remove_flag = bool(branding_settings.get('branding', {}).get('remove_branding', False))
 
     cursor.execute(
         '''INSERT INTO clients (user_id, client_id, company_name, branding_settings, widget_color, welcome_message, remove_branding)
