@@ -29,7 +29,7 @@ def init_db():
         )
     ''')
     
-    # Clients table
+    # Clients table – only create structure; migrations live elsewhere
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS clients (
             id SERIAL PRIMARY KEY,
@@ -44,10 +44,6 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
-    # make sure older installations get the new columns too
-    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS widget_color TEXT")
-    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS welcome_message TEXT")
-    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS remove_branding BOOLEAN DEFAULT FALSE")
     
     # FAQs table
     cursor.execute('''
@@ -134,6 +130,26 @@ def init_db():
     cursor.close()
     conn.close()
     print("✅ Database initialized successfully!")
+
+
+def migrate_clients_table():
+    """One‑time schema migration for the clients table.
+
+    This is split out from `init_db` so that the application startup
+    doesn't block for several minutes while Postgres rewrites a large
+    table. Call this manually via a script or the admin route.
+    """
+    conn, cursor = get_db()
+    print("🔧 Running clients table migration...")
+    # Add any missing columns without rewriting the table if possible
+    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS widget_color TEXT")
+    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS welcome_message TEXT")
+    # BOOLEAN DEFAULT FALSE is safe on Postgres 11+, but may still take time
+    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS remove_branding BOOLEAN DEFAULT FALSE")
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("✅ Clients table migration complete")
 
 # User functions
 def create_user(email, password, plan_type='starter'):

@@ -11,6 +11,8 @@ def init_demo_data():
     
     print("Initializing database...")
     models.init_db()
+    # ensure clients table has latest columns (safe no-op on new DB)
+    models.migrate_clients_table()
     
     # Create demo user
     print("Creating demo user...")

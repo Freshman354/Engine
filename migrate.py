@@ -54,6 +54,13 @@ def migrate_users():
 
 def migrate_clients():
     print("🏢 Migrating clients...")
+    # before migrating rows make sure PostgreSQL has all columns
+    try:
+        from models import migrate_clients_table
+        migrate_clients_table()
+    except Exception as exc:
+        print(f"  ⚠️ Could not run clients migration helper: {exc}")
+
     sqlite_cursor.execute('SELECT * FROM clients')
     clients = sqlite_cursor.fetchall()
 

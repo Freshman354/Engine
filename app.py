@@ -2202,6 +2202,12 @@ def init_db_production():
         secret = request.form.get('secret')
         if secret == 'your-secret-password-here':
             models.init_db()
+            # also migrate clients table to latest schema
+            try:
+                models.migrate_clients_table()
+            except Exception as e:
+                app.logger.warning(f"Clients migration helper failed: {e}")
+
             # Add affiliate tables
             conn = models.get_db()
             cursor = conn.cursor()
