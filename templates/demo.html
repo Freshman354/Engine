@@ -1,413 +1,626 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Interactive Demo - Lumvi</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --indigo: #6366f1;
+            --violet: #8b5cf6;
+            --indigo-light: #818cf8;
+            --gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
+            --transition: 0.3s ease;
+        }
+
+        [data-theme="dark"] {
+            --bg:            #06060f;
+            --bg-secondary:  #0d0c1e;
+            --surface:       rgba(255,255,255,0.04);
+            --surface-2:     rgba(255,255,255,0.07);
+            --border:        rgba(255,255,255,0.08);
+            --border-accent: rgba(99,102,241,0.3);
+            --text:          #f1f0ff;
+            --text-muted:    rgba(241,240,255,0.55);
+            --text-dim:      rgba(241,240,255,0.3);
+            --card-bg:       rgba(13,12,30,0.8);
+            --card-border:   rgba(255,255,255,0.07);
+            --mockup-bg:     rgba(255,255,255,0.03);
+            --mockup-inner:  rgba(12,11,28,0.9);
+            --code-bg:       #0d1117;
+            --code-text:     #7ee787;
+            --input-bg:      rgba(255,255,255,0.06);
+            --input-border:  rgba(255,255,255,0.1);
+            --success-bg:    rgba(52,211,153,0.12);
+            --success-text:  #6ee7b7;
+            --success-border:rgba(52,211,153,0.25);
+            --info-bg:       rgba(99,102,241,0.1);
+            --info-text:     #a5b4fc;
+            --info-border:   rgba(99,102,241,0.25);
+            --nav-bg:        rgba(6,6,15,0.85);
+            --field-bg:      rgba(255,255,255,0.04);
+            --field-border:  rgba(255,255,255,0.07);
+        }
+
+        [data-theme="light"] {
+            --bg:            #f5f4ff;
+            --bg-secondary:  #ffffff;
+            --surface:       rgba(0,0,0,0.03);
+            --surface-2:     rgba(0,0,0,0.05);
+            --border:        rgba(0,0,0,0.08);
+            --border-accent: rgba(99,102,241,0.35);
+            --text:          #12101f;
+            --text-muted:    #5b5880;
+            --text-dim:      #9ca3af;
+            --card-bg:       #ffffff;
+            --card-border:   rgba(0,0,0,0.07);
+            --mockup-bg:     #f3f2ff;
+            --mockup-inner:  #ffffff;
+            --code-bg:       #1e1b2e;
+            --code-text:     #10b981;
+            --input-bg:      #f9f8ff;
+            --input-border:  #e5e3f5;
+            --success-bg:    #d1fae5;
+            --success-text:  #065f46;
+            --success-border:#a7f3d0;
+            --info-bg:       #eef2ff;
+            --info-text:     #3730a3;
+            --info-border:   #c7d2fe;
+            --nav-bg:        rgba(245,244,255,0.92);
+            --field-bg:      #f3f2ff;
+            --field-border:  #e0defa;
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
+
         body {
             font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--bg);
+            color: var(--text);
             min-height: 100vh;
-            padding: 40px 20px;
+            transition: background var(--transition), color var(--transition);
+            position: relative;
+            overflow-x: hidden;
         }
 
-        .demo-container {
-            max-width: 1200px;
-            margin: 0 auto;
+        [data-theme="dark"] body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px);
+            background-size: 48px 48px;
+            pointer-events: none;
+            z-index: 0;
         }
 
-        .demo-header {
-            text-align: center;
-            color: white;
-            margin-bottom: 60px;
-        }
-
-        .demo-header h1 {
-            font-size: 48px;
-            margin-bottom: 16px;
-            font-weight: 700;
-        }
-
-        .demo-header p {
-            font-size: 20px;
-            opacity: 0.95;
-        }
-
-        .steps-container {
-            display: grid;
-            gap: 40px;
-            margin-bottom: 60px;
-        }
-
-        .step {
-            background: white;
-            border-radius: 16px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 40px;
-            align-items: center;
-        }
-
-        .step.reverse { grid-template-columns: 1fr 1fr; }
-        .step.reverse .step-content { order: 2; }
-        .step.reverse .step-visual { order: 1; }
-
-        .step-number {
-            display: inline-block;
-            width: 50px;
-            height: 50px;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
+        .bg-glow {
+            position: fixed;
             border-radius: 50%;
-            font-size: 24px;
-            font-weight: 700;
+            filter: blur(130px);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .bg-glow-1 {
+            width: 650px; height: 650px;
+            background: radial-gradient(circle, rgba(99,102,241,0.16) 0%, transparent 70%);
+            top: -200px; left: -150px;
+        }
+        .bg-glow-2 {
+            width: 550px; height: 550px;
+            background: radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%);
+            bottom: -100px; right: -100px;
+        }
+        [data-theme="light"] .bg-glow { opacity: 0.35; }
+
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: var(--nav-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 0 40px;
+            height: 60px;
             display: flex;
             align-items: center;
-            justify-content: center;
+            justify-content: space-between;
+            transition: background var(--transition), border-color var(--transition);
+        }
+
+        .nav-logo {
+            font-size: 18px;
+            font-weight: 800;
+            background: var(--gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-decoration: none;
+        }
+
+        .nav-right { display: flex; align-items: center; gap: 16px; }
+
+        .nav-link {
+            font-size: 13.5px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .nav-link:hover { color: var(--text); }
+
+        /* Theme toggle */
+        .theme-toggle {
+            position: relative;
+            width: 54px; height: 28px;
+            cursor: pointer; flex-shrink: 0;
+        }
+        .theme-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+        .toggle-track {
+            position: absolute; inset: 0;
+            border-radius: 30px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            transition: all var(--transition);
+            display: flex; align-items: center; padding: 0 4px;
+        }
+        [data-theme="dark"] .toggle-track { background: rgba(99,102,241,0.18); border-color: rgba(99,102,241,0.3); }
+        .toggle-thumb {
+            width: 20px; height: 20px; border-radius: 50%;
+            background: var(--gradient);
+            box-shadow: 0 2px 8px rgba(99,102,241,0.4);
+            transition: transform var(--transition);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px;
+        }
+        [data-theme="dark"]  .toggle-thumb { transform: translateX(26px); }
+        [data-theme="light"] .toggle-thumb { transform: translateX(0px); }
+
+        /* Layout */
+        .page {
+            position: relative; z-index: 1;
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 64px 24px 80px;
+        }
+
+        /* Header */
+        .demo-header { text-align: center; margin-bottom: 64px; }
+        .eyebrow {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.1em;
+            color: var(--indigo-light);
+            background: rgba(99,102,241,0.1);
+            border: 1px solid rgba(99,102,241,0.2);
+            border-radius: 30px; padding: 5px 14px;
             margin-bottom: 20px;
         }
+        .demo-header h1 {
+            font-size: clamp(30px, 5vw, 52px);
+            font-weight: 900; line-height: 1.15; margin-bottom: 16px;
+        }
+        .demo-header h1 span {
+            background: var(--gradient);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .demo-header p { font-size: 18px; color: var(--text-muted); max-width: 500px; margin: 0 auto; line-height: 1.6; }
 
-        .step h2 {
-            font-size: 32px;
-            color: #1f2937;
-            margin-bottom: 16px;
+        /* Steps */
+        .steps-container { display: grid; gap: 24px; margin-bottom: 56px; }
+
+        .step {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px; padding: 40px;
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 44px; align-items: center;
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            transition: background var(--transition), border-color var(--transition), box-shadow 0.2s;
+        }
+        [data-theme="dark"] .step {
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 20px 60px rgba(0,0,0,0.3);
+        }
+        [data-theme="light"] .step {
+            box-shadow: 0 2px 20px rgba(99,102,241,0.06), 0 1px 4px rgba(0,0,0,0.04);
+        }
+        .step:hover { border-color: var(--border-accent); }
+
+        .step.reverse .step-content { order: 2; }
+        .step.reverse .step-visual  { order: 1; }
+
+        .step-number {
+            width: 44px; height: 44px;
+            background: var(--gradient); border-radius: 14px;
+            font-size: 20px; font-weight: 800; color: white;
+            display: flex; align-items: center; justify-content: center;
+            margin-bottom: 18px;
+            box-shadow: 0 6px 18px rgba(99,102,241,0.35);
         }
 
-        .step p {
-            font-size: 18px;
-            color: #6b7280;
-            line-height: 1.7;
-            margin-bottom: 24px;
-        }
+        .step h2 { font-size: 24px; font-weight: 800; color: var(--text); margin-bottom: 10px; line-height: 1.25; }
+        .step > .step-content > p { font-size: 14.5px; color: var(--text-muted); line-height: 1.7; margin-bottom: 18px; }
 
-        .step-visual {
-            background: #f9fafb;
-            border-radius: 12px;
-            padding: 30px;
-            border: 2px solid #e5e7eb;
-        }
-
-        .mockup {
-            background: white;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }
-
-        .mockup-header {
-            display: flex;
-            gap: 6px;
-            margin-bottom: 16px;
-        }
-
-        .mockup-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-        }
-
-        .mockup-dot.red { background: #ef4444; }
-        .mockup-dot.yellow { background: #f59e0b; }
-        .mockup-dot.green { background: #10b981; }
-
-        .mockup-content {
-            color: #374151;
-            font-size: 14px;
-            line-height: 1.6;
-        }
-
-        .feature-list {
-            list-style: none;
-            margin-top: 20px;
-        }
-
+        .feature-list { list-style: none; }
         .feature-list li {
-            padding: 12px 0;
-            padding-left: 32px;
-            position: relative;
-            color: #374151;
-            font-size: 16px;
+            padding: 8px 0 8px 24px; position: relative;
+            color: var(--text-muted); font-size: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+        .feature-list li:last-child { border-bottom: none; }
+        .feature-list li::before { content: "✓"; position: absolute; left: 0; color: #34d399; font-weight: 700; font-size: 13px; }
+
+        /* Mockup */
+        .step-visual {
+            background: var(--mockup-bg);
+            border: 1px solid var(--border);
+            border-radius: 14px; padding: 4px;
+            transition: background var(--transition), border-color var(--transition);
+        }
+        .mockup { background: var(--mockup-inner); border-radius: 11px; overflow: hidden; border: 1px solid var(--border); }
+        .mockup-bar {
+            display: flex; align-items: center; gap: 6px;
+            padding: 11px 14px; border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+        .dot { width: 9px; height: 9px; border-radius: 50%; }
+        .dot-r { background: #ff5f57; }
+        .dot-y { background: #ffbd2e; }
+        .dot-g { background: #28ca41; }
+        .mockup-title { flex: 1; text-align: center; font-size: 10.5px; color: var(--text-dim); font-weight: 500; margin-right: 30px; }
+        .mockup-body { padding: 18px; }
+
+        /* Step 1 fields */
+        .field-row {
+            background: var(--field-bg);
+            border: 1px solid var(--field-border);
+            border-radius: 8px; padding: 10px 13px;
+            margin-bottom: 9px; font-size: 13px;
+            color: var(--text-muted);
+            display: flex; align-items: center; gap: 8px;
+            transition: background var(--transition), border-color var(--transition);
+        }
+        .field-label { color: var(--text-dim); font-size: 10.5px; width: 90px; flex-shrink: 0; }
+        .field-val { color: var(--text); font-weight: 500; flex: 1; font-size: 12.5px; }
+        .color-swatch { width: 18px; height: 18px; border-radius: 5px; background: linear-gradient(135deg,#6366f1,#8b5cf6); flex-shrink: 0; }
+
+        /* Step 2 upload */
+        .drop-zone {
+            border: 2px dashed var(--border-accent);
+            border-radius: 10px; padding: 26px 20px; text-align: center;
+            background: rgba(99,102,241,0.04); margin-bottom: 12px;
+        }
+        .drop-icon { font-size: 34px; margin-bottom: 8px; }
+        .drop-text { font-size: 12.5px; color: var(--text-muted); margin-bottom: 3px; }
+        .drop-sub { font-size: 11px; color: var(--text-dim); }
+        .success-banner {
+            background: var(--success-bg); border: 1px solid var(--success-border);
+            border-radius: 8px; padding: 10px 14px; font-size: 12.5px;
+            color: var(--success-text); display: flex; align-items: center; gap: 8px;
+            transition: background var(--transition);
         }
 
-        .feature-list li:before {
-            content: "✓";
-            position: absolute;
-            left: 0;
-            color: #10b981;
-            font-weight: 700;
-            font-size: 20px;
+        /* Step 3 code */
+        .code-block {
+            background: var(--code-bg); border-radius: 10px; padding: 16px;
+            font-family: 'Courier New', monospace; font-size: 11px;
+            color: var(--code-text); line-height: 1.7; margin-bottom: 12px;
+            transition: background var(--transition);
         }
+        .kw  { color: #f97583; }
+        .str { color: #79b8ff; }
+        .tag { color: #85e89d; }
 
+        .copy-btn {
+            width: 100%; padding: 10px;
+            background: var(--gradient); color: white; border: none;
+            border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            box-shadow: 0 4px 14px rgba(99,102,241,0.3);
+            transition: opacity 0.2s, transform 0.15s;
+            font-family: 'Inter', sans-serif;
+        }
+        .copy-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* Step 4 chat */
+        .chat-preview { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+        .chat-preview-header {
+            background: var(--gradient); padding: 13px 16px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .chat-header-icon {
+            width: 28px; height: 28px; border-radius: 8px;
+            background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 14px;
+        }
+        .chat-header-name { font-size: 13px; font-weight: 700; color: white; }
+        .chat-header-status { font-size: 10.5px; color: rgba(255,255,255,0.8); display: flex; align-items: center; gap: 4px; margin-top: 1px; }
+        .online-dot { width: 6px; height: 6px; border-radius: 50%; background: #34d399; box-shadow: 0 0 5px #34d399; animation: blink 2s infinite; }
+        @keyframes blink { 0%,100%{opacity:1}50%{opacity:0.45} }
+
+        .chat-messages { background: var(--mockup-bg); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+        .chat-msg { display: flex; gap: 8px; align-items: flex-start; }
+        .chat-msg.user { flex-direction: row-reverse; }
+        .chat-bubble {
+            max-width: 78%; padding: 9px 12px; border-radius: 12px;
+            font-size: 12.5px; line-height: 1.5; color: var(--text);
+        }
+        .bubble-bot { background: var(--surface-2); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+        .bubble-user { background: var(--gradient); color: white; border-bottom-right-radius: 4px; box-shadow: 0 4px 12px rgba(99,102,241,0.25); }
+        .bot-icon { width: 26px; height: 26px; border-radius: 8px; background: var(--gradient); display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+        .chat-input-row { background: var(--mockup-inner); border-top: 1px solid var(--border); padding: 10px 12px; display: flex; gap: 8px; align-items: center; transition: background var(--transition); }
+        .chat-input-fake { flex: 1; background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 20px; padding: 8px 14px; font-size: 12px; color: var(--text-dim); font-family: 'Inter', sans-serif; transition: background var(--transition), border-color var(--transition); }
+        .chat-send { width: 32px; height: 32px; border-radius: 10px; background: var(--gradient); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(99,102,241,0.3); font-size: 13px; flex-shrink: 0; }
+
+        .live-callout { background: var(--info-bg); border: 1px solid var(--info-border); border-radius: 12px; padding: 20px; margin-top: 20px; transition: background var(--transition); }
+        .live-callout h3 { color: var(--info-text); font-size: 15px; margin-bottom: 6px; }
+        .live-callout p { font-size: 13px; color: var(--info-text); opacity: 0.85; line-height: 1.5; }
+        .float-emoji { text-align: center; font-size: 40px; margin-top: 12px; animation: floaty 3s ease-in-out infinite; }
+        @keyframes floaty { 0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)} }
+
+        /* CTA */
         .cta-section {
-            background: white;
-            border-radius: 16px;
-            padding: 60px 40px;
-            text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 20px; padding: 56px 40px; text-align: center;
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            transition: background var(--transition), border-color var(--transition);
         }
+        [data-theme="dark"] .cta-section { box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 20px 60px rgba(0,0,0,0.3); border-color: var(--border-accent); }
+        [data-theme="light"] .cta-section { box-shadow: 0 4px 24px rgba(99,102,241,0.08); }
 
-        .cta-section h2 {
-            font-size: 36px;
-            color: #1f2937;
-            margin-bottom: 16px;
-        }
+        .cta-section h2 { font-size: 34px; font-weight: 900; margin-bottom: 12px; }
+        .cta-section > p { font-size: 16px; color: var(--text-muted); margin-bottom: 32px; }
 
-        .cta-section p {
-            font-size: 18px;
-            color: #6b7280;
-            margin-bottom: 32px;
-        }
-
+        .btn-row { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
         .btn {
-            display: inline-block;
-            padding: 16px 32px;
-            border-radius: 8px;
-            font-weight: 600;
-            font-size: 16px;
-            text-decoration: none;
-            transition: all 0.2s;
-            margin: 0 8px;
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 14px 28px; border-radius: 10px;
+            font-weight: 700; font-size: 14.5px;
+            text-decoration: none; transition: all 0.2s;
+            font-family: 'Inter', sans-serif; cursor: pointer; border: none;
         }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: white;
-            box-shadow: 0 4px 12px rgba(102,126,234,0.4);
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(102,126,234,0.5);
-        }
-
-        .btn-secondary {
-            background: white;
-            color: #667eea;
-            border: 2px solid #667eea;
-        }
-
-        .btn-secondary:hover {
-            background: #f5f3ff;
-        }
-
-        .live-demo-box {
-            background: #f0f9ff;
-            border: 2px solid #3b82f6;
-            border-radius: 12px;
-            padding: 24px;
-            margin-top: 24px;
-        }
-
-        .live-demo-box h3 {
-            color: #1e40af;
-            margin-bottom: 12px;
-            font-size: 20px;
-        }
-
-        .live-demo-box p {
-            color: #1e3a8a;
-            margin-bottom: 16px;
-        }
+        .btn-primary { background: var(--gradient); color: white; box-shadow: 0 4px 20px rgba(99,102,241,0.4); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(99,102,241,0.5); }
+        .btn-secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+        .btn-secondary:hover { border-color: var(--border-accent); }
+        .cta-fine { margin-top: 22px; font-size: 12.5px; color: var(--text-dim); }
 
         @media (max-width: 768px) {
-            .step {
-                grid-template-columns: 1fr;
-            }
-            .step.reverse .step-content,
-            .step.reverse .step-visual {
-                order: unset;
-            }
-            .demo-header h1 { font-size: 32px; }
-        }
-
-        /* Chat widget animation */
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-10px); }
-        }
-
-        .floating {
-            animation: float 3s ease-in-out infinite;
+            .step { grid-template-columns: 1fr; padding: 28px 20px; gap: 24px; }
+            .step.reverse .step-content, .step.reverse .step-visual { order: unset; }
+            nav { padding: 0 20px; }
+            .nav-link { display: none; }
+            .page { padding: 40px 16px 60px; }
+            .cta-section { padding: 40px 20px; }
         }
     </style>
 </head>
 <body>
-    <div class="demo-container">
-        <div class="demo-header">
-            <h1>🚀 See Lumvi in Action</h1>
-            <p>Watch how easy it is to launch your own AI chatbot in under 5 minutes</p>
-        </div>
 
-        <div class="steps-container">
-            <!-- Step 1 -->
-            <div class="step">
-                <div class="step-content">
-                    <div class="step-number">1</div>
-                    <h2>Sign Up & Create Your Chatbot</h2>
-                    <p>Start with a free account — no credit card required. Create your first chatbot in seconds.</p>
-                    <ul class="feature-list">
-                        <li>Email signup in 30 seconds</li>
-                        <li>Auto-generated client ID</li>
-                        <li>Choose your brand colors</li>
-                        <li>Customize welcome message</li>
-                    </ul>
-                </div>
-                <div class="step-visual">
-                    <div class="mockup">
-                        <div class="mockup-header">
-                            <div class="mockup-dot red"></div>
-                            <div class="mockup-dot yellow"></div>
-                            <div class="mockup-dot green"></div>
-                        </div>
-                        <div class="mockup-content">
-                            <div style="background: #f3f4f6; padding: 12px; border-radius: 6px; margin-bottom: 12px;">
-                                <strong>Company Name:</strong> Your Business
-                            </div>
-                            <div style="background: #f3f4f6; padding: 12px; border-radius: 6px; margin-bottom: 12px;">
-                                <strong>Brand Color:</strong> <span style="display: inline-block; width: 20px; height: 20px; background: #6366f1; border-radius: 4px; vertical-align: middle;"></span>
-                            </div>
-                            <div style="background: #f3f4f6; padding: 12px; border-radius: 6px;">
-                                <strong>Welcome Message:</strong> Hi! How can I help?
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+<div class="bg-glow bg-glow-1"></div>
+<div class="bg-glow bg-glow-2"></div>
 
-            <!-- Step 2 -->
-            <div class="step reverse">
-                <div class="step-content">
-                    <div class="step-number">2</div>
-                    <h2>Add Your FAQs</h2>
-                    <p>Upload your questions and answers via CSV, Excel, PDF, or add them manually. Our AI automatically generates keyword triggers.</p>
-                    <ul class="feature-list">
-                        <li>Upload 100+ FAQs instantly from CSV/Excel</li>
-                        <li>Auto-extract FAQs from PDF documents</li>
-                        <li>AI-powered keyword generation</li>
-                        <li>Bulk edit and organize</li>
-                    </ul>
-                </div>
-                <div class="step-visual">
-                    <div class="mockup">
-                        <div class="mockup-header">
-                            <div class="mockup-dot red"></div>
-                            <div class="mockup-dot yellow"></div>
-                            <div class="mockup-dot green"></div>
-                        </div>
-                        <div class="mockup-content">
-                            <div style="border: 2px dashed #d1d5db; border-radius: 8px; padding: 30px; text-align: center; background: #fafafa;">
-                                <div style="font-size: 40px; margin-bottom: 12px;">📁</div>
-                                <div style="color: #6b7280; font-size: 14px;">Drop CSV, Excel, or PDF here</div>
-                                <div style="color: #9ca3af; font-size: 12px; margin-top: 8px;">or click to browse</div>
-                            </div>
-                            <div style="margin-top: 16px; padding: 12px; background: #d1fae5; border-radius: 6px; color: #065f46; font-size: 13px;">
-                                ✓ 47 FAQs imported successfully
-                            </div>
-                        </div>
-                    </div>
-                </div>
+<nav>
+    <a href="/landing" class="nav-logo">Lumvi</a>
+    <div class="nav-right">
+        <a href="/landing#features" class="nav-link">Features</a>
+        <a href="/landing#pricing" class="nav-link">Pricing</a>
+        <a href="/login" class="nav-link">Login</a>
+        <label class="theme-toggle" title="Toggle dark/light mode">
+            <input type="checkbox" id="themeToggle">
+            <div class="toggle-track">
+                <div class="toggle-thumb"><span id="toggleIcon">🌙</span></div>
             </div>
+        </label>
+    </div>
+</nav>
 
-            <!-- Step 3 -->
-            <div class="step">
-                <div class="step-content">
-                    <div class="step-number">3</div>
-                    <h2>Copy & Embed</h2>
-                    <p>Get your embed code and paste it anywhere on your website. Works with WordPress, Shopify, Wix, or custom HTML sites.</p>
-                    <ul class="feature-list">
-                        <li>One-line embed code</li>
-                        <li>Works on any website platform</li>
-                        <li>Mobile responsive by default</li>
-                        <li>No coding required</li>
-                    </ul>
-                </div>
-                <div class="step-visual">
-                    <div class="mockup">
-                        <div class="mockup-header">
-                            <div class="mockup-dot red"></div>
-                            <div class="mockup-dot yellow"></div>
-                            <div class="mockup-dot green"></div>
-                        </div>
-                        <div class="mockup-content">
-                            <div style="background: #1f2937; color: #10b981; padding: 16px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.6;">
-                                &lt;script&gt;<br>
-                                &nbsp;&nbsp;var s = document.createElement('script');<br>
-                                &nbsp;&nbsp;s.src = 'https://lumvi.net/widget.js';<br>
-                                &nbsp;&nbsp;s.setAttribute('data-client-id', 'your-id');<br>
-                                &nbsp;&nbsp;document.body.appendChild(s);<br>
-                                &lt;/script&gt;
-                            </div>
-                            <button style="width: 100%; margin-top: 12px; padding: 10px; background: #6366f1; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
-                                📋 Copy Embed Code
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+<div class="page">
 
-            <!-- Step 4 -->
-            <div class="step reverse">
-                <div class="step-content">
-                    <div class="step-number">4</div>
-                    <h2>Watch It Work!</h2>
-                    <p>Your chatbot goes live instantly. Visitors can ask questions 24/7 and you capture leads automatically.</p>
-                    <div class="live-demo-box">
-                        <h3>👉 Try It Now</h3>
-                        <p>Click the blue chat button in the bottom-right corner of this page to test a live demo!</p>
-                        <div class="floating" style="text-align: center; font-size: 48px;">💬</div>
-                    </div>
-                </div>
-                <div class="step-visual">
-                    <div class="mockup">
-                        <div style="background: linear-gradient(135deg, #667eea, #764ba2); padding: 16px; border-radius: 8px 8px 0 0; color: white;">
-                            <strong>🤖 Support Bot</strong>
-                            <div style="font-size: 12px; opacity: 0.9;">● Online • Replies instantly</div>
-                        </div>
-                        <div style="background: #f9fafb; padding: 16px;">
-                            <div style="background: white; padding: 12px; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                                <div style="font-size: 12px; color: #6b7280; margin-bottom: 4px;">Support Bot</div>
-                                Hi! 👋 How can I help you today?
-                            </div>
-                            <div style="background: #667eea; color: white; padding: 12px; border-radius: 12px; margin-left: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                                What are your prices?
-                            </div>
-                        </div>
-                        <div style="padding: 12px; border-top: 1px solid #e5e7eb;">
-                            <input type="text" placeholder="Type a message..." style="width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 20px; font-size: 14px;">
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- CTA Section -->
-        <div class="cta-section">
-            <h2>Ready to Launch Your Chatbot?</h2>
-            <p>Join businesses using Lumvi to automate support and capture more leads</p>
-            <div>
-                <a href="/signup" class="btn btn-primary">Start Free Trial</a>
-                <a href="/#pricing" class="btn btn-secondary">View Pricing</a>
-            </div>
-            <p style="margin-top: 32px; font-size: 14px; color: #9ca3af;">
-                No credit card required • 14-day free trial • Cancel anytime
-            </p>
-        </div>
+    <div class="demo-header">
+        <div class="eyebrow">⚡ Interactive Walkthrough</div>
+        <h1>See <span>Lumvi</span> in Action</h1>
+        <p>Launch your own AI chatbot in under 5 minutes — no code, no hassle.</p>
     </div>
 
-    <!-- Actual working demo widget -->
-    <script>
-        (function() {
-            var chatbotScript = document.createElement('script');
-            chatbotScript.src = 'https://lumvi.net/static/widget.js';
-            chatbotScript.setAttribute('data-client-id', 'demo');
-            document.body.appendChild(chatbotScript);
-        })();
-    </script>
+    <div class="steps-container">
+
+        <!-- Step 1 -->
+        <div class="step">
+            <div class="step-content">
+                <div class="step-number">1</div>
+                <h2>Sign Up & Create Your Chatbot</h2>
+                <p>Start with a free account — no credit card required. Create your first branded chatbot in seconds.</p>
+                <ul class="feature-list">
+                    <li>Email signup in 30 seconds</li>
+                    <li>Auto-generated client ID</li>
+                    <li>Choose your brand colors</li>
+                    <li>Customize welcome message</li>
+                </ul>
+            </div>
+            <div class="step-visual">
+                <div class="mockup">
+                    <div class="mockup-bar">
+                        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+                        <div class="mockup-title">New Bot Setup</div>
+                    </div>
+                    <div class="mockup-body">
+                        <div class="field-row"><span class="field-label">Company</span><span class="field-val">Your Business</span></div>
+                        <div class="field-row"><span class="field-label">Brand color</span><div class="color-swatch"></div><span class="field-val">#6366f1</span></div>
+                        <div class="field-row"><span class="field-label">Welcome msg</span><span class="field-val">Hi! How can I help? 👋</span></div>
+                        <div class="field-row"><span class="field-label">Bot name</span><span class="field-val">Support Assistant</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="step reverse">
+            <div class="step-content">
+                <div class="step-number">2</div>
+                <h2>Add Your FAQs</h2>
+                <p>Upload questions and answers via CSV, Excel, or PDF. Our AI auto-generates keyword triggers instantly.</p>
+                <ul class="feature-list">
+                    <li>Upload 100+ FAQs from CSV/Excel</li>
+                    <li>Auto-extract from PDF documents</li>
+                    <li>AI-powered keyword generation</li>
+                    <li>Bulk edit and organize</li>
+                </ul>
+            </div>
+            <div class="step-visual">
+                <div class="mockup">
+                    <div class="mockup-bar">
+                        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+                        <div class="mockup-title">FAQ Manager</div>
+                    </div>
+                    <div class="mockup-body">
+                        <div class="drop-zone">
+                            <div class="drop-icon">📁</div>
+                            <div class="drop-text">Drop CSV, Excel, or PDF here</div>
+                            <div class="drop-sub">or click to browse files</div>
+                        </div>
+                        <div class="success-banner">✓ &nbsp;47 FAQs imported successfully</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="step">
+            <div class="step-content">
+                <div class="step-number">3</div>
+                <h2>Copy & Embed</h2>
+                <p>Get your one-line embed code and paste it anywhere. Works with WordPress, Shopify, Wix, or custom HTML.</p>
+                <ul class="feature-list">
+                    <li>One-line embed code</li>
+                    <li>Works on any website platform</li>
+                    <li>Mobile responsive by default</li>
+                    <li>No coding required</li>
+                </ul>
+            </div>
+            <div class="step-visual">
+                <div class="mockup">
+                    <div class="mockup-bar">
+                        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+                        <div class="mockup-title">Embed Code</div>
+                    </div>
+                    <div class="mockup-body">
+                        <div class="code-block">
+<span class="tag">&lt;script&gt;</span><br>
+&nbsp;<span class="kw">var</span> s = document.<span class="kw">createElement</span>(<span class="str">'script'</span>);<br>
+&nbsp;s.src = <span class="str">'https://lumvi.net/widget.js'</span>;<br>
+&nbsp;s.<span class="kw">setAttribute</span>(<span class="str">'data-client-id'</span>, <span class="str">'your-id'</span>);<br>
+&nbsp;document.body.<span class="kw">appendChild</span>(s);<br>
+<span class="tag">&lt;/script&gt;</span>
+                        </div>
+                        <button class="copy-btn" onclick="copyCode(this)">📋 Copy Embed Code</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 4 -->
+        <div class="step reverse">
+            <div class="step-content">
+                <div class="step-number">4</div>
+                <h2>Watch It Work!</h2>
+                <p>Your chatbot goes live instantly. Visitors ask questions 24/7 and you capture leads automatically — no babysitting needed.</p>
+                <div class="live-callout">
+                    <h3>👉 Try It Now</h3>
+                    <p>Click the chat button in the bottom-right corner of this page to test a live Lumvi demo bot!</p>
+                    <div class="float-emoji">💬</div>
+                </div>
+            </div>
+            <div class="step-visual">
+                <div class="mockup">
+                    <div class="mockup-bar">
+                        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+                        <div class="mockup-title">Live Chat Widget</div>
+                    </div>
+                    <div class="chat-preview">
+                        <div class="chat-preview-header">
+                            <div class="chat-header-icon">🤖</div>
+                            <div>
+                                <div class="chat-header-name">Support Assistant</div>
+                                <div class="chat-header-status"><div class="online-dot"></div> Online · replies instantly</div>
+                            </div>
+                        </div>
+                        <div class="chat-messages">
+                            <div class="chat-msg">
+                                <div class="bot-icon">🤖</div>
+                                <div class="chat-bubble bubble-bot">Hi! 👋 How can I help you today?</div>
+                            </div>
+                            <div class="chat-msg user">
+                                <div class="chat-bubble bubble-user">What are your prices?</div>
+                            </div>
+                            <div class="chat-msg">
+                                <div class="bot-icon">🤖</div>
+                                <div class="chat-bubble bubble-bot">Plans start at $15/mo. Want me to walk you through what's included? 🎉</div>
+                            </div>
+                        </div>
+                        <div class="chat-input-row">
+                            <input class="chat-input-fake" placeholder="Type a message…" readonly>
+                            <button class="chat-send">➤</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- CTA -->
+    <div class="cta-section">
+        <h2>Ready to Launch Your Chatbot?</h2>
+        <p>Join businesses using Lumvi to automate support and capture more leads — free for 14 days.</p>
+        <div class="btn-row">
+            <a href="/signup" class="btn btn-primary">🚀 Start Free Trial</a>
+            <a href="/landing#pricing" class="btn btn-secondary">View Pricing</a>
+        </div>
+        <p class="cta-fine">No credit card required · 14-day free trial · Cancel anytime</p>
+    </div>
+
+</div>
+
+<script>
+    (function() {
+        var s = document.createElement('script');
+        s.src = 'https://lumvi.net/static/widget.js';
+        s.setAttribute('data-client-id', 'demo');
+        document.body.appendChild(s);
+    })();
+</script>
+
+<script>
+    const html = document.documentElement;
+    const toggle = document.getElementById('themeToggle');
+    const icon = document.getElementById('toggleIcon');
+
+    const saved = localStorage.getItem('lumvi-theme') || 'dark';
+    applyTheme(saved);
+
+    toggle.addEventListener('change', () => {
+        const theme = toggle.checked ? 'light' : 'dark';
+        applyTheme(theme);
+        localStorage.setItem('lumvi-theme', theme);
+    });
+
+    function applyTheme(theme) {
+        html.setAttribute('data-theme', theme);
+        toggle.checked = theme === 'light';
+        icon.textContent = theme === 'dark' ? '🌙' : '☀️';
+    }
+
+    function copyCode(btn) {
+        const code = `<script>\nvar s = document.createElement('script');\ns.src = 'https://lumvi.net/widget.js';\ns.setAttribute('data-client-id', 'your-id');\ndocument.body.appendChild(s);\n<\/script>`;
+        navigator.clipboard.writeText(code).then(() => {
+            btn.textContent = '✓ Copied!';
+            setTimeout(() => btn.innerHTML = '📋 Copy Embed Code', 2000);
+        });
+    }
+</script>
 </body>
 </html>
