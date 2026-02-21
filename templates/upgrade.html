@@ -6,16 +6,16 @@
     <title>Upgrade Plan | Lumvi</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        /* --- PREMIUM DARK THEME (MATCHES LANDING PAGE) --- */
         :root {
-            --primary: #6366f1;       /* Indigo-500 */
-            --primary-dark: #4f46e5;  /* Indigo-600 */
-            --secondary: #ec4899;     /* Pink-500 */
-            --dark-bg: #0f172a;       /* Slate-900 */
-            --card-bg: rgba(30, 41, 59, 0.7); /* Glass Slate */
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --dark-bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
             --success: #10b981;
+            --accent: #06b6d4;
+            --agency-color: #a78bfa;
             --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.5);
         }
 
@@ -29,280 +29,535 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 40px 20px;
+            padding: 48px 20px;
         }
 
-        /* HEADER */
-        .header { text-align: center; margin-bottom: 60px; max-width: 800px; }
-        .header h1 { font-size: 42px; font-weight: 800; margin-bottom: 16px; letter-spacing: -1px; }
-        .header p { font-size: 18px; color: var(--text-muted); }
+        /* ── HEADER ── */
+        .header { text-align: center; margin-bottom: 48px; max-width: 700px; }
 
-        /* GRID LAYOUT */
+        .header h1 {
+            font-size: 40px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            letter-spacing: -1px;
+        }
+
+        .header p {
+            font-size: 16px;
+            color: var(--text-muted);
+            font-weight: 300;
+            line-height: 1.6;
+        }
+
+        /* ── BILLING TOGGLE ── */
+        .billing-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 40px;
+        }
+
+        .toggle-label { font-size: 14px; color: var(--text-muted); }
+
+        .toggle-switch {
+            position: relative;
+            width: 46px;
+            height: 24px;
+            cursor: pointer;
+        }
+
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+        .toggle-track {
+            position: absolute;
+            inset: 0;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 100px;
+            transition: background 0.3s;
+        }
+
+        .toggle-thumb {
+            position: absolute;
+            top: 3px; left: 3px;
+            width: 16px; height: 16px;
+            background: var(--text-muted);
+            border-radius: 50%;
+            transition: transform 0.3s, background 0.3s;
+        }
+
+        .toggle-switch input:checked ~ .toggle-track { background: var(--accent); border-color: var(--accent); }
+        .toggle-switch input:checked ~ .toggle-thumb { transform: translateX(22px); background: #0f172a; }
+
+        .save-badge {
+            background: rgba(16,185,129,0.15);
+            border: 1px solid rgba(16,185,129,0.3);
+            color: var(--success);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 100px;
+            opacity: 0;
+            transform: translateX(-4px);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+
+        .save-badge.visible { opacity: 1; transform: translateX(0); }
+
+        /* ── GRID ── */
         .pricing-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 32px;
-            max-width: 1280px;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            max-width: 1100px;
             width: 100%;
-            margin-bottom: 60px;
+            margin-bottom: 24px;
+            align-items: start;
         }
 
-        /* CARD STYLES */
+        /* ── CARDS ── */
         .pricing-card {
             background: var(--card-bg);
             backdrop-filter: blur(12px);
-            padding: 40px;
-            border-radius: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 36px 32px;
+            border-radius: 22px;
+            border: 1px solid rgba(255,255,255,0.1);
             text-align: left;
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, border-color 0.3s;
             position: relative;
             display: flex;
             flex-direction: column;
         }
 
-        .pricing-card:hover { transform: translateY(-8px); border-color: var(--primary); }
+        .pricing-card:hover { transform: translateY(-6px); border-color: rgba(99,102,241,0.35); }
 
-        /* FEATURED CARD */
         .pricing-card.featured {
-            background: rgba(30, 41, 59, 0.9);
-            border: 2px solid var(--primary);
-            box-shadow: var(--shadow-glow);
-            z-index: 10;
+            background: rgba(10, 20, 44, 0.95);
+            border: 1.5px solid var(--accent);
+            box-shadow: 0 0 28px rgba(6,182,212,0.18), 0 20px 50px rgba(0,0,0,0.35);
+            transform: scale(1.03);
         }
+
+        .pricing-card.featured:hover { transform: scale(1.03) translateY(-5px); }
+
+        .pricing-card.agency-card { border-color: rgba(167,139,250,0.2); }
+        .pricing-card.agency-card:hover { border-color: rgba(167,139,250,0.4); }
 
         .popular-badge {
-            background: #ffd700; color: black; font-weight: 800;
-            padding: 6px 16px; border-radius: 20px;
-            position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
-            text-transform: uppercase; font-size: 12px; letter-spacing: 1px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+            background: var(--accent);
+            color: #0f172a;
+            font-weight: 800;
+            padding: 5px 16px;
+            border-radius: 0 0 10px 10px;
+            position: absolute;
+            top: -1px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.1em;
+            white-space: nowrap;
         }
 
-        /* TEXT STYLES */
-        h3 { font-size: 24px; margin-bottom: 10px; color: white; font-weight: 700; }
-        
-        .price { font-size: 48px; font-weight: 800; margin: 20px 0; color: white; letter-spacing: -1px; }
-        .price span { font-size: 16px; color: var(--text-muted); font-weight: 500; letter-spacing: normal; }
-        .old-price { text-decoration: line-through; color: #64748b; font-size: 24px; margin-right: 10px; font-weight: 400; }
-
-        .discount-tag {
-            display: inline-block;
-            background: rgba(16, 185, 129, 0.2);
-            color: var(--success);
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-size: 13px;
+        /* ── PLAN LABEL ── */
+        .plan-label {
+            font-size: 12px;
             font-weight: 700;
-            margin-bottom: 24px;
-            align-self: flex-start;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+            margin-top: 10px;
         }
 
-        /* LIST STYLES */
-        .features-list { list-style: none; margin-bottom: 30px; flex-grow: 1; }
-        .features-list li {
+        .pricing-card.featured .plan-label { color: var(--accent); }
+        .pricing-card.agency-card .plan-label { color: var(--agency-color); }
+
+        /* ── PRICE ── */
+        .price-row {
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            margin-bottom: 4px;
+            line-height: 1;
+        }
+
+        .price-dollar {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-muted);
+            margin-bottom: 7px;
+        }
+
+        .pricing-card.featured .price-dollar { color: var(--accent); }
+        .pricing-card.agency-card .price-dollar { color: var(--agency-color); }
+
+        .price-amount {
+            font-size: 54px;
+            font-weight: 800;
+            color: white;
+            letter-spacing: -2.5px;
+            transition: opacity 0.15s, transform 0.15s;
+        }
+
+        .pricing-card.featured .price-amount { color: var(--accent); }
+        .pricing-card.agency-card .price-amount { color: var(--agency-color); }
+
+        .price-period {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+            font-weight: 300;
+        }
+
+        .price-annual {
+            font-size: 12px;
+            color: var(--success);
+            font-weight: 500;
             margin-bottom: 14px;
+            min-height: 18px;
+        }
+
+        .plan-tagline {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+            font-weight: 300;
+            line-height: 1.5;
+            min-height: 38px;
+        }
+
+        /* ── FEATURES LIST ── */
+        .features-list { list-style: none; margin-bottom: 28px; flex-grow: 1; }
+
+        .features-list li {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 10px;
             color: #cbd5e1;
-            font-size: 15px;
-            padding-bottom: 12px;
+            font-size: 14px;
+            padding: 9px 0;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }
-        .features-list li:last-child { border-bottom: none; }
-        .check { color: var(--success); font-weight: bold; font-size: 18px; }
 
-        /* BUTTONS */
+        .features-list li:last-child { border-bottom: none; }
+
+        .check {
+            width: 17px; height: 17px;
+            border-radius: 50%;
+            background: rgba(16,185,129,0.12);
+            color: var(--success);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 9px; font-weight: 700; flex-shrink: 0;
+        }
+
+        .pricing-card.featured .check { background: rgba(6,182,212,0.12); color: var(--accent); }
+        .pricing-card.agency-card .check { background: rgba(167,139,250,0.12); color: var(--agency-color); }
+
+        /* ── BUTTONS ── */
         .btn {
-            display: block; width: 100%; padding: 16px;
-            border-radius: 12px; font-weight: 700; text-align: center;
+            display: block; width: 100%; padding: 13px;
+            border-radius: 10px; font-weight: 700; text-align: center;
             text-decoration: none; transition: all 0.2s;
-            font-size: 16px; border: none; cursor: pointer;
+            font-size: 14px; border: none; cursor: pointer;
+            font-family: 'Inter', sans-serif;
         }
-        
+
         .btn-primary {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+            background: var(--accent);
+            color: #0f172a;
+            box-shadow: 0 4px 16px rgba(6,182,212,0.28);
         }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(99, 102, 241, 0.6); }
+        .btn-primary:hover { background: #22d3ee; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(6,182,212,0.4); }
 
         .btn-secondary {
-            background: transparent;
-            color: white;
-            border: 1px solid rgba(255,255,255,0.3);
+            background: transparent; color: white;
+            border: 1px solid rgba(255,255,255,0.2);
         }
-        .btn-secondary:hover { background: rgba(255,255,255,0.1); border-color: white; }
+        .btn-secondary:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.35); }
+
+        .btn-agency {
+            background: transparent;
+            color: var(--agency-color);
+            border: 1px solid rgba(167,139,250,0.3);
+        }
+        .btn-agency:hover { background: rgba(167,139,250,0.08); border-color: var(--agency-color); transform: translateY(-1px); }
 
         .btn-current {
-            background: rgba(255,255,255,0.1); color: var(--text-muted); cursor: not-allowed;
+            background: rgba(255,255,255,0.06);
+            color: var(--text-muted);
+            cursor: not-allowed;
+            border: 1px solid rgba(255,255,255,0.08);
         }
 
-        /* MODAL STYLES (UPDATED) */
+        /* ── ENTERPRISE STRIP ── */
+        .enterprise-strip {
+            max-width: 1100px;
+            width: 100%;
+            background: var(--card-bg);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 22px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 40px;
+        }
+
+        .enterprise-strip h4 { font-size: 14px; font-weight: 700; color: white; margin-bottom: 3px; }
+        .enterprise-strip p { font-size: 12px; color: var(--text-muted); font-weight: 300; }
+
+        .enterprise-feats { display: flex; gap: 18px; flex-wrap: wrap; }
+
+        .ent-feat {
+            font-size: 12px; color: var(--text-muted);
+            display: flex; align-items: center; gap: 5px;
+        }
+        .ent-feat::before { content: '✓'; color: var(--success); font-weight: 700; }
+
+        .btn-enterprise {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.15);
+            color: white; padding: 9px 20px;
+            border-radius: 8px; font-size: 13px; font-weight: 600;
+            text-decoration: none; white-space: nowrap;
+            transition: all 0.2s; flex-shrink: 0;
+        }
+        .btn-enterprise:hover { background: rgba(255,255,255,0.05); }
+
+        /* ── MODAL ── */
         .payment-modal {
-            display: none; position: fixed; z-index: 10000; left: 0; top: 0;
-            width: 100%; height: 100%;
-            background-color: rgba(15, 23, 42, 0.9); /* Dark backdrop */
-            backdrop-filter: blur(5px);
+            display: none; position: fixed; z-index: 10000;
+            left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(15, 23, 42, 0.92);
+            backdrop-filter: blur(6px);
             overflow-y: auto;
             animation: fadeIn 0.3s;
         }
 
         .payment-modal-content {
-            background: #1e293b; /* Dark Slate Card */
+            background: #1e293b;
             border: 1px solid rgba(255,255,255,0.1);
             color: white;
             margin: 5% auto; padding: 40px;
-            border-radius: 24px; max-width: 600px;
-            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.5);
-            position: relative; animation: slideUp 0.4s;
+            border-radius: 22px; max-width: 560px;
+            box-shadow: 0 25px 70px rgba(0,0,0,0.5);
+            position: relative; animation: slideUp 0.35s;
         }
 
         .payment-close {
-            position: absolute; right: 25px; top: 25px;
-            font-size: 28px; color: #64748b; cursor: pointer;
+            position: absolute; right: 24px; top: 22px;
+            font-size: 26px; color: #64748b; cursor: pointer; line-height: 1;
         }
         .payment-close:hover { color: white; }
 
-        .payment-option {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
-            padding: 20px; border-radius: 12px;
-            margin-bottom: 16px; transition: all 0.3s;
+        .modal-plan-summary {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 16px; border-radius: 12px;
+            text-align: center; margin-bottom: 28px;
         }
-        .payment-option:hover { border-color: var(--primary); background: rgba(99, 102, 241, 0.1); }
-        .payment-option h4 { color: white; margin-bottom: 8px; font-size: 16px; }
-        .payment-option p { color: #94a3b8; font-size: 14px; margin-bottom: 12px; }
 
-        /* FOOTER LINKS */
-        .back-link { text-align: center; margin-top: 40px; }
-        .back-link a { color: #94a3b8; text-decoration: none; margin: 0 10px; font-size: 14px; }
+        .modal-plan-summary p { color: #cbd5e1; font-size: 15px; margin-bottom: 4px; }
+
+        .modal-plan-summary .modal-price {
+            font-size: 28px; font-weight: 800; color: var(--accent); margin-top: 4px;
+        }
+
+        .payment-option {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 18px; border-radius: 12px;
+            margin-bottom: 14px; transition: all 0.3s;
+        }
+
+        .payment-option:hover { border-color: var(--primary); background: rgba(99,102,241,0.08); }
+        .payment-option h4 { color: white; margin-bottom: 6px; font-size: 15px; }
+        .payment-option p { color: #94a3b8; font-size: 13px; margin-bottom: 12px; font-weight: 300; }
+
+        .terms-row {
+            margin-top: 18px; font-size: 13px;
+            color: #94a3b8; display: flex; gap: 10px; align-items: flex-start;
+        }
+
+        .terms-row a { color: var(--primary); text-decoration: none; }
+        .terms-row a:hover { text-decoration: underline; }
+
+        /* ── BACK LINK ── */
+        .back-link { text-align: center; }
+        .back-link a { color: var(--text-muted); text-decoration: none; margin: 0 10px; font-size: 14px; }
         .back-link a:hover { color: white; }
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUp { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-        @media (max-width: 768px) {
-            .pricing-grid { grid-template-columns: 1fr; }
-            .header h1 { font-size: 32px; }
+        @media (max-width: 900px) {
+            .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
+            .pricing-card.featured { transform: none; }
+            .pricing-card.featured:hover { transform: translateY(-5px); }
+            .enterprise-strip { flex-direction: column; }
         }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h1>🚀 Upgrade Your Plan</h1>
-        <p>Scale your agency with our premium white-label features. <span style="color: #ffd700; font-weight: bold;">50% OFF for First 10 Customers!</span></p>
+        <h1>Upgrade Your Plan</h1>
+        <p>14-day free trial on all plans. No credit card required to start. Cancel anytime.</p>
+    </div>
+
+    <!-- Billing Toggle -->
+    <div class="billing-toggle">
+        <span class="toggle-label">Monthly</span>
+        <label class="toggle-switch">
+            <input type="checkbox" id="billingToggle" onchange="toggleBilling()">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+        </label>
+        <span class="toggle-label">Annual</span>
+        <span class="save-badge" id="saveBadge">2 months free</span>
     </div>
 
     <div class="pricing-grid">
-        
+
+        <!-- STARTER -->
         <div class="pricing-card">
-            <h3>Starter</h3>
-            <div class="price">
-                <span class="old-price">$30</span>$15<span>/mo</span>
+            <div class="plan-label">Starter</div>
+            <div class="price-row">
+                <span class="price-dollar">$</span>
+                <span class="price-amount" id="starter-price">49</span>
             </div>
-            <div class="discount-tag">🔥 50% OFF - Limited Time</div>
+            <div class="price-period">per month</div>
+            <div class="price-annual" id="starter-annual"></div>
+            <p class="plan-tagline">Automate FAQs and stop answering the same questions manually.</p>
 
             <ul class="features-list">
-                <li><span class="check">✓</span> Up to 5 Clients</li>
-                <li><span class="check">✓</span> Unlimited Conversations</li>
-                <li><span class="check">✓</span> AI-Powered Responses</li>
-                <li><span class="check">✓</span> Basic Lead Collection</li>
-                <li><span class="check">✓</span> Basic Analytics</li>
-                <li><span class="check">✓</span> Email Support</li>
+                <li><span class="check">✓</span> 3 chatbots</li>
+                <li><span class="check">✓</span> 2,000 messages/month</li>
+                <li><span class="check">✓</span> Lead capture forms</li>
+                <li><span class="check">✓</span> CSV / PDF knowledge base</li>
+                <li><span class="check">✓</span> Embed on any website</li>
+                <li><span class="check">✓</span> Email support</li>
             </ul>
-            
+
             {% if user.plan_type == 'starter' %}
                 <button class="btn btn-current">Current Plan</button>
             {% else %}
-                <button onclick="startPayment('starter')" class="btn btn-secondary">Upgrade to Starter</button>
+                <button onclick="startPayment('starter')" class="btn btn-secondary">Upgrade to Starter →</button>
             {% endif %}
         </div>
 
+        <!-- PRO (FEATURED) -->
         <div class="pricing-card featured">
-            <div class="popular-badge">MOST POPULAR</div>
-            <h3>Agency Growth</h3>
-            <div class="price">
-                <span class="old-price">$120</span>$60<span>/mo</span>
+            <div class="popular-badge">Most Popular</div>
+            <div class="plan-label">Pro</div>
+            <div class="price-row">
+                <span class="price-dollar">$</span>
+                <span class="price-amount" id="pro-price">99</span>
             </div>
-            <div class="discount-tag" style="background: rgba(255, 215, 0, 0.15); color: #ffd700;">
-                ⚡ Best Value for Agencies
-            </div>
+            <div class="price-period">per month</div>
+            <div class="price-annual" id="pro-annual"></div>
+            <p class="plan-tagline">Capture leads 24/7 and let AI handle the first conversation automatically.</p>
 
             <ul class="features-list">
-                <li><span class="check">✓</span> <strong>20 Client Bots</strong></li>
-                <li><span class="check">✓</span> <strong>Unlimited Conversations</strong></li>
-                <li><span class="check">✓</span> <strong>Full White-Labeling</strong></li>
-                <li><span class="check">✓</span> Advanced Analytics</li>
-                <li><span class="check">✓</span> Priority Support</li>
-                <li><span class="check">✓</span> Custom Integrations</li>
-                <li><span class="check">✓</span> Onboarding Call</li>
+                <li><span class="check">✓</span> 10 chatbots</li>
+                <li><span class="check">✓</span> Unlimited messages</li>
+                <li><span class="check">✓</span> Lead capture + CRM webhooks</li>
+                <li><span class="check">✓</span> Zapier / Make integration</li>
+                <li><span class="check">✓</span> Analytics dashboard</li>
+                <li><span class="check">✓</span> Custom chatbot branding</li>
+                <li><span class="check">✓</span> Priority email support</li>
+            </ul>
+
+            {% if user.plan_type == 'pro' %}
+                <button class="btn btn-current">Current Plan</button>
+            {% else %}
+                <button onclick="startPayment('pro')" class="btn btn-primary">Upgrade to Pro →</button>
+            {% endif %}
+        </div>
+
+        <!-- AGENCY -->
+        <div class="pricing-card agency-card">
+            <div class="plan-label">Agency</div>
+            <div class="price-row">
+                <span class="price-dollar">$</span>
+                <span class="price-amount" id="agency-price">299</span>
+            </div>
+            <div class="price-period">per month</div>
+            <div class="price-annual" id="agency-annual"></div>
+            <p class="plan-tagline">White-label Lumvi under your brand. Keep 100% of the margin.</p>
+
+            <ul class="features-list">
+                <li><span class="check">✓</span> Unlimited chatbots</li>
+                <li><span class="check">✓</span> Unlimited messages</li>
+                <li><span class="check">✓</span> Full white-label (your logo, domain)</li>
+                <li><span class="check">✓</span> Client management portal</li>
+                <li><span class="check">✓</span> Reseller rights — 100% margin</li>
+                <li><span class="check">✓</span> Onboarding call included</li>
+                <li><span class="check">✓</span> Priority phone + email support</li>
             </ul>
 
             {% if user.plan_type == 'agency' %}
                 <button class="btn btn-current">Current Plan</button>
             {% else %}
-                <button onclick="startPayment('agency')" class="btn btn-primary">🚀 Get Started - $60/mo</button>
-            {% endif %}
-        </div>
-
-        <div class="pricing-card">
-            <h3>Enterprise</h3>
-            <div class="price">$199<span>/life</span></div>
-            <div class="discount-tag" style="background: rgba(236, 72, 153, 0.2); color: #ec4899;">
-                💎 Lifetime Access
-            </div>
-
-            <ul class="features-list">
-                <li><span class="check">✓</span> Unlimited Clients</li>
-                <li><span class="check">✓</span> Everything in Agency</li>
-                <li><span class="check">✓</span> Self-Hosted Option</li>
-                <li><span class="check">✓</span> Custom Features</li>
-                <li><span class="check">✓</span> SLA Guarantee</li>
-                <li><span class="check">✓</span> White-Glove Onboarding</li>
-            </ul>
-
-            {% if user.plan_type == 'enterprise' %}
-                <button class="btn btn-current">Current Plan</button>
-            {% else %}
-                <button onclick="startPayment('enterprise')" class="btn btn-secondary">Get Lifetime Access</button>
+                <button onclick="startPayment('agency')" class="btn btn-agency">Upgrade to Agency →</button>
             {% endif %}
         </div>
 
     </div>
 
+    <!-- Enterprise Strip -->
+    <div class="enterprise-strip">
+        <div>
+            <h4>Need something bigger?</h4>
+            <p>Custom contracts, dedicated infrastructure, SLA guarantees, and volume pricing.</p>
+        </div>
+        <div class="enterprise-feats">
+            <span class="ent-feat">Dedicated instance</span>
+            <span class="ent-feat">SLA guarantee</span>
+            <span class="ent-feat">Custom integrations</span>
+            <span class="ent-feat">Volume pricing</span>
+        </div>
+        <a href="mailto:support@lumvi.net?subject=Enterprise%20Enquiry" class="btn-enterprise">Talk to us →</a>
+    </div>
+
+    <!-- Payment Modal -->
     <div id="paymentModal" class="payment-modal">
         <div class="payment-modal-content">
             <span class="payment-close" onclick="closePaymentModal()">&times;</span>
-            
-            <h2 style="text-align: center; margin-bottom: 20px;">🎉 Complete Your Upgrade</h2>
-            
-            <div style="background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; text-align: center; margin-bottom: 30px;">
-                <p style="color: #cbd5e1; font-size: 16px;">You are selecting: <strong style="color: white; font-size: 18px;" id="selectedPlanName">Plan</strong></p>
-                <p style="color: var(--primary); font-size: 24px; font-weight: 800; margin-top: 5px;" id="selectedPlanPrice">$0</p>
+
+            <h2 style="text-align: center; margin-bottom: 20px; font-size: 22px;">Complete Your Upgrade</h2>
+
+            <div class="modal-plan-summary">
+                <p>You are upgrading to <strong id="selectedPlanName" style="color: white;">—</strong></p>
+                <div class="modal-price" id="selectedPlanPrice">$0</div>
             </div>
-            
+
             <div class="payment-option">
                 <h4>💳 Pay with Card (Instant)</h4>
-                <p>Secure payment via Flutterwave. All cards accepted.</p>
+                <p>Secure payment via Flutterwave. All major cards accepted.</p>
                 <a id="flutterwaveLink" href="#" target="_blank" class="btn btn-primary" style="text-decoration: none;">
-                    Pay <span id="cardAmount">$0</span> Securely
+                    Pay <span id="cardAmount">$0</span> Securely →
                 </a>
             </div>
-            
+
             <div class="payment-option">
-                <h4>🏦 Bank Transfer / Crypto</h4>
-                <p>Prefer to transfer manually? Contact support.</p>
-                <button onclick="contactForBankTransfer()" class="btn btn-secondary" style="padding: 10px; font-size: 14px;">Request Bank Details</button>
+                <h4>🏦 Bank Transfer</h4>
+                <p>Prefer to pay manually? Contact us and we'll send bank details within 1 hour.</p>
+                <button onclick="contactForBankTransfer()" class="btn btn-secondary" style="font-size: 13px; padding: 10px;">
+                    Request Bank Details
+                </button>
             </div>
 
-            <div style="margin-top: 20px; font-size: 14px; color: #94a3b8; display: flex; gap: 10px; align-items: start;">
-                <input type="checkbox" id="agreeTerms" style="margin-top: 4px;">
-                <label for="agreeTerms">I agree to the <a href="/terms" target="_blank" style="color: var(--primary);">Terms & Conditions</a> and Refund Policy.</label>
+            <div class="terms-row">
+                <input type="checkbox" id="agreeTerms" style="margin-top: 3px; flex-shrink: 0;">
+                <label for="agreeTerms">
+                    I agree to the <a href="/terms" target="_blank">Terms &amp; Conditions</a> and understand the refund policy.
+                </label>
             </div>
-
         </div>
     </div>
 
@@ -314,31 +569,55 @@
 
     <script>
         let selectedPlan = '';
-        
-        // YOUR FLUTTERWAVE LINKS
+
         const flutterwaveLinks = {
-            'starter': 'https://flutterwave.com/pay/1q2ra2vpnh4y',
-            'agency': 'https://flutterwave.com/pay/vrrfifwlldpl',
-            'enterprise': 'https://flutterwave.com/pay/ehhc5k94jceb'
+            'starter':  'https://flutterwave.com/pay/1q2ra2vpnh4y',
+            'pro':      'https://flutterwave.com/pay/vrrfifwlldpl', // ⚠️ Update this with your new Pro $99 link
+            'agency':   'https://flutterwave.com/pay/ehhc5k94jceb'
         };
-        
-        const planPrices = {
-            'starter': { price: '$15/month', amount: 15 }, // Updated to match displayed price
-            'agency': { price: '$60/month', amount: 60 },  // Updated to match displayed price
-            'enterprise': { price: '$199 one-time', amount: 199 }
+
+        const prices = {
+            starter: { monthly: 49,  annual: Math.round(49  * 10 / 12), label: 'Starter' },
+            pro:     { monthly: 99,  annual: Math.round(99  * 10 / 12), label: 'Pro' },
+            agency:  { monthly: 299, annual: Math.round(299 * 10 / 12), label: 'Agency' },
         };
+
+        let isAnnual = false;
+
+        function toggleBilling() {
+            isAnnual = document.getElementById('billingToggle').checked;
+            document.getElementById('saveBadge').classList.toggle('visible', isAnnual);
+
+            ['starter', 'pro', 'agency'].forEach(function(plan) {
+                const el = document.getElementById(plan + '-price');
+                const annualEl = document.getElementById(plan + '-annual');
+
+                el.style.opacity = '0';
+                el.style.transform = 'scale(0.85)';
+                el.style.transition = 'all 0.15s';
+
+                setTimeout(function() {
+                    el.textContent = isAnnual ? prices[plan].annual : prices[plan].monthly;
+                    annualEl.textContent = isAnnual
+                        ? '$' + (prices[plan].monthly * 10) + '/yr — 2 months free'
+                        : '';
+                    el.style.opacity = '1';
+                    el.style.transform = 'scale(1)';
+                }, 140);
+            });
+        }
 
         function startPayment(plan) {
             selectedPlan = plan;
-            const planInfo = planPrices[plan];
-            
-            // Update Modal UI
-            document.getElementById('selectedPlanName').textContent = plan.charAt(0).toUpperCase() + plan.slice(1) + " Plan";
-            document.getElementById('selectedPlanPrice').textContent = planInfo.price;
-            document.getElementById('cardAmount').textContent = '$' + planInfo.amount;
+            const planData = prices[plan];
+            const amount = isAnnual ? planData.monthly * 10 : planData.monthly;
+            const periodLabel = isAnnual ? '/year' : '/month';
+
+            document.getElementById('selectedPlanName').textContent = planData.label + ' Plan';
+            document.getElementById('selectedPlanPrice').textContent = '$' + amount + periodLabel;
+            document.getElementById('cardAmount').textContent = '$' + amount;
             document.getElementById('flutterwaveLink').href = flutterwaveLinks[plan];
-            
-            // Reset & Show
+
             document.getElementById('agreeTerms').checked = false;
             document.getElementById('paymentModal').style.display = 'block';
             document.body.style.overflow = 'hidden';
@@ -349,27 +628,26 @@
             document.body.style.overflow = 'auto';
         }
 
-        // Terms Validation
         document.getElementById('flutterwaveLink').addEventListener('click', function(e) {
             if (!document.getElementById('agreeTerms').checked) {
                 e.preventDefault();
-                alert('⚠️ Please agree to the Terms & Conditions first.');
+                alert('Please agree to the Terms & Conditions before proceeding.');
             }
         });
 
-        // Bank Transfer Logic
         function contactForBankTransfer() {
-            const subject = `Bank Transfer Request - ${selectedPlan.toUpperCase()}`;
-            const body = `Hi Team,\n\nI would like to pay for the ${selectedPlan} plan via Bank Transfer.\n\nPlease send me the details.`;
-            window.location.href = `mailto:support@lumvi.net?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+            const planData = prices[selectedPlan];
+            const amount = isAnnual ? planData.monthly * 10 : planData.monthly;
+            const subject = 'Bank Transfer Request — ' + planData.label + ' Plan ($' + amount + ')';
+            const body = 'Hi Lumvi Team,\n\nI would like to pay for the ' + planData.label + ' plan via bank transfer.\n\nAmount: $' + amount + (isAnnual ? '/year' : '/month') + '\n\nPlease send me the bank details.\n\nThank you.';
+            window.location.href = 'mailto:support@lumvi.net?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
         }
 
-        // Close on Click Outside
         window.onclick = function(event) {
-            if (event.target == document.getElementById('paymentModal')) {
+            if (event.target === document.getElementById('paymentModal')) {
                 closePaymentModal();
             }
-        }
+        };
     </script>
 </body>
 </html>

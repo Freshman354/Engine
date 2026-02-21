@@ -14,11 +14,16 @@ def get_db():
     cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     return conn, cursor
 
+def get_db_connection():
+    """Get database connection (legacy alias)"""
+    conn = psycopg2.connect(DATABASE_URL)
+    conn.cursor_factory = psycopg2.extras.RealDictCursor
+    return conn
+
 def init_db():
     """Initialize database with tables"""
     conn, cursor = get_db()
     
-    # Users table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -29,7 +34,6 @@ def init_db():
         )
     ''')
     
-    # Clients table – only create structure; migrations live elsewhere
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS clients (
             id SERIAL PRIMARY KEY,
@@ -45,7 +49,6 @@ def init_db():
         )
     ''')
     
-    # FAQs table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS faqs (
             id SERIAL PRIMARY KEY,
@@ -60,7 +63,6 @@ def init_db():
         )
     ''')
     
-    # Leads table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS leads (
             id SERIAL PRIMARY KEY,
@@ -77,7 +79,6 @@ def init_db():
         )
     ''')
 
-    # Conversations table (analytics)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversations (
             id SERIAL PRIMARY KEY,
@@ -91,7 +92,6 @@ def init_db():
         )
     ''')
     
-    # Affiliates table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS affiliates (
             id SERIAL PRIMARY KEY,
@@ -109,7 +109,6 @@ def init_db():
         )
     ''')
     
-    # Referrals table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS referrals (
             id SERIAL PRIMARY KEY,
@@ -124,7 +123,6 @@ def init_db():
         )
     ''')
     
-    # Commissions table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS commissions (
             id SERIAL PRIMARY KEY,
@@ -148,110 +146,20 @@ def init_db():
 
 
 def migrate_clients_table():
-    """One‑time schema migration for the clients table.
-
-    This is split out from `init_db` so that the application startup
-    doesn't block for several minutes while Postgres rewrites a large
-    table. Call this manually via a script or the admin route.
-    """
+    """One-time schema migration for the clients table."""
     conn, cursor = get_db()
     print("🔧 Running clients table migration...")
-    # Add any missing columns without rewriting the table if possible
     cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS widget_color TEXT")
     cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS welcome_message TEXT")
-    # BOOLEAN DEFAULT FALSE is safe on Postgres 11+, but may still take time
     cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS remove_branding BOOLEAN DEFAULT FALSE")
     conn.commit()
     cursor.close()
     conn.close()
     print("✅ Clients table migration complete")
 
-# User functions
-def create_user(email, password, plan_type='starter'):
-    """Create a new user"""
-    try:
-        conn, cursor = get_db()
-        
-        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        
-        cursor.execute(
-            'INSERT INTO users (email, password_hash, plan_type) VALUES (%s, %s, %s) RETURNING id',
-            (email, password_hash, plan_type)
-        )
-        
-        user_id = cursor.fetchone()['id']
-        conn.commit()
-        cursor.close()
-        conn.close()
-        
-        return user_id
-    except psycopg2.IntegrityError:
-        return None  # Email already exists
-
-def verify_user(email, password):
-    """Verify user credentials"""
-    conn, cursor = get_db()
-    
-    cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
-    user = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    
-    if user and bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
-        return dict(user)
-    return None
-
-def get_user_by_id(user_id):
-    """Get user by ID"""
-    conn, cursor = get_db()
-    
-    cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))
-    user = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    
-    return dict(user) if user else None
-
-def get_user_by_email(email):
-    """Get user by email"""
-    conn, cursor = get_db()
-    
-    cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
-    user = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    
-    return dict(user) if user else None
-
-
-# === migrations ===
-
-def migrate_clients_table():
-    """One‑time schema migration for the clients table.
-
-    This is split out from `init_db` so that the application startup
-    doesn't block for several minutes while Postgres rewrites a large
-    table. Call this manually via a script or the admin route.
-    """
-    conn, cursor = get_db()
-    print("🔧 Running clients table migration...")
-    # Add any missing columns without rewriting the table if possible
-    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS widget_color TEXT")
-    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS welcome_message TEXT")
-    # BOOLEAN DEFAULT FALSE is safe on Postgres 11+, but may still take time
-    cursor.execute("ALTER TABLE clients ADD COLUMN IF NOT EXISTS remove_branding BOOLEAN DEFAULT FALSE")
-    conn.commit()
-    cursor.close()
-    conn.close()
-    print("✅ Clients table migration complete")
-
-# new migration for faqs table
 
 def migrate_faqs_table():
-    """One‑time schema migration for the faqs table.
-
-    Adds a `category` column with default 'General' if it doesn't exist.
-    """
+    """One-time schema migration for the faqs table."""
     conn, cursor = get_db()
     print("🔧 Running faqs table migration...")
     cursor.execute("ALTER TABLE faqs ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'General'")
@@ -260,12 +168,123 @@ def migrate_faqs_table():
     conn.close()
     print("✅ FAQs table migration complete")
 
-# Client functions
+
+# =====================================================================
+# PLAN ENFORCEMENT
+# =====================================================================
+
+def get_daily_message_count(client_id):
+    """
+    Return the number of chat messages logged for this client today (UTC).
+    Used to enforce messages_per_day plan limits in /api/chat.
+    Fails open (returns 0) if the DB is unavailable so chat is never
+    blocked by an infrastructure hiccup.
+    """
+    try:
+        conn, cursor = get_db()
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        cursor.execute(
+            '''
+            SELECT COUNT(*) AS cnt
+            FROM conversations
+            WHERE client_id = %s
+              AND DATE(timestamp) = %s
+            ''',
+            (client_id, today)
+        )
+        row = cursor.fetchone() or {}
+        cursor.close()
+        conn.close()
+        return int(row.get('cnt', 0))
+    except Exception:
+        return 0  # fail open — never block chat due to a DB error
+
+
+def get_client_owner(client_id):
+    """
+    Return the full user row for whoever owns this client_id.
+    Used by plan enforcement helpers in app.py.
+    Returns None if client or user not found.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            'SELECT user_id FROM clients WHERE client_id = %s',
+            (client_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            cursor.close()
+            conn.close()
+            return None
+        user_id = row['user_id']
+        cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return dict(user) if user else None
+    except Exception:
+        return None
+
+
+# =====================================================================
+# USER FUNCTIONS
+# =====================================================================
+
+def create_user(email, password, plan_type='starter'):
+    """Create a new user"""
+    try:
+        conn, cursor = get_db()
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        cursor.execute(
+            'INSERT INTO users (email, password_hash, plan_type) VALUES (%s, %s, %s) RETURNING id',
+            (email, password_hash, plan_type)
+        )
+        user_id = cursor.fetchone()['id']
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return user_id
+    except psycopg2.IntegrityError:
+        return None  # Email already exists
+
+def verify_user(email, password):
+    """Verify user credentials"""
+    conn, cursor = get_db()
+    cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+    user = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if user and bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+        return dict(user)
+    return None
+
+def get_user_by_id(user_id):
+    """Get user by ID"""
+    conn, cursor = get_db()
+    cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))
+    user = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return dict(user) if user else None
+
+def get_user_by_email(email):
+    """Get user by email"""
+    conn, cursor = get_db()
+    cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+    user = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return dict(user) if user else None
+
+
+# =====================================================================
+# CLIENT FUNCTIONS
+# =====================================================================
 
 def create_client(user_id, company_name, branding_settings=None):
     """Create a new client for a user"""
     conn, cursor = get_db()
-    
     client_id = f"{company_name.lower().replace(' ', '-')}-{secrets.token_hex(4)}"
     
     if branding_settings is None:
@@ -279,7 +298,6 @@ def create_client(user_id, company_name, branding_settings=None):
             "welcome_message": "Hi! How can I help you today?"
         }
     
-    # derive column values from the branding_settings JSON
     primary_color = branding_settings.get('branding', {}).get('primary_color')
     welcome_msg = branding_settings.get('bot_settings', {}).get('welcome_message')
     remove_flag = bool(branding_settings.get('branding', {}).get('remove_branding', False))
@@ -289,59 +307,47 @@ def create_client(user_id, company_name, branding_settings=None):
            VALUES (%s, %s, %s, %s, %s, %s, %s)''',
         (user_id, client_id, company_name, json.dumps(branding_settings), primary_color, welcome_msg, remove_flag)
     )
-    
     conn.commit()
     cursor.close()
     conn.close()
-    
     return client_id
 
 def get_user_clients(user_id):
     """Get all clients for a user"""
     conn, cursor = get_db()
-    
     cursor.execute('SELECT * FROM clients WHERE user_id = %s', (user_id,))
     clients = cursor.fetchall()
     cursor.close()
     conn.close()
-    
     return [dict(client) for client in clients]
 
 def get_client_by_id(client_id):
     """Get client by client_id"""
     conn, cursor = get_db()
-    
     cursor.execute('SELECT * FROM clients WHERE client_id = %s', (client_id,))
     client = cursor.fetchone()
     cursor.close()
     conn.close()
-    
     return dict(client) if client else None
-
-def get_db_connection():
-    """Get database connection (legacy alias)"""
-    conn = psycopg2.connect(DATABASE_URL)
-    conn.cursor_factory = psycopg2.extras.RealDictCursor
-    return conn
 
 def verify_client_ownership(user_id, client_id):
     """Verify that a user owns a client"""
     conn, cursor = get_db()
-    
     cursor.execute('SELECT * FROM clients WHERE client_id = %s AND user_id = %s', (client_id, user_id))
     client = cursor.fetchone()
     cursor.close()
     conn.close()
-    
     return client is not None
 
-# FAQ functions
+
+# =====================================================================
+# FAQ FUNCTIONS
+# =====================================================================
+
 def save_faqs(client_id, faqs):
-    """Save FAQs for a client"""
+    """Save FAQs for a client (replaces all existing)"""
     conn, cursor = get_db()
-    
     cursor.execute('DELETE FROM faqs WHERE client_id = %s', (client_id,))
-    
     for faq in faqs:
         cursor.execute(
             'INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers) VALUES (%s, %s, %s, %s, %s, %s)',
@@ -354,7 +360,6 @@ def save_faqs(client_id, faqs):
                 json.dumps(faq['triggers'])
             )
         )
-    
     conn.commit()
     cursor.close()
     conn.close()
@@ -362,12 +367,10 @@ def save_faqs(client_id, faqs):
 def get_faqs(client_id):
     """Get all FAQs for a client"""
     conn, cursor = get_db()
-    
     cursor.execute('SELECT * FROM faqs WHERE client_id = %s', (client_id,))
     faqs = cursor.fetchall()
     cursor.close()
     conn.close()
-    
     return [
         {
             'id': faq['faq_id'],
@@ -379,11 +382,14 @@ def get_faqs(client_id):
         for faq in faqs
     ]
 
-# Lead functions
+
+# =====================================================================
+# LEAD FUNCTIONS
+# =====================================================================
+
 def save_lead(client_id, lead_data):
     """Save a lead for a client"""
     conn, cursor = get_db()
-    
     cursor.execute(
         '''INSERT INTO leads (client_id, name, email, phone, company, message, conversation_snippet, source_url)
            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
@@ -398,7 +404,6 @@ def save_lead(client_id, lead_data):
             lead_data.get('source_url', '')
         )
     )
-    
     conn.commit()
     cursor.close()
     conn.close()
@@ -406,38 +411,32 @@ def save_lead(client_id, lead_data):
 def get_leads(client_id):
     """Get all leads for a client"""
     conn, cursor = get_db()
-    
     cursor.execute('SELECT * FROM leads WHERE client_id = %s ORDER BY created_at DESC', (client_id,))
     leads = cursor.fetchall()
     cursor.close()
     conn.close()
-    
     return [dict(lead) for lead in leads]
 
-# Affiliate functions
+
+# =====================================================================
+# AFFILIATE FUNCTIONS
+# =====================================================================
+
 def create_affiliate(user_id, payment_email, commission_rate=0.30):
     """Create affiliate account for a user"""
     conn, cursor = get_db()
-    
-    referral_code = f"{secrets.token_hex(4).upper()}"
-    
+    referral_code = secrets.token_hex(4).upper()
     try:
         cursor.execute(
             '''INSERT INTO affiliates (user_id, referral_code, commission_rate, payment_email)
                VALUES (%s, %s, %s, %s) RETURNING id''',
             (user_id, referral_code, commission_rate, payment_email)
         )
-        
         affiliate_id = cursor.fetchone()['id']
         conn.commit()
         cursor.close()
         conn.close()
-        
-        return {
-            'id': affiliate_id,
-            'referral_code': referral_code,
-            'commission_rate': commission_rate
-        }
+        return {'id': affiliate_id, 'referral_code': referral_code, 'commission_rate': commission_rate}
     except psycopg2.IntegrityError:
         cursor.close()
         conn.close()
@@ -446,40 +445,33 @@ def create_affiliate(user_id, payment_email, commission_rate=0.30):
 def get_affiliate_by_user_id(user_id):
     """Get affiliate account by user ID"""
     conn, cursor = get_db()
-    
     cursor.execute('SELECT * FROM affiliates WHERE user_id = %s', (user_id,))
     affiliate = cursor.fetchone()
     cursor.close()
     conn.close()
-    
     return dict(affiliate) if affiliate else None
 
 def get_affiliate_by_code(referral_code):
     """Get affiliate by referral code"""
     conn, cursor = get_db()
-    
     cursor.execute('SELECT * FROM affiliates WHERE referral_code = %s', (referral_code,))
     affiliate = cursor.fetchone()
     cursor.close()
     conn.close()
-    
     return dict(affiliate) if affiliate else None
 
 def create_referral(affiliate_id, referred_user_id, referral_code):
     """Track a new referral"""
     conn, cursor = get_db()
-    
     cursor.execute(
         '''INSERT INTO referrals (affiliate_id, referred_user_id, referral_code, status)
            VALUES (%s, %s, %s, %s)''',
         (affiliate_id, referred_user_id, referral_code, 'pending')
     )
-    
     cursor.execute(
         'UPDATE affiliates SET total_referrals = total_referrals + 1 WHERE id = %s',
         (affiliate_id,)
     )
-    
     conn.commit()
     cursor.close()
     conn.close()
@@ -487,30 +479,24 @@ def create_referral(affiliate_id, referred_user_id, referral_code):
 def create_commission(affiliate_id, referred_user_id, subscription_amount, plan_type):
     """Create commission record when referred user pays"""
     conn, cursor = get_db()
-    
     cursor.execute('SELECT commission_rate FROM affiliates WHERE id = %s', (affiliate_id,))
     result = cursor.fetchone()
     commission_rate = result['commission_rate'] if result else 0.30
-    
     commission_amount = subscription_amount * commission_rate
-    
     cursor.execute(
         '''INSERT INTO commissions (affiliate_id, referred_user_id, amount, subscription_amount, plan_type, status)
            VALUES (%s, %s, %s, %s, %s, %s)''',
         (affiliate_id, referred_user_id, commission_amount, subscription_amount, plan_type, 'pending')
     )
-    
     cursor.execute(
         'UPDATE affiliates SET total_earnings = total_earnings + %s WHERE id = %s',
         (commission_amount, affiliate_id)
     )
-    
     cursor.execute(
         '''UPDATE referrals SET status = 'converted', converted_at = CURRENT_TIMESTAMP
            WHERE affiliate_id = %s AND referred_user_id = %s''',
         (affiliate_id, referred_user_id)
     )
-    
     conn.commit()
     cursor.close()
     conn.close()
@@ -518,36 +504,27 @@ def create_commission(affiliate_id, referred_user_id, subscription_amount, plan_
 def get_affiliate_stats(affiliate_id):
     """Get affiliate's statistics"""
     conn, cursor = get_db()
-    
     cursor.execute('SELECT * FROM affiliates WHERE id = %s', (affiliate_id,))
     affiliate = dict(cursor.fetchone())
-    
     cursor.execute(
-        '''SELECT status, COUNT(*) as count FROM referrals 
-           WHERE affiliate_id = %s GROUP BY status''',
+        'SELECT status, COUNT(*) as count FROM referrals WHERE affiliate_id = %s GROUP BY status',
         (affiliate_id,)
     )
     referral_stats = {row['status']: row['count'] for row in cursor.fetchall()}
-    
     cursor.execute(
-        '''SELECT SUM(amount) as pending FROM commissions 
-           WHERE affiliate_id = %s AND status = 'pending' ''',
+        "SELECT SUM(amount) as pending FROM commissions WHERE affiliate_id = %s AND status = 'pending'",
         (affiliate_id,)
     )
     pending_result = cursor.fetchone()
     pending_earnings = pending_result['pending'] if pending_result['pending'] else 0
-    
     cursor.execute(
-        '''SELECT SUM(amount) as paid FROM commissions 
-           WHERE affiliate_id = %s AND status = 'paid' ''',
+        "SELECT SUM(amount) as paid FROM commissions WHERE affiliate_id = %s AND status = 'paid'",
         (affiliate_id,)
     )
     paid_result = cursor.fetchone()
     paid_earnings = paid_result['paid'] if paid_result['paid'] else 0
-    
     cursor.close()
     conn.close()
-    
     return {
         'affiliate': affiliate,
         'referral_stats': referral_stats,
@@ -559,7 +536,6 @@ def get_affiliate_stats(affiliate_id):
 def get_affiliate_commissions(affiliate_id):
     """Get all commissions for an affiliate"""
     conn, cursor = get_db()
-    
     cursor.execute(
         '''SELECT c.*, u.email as referred_email 
            FROM commissions c
@@ -568,12 +544,11 @@ def get_affiliate_commissions(affiliate_id):
            ORDER BY c.created_at DESC''',
         (affiliate_id,)
     )
-    
     commissions = [dict(row) for row in cursor.fetchall()]
     cursor.close()
     conn.close()
-    
     return commissions
+
 
 if __name__ == '__main__':
     init_db()
