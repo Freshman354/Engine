@@ -57,6 +57,9 @@
             margin-bottom: 24px;
             padding-bottom: 12px;
             border-bottom: 2px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         
         .form-group {
@@ -87,6 +90,12 @@
             outline: none;
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-group input:disabled {
+            background: #f9fafb;
+            color: #9ca3af;
+            cursor: not-allowed;
         }
         
         .form-group textarea {
@@ -204,9 +213,40 @@
             border-radius: 12px;
             font-size: 12px;
             font-weight: 700;
-            margin-left: 8px;
             text-transform: uppercase;
         }
+
+        /* ── Webhook / Integrations ── */
+        .webhook-row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .webhook-row input { flex: 1; }
+        .btn-test {
+            padding: 12px 16px;
+            background: #f3f4f6;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        .btn-test:hover { background: #e5e7eb; border-color: #9ca3af; }
+        .btn-test:disabled { opacity: 0.4; cursor: not-allowed; }
+        .webhook-status {
+            font-size: 13px;
+            margin-top: 6px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            display: none;
+        }
+        .webhook-status.ok  { background: #d1fae5; color: #065f46; display: block; }
+        .webhook-status.err { background: #fee2e2; color: #991b1b; display: block; }
         
         .preview-panel {
             position: sticky;
@@ -424,13 +464,12 @@
                 <textarea id="welcome-message" placeholder="Hi! How can I help you today?"></textarea>
             </div>
             
-            <!-- NEW: White-Label Branding Section -->
+            <!-- White-Label Branding Section -->
             <div class="section-title">
                 White-Label Options
                 <span class="plan-badge" id="plan-badge" style="display: none;"></span>
             </div>
             
-            <!-- Branding checkbox (will be enabled/disabled by JavaScript) -->
             <div class="form-group" id="branding-group">
                 <label class="checkbox-container" id="branding-container">
                     <input type="checkbox" 
@@ -442,7 +481,36 @@
                 <div class="help-text" id="branding-help-text"></div>
                 <a href="/upgrade" class="upgrade-link" id="upgrade-link" style="display: none;">Upgrade to Agency Plan →</a>
             </div>
-            
+
+            <!-- ═══════════════════════════════════════════════════════════
+                 INTEGRATIONS — Zapier / Make webhooks (Pro+ only)
+            ════════════════════════════════════════════════════════════ -->
+            <div class="section-title">
+                Integrations
+                <span class="plan-badge" id="integrations-badge" style="display:none; background:#6366f1;">PRO+</span>
+            </div>
+
+            <div class="form-group">
+                <label for="webhook-url">Zapier / Make Webhook URL</label>
+                <div class="webhook-row">
+                    <input type="url"
+                           id="webhook-url"
+                           placeholder="https://hooks.zapier.com/hooks/catch/..."
+                           disabled>
+                    <button class="btn-test"
+                            id="btn-test-webhook"
+                            onclick="testWebhook()"
+                            disabled>🧪 Test</button>
+                </div>
+                <div class="webhook-status" id="webhook-status"></div>
+                <div class="hint">Every time a lead is captured, Lumvi will POST the lead data to this URL.</div>
+                <div class="help-text" id="webhook-help-text"></div>
+                <a href="/upgrade" class="upgrade-link" id="upgrade-link-webhook" style="display:none;">
+                    Upgrade to Pro to unlock Zapier / Make →
+                </a>
+            </div>
+            <!-- ═══════════════════════════════════════════════════════════ -->
+
             <div class="section-title">Contact Information</div>
             
             <div class="form-group">
@@ -481,7 +549,6 @@
                             Hi! How can I help you today?
                         </div>
 
-                        <!-- Branding preview -->
                         <div class="preview-branding" id="preview-branding">
                             Powered by <a href="#" onclick="return false;">FAQ Chatbot</a>
                         </div>
@@ -493,9 +560,8 @@
     
     <script>
         let currentConfig = {};
-        let userPlanType = 'free'; // Will be loaded from server
+        let userPlanType = 'free';
         
-        // Load config on page load
         window.onload = function() {
             loadUserInfo();
             loadConfig();
@@ -507,54 +573,75 @@
             try {
                 const response = await fetch('/api/user/info');
                 const data = await response.json();
-                
                 if (data.success) {
                     userPlanType = data.plan_type || 'free';
-                    configureBrandingControls();
                 }
             } catch (error) {
                 console.log('Could not load user info, using default');
-                configureBrandingControls();
             }
+            // Always configure controls after fetch resolves (success or catch)
+            configureBrandingControls();
+            configureWebhookControls();
         }
 
         function configureBrandingControls() {
-            const checkbox = document.getElementById('remove-branding');
-            const container = document.getElementById('branding-container');
-            const helpText = document.getElementById('branding-help-text');
+            const checkbox    = document.getElementById('remove-branding');
+            const container   = document.getElementById('branding-container');
+            const helpText    = document.getElementById('branding-help-text');
             const upgradeLink = document.getElementById('upgrade-link');
-            const planBadge = document.getElementById('plan-badge');
+            const planBadge   = document.getElementById('plan-badge');
 
             if (userPlanType === 'agency' || userPlanType === 'enterprise') {
-                // Agency/Enterprise: Enable checkbox
                 checkbox.disabled = false;
                 container.classList.remove('disabled');
-                helpText.className = 'help-text success';
+                helpText.className   = 'help-text success';
                 helpText.textContent = '✅ White-label is available on your ' + userPlanType + ' plan';
                 upgradeLink.style.display = 'none';
-                planBadge.textContent = userPlanType.toUpperCase();
-                planBadge.style.display = 'inline-block';
+                planBadge.textContent     = userPlanType.toUpperCase();
+                planBadge.style.display   = 'inline-block';
             } else {
-                // Free/Starter: Disable checkbox
                 checkbox.disabled = true;
                 container.classList.add('disabled');
-                const labelSpan = container.querySelector('.checkbox-label');
-                labelSpan.classList.add('grayed');
-                helpText.className = 'help-text warning';
-                helpText.textContent = '🔒 Upgrade to Agency plan ($120/mo) to remove branding and fully white-label your chatbot';
+                container.querySelector('.checkbox-label').classList.add('grayed');
+                helpText.className   = 'help-text warning';
+                helpText.textContent = '🔒 Upgrade to Agency plan ($299/mo) to remove branding and fully white-label your chatbot';
                 upgradeLink.style.display = 'inline-block';
+            }
+        }
+
+        // ── NEW: configure webhook field based on plan ───────────────────
+        function configureWebhookControls() {
+            const input      = document.getElementById('webhook-url');
+            const testBtn    = document.getElementById('btn-test-webhook');
+            const helpText   = document.getElementById('webhook-help-text');
+            const upgradeBtn = document.getElementById('upgrade-link-webhook');
+            const badge      = document.getElementById('integrations-badge');
+            const canWebhook = ['pro', 'agency', 'enterprise'].includes(userPlanType);
+
+            if (canWebhook) {
+                input.disabled   = false;
+                testBtn.disabled = false;
+                helpText.className   = 'help-text success';
+                helpText.textContent = '✅ Zapier / Make webhooks are active on your ' + userPlanType + ' plan';
+                upgradeBtn.style.display = 'none';
+                badge.style.display      = 'inline-block';
+            } else {
+                input.disabled   = true;
+                testBtn.disabled = true;
+                helpText.className   = 'help-text warning';
+                helpText.textContent = '🔒 Webhook integrations are available on Pro ($99/mo) and above';
+                upgradeBtn.style.display = 'inline-block';
+                badge.style.display      = 'none';
             }
         }
         
         function attachEventListeners() {
-            // Update preview on any input change
             document.getElementById('company-name').addEventListener('input', updatePreview);
             document.getElementById('primary-color').addEventListener('input', updatePreview);
             document.getElementById('secondary-color').addEventListener('input', updatePreview);
             document.getElementById('bot-name').addEventListener('input', updatePreview);
             document.getElementById('welcome-message').addEventListener('input', updatePreview);
             
-            // Color picker sync
             document.getElementById('primary-color-picker').addEventListener('input', function(e) {
                 document.getElementById('primary-color').value = e.target.value;
                 updatePreview();
@@ -565,7 +652,6 @@
                 updatePreview();
             });
             
-            // Text input to color picker sync
             document.getElementById('primary-color').addEventListener('input', function(e) {
                 if (/^#[0-9A-F]{6}$/i.test(e.target.value)) {
                     document.getElementById('primary-color-picker').value = e.target.value;
@@ -609,103 +695,149 @@
         }
         
         function populateForm(config) {
-            document.getElementById('company-name').value = config.branding.company_name || '';
-            document.getElementById('logo-url').value = config.branding.logo_url || '';
-            document.getElementById('primary-color').value = config.branding.primary_color || '#667eea';
-            document.getElementById('secondary-color').value = config.branding.secondary_color || '#764ba2';
-            document.getElementById('bot-name').value = config.bot_settings.bot_name || '';
-            document.getElementById('welcome-message').value = config.bot_settings.welcome_message || '';
-            document.getElementById('contact-email').value = config.contact.email || '';
-            document.getElementById('contact-phone').value = config.contact.phone || '';
-            document.getElementById('business-hours').value = config.contact.business_hours || '';
+            document.getElementById('company-name').value    = config.branding?.company_name    || '';
+            document.getElementById('logo-url').value        = config.branding?.logo_url        || '';
+            document.getElementById('primary-color').value   = config.branding?.primary_color   || '#667eea';
+            document.getElementById('secondary-color').value = config.branding?.secondary_color || '#764ba2';
+            document.getElementById('bot-name').value        = config.bot_settings?.bot_name    || '';
+            document.getElementById('welcome-message').value = config.bot_settings?.welcome_message || '';
+            document.getElementById('contact-email').value   = config.contact?.email            || '';
+            document.getElementById('contact-phone').value   = config.contact?.phone            || '';
+            document.getElementById('business-hours').value  = config.contact?.business_hours   || '';
             
             // Sync color pickers
-            document.getElementById('primary-color-picker').value = config.branding.primary_color || '#667eea';
-            document.getElementById('secondary-color-picker').value = config.branding.secondary_color || '#764ba2';
+            document.getElementById('primary-color-picker').value  = config.branding?.primary_color   || '#667eea';
+            document.getElementById('secondary-color-picker').value = config.branding?.secondary_color || '#764ba2';
+
+            // ── Webhook: only populate if field is enabled for this plan ──
+            const webhookInput = document.getElementById('webhook-url');
+            if (!webhookInput.disabled) {
+                webhookInput.value = config.integrations?.webhook_url || '';
+            }
         }
         
         function updatePreview() {
-            const botName = document.getElementById('bot-name').value || 'Support Assistant';
-            const welcomeMessage = document.getElementById('welcome-message').value || 'Hi! How can I help you today?';
-            const primaryColor = document.getElementById('primary-color').value || '#667eea';
-            const companyName = document.getElementById('company-name').value || 'Demo Company';
+            const botName      = document.getElementById('bot-name').value        || 'Support Assistant';
+            const welcomeMsg   = document.getElementById('welcome-message').value || 'Hi! How can I help you today?';
+            const primaryColor = document.getElementById('primary-color').value   || '#667eea';
+            const companyName  = document.getElementById('company-name').value    || 'Demo Company';
             
-            // Update preview
-            document.getElementById('preview-name').textContent = botName;
-            document.getElementById('preview-message').textContent = welcomeMessage;
+            document.getElementById('preview-name').textContent    = botName;
+            document.getElementById('preview-message').textContent = welcomeMsg;
             document.getElementById('preview-header').style.background = primaryColor;
             
-            // Update avatar
             const initials = companyName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
             document.getElementById('preview-avatar').textContent = initials;
         }
         
         async function saveChanges() {
-            const clientId = document.getElementById('client-id').value || 'demo';
-            const removeBrandingCheckbox = document.getElementById('remove-branding');
-            const removeBranding = removeBrandingCheckbox ? removeBrandingCheckbox.checked : false;
+            const clientId       = document.getElementById('client-id').value || 'demo';
+            const removeBranding = document.getElementById('remove-branding')?.checked || false;
+
+            // Only include webhook_url if the field is enabled (pro/agency/enterprise)
+            const webhookInput = document.getElementById('webhook-url');
+            const webhookUrl   = webhookInput.disabled ? '' : webhookInput.value.trim();
             
             const updatedConfig = {
-                client_id: clientId,
+                client_id:       clientId,
                 remove_branding: removeBranding,
                 branding: {
-                    company_name: document.getElementById('company-name').value,
-                    logo_url: document.getElementById('logo-url').value,
-                    primary_color: document.getElementById('primary-color').value,
+                    company_name:    document.getElementById('company-name').value,
+                    logo_url:        document.getElementById('logo-url').value,
+                    primary_color:   document.getElementById('primary-color').value,
                     secondary_color: document.getElementById('secondary-color').value,
-                    bot_avatar: currentConfig.branding?.bot_avatar || ''
+                    bot_avatar:      currentConfig.branding?.bot_avatar || ''
                 },
                 contact: {
-                    email: document.getElementById('contact-email').value,
-                    phone: document.getElementById('contact-phone').value,
-                    whatsapp: currentConfig.contact?.whatsapp || '',
+                    email:          document.getElementById('contact-email').value,
+                    phone:          document.getElementById('contact-phone').value,
+                    whatsapp:       currentConfig.contact?.whatsapp || '',
                     business_hours: document.getElementById('business-hours').value
                 },
                 bot_settings: {
-                    bot_name: document.getElementById('bot-name').value,
-                    welcome_message: document.getElementById('welcome-message').value,
-                    tone: currentConfig.bot_settings?.tone || 'friendly',
+                    bot_name:         document.getElementById('bot-name').value,
+                    welcome_message:  document.getElementById('welcome-message').value,
+                    tone:             currentConfig.bot_settings?.tone || 'friendly',
                     fallback_message: currentConfig.bot_settings?.fallback_message || '',
-                    lead_triggers: currentConfig.bot_settings?.lead_triggers || []
+                    lead_triggers:    currentConfig.bot_settings?.lead_triggers || []
+                },
+                // ── integrations block ──────────────────────────────────
+                // Backend (save_customization) will strip webhook_url for
+                // free/starter regardless of what arrives here, so it is
+                // safe to always send the field.
+                integrations: {
+                    webhook_url: webhookUrl
                 }
             };
             
             try {
                 const response = await fetch('/api/admin/customize', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(updatedConfig)
                 });
                 
                 const data = await response.json();
-                
-                if (data.success) {
-                    showSuccess();
-                } else {
-                    showError();
-                }
+                data.success ? showSuccess() : showError(data.error);
             } catch (error) {
                 console.error('Error saving:', error);
                 showError();
             }
         }
-        
-        function showSuccess() {
-            const successEl = document.getElementById('success-message');
-            successEl.style.display = 'block';
-            setTimeout(() => {
-                successEl.style.display = 'none';
-            }, 3000);
+
+        // ── NEW: test webhook by sending a ping via the backend ──────────
+        async function testWebhook() {
+            const url    = document.getElementById('webhook-url').value.trim();
+            const status = document.getElementById('webhook-status');
+            const btn    = document.getElementById('btn-test-webhook');
+
+            if (!url) {
+                status.className   = 'webhook-status err';
+                status.textContent = '⚠️ Enter a webhook URL first.';
+                return;
+            }
+
+            btn.disabled    = true;
+            btn.textContent = '⏳ Sending...';
+            status.className   = 'webhook-status';
+            status.textContent = '';
+
+            try {
+                const res  = await fetch('/api/admin/test-webhook', {
+                    method:  'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body:    JSON.stringify({ webhook_url: url })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    status.className   = 'webhook-status ok';
+                    status.textContent = '✅ Test ping sent! Check Zapier / Make / webhook.site to confirm it arrived.';
+                } else {
+                    status.className   = 'webhook-status err';
+                    status.textContent = '❌ ' + (data.error || 'Webhook test failed.');
+                }
+            } catch (e) {
+                status.className   = 'webhook-status err';
+                status.textContent = '❌ Network error — could not reach the test endpoint.';
+            }
+
+            btn.disabled    = false;
+            btn.textContent = '🧪 Test';
         }
         
-        function showError() {
-            const errorEl = document.getElementById('error-message');
-            errorEl.style.display = 'block';
-            setTimeout(() => {
-                errorEl.style.display = 'none';
-            }, 3000);
+        function showSuccess(msg) {
+            const el = document.getElementById('success-message');
+            el.textContent   = '✅ ' + (msg || 'Changes saved successfully!');
+            el.style.display = 'block';
+            setTimeout(() => { el.style.display = 'none'; }, 3000);
+        }
+        
+        function showError(msg) {
+            const el = document.getElementById('error-message');
+            el.textContent   = '❌ ' + (msg || 'Error saving changes. Please try again.');
+            el.style.display = 'block';
+            setTimeout(() => { el.style.display = 'none'; }, 4000);
         }
     </script>
 </body>
