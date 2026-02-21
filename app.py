@@ -909,7 +909,9 @@ def dashboard():
         if client['branding_settings']:
             client['branding_settings'] = json.loads(client['branding_settings'])
     
-    return render_template('dashboard.html', user=current_user, clients=clients)
+    # Enterprise users get the new light dashboard; all others get the original
+    template = 'dashboard_enterprise.html' if current_user.plan_type == 'enterprise' else 'dashboard.html'
+    return render_template(template, user=current_user, clients=clients)
 
 @app.route('/create-client', methods=['POST'])
 @login_required
@@ -2253,4 +2255,4 @@ def load_user(user_id):
 
 # Initialize database on startup
 with app.app_context():
-    models.init_db()    
+    models.init_db()
