@@ -139,6 +139,32 @@ def init_db():
         )
     ''')
 
+    # Payments table
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS payments (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            currency TEXT DEFAULT 'USD',
+            payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status TEXT DEFAULT 'completed',
+            provider TEXT DEFAULT 'manual',
+            plan_type TEXT,
+            reference TEXT,
+            notes TEXT,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS analytics_events (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER,
+            event_name TEXT NOT NULL,
+            metadata TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -338,6 +364,27 @@ def verify_client_ownership(user_id, client_id):
     cursor.close()
     conn.close()
     return client is not None
+
+
+def delete_client(client_id):
+    """
+    Cascade-delete a client and all its associated data:
+    conversations → leads → FAQs → client row.
+    Order matters because of foreign key constraints.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute('DELETE FROM conversations WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM leads WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM faqs WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM clients WHERE client_id = %s', (client_id,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
 
 
 # =====================================================================
@@ -548,6 +595,326 @@ def get_affiliate_commissions(affiliate_id):
     cursor.close()
     conn.close()
     return commissions
+
+
+
+# =====================================================================
+# ADMIN MIGRATIONS
+# =====================================================================
+
+def migrate_admin_columns():
+    """Add is_admin, subscription_status, upgraded_at, cancelled_at to users."""
+    conn, cursor = get_db()
+    print("Running admin column migration...")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status TEXT DEFAULT 'active'")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS upgraded_at TIMESTAMP")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP")
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("Admin columns migration complete")
+
+
+def migrate_payments_and_events():
+    """Create payments and analytics_events tables."""
+    conn, cursor = get_db()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS payments (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            amount REAL NOT NULL,
+            currency TEXT DEFAULT 'USD',
+            payment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status TEXT DEFAULT 'completed',
+            provider TEXT DEFAULT 'manual',
+            plan_type TEXT,
+            reference TEXT,
+            notes TEXT,
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS analytics_events (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER,
+            event_name TEXT NOT NULL,
+            metadata TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("Payments and analytics_events tables ready")
+
+
+# =====================================================================
+# EVENT TRACKING
+# =====================================================================
+
+def track_event(event_name, user_id=None, metadata=None):
+    """
+    Log a named event to analytics_events.
+    Fails silently so it never disrupts the main request.
+    Usage: track_event('login', user_id=5, metadata={'plan': 'pro'})
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            'INSERT INTO analytics_events (user_id, event_name, metadata) VALUES (%s, %s, %s)',
+            (user_id, event_name, json.dumps(metadata) if metadata else None)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+
+
+# =====================================================================
+# PAYMENT FUNCTIONS
+# =====================================================================
+
+def record_payment(user_id, amount, plan_type, provider='manual', currency='USD',
+                   status='completed', reference=None, notes=None):
+    """Insert a payment record and return its id."""
+    conn, cursor = get_db()
+    cursor.execute(
+        '''INSERT INTO payments
+           (user_id, amount, currency, status, provider, plan_type, reference, notes)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+        (user_id, amount, currency, status, provider, plan_type, reference, notes)
+    )
+    payment_id = cursor.fetchone()['id']
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return payment_id
+
+
+def get_all_payments(limit=200):
+    """Get recent payments joined with user email."""
+    conn, cursor = get_db()
+    cursor.execute(
+        '''SELECT p.*, u.email
+           FROM payments p
+           JOIN users u ON p.user_id = u.id
+           ORDER BY p.payment_date DESC
+           LIMIT %s''',
+        (limit,)
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    for r in rows:
+        if r.get('payment_date'):
+            r['payment_date'] = r['payment_date'].isoformat()
+    return rows
+
+
+def get_mrr():
+    """Sum completed payments in the current calendar month."""
+    conn, cursor = get_db()
+    cursor.execute(
+        """SELECT COALESCE(SUM(amount), 0) AS mrr
+           FROM payments
+           WHERE status = 'completed'
+             AND DATE_TRUNC('month', payment_date) = DATE_TRUNC('month', CURRENT_DATE)"""
+    )
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return float(row['mrr']) if row else 0.0
+
+
+def get_total_revenue():
+    """Sum of all completed payments ever."""
+    conn, cursor = get_db()
+    cursor.execute("SELECT COALESCE(SUM(amount), 0) AS total FROM payments WHERE status = 'completed'")
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return float(row['total']) if row else 0.0
+
+
+def get_revenue_by_month(months=6):
+    """Monthly revenue totals for the last N months."""
+    conn, cursor = get_db()
+    cursor.execute(
+        """SELECT TO_CHAR(DATE_TRUNC('month', payment_date), 'Mon YYYY') AS month,
+                  DATE_TRUNC('month', payment_date) AS month_date,
+                  COALESCE(SUM(amount), 0) AS revenue
+           FROM payments
+           WHERE status = 'completed'
+             AND payment_date >= CURRENT_DATE - INTERVAL '%(m)s months'
+           GROUP BY DATE_TRUNC('month', payment_date)
+           ORDER BY month_date ASC""" % {'m': months}
+    )
+    rows = [{'month': r['month'], 'revenue': float(r['revenue'])} for r in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    return rows
+
+
+# =====================================================================
+# ADMIN USER FUNCTIONS
+# =====================================================================
+
+def get_all_users(limit=500):
+    """All users for admin panel, newest first."""
+    conn, cursor = get_db()
+    cursor.execute(
+        '''SELECT id, email, plan_type, subscription_status, is_admin,
+                  created_at, upgraded_at, cancelled_at
+           FROM users
+           ORDER BY created_at DESC
+           LIMIT %s''',
+        (limit,)
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    for r in rows:
+        for col in ['created_at', 'upgraded_at', 'cancelled_at']:
+            if r.get(col):
+                r[col] = r[col].isoformat()
+    return rows
+
+
+def get_user_count_by_plan():
+    """Users grouped by plan_type."""
+    conn, cursor = get_db()
+    cursor.execute(
+        'SELECT plan_type, COUNT(*) AS cnt FROM users GROUP BY plan_type ORDER BY cnt DESC'
+    )
+    rows = {r['plan_type']: int(r['cnt']) for r in cursor.fetchall()}
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def get_new_users_this_month():
+    """Count signups in the current calendar month."""
+    conn, cursor = get_db()
+    cursor.execute(
+        """SELECT COUNT(*) AS cnt FROM users
+           WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)"""
+    )
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return int(row['cnt']) if row else 0
+
+
+def get_user_growth_by_month(months=6):
+    """New signups per month for the last N months."""
+    conn, cursor = get_db()
+    cursor.execute(
+        """SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'Mon YYYY') AS month,
+                  DATE_TRUNC('month', created_at) AS month_date,
+                  COUNT(*) AS count
+           FROM users
+           WHERE created_at >= CURRENT_DATE - INTERVAL '%(m)s months'
+           GROUP BY DATE_TRUNC('month', created_at)
+           ORDER BY month_date ASC""" % {'m': months}
+    )
+    rows = [{'month': r['month'], 'count': int(r['count'])} for r in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def admin_update_user(user_id, plan_type=None, subscription_status=None, is_admin=None):
+    """Update user plan, subscription_status, or admin flag."""
+    conn, cursor = get_db()
+    updates = []
+    params = []
+    if plan_type is not None:
+        updates.append('plan_type = %s')
+        params.append(plan_type)
+        updates.append('upgraded_at = CURRENT_TIMESTAMP')
+    if subscription_status is not None:
+        updates.append('subscription_status = %s')
+        params.append(subscription_status)
+        if subscription_status == 'cancelled':
+            updates.append('cancelled_at = CURRENT_TIMESTAMP')
+    if is_admin is not None:
+        updates.append('is_admin = %s')
+        params.append(bool(is_admin))
+    if not updates:
+        cursor.close()
+        conn.close()
+        return False
+    params.append(user_id)
+    cursor.execute('UPDATE users SET ' + ', '.join(updates) + ' WHERE id = %s', params)
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return True
+
+
+def admin_delete_user(user_id):
+    """Hard-delete a user and cascade all their data."""
+    conn, cursor = get_db()
+    try:
+        cursor.execute('SELECT client_id FROM clients WHERE user_id = %s', (user_id,))
+        client_ids = [r['client_id'] for r in cursor.fetchall()]
+        for cid in client_ids:
+            cursor.execute('DELETE FROM conversations WHERE client_id = %s', (cid,))
+            cursor.execute('DELETE FROM leads WHERE client_id = %s', (cid,))
+            cursor.execute('DELETE FROM faqs WHERE client_id = %s', (cid,))
+        cursor.execute('DELETE FROM clients WHERE user_id = %s', (user_id,))
+        cursor.execute('DELETE FROM commissions WHERE referred_user_id = %s', (user_id,))
+        cursor.execute('DELETE FROM referrals WHERE referred_user_id = %s', (user_id,))
+        cursor.execute('DELETE FROM affiliates WHERE user_id = %s', (user_id,))
+        cursor.execute('DELETE FROM payments WHERE user_id = %s', (user_id,))
+        cursor.execute('DELETE FROM analytics_events WHERE user_id = %s', (user_id,))
+        cursor.execute('DELETE FROM users WHERE id = %s', (user_id,))
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_all_leads_admin(limit=500, client_id_filter=None, search=None):
+    """Leads across all clients for admin view."""
+    conn, cursor = get_db()
+    query = '''SELECT l.*, c.company_name, u.email as owner_email
+               FROM leads l
+               LEFT JOIN clients c ON l.client_id = c.client_id
+               LEFT JOIN users u ON c.user_id = u.id
+               WHERE 1=1'''
+    params = []
+    if client_id_filter:
+        query += ' AND l.client_id = %s'
+        params.append(client_id_filter)
+    if search:
+        query += ' AND (l.name ILIKE %s OR l.email ILIKE %s)'
+        params.extend(['%' + search + '%', '%' + search + '%'])
+    query += ' ORDER BY l.created_at DESC LIMIT %s'
+    params.append(limit)
+    cursor.execute(query, params)
+    rows = [dict(r) for r in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    for r in rows:
+        if r.get('created_at'):
+            r['created_at'] = r['created_at'].isoformat()
+    return rows
+
+
+def admin_delete_lead(lead_id):
+    """Delete a single lead by id."""
+    conn, cursor = get_db()
+    cursor.execute('DELETE FROM leads WHERE id = %s', (lead_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 
 if __name__ == '__main__':

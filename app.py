@@ -10,7 +10,7 @@ from flask_limiter.util import get_remote_address
 import logging
 from logging.handlers import RotatingFileHandler
 import shutil
-from datetime import timedelta
+from datetime import datetime, timedelta
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from functools import wraps
 
@@ -27,6 +27,10 @@ from paypalrestsdk import Payment, configure
 load_dotenv()
 
 app = Flask(__name__)
+
+# Admin blueprint — register immediately after app creation
+from admin_routes import admin_bp
+app.register_blueprint(admin_bp)
 app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev_key_change_this_in_prod")
 
 # Initialize AI helper at app startup
@@ -115,6 +119,7 @@ class User(UserMixin):
         self.id = user_data['id']
         self.email = user_data['email']
         self.plan_type = user_data['plan_type']
+        self.is_admin = bool(user_data.get('is_admin', False))
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -128,6 +133,16 @@ try:
     models.init_db()
     if hasattr(models, 'migrate_clients_table'):
         models.migrate_clients_table()
+
+    # Ensure 'pro' is allowed in the plan_type column (removes old CHECK constraint)
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_plan_type_check")
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as _e:
+        pass  # column may not have a constraint — that's fine
     if hasattr(models, 'migrate_faqs_table'):
         models.migrate_faqs_table()
     print("✅ Database initialized/migrated successfully!")
@@ -788,7 +803,7 @@ def signup():
         user_data = models.get_user_by_id(user_id)
         user = User(user_data)
         login_user(user)
-
+        models.track_event('signup', user_id=user_id, metadata={'email': email, 'plan': 'free'})
         return redirect(url_for('dashboard'))
 
     return render_template('signup.html', referral_code=referral_code)
@@ -807,6 +822,7 @@ def login():
         if user_data:
             user = User(user_data)
             login_user(user)
+            models.track_event('login', user_id=user_data['id'], metadata={'email': email})
             return redirect(url_for('dashboard'))
         else:
             return render_template('login.html', error='Invalid email or password')
@@ -829,8 +845,28 @@ def dashboard():
         if client['branding_settings']:
             client['branding_settings'] = json.loads(client['branding_settings'])
 
-    template = 'dashboard_enterprise.html' if current_user.plan_type in ('agency', 'enterprise') else 'dashboard.html'
-    return render_template(template, user=current_user, clients=clients)
+    # Always re-fetch user from DB so plan badge is never stale after an upgrade
+    fresh_user = models.get_user_by_id(current_user.id)
+    plan_type = fresh_user['plan_type'] if fresh_user else current_user.plan_type
+    plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+    client_limit = plan_limits['clients']
+    client_count = len(clients)
+    # For unlimited plans (agency/enterprise) show a clean display
+    slots_display = 'Unlimited' if client_limit >= 999999 else str(client_limit)
+    limit_reached = False if client_limit >= 999999 else client_count >= client_limit
+
+    template = 'dashboard_enterprise.html'
+    return render_template(
+        template,
+        user=current_user,
+        clients=clients,
+        plan_type=plan_type,
+        plan_limits=plan_limits,
+        client_count=client_count,
+        client_limit=client_limit,
+        slots_display=slots_display,
+        limit_reached=limit_reached
+    )
 
 
 @app.route('/create-client', methods=['POST'])
@@ -1763,6 +1799,12 @@ def paypal_success():
             conn.close()
 
             session.pop('pending_payment', None)
+            # Log the payment and event
+            amount = pending_payment.get('amount', 0)
+            models.record_payment(current_user.id, float(amount), plan,
+                                  provider='paypal', reference=payment_id)
+            models.track_event('plan_upgrade', user_id=current_user.id,
+                               metadata={'plan': plan, 'provider': 'paypal', 'amount': amount})
             flash(f"✅ Payment successful! You've been upgraded to the {plan.capitalize()} plan.", 'success')
             return redirect(url_for('dashboard'))
         else:
@@ -1913,6 +1955,84 @@ def affiliate_dashboard():
     return render_template('affiliate-dashboard.html', stats=stats, commissions=commissions)
 
 
+@app.route('/admin/set-plan', methods=['GET', 'POST'])
+def admin_set_plan():
+    ADMIN_SECRET = os.environ.get('ADMIN_SECRET', 'lumvi-admin-2024')
+    error = None
+    success = None
+
+    if request.method == 'POST':
+        secret = request.form.get('secret')
+        email = request.form.get('email', '').strip().lower()
+        plan = request.form.get('plan', '').strip().lower()
+
+        valid_plans = ['free', 'starter', 'pro', 'agency', 'enterprise']
+
+        if secret != ADMIN_SECRET:
+            error = 'Invalid admin secret.'
+        elif not email:
+            error = 'Email is required.'
+        elif plan not in valid_plans:
+            error = f'Invalid plan. Must be one of: {", ".join(valid_plans)}'
+        else:
+            user = models.get_user_by_email(email)
+            if not user:
+                error = f'No user found with email: {email}'
+            else:
+                conn, cursor = models.get_db()
+                cursor.execute(
+                    'UPDATE users SET plan_type = %s WHERE email = %s',
+                    (plan, email)
+                )
+                conn.commit()
+                cursor.close()
+                conn.close()
+                success = f'✅ {email} updated to {plan.capitalize()} plan.'
+
+    return f'''<!DOCTYPE html>
+<html>
+<head><title>Lumvi Admin — Set Plan</title>
+<style>
+  body{{font-family:-apple-system,sans-serif;background:#0f172a;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}}
+  .card{{background:#1e293b;border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:40px;max-width:460px;width:100%;color:#f8fafc;}}
+  h1{{font-size:22px;font-weight:800;margin-bottom:6px;}}
+  p{{color:#64748b;font-size:14px;margin-bottom:28px;}}
+  label{{display:block;font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;}}
+  input,select{{width:100%;padding:10px 14px;background:#0f172a;border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#f8fafc;font-size:14px;margin-bottom:16px;}}
+  button{{width:100%;padding:12px;background:#06b6d4;color:#0f172a;border:none;border-radius:8px;font-weight:800;font-size:15px;cursor:pointer;margin-top:4px;}}
+  button:hover{{background:#0891b2;}}
+  .success{{background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);color:#34d399;padding:12px 16px;border-radius:8px;margin-bottom:20px;font-size:14px;}}
+  .error{{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#f87171;padding:12px 16px;border-radius:8px;margin-bottom:20px;font-size:14px;}}
+  .warning{{color:#fbbf24;font-size:12px;margin-top:16px;text-align:center;}}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Admin — Set User Plan</h1>
+  <p>Update any user account to a different plan tier.</p>
+  {"<div class=\"success\">" + success + "</div>" if success else ""}
+  {"<div class=\"error\">" + error + "</div>" if error else ""}
+  <form method="POST">
+    <label>Admin Secret</label>
+    <input type="password" name="secret" placeholder="Enter admin secret" required>
+    <label>User Email</label>
+    <input type="email" name="email" placeholder="user@example.com" required>
+    <label>New Plan</label>
+    <select name="plan">
+      <option value="free">Free</option>
+      <option value="starter">Starter ($49/mo)</option>
+      <option value="pro">Pro ($99/mo)</option>
+      <option value="agency">Agency ($299/mo)</option>
+      <option value="enterprise">Enterprise</option>
+    </select>
+    <button type="submit">Update Plan</button>
+  </form>
+  <p class="warning">⚠️ Keep this URL private. Set ADMIN_SECRET in your environment variables.</p>
+</div>
+</body>
+</html>'''
+
+
 @app.route('/admin/init-db-production', methods=['GET', 'POST'])
 def init_db_production():
     if request.method == 'POST':
@@ -1943,6 +2063,44 @@ def init_db_production():
 @app.route('/demo')
 def demo_page():
     return render_template('demo.html')
+
+
+# =====================================================================
+# FIX 2: BLOCK BOT DELETION (privacy policy compliance)
+# Bots cannot be self-deleted — users must contact support.
+# This catches any frontend delete calls and returns a clear message.
+# =====================================================================
+
+@app.route('/api/clients/delete', methods=['POST', 'DELETE'])
+@login_required
+def delete_client_legacy():
+    """Legacy route — client_id in JSON body."""
+    data = request.json or {}
+    client_id = data.get('client_id')
+    if not client_id:
+        return jsonify({'success': False, 'error': 'client_id required'}), 400
+    return _do_delete_client(client_id)
+
+
+@app.route('/api/clients/<client_id>/delete', methods=['POST', 'DELETE'])
+@login_required
+def delete_client_by_id(client_id):
+    """RESTful delete route — client_id in URL."""
+    return _do_delete_client(client_id)
+
+
+def _do_delete_client(client_id):
+    """Shared deletion logic — verifies ownership then cascades delete."""
+    try:
+        if not models.verify_client_ownership(current_user.id, client_id):
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+        models.delete_client(client_id)
+        app.logger.info(f'Client {client_id} deleted by user {current_user.id}')
+        return jsonify({'success': True, 'message': 'Chatbot deleted successfully'})
+    except Exception as e:
+        app.logger.error(f'Delete client error: {e}')
+        return jsonify({'success': False, 'error': 'Failed to delete chatbot'}), 500
 
 
 # =====================================================================

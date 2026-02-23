@@ -1,0 +1,1050 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel — Lumvi</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #0a0f1a;
+            --surface: #111827;
+            --surface2: #1e293b;
+            --border: rgba(255,255,255,0.07);
+            --text: #f1f5f9;
+            --muted: #64748b;
+            --light: #94a3b8;
+            --primary: #06b6d4;
+            --primary-dim: rgba(6,182,212,0.12);
+            --success: #10b981;
+            --success-dim: rgba(16,185,129,0.12);
+            --warning: #f59e0b;
+            --warning-dim: rgba(245,158,11,0.12);
+            --danger: #ef4444;
+            --danger-dim: rgba(239,68,68,0.12);
+            --purple: #a78bfa;
+            --purple-dim: rgba(167,139,250,0.12);
+            --sidebar-w: 230px;
+        }
+
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; display:flex; }
+
+        /* ── SIDEBAR ── */
+        .sidebar {
+            width:var(--sidebar-w); background:var(--surface);
+            border-right:1px solid var(--border);
+            position:fixed; top:0; left:0; height:100vh;
+            display:flex; flex-direction:column; z-index:50;
+        }
+        .sidebar-logo {
+            padding:22px 20px; border-bottom:1px solid var(--border);
+            display:flex; align-items:center; gap:10px;
+        }
+        .logo-badge {
+            width:36px; height:36px; border-radius:10px;
+            background:linear-gradient(135deg,#06b6d4,#a78bfa);
+            display:flex; align-items:center; justify-content:center;
+            font-size:16px; flex-shrink:0;
+        }
+        .logo-text { font-size:16px; font-weight:800; letter-spacing:-0.3px; }
+        .logo-sub { font-size:10px; color:var(--muted); font-weight:600; letter-spacing:0.05em; text-transform:uppercase; }
+
+        .sidebar-nav { flex:1; padding:16px 12px; display:flex; flex-direction:column; gap:2px; overflow-y:auto; }
+        .nav-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); padding:12px 10px 6px; }
+
+        .nav-item {
+            display:flex; align-items:center; gap:10px;
+            padding:9px 12px; border-radius:9px;
+            text-decoration:none; color:var(--light);
+            font-size:13.5px; font-weight:500;
+            transition:all 0.15s; cursor:pointer;
+        }
+        .nav-item:hover { background:rgba(255,255,255,0.05); color:var(--text); }
+        .nav-item.active { background:var(--primary-dim); color:var(--primary); font-weight:600; }
+        .nav-item .icon { font-size:15px; width:18px; text-align:center; }
+
+        .sidebar-footer {
+            padding:14px 16px; border-top:1px solid var(--border);
+            display:flex; align-items:center; gap:10px;
+        }
+        .admin-avatar {
+            width:32px; height:32px; border-radius:50%;
+            background:linear-gradient(135deg,var(--primary),var(--purple));
+            display:flex; align-items:center; justify-content:center;
+            font-size:12px; font-weight:800; color:#0a0f1a; flex-shrink:0;
+        }
+        .admin-info .name { font-size:13px; font-weight:600; }
+        .admin-info .role { font-size:11px; color:var(--muted); }
+
+        /* ── MAIN ── */
+        .main { margin-left:var(--sidebar-w); flex:1; display:flex; flex-direction:column; }
+
+        .topbar {
+            background:var(--surface); border-bottom:1px solid var(--border);
+            padding:0 32px; height:58px;
+            display:flex; align-items:center; justify-content:space-between;
+            position:sticky; top:0; z-index:40;
+        }
+        .topbar-title { font-size:15px; font-weight:700; }
+        .topbar-right { display:flex; align-items:center; gap:10px; }
+        .admin-chip {
+            padding:4px 12px; border-radius:999px; font-size:11px; font-weight:700;
+            background:var(--danger-dim); color:var(--danger);
+            border:1px solid rgba(239,68,68,0.2);
+            text-transform:uppercase; letter-spacing:0.06em;
+        }
+        .topbar-link {
+            padding:6px 14px; border-radius:8px; font-size:13px; font-weight:500;
+            color:var(--muted); text-decoration:none;
+            border:1px solid var(--border); transition:all 0.15s;
+        }
+        .topbar-link:hover { color:var(--text); border-color:rgba(255,255,255,0.15); }
+
+        /* ── PAGE ── */
+        .page { padding:28px 32px; }
+        .page-header { margin-bottom:28px; }
+        .page-header h1 { font-size:22px; font-weight:800; letter-spacing:-0.4px; margin-bottom:4px; }
+        .page-header p { color:var(--muted); font-size:14px; }
+
+        /* ── STAT CARDS ── */
+        .stats-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:28px; }
+        .stat-card {
+            background:var(--surface); border:1px solid var(--border);
+            border-radius:14px; padding:20px 22px; transition:border-color 0.2s;
+        }
+        .stat-card:hover { border-color:rgba(255,255,255,0.12); }
+        .stat-card .label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+        .stat-card .val { font-size:28px; font-weight:800; letter-spacing:-0.5px; margin-bottom:4px; }
+        .stat-card .sub { font-size:12px; color:var(--muted); }
+        .stat-card.c-primary .val { color:var(--primary); }
+        .stat-card.c-success .val { color:var(--success); }
+        .stat-card.c-warning .val { color:var(--warning); }
+        .stat-card.c-purple .val { color:var(--purple); }
+
+        /* ── CHARTS ROW ── */
+        .charts-row { display:grid; grid-template-columns:2fr 1fr; gap:20px; margin-bottom:28px; }
+        .chart-card {
+            background:var(--surface); border:1px solid var(--border);
+            border-radius:14px; padding:24px;
+        }
+        .chart-card h3 { font-size:14px; font-weight:700; margin-bottom:20px; color:var(--light); }
+        .chart-wrap { position:relative; height:220px; }
+
+        /* ── TABLES ── */
+        .table-card {
+            background:var(--surface); border:1px solid var(--border);
+            border-radius:14px; overflow:hidden; margin-bottom:24px;
+        }
+        .table-card-header {
+            padding:16px 20px; border-bottom:1px solid var(--border);
+            display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+        }
+        .table-card-header h3 { font-size:15px; font-weight:700; }
+        .table-wrap { overflow-x:auto; }
+        table { width:100%; border-collapse:collapse; }
+        thead tr { background:rgba(255,255,255,0.02); border-bottom:1px solid var(--border); }
+        th { padding:10px 16px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); white-space:nowrap; }
+        td { padding:13px 16px; font-size:13.5px; border-bottom:1px solid var(--border); vertical-align:middle; }
+        tbody tr:last-child td { border-bottom:none; }
+        tbody tr:hover { background:rgba(255,255,255,0.02); }
+
+        /* ── BADGES ── */
+        .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; }
+        .badge-free { background:rgba(100,116,139,0.15); color:#94a3b8; }
+        .badge-starter { background:var(--primary-dim); color:var(--primary); }
+        .badge-pro { background:var(--purple-dim); color:var(--purple); }
+        .badge-agency { background:var(--warning-dim); color:var(--warning); }
+        .badge-enterprise { background:var(--danger-dim); color:var(--danger); }
+        .badge-active { background:var(--success-dim); color:var(--success); }
+        .badge-cancelled { background:var(--danger-dim); color:var(--danger); }
+        .badge-past_due { background:var(--warning-dim); color:var(--warning); }
+        .badge-trialing { background:var(--primary-dim); color:var(--primary); }
+        .badge-paused { background:rgba(100,116,139,0.15); color:#94a3b8; }
+        .badge-completed { background:var(--success-dim); color:var(--success); }
+        .badge-failed { background:var(--danger-dim); color:var(--danger); }
+        .badge-manual { background:rgba(100,116,139,0.15); color:#94a3b8; }
+
+        /* ── BUTTONS ── */
+        .btn {
+            padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600;
+            border:none; cursor:pointer; text-decoration:none;
+            display:inline-flex; align-items:center; gap:6px;
+            transition:all 0.15s; font-family:inherit;
+        }
+        .btn-primary { background:var(--primary); color:#0a0f1a; }
+        .btn-primary:hover { background:#0891b2; }
+        .btn-success { background:var(--success); color:#0a0f1a; }
+        .btn-success:hover { background:#059669; }
+        .btn-danger { background:var(--danger); color:white; }
+        .btn-danger:hover { background:#dc2626; }
+        .btn-ghost { background:transparent; color:var(--muted); border:1px solid var(--border); }
+        .btn-ghost:hover { color:var(--text); border-color:rgba(255,255,255,0.15); }
+        .btn-sm { padding:5px 10px; font-size:12px; border-radius:6px; }
+
+        /* ── FORM ELEMENTS ── */
+        .input, .select {
+            background:var(--surface2); border:1px solid var(--border);
+            border-radius:8px; padding:8px 12px; font-size:13px;
+            color:var(--text); font-family:inherit; transition:border-color 0.15s;
+        }
+        .input:focus, .select:focus { outline:none; border-color:var(--primary); }
+        .input::placeholder { color:var(--muted); }
+        .select option { background:var(--surface2); }
+
+        /* ── SEARCH BAR ── */
+        .search-bar { display:flex; gap:8px; align-items:center; }
+        .search-bar .input { width:220px; }
+
+        /* ── MODAL ── */
+        .modal-overlay {
+            display:none; position:fixed; inset:0;
+            background:rgba(0,0,0,0.6); backdrop-filter:blur(4px);
+            z-index:1000; align-items:center; justify-content:center;
+        }
+        .modal-overlay.open { display:flex; }
+        .modal {
+            background:var(--surface); border:1px solid var(--border);
+            border-radius:18px; padding:32px; max-width:480px; width:90%;
+            box-shadow:0 20px 60px rgba(0,0,0,0.4);
+            animation:slideUp 0.2s ease;
+        }
+        .modal h2 { font-size:18px; font-weight:800; margin-bottom:6px; }
+        .modal p { color:var(--muted); font-size:14px; margin-bottom:20px; }
+        .modal-actions { display:flex; gap:10px; margin-top:24px; }
+        .form-row { margin-bottom:16px; }
+        .form-row label { display:block; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:var(--muted); margin-bottom:6px; }
+        .form-row .input, .form-row .select { width:100%; }
+
+        /* ── TOAST ── */
+        .toast {
+            position:fixed; bottom:24px; right:24px;
+            padding:12px 20px; border-radius:10px; font-size:14px; font-weight:600;
+            z-index:9999; opacity:0; transform:translateY(8px);
+            transition:all 0.3s; pointer-events:none; color:white;
+        }
+        .toast.show { opacity:1; transform:translateY(0); }
+        .toast.success { background:#16a34a; }
+        .toast.error { background:var(--danger); }
+        .toast.info { background:var(--primary); color:#0a0f1a; }
+
+        /* ── PLAN DIST LEGEND ── */
+        .plan-legend { display:flex; flex-direction:column; gap:8px; margin-top:16px; }
+        .plan-legend-item { display:flex; align-items:center; justify-content:space-between; font-size:13px; }
+        .plan-legend-dot { width:10px; height:10px; border-radius:50%; margin-right:8px; flex-shrink:0; }
+
+        /* ── EVENT TABLE ── */
+        .event-meta { font-family:monospace; font-size:11px; color:var(--muted); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+        /* ── EMPTY ── */
+        .empty { text-align:center; padding:48px; color:var(--muted); font-size:14px; }
+
+        @keyframes slideUp { from{transform:translateY(16px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+        @media (max-width:1200px) { .stats-grid{grid-template-columns:repeat(2,1fr);} .charts-row{grid-template-columns:1fr;} }
+        @media (max-width:768px) { .sidebar{display:none;} .main{margin-left:0;} .page{padding:20px 16px;} .stats-grid{grid-template-columns:repeat(2,1fr);} }
+    </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+    <div class="sidebar-logo">
+        <div class="logo-badge">⚙️</div>
+        <div>
+            <div class="logo-text">Lumvi</div>
+            <div class="logo-sub">Admin Panel</div>
+        </div>
+    </div>
+    <nav class="sidebar-nav">
+        <div class="nav-label">Overview</div>
+        <a href="/admin/dashboard" class="nav-item {% if section=='dashboard' %}active{% endif %}">
+            <span class="icon">📊</span> Dashboard
+        </a>
+
+        <div class="nav-label">Management</div>
+        <a href="/admin/users" class="nav-item {% if section=='users' %}active{% endif %}">
+            <span class="icon">👥</span> Users
+        </a>
+        <a href="/admin/revenue" class="nav-item {% if section=='revenue' %}active{% endif %}">
+            <span class="icon">💰</span> Revenue
+        </a>
+        <a href="/admin/leads" class="nav-item {% if section=='leads' %}active{% endif %}">
+            <span class="icon">🎯</span> Leads
+        </a>
+        <a href="/admin/analytics" class="nav-item {% if section=='analytics' %}active{% endif %}">
+            <span class="icon">📡</span> Events
+        </a>
+
+        <div class="nav-label">System</div>
+        <a href="/admin/system" class="nav-item {% if section=='system' %}active{% endif %}">
+            <span class="icon">🔧</span> System
+        </a>
+        <a href="/admin/set-plan" class="nav-item">
+            <span class="icon">✏️</span> Set Plan
+        </a>
+
+        <div class="nav-label">App</div>
+        <a href="/dashboard" class="nav-item">
+            <span class="icon">🏠</span> Back to App
+        </a>
+        <a href="/logout" class="nav-item">
+            <span class="icon">🚪</span> Logout
+        </a>
+    </nav>
+    <div class="sidebar-footer">
+        <div class="admin-avatar">{{ current_user.email[0]|upper }}</div>
+        <div class="admin-info">
+            <div class="name">{{ current_user.email }}</div>
+            <div class="role">Administrator</div>
+        </div>
+    </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+    <div class="topbar">
+        <span class="topbar-title">
+            {% if section=='dashboard' %}Overview
+            {% elif section=='users' %}User Management
+            {% elif section=='revenue' %}Revenue
+            {% elif section=='leads' %}Leads
+            {% elif section=='analytics' %}Event Analytics
+            {% elif section=='system' %}System
+            {% else %}Admin Panel{% endif %}
+        </span>
+        <div class="topbar-right">
+            <span class="admin-chip">Admin</span>
+            <a href="/dashboard" class="topbar-link">App →</a>
+        </div>
+    </div>
+
+    <div class="page">
+
+    <!-- ================================================================
+         SECTION: DASHBOARD
+    ================================================================ -->
+    {% if section == 'dashboard' %}
+    <div class="page-header">
+        <h1>Dashboard Overview</h1>
+        <p>Real-time snapshot of your SaaS metrics</p>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card c-primary">
+            <div class="label">👥 Total Users</div>
+            <div class="val">{{ total_users }}</div>
+            <div class="sub">{{ new_this_month }} new this month</div>
+        </div>
+        <div class="stat-card c-success">
+            <div class="label">💰 MRR</div>
+            <div class="val">${{ '%.0f'|format(mrr) }}</div>
+            <div class="sub">Current month</div>
+        </div>
+        <div class="stat-card c-warning">
+            <div class="label">📦 Total Revenue</div>
+            <div class="val">${{ '%.0f'|format(total_revenue) }}</div>
+            <div class="sub">All time</div>
+        </div>
+        <div class="stat-card c-purple">
+            <div class="label">✅ Active Subs</div>
+            <div class="val">{{ active_subs }}</div>
+            <div class="sub">{{ paid_users }} paid users total</div>
+        </div>
+    </div>
+
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:28px;">
+        <div class="stat-card">
+            <div class="label">🆓 Free Users</div>
+            <div class="val">{{ free_users }}</div>
+            <div class="sub">On free plan</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">⚡ Pro Users</div>
+            <div class="val">{{ by_plan.get('pro', 0) }}</div>
+            <div class="sub">$99/mo each</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">🏢 Agency Users</div>
+            <div class="val">{{ by_plan.get('agency', 0) }}</div>
+            <div class="sub">$299/mo each</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">🤖 Total Chatbots</div>
+            <div class="val">{{ total_clients }}</div>
+            <div class="sub">Across all accounts</div>
+        </div>
+    </div>
+
+    <div class="charts-row">
+        <div class="chart-card">
+            <h3>📈 Revenue Over Time</h3>
+            <div class="chart-wrap">
+                <canvas id="revenueChart"></canvas>
+            </div>
+        </div>
+        <div class="chart-card">
+            <h3>🥧 Plan Distribution</h3>
+            <div class="chart-wrap" style="height:180px;">
+                <canvas id="planChart"></canvas>
+            </div>
+            <div class="plan-legend" id="planLegend"></div>
+        </div>
+    </div>
+
+    <div class="chart-card" style="margin-bottom:0;">
+        <h3>👥 User Growth</h3>
+        <div class="chart-wrap">
+            <canvas id="userChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+    (function() {
+    const revenueData = {{ revenue_by_month | tojson | safe }};
+    const userGrowthData = {{ user_growth | tojson | safe }};
+    const byPlan = {{ by_plan | tojson | safe }};
+
+    // Revenue chart
+    new Chart(document.getElementById('revenueChart'), {
+        type: 'bar',
+        data: {
+            labels: revenueData.map(d => d.month),
+            datasets: [{
+                label: 'Revenue ($)',
+                data: revenueData.map(d => d.revenue),
+                backgroundColor: 'rgba(6,182,212,0.6)',
+                borderColor: '#06b6d4',
+                borderWidth: 2,
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive:true, maintainAspectRatio:false,
+            plugins:{legend:{display:false}},
+            scales:{
+                y:{beginAtZero:true, ticks:{color:'#64748b', callback:v=>'$'+v}, grid:{color:'rgba(255,255,255,0.04)'}},
+                x:{ticks:{color:'#64748b'}, grid:{display:false}}
+            }
+        }
+    });
+
+    // Plan distribution pie
+    const planColors = {'free':'#475569','starter':'#06b6d4','pro':'#a78bfa','agency':'#f59e0b','enterprise':'#ef4444'};
+    const planLabels = Object.keys(byPlan);
+    const planVals = Object.values(byPlan);
+    new Chart(document.getElementById('planChart'), {
+        type: 'doughnut',
+        data: {
+            labels: planLabels,
+            datasets: [{
+                data: planVals,
+                backgroundColor: planLabels.map(p => planColors[p] || '#64748b'),
+                borderWidth: 0
+            }]
+        },
+        options: {responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, cutout:'65%'}
+    });
+
+    // Legend
+    const legend = document.getElementById('planLegend');
+    planLabels.forEach((p,i) => {
+        const el = document.createElement('div');
+        el.className = 'plan-legend-item';
+        el.innerHTML = `<div style="display:flex;align-items:center;"><div class="plan-legend-dot" style="background:${planColors[p]||'#64748b'}"></div>${p.charAt(0).toUpperCase()+p.slice(1)}</div><strong>${planVals[i]}</strong>`;
+        legend.appendChild(el);
+    });
+
+    // User growth
+    new Chart(document.getElementById('userChart'), {
+        type: 'line',
+        data: {
+            labels: userGrowthData.map(d => d.month),
+            datasets: [{
+                label: 'New Users',
+                data: userGrowthData.map(d => d.count),
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16,185,129,0.08)',
+                tension: 0.4, fill: true, pointRadius: 4,
+                pointBackgroundColor: '#10b981'
+            }]
+        },
+        options: {
+            responsive:true, maintainAspectRatio:false,
+            plugins:{legend:{display:false}},
+            scales:{
+                y:{beginAtZero:true, ticks:{color:'#64748b', precision:0}, grid:{color:'rgba(255,255,255,0.04)'}},
+                x:{ticks:{color:'#64748b'}, grid:{display:false}}
+            }
+        }
+    });
+    })();
+    </script>
+
+
+    <!-- ================================================================
+         SECTION: USERS
+    ================================================================ -->
+    {% elif section == 'users' %}
+    <div class="page-header">
+        <h1>User Management</h1>
+        <p>{{ users|length }} users — edit plans, statuses, and permissions</p>
+    </div>
+
+    <div class="table-card">
+        <div class="table-card-header">
+            <h3>All Users</h3>
+            <div class="search-bar">
+                <input class="input" id="userSearch" placeholder="Search by email…" oninput="filterUsers(this.value)">
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table id="usersTable">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Plan</th>
+                        <th>Status</th>
+                        <th>Admin</th>
+                        <th>Joined</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for u in users %}
+                <tr data-email="{{ u.email }}" id="userrow-{{ u.id }}">
+                    <td>
+                        <div style="font-weight:600;">{{ u.email }}</div>
+                        <div style="font-size:11px;color:var(--muted);">ID: {{ u.id }}</div>
+                    </td>
+                    <td><span class="badge badge-{{ u.plan_type }}">{{ u.plan_type }}</span></td>
+                    <td><span class="badge badge-{{ u.subscription_status or 'active' }}">{{ u.subscription_status or 'active' }}</span></td>
+                    <td>
+                        {% if u.is_admin %}
+                            <span class="badge" style="background:var(--danger-dim);color:var(--danger);">Admin</span>
+                        {% else %}
+                            <span style="color:var(--muted);font-size:12px;">—</span>
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--muted);font-size:12px;">{{ u.created_at[:10] if u.created_at else '—' }}</td>
+                    <td>
+                        <div style="display:flex;gap:6px;">
+                            <button class="btn btn-sm btn-ghost" onclick="openEditModal({{ u.id }}, '{{ u.email }}', '{{ u.plan_type }}', '{{ u.subscription_status or 'active' }}')">✏️ Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="confirmDeleteUser({{ u.id }}, '{{ u.email }}')">🗑️</button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div class="modal-overlay" id="editModal">
+        <div class="modal">
+            <h2>✏️ Edit User</h2>
+            <p id="editModalEmail" style="color:var(--primary);font-weight:600;margin-bottom:20px;"></p>
+            <div class="form-row">
+                <label>Plan</label>
+                <select class="select" id="editPlan">
+                    {% for p in valid_plans %}
+                    <option value="{{ p }}">{{ p|title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-row">
+                <label>Subscription Status</label>
+                <select class="select" id="editStatus">
+                    {% for s in valid_statuses %}
+                    <option value="{{ s }}">{{ s|title }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeModal('editModal')" style="flex:1;justify-content:center;">Cancel</button>
+                <button class="btn btn-primary" onclick="saveUserEdit()" style="flex:1;justify-content:center;">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete User Modal -->
+    <div class="modal-overlay" id="deleteUserModal">
+        <div class="modal" style="text-align:center;">
+            <div style="font-size:40px;margin-bottom:12px;">⚠️</div>
+            <h2>Delete User?</h2>
+            <p id="deleteUserEmail" style="margin-bottom:8px;"></p>
+            <p>This permanently deletes the user and <strong>all their chatbots, FAQs, leads and payments.</strong> Cannot be undone.</p>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeModal('deleteUserModal')" style="flex:1;justify-content:center;">Cancel</button>
+                <button class="btn btn-danger" id="confirmDeleteBtn" onclick="executeDeleteUser()" style="flex:1;justify-content:center;">Delete Forever</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    let editingUserId = null;
+    let deletingUserId = null;
+
+    function filterUsers(q) {
+        const rows = document.querySelectorAll('#usersTable tbody tr');
+        rows.forEach(r => {
+            r.style.display = r.dataset.email.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+        });
+    }
+
+    function openEditModal(id, email, plan, status) {
+        editingUserId = id;
+        document.getElementById('editModalEmail').textContent = email;
+        document.getElementById('editPlan').value = plan;
+        document.getElementById('editStatus').value = status;
+        document.getElementById('editModal').classList.add('open');
+    }
+
+    async function saveUserEdit() {
+        const plan_type = document.getElementById('editPlan').value;
+        const subscription_status = document.getElementById('editStatus').value;
+        const res = await fetch(`/admin/api/users/${editingUserId}/update`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({plan_type, subscription_status})
+        });
+        const data = await res.json();
+        if (data.success) {
+            closeModal('editModal');
+            showToast('✅ User updated', 'success');
+            // Update badges in table row
+            const row = document.getElementById('userrow-' + editingUserId);
+            if (row) {
+                row.querySelectorAll('.badge')[0].textContent = plan_type;
+                row.querySelectorAll('.badge')[0].className = 'badge badge-' + plan_type;
+                row.querySelectorAll('.badge')[1].textContent = subscription_status;
+                row.querySelectorAll('.badge')[1].className = 'badge badge-' + subscription_status;
+            }
+        } else {
+            showToast('❌ ' + (data.error || 'Update failed'), 'error');
+        }
+    }
+
+    function confirmDeleteUser(id, email) {
+        deletingUserId = id;
+        document.getElementById('deleteUserEmail').textContent = email;
+        document.getElementById('deleteUserModal').classList.add('open');
+    }
+
+    async function executeDeleteUser() {
+        const btn = document.getElementById('confirmDeleteBtn');
+        btn.textContent = 'Deleting…'; btn.disabled = true;
+        const res = await fetch(`/admin/api/users/${deletingUserId}/delete`, {method:'DELETE'});
+        const data = await res.json();
+        if (data.success) {
+            const row = document.getElementById('userrow-' + deletingUserId);
+            if (row) { row.style.opacity = '0'; row.style.transition = 'opacity 0.3s'; setTimeout(() => row.remove(), 300); }
+            closeModal('deleteUserModal');
+            showToast('✅ User deleted', 'success');
+        } else {
+            showToast('❌ ' + (data.error || 'Delete failed'), 'error');
+        }
+        btn.textContent = 'Delete Forever'; btn.disabled = false;
+    }
+    </script>
+
+
+    <!-- ================================================================
+         SECTION: REVENUE
+    ================================================================ -->
+    {% elif section == 'revenue' %}
+    <div class="page-header">
+        <h1>Revenue</h1>
+        <p>Payment records, MRR, and revenue trends</p>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card c-success">
+            <div class="label">💰 MRR</div>
+            <div class="val">${{ '%.2f'|format(mrr) }}</div>
+            <div class="sub">This month</div>
+        </div>
+        <div class="stat-card c-primary">
+            <div class="label">📦 Total Revenue</div>
+            <div class="val">${{ '%.2f'|format(total_revenue) }}</div>
+            <div class="sub">All time</div>
+        </div>
+        <div class="stat-card c-warning">
+            <div class="label">📋 Total Payments</div>
+            <div class="val">{{ payments|length }}</div>
+            <div class="sub">All records</div>
+        </div>
+        <div class="stat-card c-purple">
+            <div class="label">❌ Failed</div>
+            <div class="val">{{ failed_count }}</div>
+            <div class="sub">Failed payments</div>
+        </div>
+    </div>
+
+    <div class="chart-card" style="margin-bottom:24px;">
+        <h3>📈 Monthly Revenue</h3>
+        <div class="chart-wrap">
+            <canvas id="revChart"></canvas>
+        </div>
+    </div>
+
+    <div class="table-card">
+        <div class="table-card-header">
+            <h3>Payment Records</h3>
+            <button class="btn btn-primary btn-sm" onclick="document.getElementById('addPaymentModal').classList.add('open')">+ Record Payment</button>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Amount</th>
+                        <th>Plan</th>
+                        <th>Provider</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for p in payments %}
+                <tr>
+                    <td style="color:var(--light);">{{ p.email }}</td>
+                    <td style="font-weight:700;color:var(--success);">${{ '%.2f'|format(p.amount) }} <span style="font-size:11px;color:var(--muted);">{{ p.currency }}</span></td>
+                    <td><span class="badge badge-{{ p.plan_type or 'manual' }}">{{ p.plan_type or '—' }}</span></td>
+                    <td><span class="badge badge-{{ p.provider or 'manual' }}">{{ p.provider or 'manual' }}</span></td>
+                    <td><span class="badge badge-{{ p.status }}">{{ p.status }}</span></td>
+                    <td style="color:var(--muted);font-size:12px;">{{ p.payment_date[:10] if p.payment_date else '—' }}</td>
+                    <td style="color:var(--muted);font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ p.notes or '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="empty">No payment records yet</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Add Payment Modal -->
+    <div class="modal-overlay" id="addPaymentModal">
+        <div class="modal">
+            <h2>💰 Record Payment</h2>
+            <p>Manually log a payment (e.g. Flutterwave, bank transfer)</p>
+            <div class="form-row">
+                <label>User ID</label>
+                <input class="input" id="payUserId" placeholder="e.g. 5" type="number">
+            </div>
+            <div class="form-row">
+                <label>Amount (USD)</label>
+                <input class="input" id="payAmount" placeholder="e.g. 99.00" type="number" step="0.01">
+            </div>
+            <div class="form-row">
+                <label>Plan</label>
+                <select class="select" id="payPlan">
+                    {% for p in valid_plans %}<option value="{{ p }}">{{ p|title }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-row">
+                <label>Provider</label>
+                <select class="select" id="payProvider">
+                    <option value="manual">Manual</option>
+                    <option value="flutterwave">Flutterwave</option>
+                    <option value="paypal">PayPal</option>
+                    <option value="stripe">Stripe</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label>Notes (optional)</label>
+                <input class="input" id="payNotes" placeholder="Reference, receipt ID, etc.">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeModal('addPaymentModal')" style="flex:1;justify-content:center;">Cancel</button>
+                <button class="btn btn-success" onclick="submitPayment()" style="flex:1;justify-content:center;">Record Payment</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    {
+    const revData = {{ revenue_by_month | tojson | safe }};
+    new Chart(document.getElementById('revChart'), {
+        type: 'bar',
+        data: {
+            labels: revData.map(d => d.month),
+            datasets: [{
+                label: 'Revenue ($)',
+                data: revData.map(d => d.revenue),
+                backgroundColor: 'rgba(16,185,129,0.6)',
+                borderColor: '#10b981',
+                borderWidth: 2, borderRadius: 6
+            }]
+        },
+        options: {
+            responsive:true, maintainAspectRatio:false,
+            plugins:{legend:{display:false}},
+            scales:{
+                y:{beginAtZero:true, ticks:{color:'#64748b',callback:v=>'$'+v}, grid:{color:'rgba(255,255,255,0.04)'}},
+                x:{ticks:{color:'#64748b'}, grid:{display:false}}
+            }
+        }
+    });
+    }
+
+    async function submitPayment() {
+        const res = await fetch('/admin/api/payments/add', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+                user_id: document.getElementById('payUserId').value,
+                amount: document.getElementById('payAmount').value,
+                plan_type: document.getElementById('payPlan').value,
+                provider: document.getElementById('payProvider').value,
+                notes: document.getElementById('payNotes').value
+            })
+        });
+        const data = await res.json();
+        if (data.success) { closeModal('addPaymentModal'); showToast('✅ Payment recorded', 'success'); setTimeout(()=>location.reload(), 1200); }
+        else showToast('❌ ' + (data.error || 'Failed'), 'error');
+    }
+    </script>
+
+
+    <!-- ================================================================
+         SECTION: LEADS
+    ================================================================ -->
+    {% elif section == 'leads' %}
+    <div class="page-header">
+        <h1>Leads Management</h1>
+        <p>{{ leads|length }} leads across all clients</p>
+    </div>
+
+    <div class="table-card">
+        <div class="table-card-header">
+            <h3>All Leads</h3>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <form method="GET" action="/admin/leads" style="display:flex;gap:8px;">
+                    <input class="input" name="q" placeholder="Search name/email…" value="{{ search or '' }}">
+                    <select class="select" name="client_id">
+                        <option value="">All clients</option>
+                        {% for c in clients %}
+                        <option value="{{ c.client_id }}" {% if c.client_id == client_filter %}selected{% endif %}>{{ c.company_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+                    {% if search or client_filter %}<a href="/admin/leads" class="btn btn-ghost btn-sm">Clear</a>{% endif %}
+                </form>
+                <a href="/admin/leads/export?q={{ search or '' }}&client_id={{ client_filter or '' }}" class="btn btn-success btn-sm">⬇️ Export CSV</a>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Company</th>
+                        <th>Client</th>
+                        <th>Owner</th>
+                        <th>Date</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for lead in leads %}
+                <tr id="leadrow-{{ lead.id }}">
+                    <td style="font-weight:600;">{{ lead.name or '—' }}</td>
+                    <td style="color:var(--primary);">{{ lead.email or '—' }}</td>
+                    <td style="color:var(--muted);">{{ lead.phone or '—' }}</td>
+                    <td style="color:var(--muted);">{{ lead.company or '—' }}</td>
+                    <td><span style="font-size:11px;font-family:monospace;color:var(--muted);">{{ lead.company_name or lead.client_id or '—' }}</span></td>
+                    <td style="font-size:12px;color:var(--muted);">{{ lead.owner_email or '—' }}</td>
+                    <td style="font-size:12px;color:var(--muted);">{{ lead.created_at[:10] if lead.created_at else '—' }}</td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" onclick="deleteLead({{ lead.id }})">🗑️</button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="8" class="empty">No leads found</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+    async function deleteLead(id) {
+        if (!confirm('Delete this lead?')) return;
+        const res = await fetch(`/admin/api/leads/${id}/delete`, {method:'DELETE'});
+        const data = await res.json();
+        if (data.success) {
+            const row = document.getElementById('leadrow-'+id);
+            if (row) { row.style.opacity='0'; row.style.transition='opacity 0.3s'; setTimeout(()=>row.remove(),300); }
+            showToast('✅ Lead deleted','success');
+        } else showToast('❌ '+(data.error||'Failed'),'error');
+    }
+    </script>
+
+
+    <!-- ================================================================
+         SECTION: ANALYTICS EVENTS
+    ================================================================ -->
+    {% elif section == 'analytics' %}
+    <div class="page-header">
+        <h1>Event Analytics</h1>
+        <p>track_event() logs from across the platform</p>
+    </div>
+
+    <div class="stats-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr));">
+        {% for name, count in event_counts.items() %}
+        <div class="stat-card">
+            <div class="label">{{ name }}</div>
+            <div class="val" style="font-size:22px;">{{ count }}</div>
+        </div>
+        {% else %}
+        <div class="stat-card"><div class="label">No events yet</div><div class="val">0</div></div>
+        {% endfor %}
+    </div>
+
+    <div class="table-card">
+        <div class="table-card-header"><h3>Recent Events (last 300)</h3></div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Event</th>
+                        <th>User</th>
+                        <th>Metadata</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for e in events %}
+                <tr>
+                    <td><span class="badge" style="background:var(--primary-dim);color:var(--primary);">{{ e.event_name }}</span></td>
+                    <td style="font-size:12px;color:var(--muted);">{{ e.email or ('User ' + e.user_id|string) if e.user_id else '—' }}</td>
+                    <td><div class="event-meta" title="{{ e.metadata or '' }}">{{ e.metadata or '—' }}</div></td>
+                    <td style="font-size:12px;color:var(--muted);">{{ e.created_at[:16] if e.created_at else '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="empty">No events recorded yet</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+
+    <!-- ================================================================
+         SECTION: SYSTEM
+    ================================================================ -->
+    {% elif section == 'system' %}
+    <div class="page-header">
+        <h1>System</h1>
+        <p>Database migrations, admin management, and utilities</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div class="table-card" style="margin-bottom:0;">
+            <div class="table-card-header"><h3>🔧 Run Migrations</h3></div>
+            <div style="padding:24px;">
+                <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">Run all pending database migrations. Safe to run multiple times.</p>
+                <button class="btn btn-primary" onclick="runMigrations()">Run All Migrations</button>
+                <div id="migrationResults" style="margin-top:16px;font-size:13px;color:var(--muted);font-family:monospace;"></div>
+            </div>
+        </div>
+
+        <div class="table-card" style="margin-bottom:0;">
+            <div class="table-card-header"><h3>👑 Grant Admin Access</h3></div>
+            <div style="padding:24px;">
+                <p style="color:var(--muted);font-size:14px;margin-bottom:16px;">Make any existing user an admin by email.</p>
+                <div style="display:flex;gap:8px;">
+                    <input class="input" id="makeAdminEmail" placeholder="user@example.com" style="flex:1;">
+                    <button class="btn btn-danger" onclick="grantAdmin()">Grant Admin</button>
+                </div>
+                <div id="makeAdminResult" style="margin-top:12px;font-size:13px;"></div>
+            </div>
+        </div>
+
+        <div class="table-card" style="margin-bottom:0;grid-column:1/-1;">
+            <div class="table-card-header"><h3>📖 Quick Reference</h3></div>
+            <div style="padding:24px;">
+                <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Add <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--primary);">track_event()</code> calls anywhere in app.py to log events:</p>
+                <pre style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:12px;color:#a5b4fc;overflow-x:auto;">
+# At login:
+models.track_event('login', user_id=user['id'], metadata={'email': user['email']})
+
+# At signup:
+models.track_event('signup', user_id=user_id, metadata={'plan': plan_type})
+
+# At plan upgrade:
+models.track_event('plan_upgrade', user_id=current_user.id,
+                   metadata={'from': old_plan, 'to': new_plan})
+
+# At payment:
+models.track_event('payment', user_id=current_user.id,
+                   metadata={'amount': amount, 'provider': 'flutterwave'})</pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    async function runMigrations() {
+        const el = document.getElementById('migrationResults');
+        el.textContent = 'Running…';
+        const res = await fetch('/admin/api/system/migrate', {method:'POST'});
+        const data = await res.json();
+        if (data.success) {
+            el.innerHTML = data.results.map(r => `<div style="margin-bottom:4px;">✅ ${r}</div>`).join('');
+            showToast('✅ Migrations complete', 'success');
+        } else showToast('❌ Migration failed', 'error');
+    }
+
+    async function grantAdmin() {
+        const email = document.getElementById('makeAdminEmail').value.trim();
+        if (!email) return;
+        const res = await fetch('/admin/api/system/make-admin', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({email})
+        });
+        const data = await res.json();
+        const el = document.getElementById('makeAdminResult');
+        if (data.success) { el.style.color = '#10b981'; el.textContent = '✅ ' + data.message; showToast('✅ Admin granted', 'success'); }
+        else { el.style.color = 'var(--danger)'; el.textContent = '❌ ' + data.error; }
+    }
+    </script>
+
+    {% endif %}
+
+    </div><!-- /page -->
+</div><!-- /main -->
+
+<!-- TOAST -->
+<div class="toast" id="globalToast"></div>
+
+<script>
+function showToast(msg, type='success') {
+    const t = document.getElementById('globalToast');
+    t.textContent = msg;
+    t.className = 'toast ' + type + ' show';
+    setTimeout(() => t.className = 'toast', 3500);
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-overlay.open').forEach(m => m.classList.remove('open'));
+    }
+});
+
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', e => {
+        if (e.target === overlay) overlay.classList.remove('open');
+    });
+});
+</script>
+</body>
+</html>
