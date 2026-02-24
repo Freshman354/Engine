@@ -231,6 +231,33 @@
         let conversationHistory = [];
         let leadCollectionMode = false;
         let leadData = {};
+        let leadFieldIndex = 0;
+        let activeLeadFields = [];
+
+        // Default fields used if client hasn't configured custom ones
+        const DEFAULT_LEAD_FIELDS = [
+            { key: 'name',    label: "What's your name?",                                    type: 'text',  required: true,  enabled: true },
+            { key: 'email',   label: "What's your email address?",                           type: 'email', required: true,  enabled: true },
+            { key: 'phone',   label: "What's your phone number? (or type 'skip' to skip)",   type: 'text',  required: false, enabled: true },
+            { key: 'company', label: "What company are you from? (or type 'skip' to skip)",  type: 'text',  required: false, enabled: true }
+        ];
+
+        // Load lead_fields config from server
+        async function loadLeadFields() {
+            try {
+                const res = await fetch(`/api/config?client_id=${CLIENT_ID}`);
+                const data = await res.json();
+                const fields = data?.config?.bot_settings?.lead_fields;
+                if (fields && Array.isArray(fields) && fields.length > 0) {
+                    activeLeadFields = fields.filter(f => f.enabled !== false);
+                } else {
+                    activeLeadFields = DEFAULT_LEAD_FIELDS.filter(f => f.enabled !== false);
+                }
+            } catch(e) {
+                activeLeadFields = DEFAULT_LEAD_FIELDS.filter(f => f.enabled !== false);
+            }
+        }
+        loadLeadFields();
 
         function setCurrentTime() {
             const now = new Date();
@@ -285,58 +312,62 @@
         async function handleLeadCollection(message) {
             const lower = message.toLowerCase().trim();
 
-            // Allow user to cancel
+            // Allow cancel
             if (lower === 'cancel' || lower === 'nevermind') {
                 leadCollectionMode = false;
                 leadData = {};
-                addBotMessage("No problem! Feel free to ask me any questions about our services!");
+                leadFieldIndex = 0;
+                addBotMessage("No problem! Feel free to ask me any other questions.");
                 return;
             }
 
-            // Step 1: Collect name
-            if (!leadData.hasOwnProperty('name')) {
-                leadData.name = message;
-                addBotMessage("Great! And what's your email address?");
-                return;
-             }
+            const field = activeLeadFields[leadFieldIndex];
+            if (!field) { await submitLead(); return; }
 
-            // Step 2: Collect email
-            if (!leadData.hasOwnProperty('email')) {
-                if (isValidEmail(message)) {
-                    leadData.email = message;
-                    addBotMessage("Perfect! And your phone number? (Type 'skip' if you'd prefer not to share)");
-                } else {
-                     addBotMessage("That doesn't look like a valid email. Can you try again? (Or type 'cancel' to stop)");
-                }
+            // Validate email fields
+            if (field.type === 'email' && !isValidEmail(message)) {
+                addBotMessage("That doesn't look like a valid email. Can you try again? (or type 'cancel' to stop)");
                 return;
             }
 
-            // Step 3: Collect phone
-            if (!leadData.hasOwnProperty('phone')) {
-                leadData.phone = lower === 'skip' ? '' : message;
-                addBotMessage("Thanks! What company do you represent? (Type 'skip' if not applicable)");
-                return;
+            // Handle skip for optional fields
+            if (!field.required && lower === 'skip') {
+                leadData[field.key] = '';
+            } else {
+                leadData[field.key] = message;
             }
 
-            // Step 4: Collect company and submit
-            if (!leadData.hasOwnProperty('company')) {
-                 leadData.company = lower === 'skip' ? '' : message;
-                 await submitLead();
+            leadFieldIndex++;
+
+            // Ask next field or submit
+            if (leadFieldIndex < activeLeadFields.length) {
+                const nextField = activeLeadFields[leadFieldIndex];
+                addBotMessage(nextField.label);
+            } else {
+                await submitLead();
             }
         }
 
         async function submitLead() {
             showTyping();
             try {
+                // Separate standard fields from custom ones
+                const standardKeys = ['name', 'email', 'phone', 'company'];
+                const customFields = {};
+                Object.entries(leadData).forEach(([k, v]) => {
+                    if (!standardKeys.includes(k)) customFields[k] = v;
+                });
+
                 const response = await fetch('/api/lead', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         client_id: CLIENT_ID,
-                        name: leadData.name,
-                        email: leadData.email,
-                        phone: leadData.phone,
-                        company: leadData.company,
+                        name: leadData.name || '',
+                        email: leadData.email || '',
+                        phone: leadData.phone || '',
+                        company: leadData.company || '',
+                        custom_fields: customFields,
                         conversation_snippet: conversationHistory.slice(-5).map(m => m.content).join(' | '),
                         source_url: window.location.href
                     })
@@ -347,6 +378,7 @@
                     addBotMessage(data.message);
                     leadCollectionMode = false;
                     leadData = {};
+                    leadFieldIndex = 0;
                 } else {
                     addBotMessage('Sorry, there was an error. Please try again or email us directly.');
                 }
@@ -388,7 +420,9 @@
                     if (data.trigger_lead_collection) {
                         leadCollectionMode = true;
                         leadData = {};
-                        addBotMessage("What's your name?");
+                        leadFieldIndex = 0;
+                        const firstField = activeLeadFields[0] || { label: "What's your name?" };
+                        addBotMessage(firstField.label);
                     }
                 } else {
                     addBotMessage('Sorry, something went wrong. Please try again.');

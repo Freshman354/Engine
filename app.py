@@ -730,6 +730,9 @@ def submit_lead():
         phone = sanitize_input(data.get('phone', ''), max_length=50)
         company = sanitize_input(data.get('company', ''), max_length=100)
         message = sanitize_input(data.get('message', ''), max_length=1000)
+        custom_fields = data.get('custom_fields', {})
+        if not isinstance(custom_fields, dict):
+            custom_fields = {}
 
         if not name or not email:
             return jsonify({'success': False, 'error': 'Name and email are required'}), 400
@@ -744,6 +747,7 @@ def submit_lead():
         lead_data = {
             'name': name, 'email': email, 'phone': phone, 'company': company,
             'message': message,
+            'custom_fields': json.dumps(custom_fields) if custom_fields else None,
             'conversation_snippet': data.get('conversation_snippet', ''),
             'source_url': data.get('source_url', '')
         }
@@ -776,23 +780,28 @@ def signup():
         return redirect(url_for('dashboard'))
 
     referral_code = request.args.get('ref')
+    plan_param    = request.args.get('plan', '').lower()  # from sales page buttons
 
     if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
+        email            = request.form.get('email')
+        password         = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
-        plan_type = 'free'
+        plan_type        = 'free'
+        plan_from_form   = request.form.get('plan_param', '').lower()
 
         if password != confirm_password:
-            return render_template('signup.html', error='Passwords do not match', referral_code=referral_code)
+            return render_template('signup.html', error='Passwords do not match',
+                                   referral_code=referral_code, plan_param=plan_from_form)
 
         if len(password) < 6:
-            return render_template('signup.html', error='Password must be at least 6 characters', referral_code=referral_code)
+            return render_template('signup.html', error='Password must be at least 6 characters',
+                                   referral_code=referral_code, plan_param=plan_from_form)
 
         user_id = models.create_user(email, password, plan_type)
 
         if user_id is None:
-            return render_template('signup.html', error='Email already exists', referral_code=referral_code)
+            return render_template('signup.html', error='Email already exists',
+                                   referral_code=referral_code, plan_param=plan_from_form)
 
         if referral_code:
             affiliate = models.get_affiliate_by_code(referral_code)
@@ -804,9 +813,13 @@ def signup():
         user = User(user_data)
         login_user(user)
         models.track_event('signup', user_id=user_id, metadata={'email': email, 'plan': 'free'})
+
+        # If they came from a pricing button, send them straight to upgrade
+        if plan_from_form in ('starter', 'pro', 'agency'):
+            return redirect(url_for('upgrade_page') + f'?plan={plan_from_form}')
         return redirect(url_for('dashboard'))
 
-    return render_template('signup.html', referral_code=referral_code)
+    return render_template('signup.html', referral_code=referral_code, plan_param=plan_param)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -1698,7 +1711,7 @@ def parse_structured_faq_text(text):
 @app.route('/upgrade')
 @login_required
 def upgrade_page():
-    return render_template('upgrade.html', user=current_user)
+    return render_template('upgrade.html', user=current_user, flw_public_key=os.environ.get('FLW_PUBLIC_KEY', ''))
 
 # =====================================================================
 # PAYMENT ROUTES - PAYPAL
@@ -1818,6 +1831,179 @@ def paypal_success():
         traceback.print_exc()
         flash("❌ Payment processing error. Contact support@lumvi.net.", 'error')
         return redirect(url_for('dashboard'))
+
+
+# =====================================================================
+# PAYMENT ROUTES - FLUTTERWAVE
+# =====================================================================
+
+PLAN_PRICES_FLW = {
+    'starter': 49.00,
+    'pro':     99.00,
+    'agency':  299.00
+}
+
+@app.route('/payment/flutterwave/callback')
+@login_required
+def flutterwave_callback():
+    """
+    Flutterwave redirects here after payment.
+    URL params: status, tx_ref, transaction_id
+    tx_ref format: lumvi_{plan}_{user_id}_{timestamp}
+    """
+    status         = request.args.get('status', '')
+    tx_ref         = request.args.get('tx_ref', '')
+    transaction_id = request.args.get('transaction_id', '')
+
+    if status != 'successful':
+        flash("❌ Payment was not completed. Please try again.", 'error')
+        return redirect(url_for('upgrade_page'))
+
+    if not transaction_id:
+        flash("❌ Invalid payment reference. Contact support@lumvi.net.", 'error')
+        return redirect(url_for('upgrade_page'))
+
+    # Verify with Flutterwave API
+    flw_secret = os.environ.get('FLW_SECRET_KEY', '')
+    if not flw_secret:
+        app.logger.error("FLW_SECRET_KEY not set")
+        flash("❌ Payment configuration error. Contact support@lumvi.net.", 'error')
+        return redirect(url_for('upgrade_page'))
+
+    try:
+        verify_url = f"https://api.flutterwave.com/v3/transactions/{transaction_id}/verify"
+        headers = {"Authorization": f"Bearer {flw_secret}"}
+        resp = requests.get(verify_url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        flw_data = resp.json()
+    except Exception as e:
+        app.logger.error(f"Flutterwave verify error: {e}")
+        flash("❌ Could not verify payment. Contact support@lumvi.net.", 'error')
+        return redirect(url_for('upgrade_page'))
+
+    if flw_data.get('status') != 'success':
+        flash("❌ Payment verification failed. Contact support@lumvi.net.", 'error')
+        return redirect(url_for('upgrade_page'))
+
+    txn = flw_data.get('data', {})
+    if txn.get('status') != 'successful':
+        flash("❌ Payment not successful. Please try again.", 'error')
+        return redirect(url_for('upgrade_page'))
+
+    # Extract plan from tx_ref
+    plan = None
+    try:
+        parts = tx_ref.split('_')
+        if len(parts) >= 2:
+            plan = parts[1].lower()
+    except Exception:
+        pass
+
+    if plan not in PLAN_PRICES_FLW:
+        app.logger.error(f"Flutterwave: unknown plan in tx_ref '{tx_ref}'")
+        flash("❌ Could not determine plan. Contact support@lumvi.net.", 'error')
+        return redirect(url_for('upgrade_page'))
+
+    paid_amount  = float(txn.get('amount', 0))
+    paid_currency = txn.get('currency', 'USD')
+
+    # Amount check (USD only — NGN skipped since exchange rate varies)
+    if paid_currency == 'USD' and paid_amount < PLAN_PRICES_FLW[plan]:
+        app.logger.error(f"Flutterwave amount mismatch: expected {PLAN_PRICES_FLW[plan]}, got {paid_amount}")
+        flash("❌ Payment amount mismatch. Contact support@lumvi.net.", 'error')
+        return redirect(url_for('upgrade_page'))
+
+    # Upgrade the user
+    conn, cursor = models.get_db()
+    cursor.execute(
+        'UPDATE users SET plan_type = %s, upgraded_at = CURRENT_TIMESTAMP WHERE id = %s',
+        (plan, current_user.id)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    models.record_payment(current_user.id, paid_amount, plan,
+                          provider='flutterwave', reference=str(transaction_id))
+    models.track_event('plan_upgrade', user_id=current_user.id,
+                       metadata={'plan': plan, 'provider': 'flutterwave',
+                                 'amount': paid_amount, 'tx_ref': tx_ref})
+
+    app.logger.info(f"Flutterwave upgrade OK: user={current_user.id} plan={plan} txn={transaction_id}")
+    flash(f"✅ Payment successful! You've been upgraded to the {plan.capitalize()} plan.", 'success')
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/payment/flutterwave/webhook', methods=['POST'])
+def flutterwave_webhook():
+    """
+    Flutterwave server-to-server webhook (backup).
+    Set webhook URL in Flutterwave dashboard: https://lumvi.net/payment/flutterwave/webhook
+    Set FLW_WEBHOOK_HASH env var to your secret hash from the Flutterwave dashboard.
+    """
+    flw_hash     = os.environ.get('FLW_WEBHOOK_HASH', '')
+    request_hash = request.headers.get('verif-hash', '')
+
+    if flw_hash and request_hash != flw_hash:
+        app.logger.warning("Flutterwave webhook: invalid hash")
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    payload = request.json or {}
+    event   = payload.get('event', '')
+
+    if event != 'charge.completed':
+        return jsonify({'status': 'ignored'}), 200
+
+    data       = payload.get('data', {})
+    txn_status = data.get('status', '')
+    tx_ref     = data.get('tx_ref', '')
+    txn_id     = str(data.get('id', ''))
+    amount     = float(data.get('amount', 0))
+    currency   = data.get('currency', 'USD')
+
+    if txn_status != 'successful':
+        return jsonify({'status': 'not successful'}), 200
+
+    # Extract plan + user_id from tx_ref
+    try:
+        parts   = tx_ref.split('_')
+        plan    = parts[1].lower() if len(parts) >= 2 else None
+        user_id = int(parts[2])    if len(parts) >= 3 else None
+    except (IndexError, ValueError):
+        app.logger.error(f"Flutterwave webhook: bad tx_ref '{tx_ref}'")
+        return jsonify({'status': 'bad tx_ref'}), 200
+
+    if plan not in PLAN_PRICES_FLW or not user_id:
+        app.logger.error(f"Flutterwave webhook: unknown plan/user tx_ref='{tx_ref}'")
+        return jsonify({'status': 'unknown plan'}), 200
+
+    # Duplicate check
+    conn, cursor = models.get_db()
+    cursor.execute("SELECT id FROM payments WHERE reference = %s LIMIT 1", (txn_id,))
+    already_processed = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if already_processed:
+        return jsonify({'status': 'already processed'}), 200
+
+    # Upgrade user
+    conn, cursor = models.get_db()
+    cursor.execute(
+        'UPDATE users SET plan_type = %s, upgraded_at = CURRENT_TIMESTAMP WHERE id = %s',
+        (plan, user_id)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    models.record_payment(user_id, amount, plan, provider='flutterwave', reference=txn_id)
+    models.track_event('plan_upgrade', user_id=user_id,
+                       metadata={'plan': plan, 'provider': 'flutterwave_webhook',
+                                 'amount': amount, 'tx_ref': tx_ref})
+
+    app.logger.info(f"Flutterwave webhook upgrade OK: user={user_id} plan={plan} txn={txn_id}")
+    return jsonify({'status': 'ok'}), 200
 
 
 @app.route('/api/webhook/lead', methods=['POST'])

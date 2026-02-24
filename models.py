@@ -72,6 +72,7 @@ def init_db():
             phone TEXT,
             company TEXT,
             message TEXT,
+            custom_fields TEXT,
             conversation_snippet TEXT,
             source_url TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -438,8 +439,8 @@ def save_lead(client_id, lead_data):
     """Save a lead for a client"""
     conn, cursor = get_db()
     cursor.execute(
-        '''INSERT INTO leads (client_id, name, email, phone, company, message, conversation_snippet, source_url)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
+        '''INSERT INTO leads (client_id, name, email, phone, company, message, custom_fields, conversation_snippet, source_url)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)''',
         (
             client_id,
             lead_data['name'],
@@ -447,10 +448,20 @@ def save_lead(client_id, lead_data):
             lead_data.get('phone', ''),
             lead_data.get('company', ''),
             lead_data.get('message', ''),
+            lead_data.get('custom_fields'),
             lead_data.get('conversation_snippet', ''),
             lead_data.get('source_url', '')
         )
     )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def migrate_lead_custom_fields():
+    """Add custom_fields column to leads table if not present."""
+    conn, cursor = get_db()
+    cursor.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS custom_fields TEXT")
     conn.commit()
     cursor.close()
     conn.close()

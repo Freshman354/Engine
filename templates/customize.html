@@ -223,6 +223,69 @@
             align-items: flex-start;
         }
         .webhook-row input { flex: 1; }
+
+        /* ── Lead Field Rows ── */
+        .lead-field-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+        .lead-field-row .drag-handle {
+            cursor: grab;
+            color: #9ca3af;
+            font-size: 18px;
+            flex-shrink: 0;
+            user-select: none;
+        }
+        .lead-field-row .field-toggle {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .lead-field-row .field-label-input {
+            flex: 1;
+            padding: 7px 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+            background: white;
+        }
+        .lead-field-row .field-badge {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: #e0e7ff;
+            color: #4338ca;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .lead-field-row .field-badge.optional { background: #f3f4f6; color: #6b7280; }
+        .lead-field-row .field-req {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            color: #6b7280;
+            flex-shrink: 0;
+        }
+        .lead-field-row .field-del {
+            background: none;
+            border: none;
+            color: #ef4444;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0 4px;
+            flex-shrink: 0;
+            opacity: 0.6;
+        }
+        .lead-field-row .field-del:hover { opacity: 1; }
+        .lead-field-row.disabled { opacity: 0.45; }
         .btn-test {
             padding: 12px 16px;
             background: #f3f4f6;
@@ -463,6 +526,22 @@
                 <label>Welcome Message</label>
                 <textarea id="welcome-message" placeholder="Hi! How can I help you today?"></textarea>
             </div>
+
+            <!-- ═══════════════════════════════════════════════════════════
+                 LEAD FORM FIELDS — customise questions asked during lead capture
+            ════════════════════════════════════════════════════════════ -->
+            <div class="section-title">Lead Form Fields</div>
+            <div class="hint" style="margin-bottom:12px;">Customise the questions your chatbot asks when collecting contact info. Drag to reorder.</div>
+
+            <div id="lead-fields-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;"></div>
+
+            <button type="button" onclick="addCustomLeadField()" style="
+                background:transparent;border:1.5px dashed #667eea;color:#667eea;
+                padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;
+                cursor:pointer;width:100%;transition:all 0.2s;">
+                + Add Custom Field
+            </button>
+            <!-- ═══════════════════════════════════════════════════════════ -->
             
             <!-- White-Label Branding Section -->
             <div class="section-title">
@@ -714,6 +793,82 @@
             if (!webhookInput.disabled) {
                 webhookInput.value = config.integrations?.webhook_url || '';
             }
+
+            // ── Lead Fields ──
+            renderLeadFields(config.bot_settings?.lead_fields || null);
+        }
+
+        // ─── LEAD FIELDS MANAGER ────────────────────────────────────────────
+
+        const DEFAULT_LEAD_FIELDS = [
+            { key: 'name',    label: "What's your name?",                                   type: 'text',  required: true,  enabled: true,  custom: false },
+            { key: 'email',   label: "What's your email address?",                          type: 'email', required: true,  enabled: true,  custom: false },
+            { key: 'phone',   label: "What's your phone number? (or type 'skip' to skip)",  type: 'text',  required: false, enabled: true,  custom: false },
+            { key: 'company', label: "What company are you from? (or type 'skip' to skip)", type: 'text',  required: false, enabled: true,  custom: false }
+        ];
+
+        function renderLeadFields(fields) {
+            const list = document.getElementById('lead-fields-list');
+            const data = (fields && fields.length > 0) ? fields : DEFAULT_LEAD_FIELDS;
+            list.innerHTML = '';
+            data.forEach((f, i) => list.appendChild(buildFieldRow(f, i)));
+        }
+
+        function buildFieldRow(field, index) {
+            const row = document.createElement('div');
+            row.className = 'lead-field-row' + (field.enabled === false ? ' disabled' : '');
+            row.dataset.key = field.key;
+            row.dataset.type = field.type || 'text';
+            row.dataset.custom = field.custom ? '1' : '0';
+
+            const reqLabel = field.required ? 'Required' : 'Optional';
+            const reqClass = field.required ? '' : 'optional';
+
+            row.innerHTML = `
+                <span class="drag-handle" title="Drag to reorder">⠿</span>
+                <input type="checkbox" class="field-toggle" title="Enable/disable this field"
+                    ${field.enabled !== false ? 'checked' : ''}
+                    onchange="toggleFieldRow(this)">
+                <input type="text" class="field-label-input" value="${escapeAttr(field.label)}" placeholder="Question label">
+                <span class="field-badge ${reqClass}">${reqLabel}</span>
+                <label class="field-req" title="Mark as required">
+                    <input type="checkbox" ${field.required ? 'checked' : ''}
+                        onchange="this.closest('.lead-field-row').querySelector('.field-badge').textContent = this.checked ? 'Required' : 'Optional'; this.closest('.lead-field-row').querySelector('.field-badge').className = 'field-badge' + (this.checked ? '' : ' optional');">
+                    Req
+                </label>
+                ${field.custom ? `<button class="field-del" onclick="this.closest('.lead-field-row').remove()" title="Remove field">✕</button>` : '<span style="width:22px"></span>'}
+            `;
+            return row;
+        }
+
+        function toggleFieldRow(checkbox) {
+            const row = checkbox.closest('.lead-field-row');
+            row.classList.toggle('disabled', !checkbox.checked);
+        }
+
+        function addCustomLeadField() {
+            const list = document.getElementById('lead-fields-list');
+            const key = 'custom_' + Date.now();
+            const field = { key, label: '', type: 'text', required: false, enabled: true, custom: true };
+            const row = buildFieldRow(field, list.children.length);
+            list.appendChild(row);
+            row.querySelector('.field-label-input').focus();
+        }
+
+        function getLeadFields() {
+            const rows = document.querySelectorAll('#lead-fields-list .lead-field-row');
+            return Array.from(rows).map(row => ({
+                key:      row.dataset.key,
+                type:     row.dataset.type || 'text',
+                label:    row.querySelector('.field-label-input').value.trim(),
+                enabled:  row.querySelector('.field-toggle').checked,
+                required: row.querySelector('.field-req input[type=checkbox]').checked,
+                custom:   row.dataset.custom === '1'
+            })).filter(f => f.label); // skip rows with empty labels
+        }
+
+        function escapeAttr(str) {
+            return String(str || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
         
         function updatePreview() {
@@ -759,7 +914,8 @@
                     welcome_message:  document.getElementById('welcome-message').value,
                     tone:             currentConfig.bot_settings?.tone || 'friendly',
                     fallback_message: currentConfig.bot_settings?.fallback_message || '',
-                    lead_triggers:    currentConfig.bot_settings?.lead_triggers || []
+                    lead_triggers:    currentConfig.bot_settings?.lead_triggers || [],
+                    lead_fields:      getLeadFields()
                 },
                 // ── integrations block ──────────────────────────────────
                 // Backend (save_customization) will strip webhook_url for

@@ -539,9 +539,9 @@
             <div class="payment-option">
                 <h4>💳 Pay with Card (Instant)</h4>
                 <p>Secure payment via Flutterwave. All major cards accepted.</p>
-                <a id="flutterwaveLink" href="#" target="_blank" class="btn btn-primary" style="text-decoration: none;">
+                <button onclick="initiateFlutterwavePayment()" class="btn btn-primary" style="width:100%;">
                     Pay <span id="cardAmount">$0</span> Securely →
-                </a>
+                </button>
             </div>
 
             <div class="payment-option">
@@ -567,14 +567,16 @@
         <a href="/privacy-policy">Privacy</a>
     </div>
 
+    <!-- Flutterwave Inline JS SDK -->
+    <script src="https://checkout.flutterwave.com/v3.js"></script>
     <script>
-        let selectedPlan = '';
+        // Injected by Flask — never expose secret key here, only public key
+        const FLW_PUBLIC_KEY = '{{ flw_public_key }}';
+        const CURRENT_USER_ID    = {{ user.id }};
+        const CURRENT_USER_EMAIL = '{{ user.email }}';
+        const CURRENT_USER_NAME  = '{{ (user.name or user.email) | e }}';
 
-        const flutterwaveLinks = {
-            'starter':  'https://flutterwave.com/pay/1q2ra2vpnh4y',
-            'pro':      'https://flutterwave.com/pay/vrrfifwlldpl', // ⚠️ Update this with your new Pro $99 link
-            'agency':   'https://flutterwave.com/pay/ehhc5k94jceb'
-        };
+        let selectedPlan = '';
 
         const prices = {
             starter: { monthly: 49,  annual: Math.round(49  * 10 / 12), label: 'Starter' },
@@ -616,7 +618,6 @@
             document.getElementById('selectedPlanName').textContent = planData.label + ' Plan';
             document.getElementById('selectedPlanPrice').textContent = '$' + amount + periodLabel;
             document.getElementById('cardAmount').textContent = '$' + amount;
-            document.getElementById('flutterwaveLink').href = flutterwaveLinks[plan];
 
             document.getElementById('agreeTerms').checked = false;
             document.getElementById('paymentModal').style.display = 'block';
@@ -628,12 +629,49 @@
             document.body.style.overflow = 'auto';
         }
 
-        document.getElementById('flutterwaveLink').addEventListener('click', function(e) {
+        // Called when user clicks "Pay with Card" in the modal
+        function initiateFlutterwavePayment() {
             if (!document.getElementById('agreeTerms').checked) {
-                e.preventDefault();
                 alert('Please agree to the Terms & Conditions before proceeding.');
+                return;
             }
-        });
+
+            const planData = prices[selectedPlan];
+            const amount   = isAnnual ? planData.monthly * 10 : planData.monthly;
+            // tx_ref encodes plan + user_id so the callback can upgrade the right user
+            const txRef    = 'lumvi_' + selectedPlan + '_' + CURRENT_USER_ID + '_' + Date.now();
+
+            if (!FLW_PUBLIC_KEY) {
+                alert('Payment not configured. Please contact support@lumvi.net.');
+                return;
+            }
+
+            closePaymentModal();
+
+            FlutterwaveCheckout({
+                public_key:   FLW_PUBLIC_KEY,
+                tx_ref:       txRef,
+                amount:       amount,
+                currency:     'USD',
+                redirect_url: window.location.origin + '/payment/flutterwave/callback',
+                customer: {
+                    email: CURRENT_USER_EMAIL,
+                    name:  CURRENT_USER_NAME
+                },
+                customizations: {
+                    title:       'Lumvi ' + planData.label + ' Plan',
+                    description: (isAnnual ? 'Annual' : 'Monthly') + ' subscription',
+                    logo:        'https://lumvi.net/static/logo.png'
+                },
+                callback: function(data) {
+                    // This fires in-page on success before the redirect
+                    console.log('FLW payment data:', data);
+                },
+                onclose: function() {
+                    console.log('FLW modal closed');
+                }
+            });
+        }
 
         function contactForBankTransfer() {
             const planData = prices[selectedPlan];
@@ -648,6 +686,15 @@
                 closePaymentModal();
             }
         };
+
+        // Auto-open payment modal if user arrived from sales page pricing button
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const plan = urlParams.get('plan');
+            if (plan && prices[plan]) {
+                setTimeout(function() { startPayment(plan); }, 400);
+            }
+        })();
     </script>
 </body>
 </html>
