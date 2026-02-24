@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class AIHelper:
     """AI-powered chatbot intelligence using Google Gemini"""
 
-    def __init__(self, api_key: str, model_name: str = 'gemini-1.5-flash-latest'):
+    def __init__(self, api_key: str, model_name: str = 'gemini-2.0-flash'):
         self.api_key = api_key
         self.model_name = model_name
         self.enabled = bool(api_key and api_key != '')
@@ -223,7 +223,7 @@ Return ONLY JSON:
 _ai_helper = None
 
 
-def get_ai_helper(api_key: str, model_name: str = 'gemini-1.5-flash-latest'):
+def get_ai_helper(api_key: str, model_name: str = 'gemini-2.0-flash'):
     """Get or create AI helper singleton"""
     global _ai_helper
     if _ai_helper is None:
