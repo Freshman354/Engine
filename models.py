@@ -306,8 +306,67 @@ def get_user_by_email(email):
 
 
 # =====================================================================
-# CLIENT FUNCTIONS
+# PASSWORD RESET FUNCTIONS
 # =====================================================================
+
+def migrate_password_reset_tokens():
+    """Create password_reset_tokens table if it doesn't exist."""
+    conn, cursor = get_db()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token TEXT NOT NULL UNIQUE,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def save_password_reset_token(user_id, token, expires_at):
+    """Save a password reset token (one per user — delete old ones first)."""
+    conn, cursor = get_db()
+    cursor.execute('DELETE FROM password_reset_tokens WHERE user_id = %s', (user_id,))
+    cursor.execute(
+        'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (%s, %s, %s)',
+        (user_id, token, expires_at)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_password_reset_token(token):
+    """Return token row if it exists, else None."""
+    conn, cursor = get_db()
+    cursor.execute('SELECT * FROM password_reset_tokens WHERE token = %s', (token,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_password_reset_token(token):
+    """Delete a used or expired token."""
+    conn, cursor = get_db()
+    cursor.execute('DELETE FROM password_reset_tokens WHERE token = %s', (token,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def update_user_password(user_id, new_password):
+    """Hash and save a new password for a user."""
+    import bcrypt
+    hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    conn, cursor = get_db()
+    cursor.execute('UPDATE users SET password_hash = %s WHERE id = %s', (hashed, user_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 def create_client(user_id, company_name, branding_settings=None):
     """Create a new client for a user"""

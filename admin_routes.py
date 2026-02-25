@@ -374,6 +374,11 @@ def api_migrate():
         results.append('Lead custom_fields column: OK')
     except Exception as e:
         results.append(f'Lead custom_fields column: {e}')
+    try:
+        models.migrate_password_reset_tokens()
+        results.append('Password reset tokens table: OK')
+    except Exception as e:
+        results.append(f'Password reset tokens table: {e}')
     models.track_event('admin_migration_run', user_id=current_user.id,
                        metadata={'results': results})
     return jsonify({'success': True, 'results': results})

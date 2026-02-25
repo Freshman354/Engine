@@ -13,6 +13,8 @@ import shutil
 from datetime import datetime, timedelta
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from functools import wraps
+from flask_mail import Mail, Message
+import secrets
 
 import models
 import requests
@@ -32,6 +34,15 @@ app = Flask(__name__)
 from admin_routes import admin_bp
 app.register_blueprint(admin_bp)
 app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev_key_change_this_in_prod")
+
+# ── Flask-Mail (password reset emails) ──────────────────────────────
+app.config['MAIL_SERVER']   = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT']     = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS']  = True
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', '')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
+app.config['MAIL_DEFAULT_SENDER'] = ('Lumvi', 'support@lumvi.net')
+mail = Mail(app)
 
 # Initialize AI helper at app startup
 ai_helper = get_ai_helper(Config.GEMINI_API_KEY, Config.GEMINI_MODEL)
@@ -820,6 +831,91 @@ def signup():
         return redirect(url_for('dashboard'))
 
     return render_template('signup.html', referral_code=referral_code, plan_param=plan_param)
+
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        user_data = models.get_user_by_email(email)
+
+        # Always show success message — never reveal if email exists (security)
+        success_msg = "If that email is registered, you'll receive a reset link shortly."
+
+        if user_data:
+            token = secrets.token_urlsafe(32)
+            expires_at = datetime.utcnow() + timedelta(hours=1)
+            models.save_password_reset_token(user_data['id'], token, expires_at)
+
+            reset_url = url_for('reset_password', token=token, _external=True)
+            try:
+                msg = Message(
+                    subject="Reset your Lumvi password",
+                    recipients=[email],
+                    html=f"""
+                    <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#f8fafc;padding:40px;border-radius:16px;">
+                        <div style="text-align:center;margin-bottom:32px;">
+                            <div style="display:inline-block;background:linear-gradient(135deg,#6366f1,#a78bfa);border-radius:12px;padding:12px 20px;font-size:24px;font-weight:800;margin-bottom:12px;">⚡ Lumvi</div>
+                        </div>
+                        <h2 style="margin:0 0 12px;font-size:22px;font-weight:700;">Reset your password</h2>
+                        <p style="color:#94a3b8;margin:0 0 28px;line-height:1.6;">
+                            We received a request to reset the password for your Lumvi account.
+                            Click the button below to set a new password. This link expires in <strong style="color:#f8fafc;">1 hour</strong>.
+                        </p>
+                        <a href="{reset_url}" style="display:block;text-align:center;background:linear-gradient(135deg,#6366f1,#7c3aed);color:white;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:700;font-size:15px;margin-bottom:24px;">
+                            Reset My Password →
+                        </a>
+                        <p style="color:#475569;font-size:13px;margin:0;line-height:1.6;">
+                            If you didn't request this, you can safely ignore this email — your password won't change.<br><br>
+                            Or copy this link: <span style="color:#6366f1;">{reset_url}</span>
+                        </p>
+                    </div>
+                    """
+                )
+                mail.send(msg)
+            except Exception as e:
+                app.logger.error(f"Password reset email failed: {e}")
+
+        return render_template('forgot_password.html', success=success_msg)
+
+    return render_template('forgot_password.html')
+
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
+    token_data = models.get_password_reset_token(token)
+
+    if not token_data:
+        return render_template('reset_password.html', error="This reset link is invalid or has already been used.")
+
+    if datetime.utcnow() > token_data['expires_at']:
+        models.delete_password_reset_token(token)
+        return render_template('reset_password.html', error="This reset link has expired. Please request a new one.")
+
+    if request.method == 'POST':
+        password         = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
+        if len(password) < 6:
+            return render_template('reset_password.html', token=token,
+                                   error="Password must be at least 6 characters.")
+        if password != confirm_password:
+            return render_template('reset_password.html', token=token,
+                                   error="Passwords don't match.")
+
+        models.update_user_password(token_data['user_id'], password)
+        models.delete_password_reset_token(token)
+        models.track_event('password_reset', user_id=token_data['user_id'])
+
+        return render_template('reset_password.html', success="Password updated! You can now log in.")
+
+    return render_template('reset_password.html', token=token)
 
 
 @app.route('/login', methods=['GET', 'POST'])
