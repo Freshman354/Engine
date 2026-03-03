@@ -41,7 +41,7 @@ app.config['MAIL_PORT']     = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS']  = True
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', '')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
-app.config['MAIL_DEFAULT_SENDER'] = ('Lumvi', 'support@lumvi.net')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'noreply@lumvi.net')
 mail = Mail(app)
 
 # Initialize AI helper at app startup
@@ -190,26 +190,21 @@ STOP_WORDS = {
     'is', 'are', 'was', 'were', 'be', 'been', 'being',
     'do', 'does', 'did', 'have', 'has', 'had',
     'can', 'could', 'will', 'would', 'should', 'shall', 'may', 'might',
-    'go', 'get', 'got', 'make', 'made', 'use', 'used',
+    'go', 'get', 'got', 'make', 'made',
     'in', 'on', 'at', 'by', 'for', 'with', 'about',
     'to', 'from', 'into', 'through', 'before', 'after',
     'of', 'off', 'out', 'over', 'under', 'and', 'or', 'but',
     'if', 'as', 'than', 'because', 'while',
     'just', 'also', 'too', 'very', 'really', 'quite', 'already',
     'still', 'ever', 'never', 'always', 'often',
-    'anytime', 'sometime', 'whenever', 'now', 'then', 'when',
-    'today', 'tomorrow', 'time', 'times',
     'please', 'thanks', 'thank', 'hello', 'hi', 'hey',
-    'like', 'want', 'need', 'know', 'tell', 'show', 'help',
     'what', 'where', 'which', 'who', 'why', 'how',
     'any', 'all', 'some', 'more', 'most', 'many', 'much',
     'no', 'not', 'nor', 'there', 'per', 'each'
 }
 
 GENERIC_TAGS = {
-    'schedule', 'appointment', 'book', 'available', 'availability',
-    'open', 'closed', 'contact', 'reach', 'support', 'help',
-    'information', 'info', 'details', 'more', 'learn'
+    'information', 'info', 'details', 'learn'
 }
 
 
@@ -605,7 +600,6 @@ def chat():
         if not message:
             return jsonify({'success': False, 'error': 'Message is required'}), 400
 
-        # ── Load client + FAQs ────────────────────────────────────────────
         try:
             client = models.get_client_by_id(client_id)
             if not client:
@@ -639,12 +633,12 @@ def chat():
             faqs_list = []
             config = {}
 
-        lead_triggers = config.get('bot_settings', {}).get(
-            'lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk']
-        )
+        lead_triggers = config.get('bot_settings', {}).get('lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk'])
         message_lower = message.lower()
 
-        # ── Plan enforcement ──────────────────────────────────────────────
+        # ── Plan enforcement: messages_per_day ──────────────────────────
+        # Only check for real (non-demo) clients so the demo widget is
+        # never accidentally blocked.
         if client and client_id != 'demo':
             owner = models.get_client_owner(client_id)
             if owner:
@@ -666,7 +660,7 @@ def chat():
                             'method': 'limit_enforced'
                         })
 
-        # ── Step 1: Lead detection ────────────────────────────────────────
+        # Step 1: Lead detection
         for trigger in lead_triggers:
             if trigger.lower() in message_lower:
                 response_text = "I'd be happy to connect you with our team! What's the best email to reach you?"
@@ -675,21 +669,31 @@ def chat():
                     'success': True,
                     'response': response_text,
                     'trigger_lead_collection': True,
-                    'method': 'lead_trigger',
+                    'method': 'instant',
                     'contact_info': config.get('contact', {})
                 })
 
-        # ── Step 2: AI matching (primary) ─────────────────────────────────
-        if ai_helper and ai_helper.enabled and faqs_list:
+        # Step 2: Smart keyword matching
+        best_faq, confidence = find_best_match(message, faqs_list)
+
+        if best_faq:
+            app.logger.info(f"Smart match: '{best_faq.get('id')}' | confidence: {confidence}")
+            response_text = best_faq.get('answer')
+            log_conversation(client_id, message, response_text, matched=True, method='smart_keyword')
+            return jsonify({
+                'success': True,
+                'response': response_text,
+                'confidence': confidence,
+                'method': 'smart_keyword'
+            })
+
+        # Step 3: AI fallback
+        if ai_helper and ai_helper.enabled:
+            app.logger.info("No smart match found, trying AI...")
             try:
                 ai_faq, ai_confidence = ai_helper.find_best_faq(message, faqs_list)
                 if ai_faq and ai_confidence > 0.5:
-                    response_text = ai_helper.generate_smart_response(
-                        message, ai_faq, conversation_history
-                    )
-                    app.logger.info(
-                        f"AI matched: '{ai_faq.get('id')}' | confidence: {ai_confidence}"
-                    )
+                    response_text = ai_faq.get('answer')
                     log_conversation(client_id, message, response_text, matched=True, method='ai')
                     return jsonify({
                         'success': True,
@@ -700,7 +704,7 @@ def chat():
             except Exception as ai_error:
                 app.logger.error(f"AI error: {ai_error}")
 
-        # ── Step 3: Fallback ──────────────────────────────────────────────
+        # Step 4: Fallback
         fallback = config.get('bot_settings', {}).get(
             'fallback_message',
             "I'm not sure about that. Would you like to speak with our team? Type 'contact'!"
@@ -2610,4 +2614,4 @@ def refund_policy():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=True)
