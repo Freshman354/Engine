@@ -605,6 +605,7 @@ def chat():
         if not message:
             return jsonify({'success': False, 'error': 'Message is required'}), 400
 
+        # ── Load client + FAQs ────────────────────────────────────────────
         try:
             client = models.get_client_by_id(client_id)
             if not client:
@@ -638,10 +639,12 @@ def chat():
             faqs_list = []
             config = {}
 
-        lead_triggers = config.get('bot_settings', {}).get('lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk'])
+        lead_triggers = config.get('bot_settings', {}).get(
+            'lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk']
+        )
         message_lower = message.lower()
 
-        # ── Plan enforcement ─────────────────────────────────────────────
+        # ── Plan enforcement ──────────────────────────────────────────────
         if client and client_id != 'demo':
             owner = models.get_client_owner(client_id)
             if owner:
@@ -650,6 +653,9 @@ def chat():
                 if daily_limit < 999999:
                     today_count = models.get_daily_message_count(client_id)
                     if today_count >= daily_limit:
+                        app.logger.info(
+                            f"[Limit] {client_id} hit daily cap ({today_count}/{daily_limit}) on plan '{plan_type}'"
+                        )
                         return jsonify({
                             'success': True,
                             'response': (
@@ -660,7 +666,7 @@ def chat():
                             'method': 'limit_enforced'
                         })
 
-        # Step 1: Lead detection
+        # ── Step 1: Lead detection ────────────────────────────────────────
         for trigger in lead_triggers:
             if trigger.lower() in message_lower:
                 response_text = "I'd be happy to connect you with our team! What's the best email to reach you?"
@@ -669,17 +675,20 @@ def chat():
                     'success': True,
                     'response': response_text,
                     'trigger_lead_collection': True,
-                    'method': 'instant',
+                    'method': 'lead_trigger',
                     'contact_info': config.get('contact', {})
                 })
 
-        # Step 2: AI matching
-        if ai_helper and ai_helper.enabled:
+        # ── Step 2: AI matching (primary) ─────────────────────────────────
+        if ai_helper and ai_helper.enabled and faqs_list:
             try:
                 ai_faq, ai_confidence = ai_helper.find_best_faq(message, faqs_list)
                 if ai_faq and ai_confidence > 0.5:
                     response_text = ai_helper.generate_smart_response(
                         message, ai_faq, conversation_history
+                    )
+                    app.logger.info(
+                        f"AI matched: '{ai_faq.get('id')}' | confidence: {ai_confidence}"
                     )
                     log_conversation(client_id, message, response_text, matched=True, method='ai')
                     return jsonify({
@@ -691,7 +700,7 @@ def chat():
             except Exception as ai_error:
                 app.logger.error(f"AI error: {ai_error}")
 
-        # Step 3: Fallback
+        # ── Step 3: Fallback ──────────────────────────────────────────────
         fallback = config.get('bot_settings', {}).get(
             'fallback_message',
             "I'm not sure about that. Would you like to speak with our team? Type 'contact'!"
