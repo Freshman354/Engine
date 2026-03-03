@@ -641,9 +641,7 @@ def chat():
         lead_triggers = config.get('bot_settings', {}).get('lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk'])
         message_lower = message.lower()
 
-        # ── Plan enforcement: messages_per_day ──────────────────────────
-        # Only check for real (non-demo) clients so the demo widget is
-        # never accidentally blocked.
+        # ── Plan enforcement ─────────────────────────────────────────────
         if client and client_id != 'demo':
             owner = models.get_client_owner(client_id)
             if owner:
@@ -652,9 +650,6 @@ def chat():
                 if daily_limit < 999999:
                     today_count = models.get_daily_message_count(client_id)
                     if today_count >= daily_limit:
-                        app.logger.info(
-                            f"[Limit] {client_id} hit daily cap ({today_count}/{daily_limit}) on plan '{plan_type}'"
-                        )
                         return jsonify({
                             'success': True,
                             'response': (
@@ -678,27 +673,14 @@ def chat():
                     'contact_info': config.get('contact', {})
                 })
 
-        # Step 2: Smart keyword matching
-        best_faq, confidence = find_best_match(message, faqs_list)
-
-        if best_faq:
-            app.logger.info(f"Smart match: '{best_faq.get('id')}' | confidence: {confidence}")
-            response_text = best_faq.get('answer')
-            log_conversation(client_id, message, response_text, matched=True, method='smart_keyword')
-            return jsonify({
-                'success': True,
-                'response': response_text,
-                'confidence': confidence,
-                'method': 'smart_keyword'
-            })
-
-        # Step 3: AI fallback
+        # Step 2: AI matching
         if ai_helper and ai_helper.enabled:
-            app.logger.info("No smart match found, trying AI...")
             try:
                 ai_faq, ai_confidence = ai_helper.find_best_faq(message, faqs_list)
                 if ai_faq and ai_confidence > 0.5:
-                    response_text = ai_faq.get('answer')
+                    response_text = ai_helper.generate_smart_response(
+                        message, ai_faq, conversation_history
+                    )
                     log_conversation(client_id, message, response_text, matched=True, method='ai')
                     return jsonify({
                         'success': True,
@@ -709,7 +691,7 @@ def chat():
             except Exception as ai_error:
                 app.logger.error(f"AI error: {ai_error}")
 
-        # Step 4: Fallback
+        # Step 3: Fallback
         fallback = config.get('bot_settings', {}).get(
             'fallback_message',
             "I'm not sure about that. Would you like to speak with our team? Type 'contact'!"
