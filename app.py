@@ -183,6 +183,83 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
+# =====================================================================
+# VERTICAL SYSTEM PROMPTS
+# Pre-configured AI personas per industry template
+# =====================================================================
+VERTICAL_PROMPTS = {
+    'custom': None,  # No system prompt — use default behaviour
+
+    'real_estate': """You are a warm, professional real estate assistant. Your job is to help potential buyers and renters find their perfect property.
+- Speak in a friendly, consultative tone
+- Ask about budget, preferred location, number of bedrooms/bathrooms, and timeline
+- Help qualify leads by understanding their urgency and financing situation
+- Offer to book property viewings for serious prospects
+- When someone is ready, collect their contact details and preferred viewing time
+- Always be encouraging and helpful — buying a home is exciting!""",
+
+    'saas': """You are a knowledgeable, friendly SaaS support assistant. Your goal is to help users get the most out of the product and resolve issues quickly.
+- Speak in a clear, helpful, slightly technical tone
+- Help with onboarding, feature questions, billing, and troubleshooting
+- For complex issues, collect user details and route to the support team
+- Highlight relevant features and upsell opportunities naturally
+- Ask about company size and use case when qualifying new leads
+- Always aim to resolve in chat first before escalating""",
+
+    'ecommerce': """You are a fast, friendly e-commerce support assistant. Help customers with their orders and shopping experience.
+- Be quick, upbeat and solution-focused
+- Help with order tracking, returns, refunds, product questions, and shipping
+- Ask for order number when handling order-specific queries
+- Proactively offer alternatives if an item is out of stock
+- Capture contact details for unresolved issues
+- Keep responses short and punchy — shoppers want fast answers""",
+
+    'healthcare': """You are a calm, professional healthcare clinic assistant. Help patients with bookings and general clinic information.
+- Use a reassuring, professional tone at all times
+- Help with appointment booking, clinic hours, services offered, and insurance queries
+- NEVER provide medical diagnoses or specific medical advice — always direct to a healthcare professional
+- Collect patient name, contact number, and reason for visit when booking
+- Be sensitive and empathetic — patients may be anxious
+- If someone describes an emergency, immediately direct them to call emergency services""",
+
+    'law_firm': """You are a professional, precise legal intake assistant for a law firm. Help potential clients understand if the firm can help them.
+- Maintain a formal, authoritative but approachable tone
+- Help with initial consultations, practice areas, fees, and intake
+- NEVER provide specific legal advice — always clarify you are an intake assistant
+- Collect case type, brief description, urgency level, and contact details
+- Ask qualifying questions: jurisdiction, opposing party, timeline of events
+- Be thorough and detail-oriented — legal matters require precision"""
+}
+
+VERTICAL_DEFAULT_FAQS = {
+    'real_estate': [
+        {'question': 'What areas do you cover?', 'answer': 'We cover properties across the region. Tell me your preferred area and I can show you what is available!'},
+        {'question': 'How do I book a viewing?', 'answer': 'I would be happy to arrange a viewing! Can I get your name, contact number, and the property you are interested in?'},
+        {'question': 'What is the buying process?', 'answer': 'The process typically involves: 1) Property search, 2) Making an offer, 3) Surveys & legal checks, 4) Exchange of contracts, 5) Completion. We guide you every step of the way!'},
+    ],
+    'saas': [
+        {'question': 'How do I get started?', 'answer': 'Getting started is easy! Sign up for a free trial and our onboarding wizard will guide you through setup in under 10 minutes.'},
+        {'question': 'How do I reset my password?', 'answer': 'Click "Forgot Password" on the login page and we will send a reset link to your email within 2 minutes.'},
+        {'question': 'What integrations do you support?', 'answer': 'We integrate with Zapier, Slack, HubSpot, Salesforce and 100+ other tools. Check our integrations page for the full list!'},
+    ],
+    'ecommerce': [
+        {'question': 'How do I track my order?', 'answer': 'You can track your order using the tracking number in your confirmation email, or share your order number here and I will look it up!'},
+        {'question': 'What is your return policy?', 'answer': 'We offer hassle-free returns within 30 days of purchase. Items must be unused and in original packaging. Start a return from your account page.'},
+        {'question': 'How long does shipping take?', 'answer': 'Standard shipping takes 3-5 business days. Express shipping (1-2 days) is available at checkout. Free shipping on orders over $50!'},
+    ],
+    'healthcare': [
+        {'question': 'How do I book an appointment?', 'answer': 'I can help you book an appointment! Could you share your name, contact number, and what you would like to be seen for?'},
+        {'question': 'What are your opening hours?', 'answer': 'Our clinic is open Monday to Friday 8am-6pm, and Saturday 9am-1pm. We are closed on Sundays and public holidays.'},
+        {'question': 'Do you accept walk-ins?', 'answer': 'We do accept walk-ins subject to availability, but we recommend booking in advance to guarantee your preferred time slot.'},
+    ],
+    'law_firm': [
+        {'question': 'What areas of law do you practice?', 'answer': 'Our firm specialises in [practice areas]. To discuss your specific matter, we can arrange a free initial consultation with one of our solicitors.'},
+        {'question': 'How much does a consultation cost?', 'answer': 'We offer a free 30-minute initial consultation for new clients. Following that, fees vary depending on the nature of your matter. Would you like to book a consultation?'},
+        {'question': 'How do I start a case?', 'answer': 'To get started, I need a few details about your matter. Could you briefly describe your situation and the urgency?'},
+    ],
+}
+
+
 STOP_WORDS = {
     'a', 'an', 'the', 'this', 'that', 'these', 'those',
     'i', 'me', 'my', 'we', 'our', 'you', 'your', 'it', 'its',
@@ -636,6 +713,10 @@ def chat():
         lead_triggers = config.get('bot_settings', {}).get('lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk'])
         message_lower = message.lower()
 
+        # Load vertical system prompt if set
+        vertical = config.get('vertical', 'custom')
+        vertical_system_prompt = config.get('bot_settings', {}).get('system_prompt') or VERTICAL_PROMPTS.get(vertical)
+
         # ── Plan enforcement: messages_per_day ──────────────────────────
         # Only check for real (non-demo) clients so the demo widget is
         # never accidentally blocked.
@@ -694,6 +775,11 @@ def chat():
                 ai_faq, ai_confidence = ai_helper.find_best_faq(message, faqs_list)
                 if ai_faq and ai_confidence > 0.5:
                     response_text = ai_faq.get('answer')
+                    # If vertical system prompt exists, enhance the response
+                    if vertical_system_prompt:
+                        response_text = ai_helper.generate_vertical_response(
+                            message, ai_faq, vertical_system_prompt
+                        )
                     log_conversation(client_id, message, response_text, matched=True, method='ai')
                     return jsonify({
                         'success': True,
@@ -701,6 +787,19 @@ def chat():
                         'confidence': ai_confidence,
                         'method': 'ai'
                     })
+                # If no FAQ match but vertical prompt exists, generate contextual response
+                elif vertical_system_prompt and faqs_list:
+                    response_text = ai_helper.generate_vertical_fallback(
+                        message, faqs_list, vertical_system_prompt
+                    )
+                    if response_text:
+                        log_conversation(client_id, message, response_text, matched=True, method='ai_vertical')
+                        return jsonify({
+                            'success': True,
+                            'response': response_text,
+                            'confidence': 0.6,
+                            'method': 'ai_vertical'
+                        })
             except Exception as ai_error:
                 app.logger.error(f"AI error: {ai_error}")
 
@@ -1077,7 +1176,34 @@ def create_client():
             </html>
             ''', 403
 
-        client_id = models.create_client(current_user.id, company_name)
+        # Get vertical template selection
+        vertical = request.form.get('vertical', 'custom')
+        if vertical not in VERTICAL_PROMPTS:
+            vertical = 'custom'
+
+        # Build initial branding_settings with vertical info
+        system_prompt = VERTICAL_PROMPTS.get(vertical)
+        initial_settings = {
+            'vertical': vertical,
+            'bot_settings': {
+                'system_prompt': system_prompt or '',
+                'welcome_message': 'Hi! How can I help you today?',
+                'fallback_message': "I'm not sure about that. Would you like to speak with our team? Type 'contact'!",
+                'lead_triggers': ['contact', 'sales', 'demo', 'speak', 'talk', 'human', 'agent']
+            }
+        }
+
+        client_id = models.create_client(current_user.id, company_name, initial_settings)
+
+        # Seed default FAQs for the vertical
+        default_faqs = VERTICAL_DEFAULT_FAQS.get(vertical, [])
+        for faq in default_faqs:
+            try:
+                models.add_faq(client_id, faq['question'], faq['answer'], [])
+            except Exception as faq_err:
+                app.logger.warning(f'Could not seed FAQ: {faq_err}')
+
+        app.logger.info(f'Created client {client_id} with vertical={vertical}')
         return redirect(url_for('dashboard'))
 
     except Exception as e:

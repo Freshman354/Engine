@@ -26,7 +26,6 @@ class AIHelper:
                 # Test it works
                 test_response = self.model.generate_content("Say 'OK'")
                 logger.info(f"AI Helper initialized with {model_name}")
-                # don't print emojis to console; they can cause encoding errors
                 logger.debug(f"Gemini test response: {test_response.text[:50]}")
 
             except Exception as e:
@@ -74,6 +73,50 @@ Return ONLY the JSON, no other text."""
         except Exception as e:
             logger.error(f"AI matching error: {e}")
             return None, 0.0
+
+    def generate_vertical_response(self, user_message: str, faq: Dict, system_prompt: str) -> str:
+        """Generate a response shaped by the vertical system prompt."""
+        if not self.enabled:
+            return faq.get('answer', '')
+        try:
+            prompt = f"""{system_prompt}
+
+A customer has asked: "{user_message}"
+
+The relevant FAQ answer is:
+Q: {faq.get('question')}
+A: {faq.get('answer')}
+
+Respond naturally in the tone and style defined above. Use the FAQ answer as your source of truth but phrase it conversationally. Keep it concise (2-3 sentences max). Return ONLY the response text."""
+
+            response = self.model.generate_content(prompt)
+            result = response.text.strip()
+            return result if result and len(result) > 10 else faq.get('answer', '')
+        except Exception as e:
+            logger.error(f"generate_vertical_response error: {e}")
+            return faq.get('answer', '')
+
+    def generate_vertical_fallback(self, user_message: str, faqs: List[Dict], system_prompt: str) -> str:
+        """When no FAQ matches, use the vertical prompt to generate a helpful response."""
+        if not self.enabled:
+            return ''
+        try:
+            faq_context = self._format_faqs_for_ai(faqs)
+            prompt = f"""{system_prompt}
+
+A customer has asked: "{user_message}"
+
+Available knowledge base:
+{faq_context}
+
+The question does not exactly match any FAQ. Use your knowledge base context and the persona above to give a helpful, on-brand response. If you truly cannot answer, say so politely and offer to connect them with the team. Keep it to 2-3 sentences. Return ONLY the response text."""
+
+            response = self.model.generate_content(prompt)
+            result = response.text.strip()
+            return result if result and len(result) > 10 else ''
+        except Exception as e:
+            logger.error(f"generate_vertical_fallback error: {e}")
+            return ''
 
     def generate_smart_response(self, user_message: str, faq: Dict, context: Optional[List[Dict]] = None) -> str:
         """Generate a natural, context-aware response"""

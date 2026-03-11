@@ -613,7 +613,7 @@
 
     <!-- NEW CLIENT MODAL -->
     <div class="modal" id="new-client-modal">
-        <div class="modal-content">
+        <div class="modal-content" style="max-width:620px;width:95%;">
             <div class="modal-header">
                 <h2>Create New Client</h2>
                 <button class="modal-close" onclick="closeModal()">×</button>
@@ -623,10 +623,56 @@
                     <label>Company Name</label>
                     <input type="text" name="company_name" placeholder="Acme Corporation" required autofocus>
                 </div>
+
+                <div class="form-group">
+                    <label>Industry Template</label>
+                    <p style="font-size:13px;color:#64748b;margin:-4px 0 12px;">Pre-configures the bot tone, prompts and starter FAQs for this industry.</p>
+                    <input type="hidden" name="vertical" id="vertical-input" value="custom">
+                    <div class="vertical-grid">
+                        <div class="vertical-card selected" data-vertical="custom" onclick="selectVertical(this)">
+                            <span class="vertical-icon">&#9881;&#65039;</span>
+                            <span class="vertical-label">Custom</span>
+                        </div>
+                        <div class="vertical-card" data-vertical="real_estate" onclick="selectVertical(this)">
+                            <span class="vertical-icon">&#127968;</span>
+                            <span class="vertical-label">Real Estate</span>
+                        </div>
+                        <div class="vertical-card" data-vertical="saas" onclick="selectVertical(this)">
+                            <span class="vertical-icon">&#128187;</span>
+                            <span class="vertical-label">SaaS Support</span>
+                        </div>
+                        <div class="vertical-card" data-vertical="ecommerce" onclick="selectVertical(this)">
+                            <span class="vertical-icon">&#128722;</span>
+                            <span class="vertical-label">E-commerce</span>
+                        </div>
+                        <div class="vertical-card" data-vertical="healthcare" onclick="selectVertical(this)">
+                            <span class="vertical-icon">&#127973;</span>
+                            <span class="vertical-label">Healthcare</span>
+                        </div>
+                        <div class="vertical-card" data-vertical="law_firm" onclick="selectVertical(this)">
+                            <span class="vertical-icon">&#9878;&#65039;</span>
+                            <span class="vertical-label">Law Firm</span>
+                        </div>
+                    </div>
+                    <div class="vertical-preview" id="vertical-preview">
+                        <span id="preview-text">Blank slate — configure everything yourself.</span>
+                    </div>
+                </div>
+
                 <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Create Client</button>
             </form>
         </div>
     </div>
+
+    <style>
+        .vertical-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:12px; }
+        .vertical-card { background:rgba(15,23,42,0.5); border:1.5px solid rgba(99,102,241,0.15); border-radius:12px; padding:14px 10px; text-align:center; cursor:pointer; transition:all 0.2s; display:flex; flex-direction:column; align-items:center; gap:6px; }
+        .vertical-card:hover { border-color:rgba(99,102,241,0.5); background:rgba(99,102,241,0.08); }
+        .vertical-card.selected { border-color:#6366f1; background:rgba(99,102,241,0.15); box-shadow:0 0 0 3px rgba(99,102,241,0.2); }
+        .vertical-icon { font-size:22px; }
+        .vertical-label { font-size:12px; font-weight:600; color:#cbd5e1; }
+        .vertical-preview { background:rgba(6,182,212,0.07); border:1px solid rgba(6,182,212,0.2); border-radius:8px; padding:10px 14px; font-size:12px; color:#67e8f9; line-height:1.5; min-height:36px; }
+    </style>
 
     <!-- DELETE CONFIRM MODAL -->
     <div class="delete-modal" id="delete-modal">
@@ -667,6 +713,23 @@
 
     <script>
         // ── New Client Modal ──────────────────────────────────────────
+        const VERTICAL_PREVIEWS = {
+            custom:      'Blank slate — configure everything yourself.',
+            real_estate: 'Warm, consultative tone. Lead fields: budget, location, bedrooms. Focused on booking property viewings.',
+            saas:        'Helpful, technical tone. Lead fields: company size, use case. Routes users to trial signup or support tickets.',
+            ecommerce:   'Fast, friendly tone. Lead fields: order number, product. Handles returns, shipping and product questions.',
+            healthcare:  'Calm, professional tone. Lead fields: symptoms, insurance. Books appointments and handles clinic FAQs.',
+            law_firm:    'Formal, precise tone. Lead fields: case type, urgency. Intake form for new client consultations.'
+        };
+
+        function selectVertical(card) {
+            document.querySelectorAll('.vertical-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            const v = card.getAttribute('data-vertical');
+            document.getElementById('vertical-input').value = v;
+            document.getElementById('preview-text').textContent = VERTICAL_PREVIEWS[v] || '';
+        }
+
         function openNewClientModal() {
             document.getElementById('new-client-modal').style.display = 'flex';
         }
