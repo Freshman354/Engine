@@ -627,11 +627,11 @@
                 <div class="form-group">
                     <label>Industry Template</label>
                     <p style="font-size:13px;color:#64748b;margin:-4px 0 12px;">Pre-configures the bot tone, prompts and starter FAQs for this industry.</p>
-                    <input type="hidden" name="vertical" id="vertical-input" value="custom">
+                    <input type="hidden" name="vertical" id="vertical-input" value="general">
                     <div class="vertical-grid">
-                        <div class="vertical-card selected" data-vertical="custom" onclick="selectVertical(this)">
-                            <span class="vertical-icon">&#9881;&#65039;</span>
-                            <span class="vertical-label">Custom</span>
+                        <div class="vertical-card selected" data-vertical="general" onclick="selectVertical(this)">
+                            <span class="vertical-icon">&#127760;</span>
+                            <span class="vertical-label">General</span>
                         </div>
                         <div class="vertical-card" data-vertical="real_estate" onclick="selectVertical(this)">
                             <span class="vertical-icon">&#127968;</span>
@@ -714,7 +714,7 @@
     <script>
         // ── New Client Modal ──────────────────────────────────────────
         const VERTICAL_PREVIEWS = {
-            custom:      'Blank slate — configure everything yourself.',
+            general:     'Friendly, professional assistant. Suitable for any business type.',
             real_estate: 'Warm, consultative tone. Lead fields: budget, location, bedrooms. Focused on booking property viewings.',
             saas:        'Helpful, technical tone. Lead fields: company size, use case. Routes users to trial signup or support tickets.',
             ecommerce:   'Fast, friendly tone. Lead fields: order number, product. Handles returns, shipping and product questions.',

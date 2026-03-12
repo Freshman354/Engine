@@ -188,7 +188,11 @@ limiter = Limiter(
 # Pre-configured AI personas per industry template
 # =====================================================================
 VERTICAL_PROMPTS = {
-    'custom': None,  # No system prompt — use default behaviour
+    'general': """You are a friendly, professional assistant. Your job is to help visitors with their questions clearly and helpfully.
+- Be warm, polite and concise
+- Answer questions using the available knowledge base
+- If you cannot answer, offer to connect the visitor with the team
+- Keep responses to 2-3 sentences""",
 
     'real_estate': """You are a warm, professional real estate assistant. Your job is to help potential buyers and renters find their perfect property.
 - Speak in a friendly, consultative tone
@@ -754,41 +758,28 @@ def chat():
                     'contact_info': config.get('contact', {})
                 })
 
-        # Step 2: Smart keyword matching
-        best_faq, confidence = find_best_match(message, faqs_list)
-
-        if best_faq:
-            app.logger.info(f"Smart match: '{best_faq.get('id')}' | confidence: {confidence}")
-            response_text = best_faq.get('answer')
-            log_conversation(client_id, message, response_text, matched=True, method='smart_keyword')
-            return jsonify({
-                'success': True,
-                'response': response_text,
-                'confidence': confidence,
-                'method': 'smart_keyword'
-            })
-
-        # Step 3: AI fallback
+        # Step 2: AI smart matching (primary matcher)
         if ai_helper and ai_helper.enabled:
-            app.logger.info("No smart match found, trying AI...")
+            app.logger.info("Running AI smart matching...")
             try:
                 ai_faq, ai_confidence = ai_helper.find_best_faq(message, faqs_list)
                 if ai_faq and ai_confidence > 0.5:
-                    response_text = ai_faq.get('answer')
-                    # If vertical system prompt exists, enhance the response
+                    # Shape response with vertical persona if available
                     if vertical_system_prompt:
                         response_text = ai_helper.generate_vertical_response(
                             message, ai_faq, vertical_system_prompt
                         )
-                    log_conversation(client_id, message, response_text, matched=True, method='ai')
+                    else:
+                        response_text = ai_faq.get('answer')
+                    log_conversation(client_id, message, response_text, matched=True, method='ai_smart')
                     return jsonify({
                         'success': True,
                         'response': response_text,
                         'confidence': ai_confidence,
-                        'method': 'ai'
+                        'method': 'ai_smart'
                     })
-                # If no FAQ match but vertical prompt exists, generate contextual response
-                elif vertical_system_prompt and faqs_list:
+                # No FAQ match — use vertical persona to generate contextual response
+                elif faqs_list and vertical_system_prompt:
                     response_text = ai_helper.generate_vertical_fallback(
                         message, faqs_list, vertical_system_prompt
                     )
@@ -801,7 +792,20 @@ def chat():
                             'method': 'ai_vertical'
                         })
             except Exception as ai_error:
-                app.logger.error(f"AI error: {ai_error}")
+                app.logger.error(f"AI smart matching error: {ai_error}")
+
+        # Step 3: Keyword matching fallback (used only if AI is disabled)
+        best_faq, confidence = find_best_match(message, faqs_list)
+        if best_faq:
+            app.logger.info(f"Keyword fallback match: '{best_faq.get('id')}' | score: {confidence}")
+            response_text = best_faq.get('answer')
+            log_conversation(client_id, message, response_text, matched=True, method='keyword_fallback')
+            return jsonify({
+                'success': True,
+                'response': response_text,
+                'confidence': confidence,
+                'method': 'keyword_fallback'
+            })
 
         # Step 4: Fallback
         fallback = config.get('bot_settings', {}).get(
@@ -1179,7 +1183,7 @@ def create_client():
         # Get vertical template selection
         vertical = request.form.get('vertical', 'custom')
         if vertical not in VERTICAL_PROMPTS:
-            vertical = 'custom'
+            vertical = 'general'
 
         # Build initial branding_settings with vertical info
         system_prompt = VERTICAL_PROMPTS.get(vertical)
