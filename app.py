@@ -44,6 +44,104 @@ app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'noreply@lumvi.net')
 mail = Mail(app)
 
+
+def send_welcome_email(email):
+    """Send a branded welcome email to a new Lumvi user."""
+    try:
+        msg = Message(
+            subject="Welcome to Lumvi — your AI chatbot is ready 🚀",
+            recipients=[email],
+            html=f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0f172a;font-family:'Inter',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:40px 0;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+
+        <!-- Header -->
+        <tr><td style="background:linear-gradient(135deg,#6366f1 0%,#7c3aed 50%,#a78bfa 100%);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
+          <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:12px;padding:10px 20px;margin-bottom:16px;">
+            <span style="font-size:26px;font-weight:900;color:#ffffff;letter-spacing:-0.5px;">&#9889; Lumvi</span>
+          </div>
+          <h1 style="margin:0;font-size:24px;font-weight:800;color:#ffffff;line-height:1.3;">
+            You're all set &mdash; let's build your first chatbot!
+          </h1>
+        </td></tr>
+
+        <!-- Body -->
+        <tr><td style="background:#1e293b;padding:36px 40px;">
+          <p style="margin:0 0 20px;color:#94a3b8;font-size:15px;line-height:1.7;">
+            Hey there &#128075; &mdash; welcome to Lumvi! You're now part of a growing group of agencies and businesses using AI chatbots to capture leads and answer questions automatically.
+          </p>
+          <p style="margin:0 0 28px;color:#94a3b8;font-size:15px;line-height:1.7;">
+            Here's how to get started in 3 simple steps:
+          </p>
+
+          <!-- Steps -->
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+            <tr>
+              <td style="padding:14px 16px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;">
+                <strong style="font-size:14px;font-weight:700;color:#c7d2fe;">1. Create your first chatbot</strong>
+                <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.6;">Go to your dashboard and click "Create New Chatbot". Choose an industry template or start from scratch.</p>
+              </td>
+            </tr>
+            <tr><td style="height:10px;"></td></tr>
+            <tr>
+              <td style="padding:14px 16px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;">
+                <strong style="font-size:14px;font-weight:700;color:#c7d2fe;">2. Add your FAQs</strong>
+                <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.6;">Train your bot with common questions. Upload a CSV or PDF, or add them manually in the FAQ Manager.</p>
+              </td>
+            </tr>
+            <tr><td style="height:10px;"></td></tr>
+            <tr>
+              <td style="padding:14px 16px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;">
+                <strong style="font-size:14px;font-weight:700;color:#c7d2fe;">3. Embed on your website</strong>
+                <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.6;">Copy the one-line embed code from your dashboard and paste it into any website. Done!</p>
+              </td>
+            </tr>
+          </table>
+
+          <!-- CTA -->
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr><td align="center" style="padding:8px 0 28px;">
+              <a href="https://lumvi.net/dashboard"
+                 style="display:inline-block;background:linear-gradient(135deg,#6366f1,#7c3aed);color:#ffffff;text-decoration:none;padding:15px 36px;border-radius:10px;font-weight:800;font-size:15px;">
+                Go to My Dashboard &rarr;
+              </a>
+            </td></tr>
+          </table>
+
+          <p style="margin:0;color:#475569;font-size:13px;line-height:1.7;border-top:1px solid rgba(255,255,255,0.06);padding-top:20px;">
+            Questions? Reply to this email or reach us at
+            <a href="mailto:support@lumvi.net" style="color:#818cf8;text-decoration:none;">support@lumvi.net</a>.
+            We're happy to help.
+          </p>
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="background:#0f172a;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center;">
+          <p style="margin:0;color:#334155;font-size:12px;">
+            &copy; 2025 Lumvi &middot;
+            <a href="https://lumvi.net" style="color:#475569;text-decoration:none;">lumvi.net</a> &middot;
+            <a href="https://lumvi.net/privacy-policy" style="color:#475569;text-decoration:none;">Privacy Policy</a>
+          </p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+            """
+        )
+        mail.send(msg)
+        app.logger.info(f"Welcome email sent to {email}")
+    except Exception as e:
+        app.logger.error(f"Welcome email failed for {email}: {e}")
+
+
 # Initialize AI helper at app startup
 ai_helper = get_ai_helper(Config.GEMINI_API_KEY, Config.GEMINI_MODEL)
 
@@ -182,87 +280,6 @@ limiter = Limiter(
     default_limits=["200 per day", "50 per hour"],
     storage_uri="memory://"
 )
-
-# =====================================================================
-# VERTICAL SYSTEM PROMPTS
-# Pre-configured AI personas per industry template
-# =====================================================================
-VERTICAL_PROMPTS = {
-    'general': """You are a friendly, professional assistant. Your job is to help visitors with their questions clearly and helpfully.
-- Be warm, polite and concise
-- Answer questions using the available knowledge base
-- If you cannot answer, offer to connect the visitor with the team
-- Keep responses to 2-3 sentences""",
-
-    'real_estate': """You are a warm, professional real estate assistant. Your job is to help potential buyers and renters find their perfect property.
-- Speak in a friendly, consultative tone
-- Ask about budget, preferred location, number of bedrooms/bathrooms, and timeline
-- Help qualify leads by understanding their urgency and financing situation
-- Offer to book property viewings for serious prospects
-- When someone is ready, collect their contact details and preferred viewing time
-- Always be encouraging and helpful — buying a home is exciting!""",
-
-    'saas': """You are a knowledgeable, friendly SaaS support assistant. Your goal is to help users get the most out of the product and resolve issues quickly.
-- Speak in a clear, helpful, slightly technical tone
-- Help with onboarding, feature questions, billing, and troubleshooting
-- For complex issues, collect user details and route to the support team
-- Highlight relevant features and upsell opportunities naturally
-- Ask about company size and use case when qualifying new leads
-- Always aim to resolve in chat first before escalating""",
-
-    'ecommerce': """You are a fast, friendly e-commerce support assistant. Help customers with their orders and shopping experience.
-- Be quick, upbeat and solution-focused
-- Help with order tracking, returns, refunds, product questions, and shipping
-- Ask for order number when handling order-specific queries
-- Proactively offer alternatives if an item is out of stock
-- Capture contact details for unresolved issues
-- Keep responses short and punchy — shoppers want fast answers""",
-
-    'healthcare': """You are a calm, professional healthcare clinic assistant. Help patients with bookings and general clinic information.
-- Use a reassuring, professional tone at all times
-- Help with appointment booking, clinic hours, services offered, and insurance queries
-- NEVER provide medical diagnoses or specific medical advice — always direct to a healthcare professional
-- Collect patient name, contact number, and reason for visit when booking
-- Be sensitive and empathetic — patients may be anxious
-- If someone describes an emergency, immediately direct them to call emergency services""",
-
-    'law_firm': """You are a professional, precise legal intake assistant for a law firm. Help potential clients understand if the firm can help them.
-- Maintain a formal, authoritative but approachable tone
-- Help with initial consultations, practice areas, fees, and intake
-- NEVER provide specific legal advice — always clarify you are an intake assistant
-- Collect case type, brief description, urgency level, and contact details
-- Ask qualifying questions: jurisdiction, opposing party, timeline of events
-- Be thorough and detail-oriented — legal matters require precision"""
-}
-
-VERTICAL_DEFAULT_FAQS = {
-    'real_estate': [
-        {'question': 'What areas do you cover?', 'answer': 'We cover properties across the region. Tell me your preferred area and I can show you what is available!'},
-        {'question': 'How do I book a viewing?', 'answer': 'I would be happy to arrange a viewing! Can I get your name, contact number, and the property you are interested in?'},
-        {'question': 'What is the buying process?', 'answer': 'The process typically involves: 1) Property search, 2) Making an offer, 3) Surveys & legal checks, 4) Exchange of contracts, 5) Completion. We guide you every step of the way!'},
-    ],
-    'saas': [
-        {'question': 'How do I get started?', 'answer': 'Getting started is easy! Sign up for a free trial and our onboarding wizard will guide you through setup in under 10 minutes.'},
-        {'question': 'How do I reset my password?', 'answer': 'Click "Forgot Password" on the login page and we will send a reset link to your email within 2 minutes.'},
-        {'question': 'What integrations do you support?', 'answer': 'We integrate with Zapier, Slack, HubSpot, Salesforce and 100+ other tools. Check our integrations page for the full list!'},
-    ],
-    'ecommerce': [
-        {'question': 'How do I track my order?', 'answer': 'You can track your order using the tracking number in your confirmation email, or share your order number here and I will look it up!'},
-        {'question': 'What is your return policy?', 'answer': 'We offer hassle-free returns within 30 days of purchase. Items must be unused and in original packaging. Start a return from your account page.'},
-        {'question': 'How long does shipping take?', 'answer': 'Standard shipping takes 3-5 business days. Express shipping (1-2 days) is available at checkout. Free shipping on orders over $50!'},
-    ],
-    'healthcare': [
-        {'question': 'How do I book an appointment?', 'answer': 'I can help you book an appointment! Could you share your name, contact number, and what you would like to be seen for?'},
-        {'question': 'What are your opening hours?', 'answer': 'Our clinic is open Monday to Friday 8am-6pm, and Saturday 9am-1pm. We are closed on Sundays and public holidays.'},
-        {'question': 'Do you accept walk-ins?', 'answer': 'We do accept walk-ins subject to availability, but we recommend booking in advance to guarantee your preferred time slot.'},
-    ],
-    'law_firm': [
-        {'question': 'What areas of law do you practice?', 'answer': 'Our firm specialises in [practice areas]. To discuss your specific matter, we can arrange a free initial consultation with one of our solicitors.'},
-        {'question': 'How much does a consultation cost?', 'answer': 'We offer a free 30-minute initial consultation for new clients. Following that, fees vary depending on the nature of your matter. Would you like to book a consultation?'},
-        {'question': 'How do I start a case?', 'answer': 'To get started, I need a few details about your matter. Could you briefly describe your situation and the urgency?'},
-    ],
-}
-
 
 STOP_WORDS = {
     'a', 'an', 'the', 'this', 'that', 'these', 'those',
@@ -717,10 +734,6 @@ def chat():
         lead_triggers = config.get('bot_settings', {}).get('lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk'])
         message_lower = message.lower()
 
-        # Load vertical system prompt if set
-        vertical = config.get('vertical', 'custom')
-        vertical_system_prompt = config.get('bot_settings', {}).get('system_prompt') or VERTICAL_PROMPTS.get(vertical)
-
         # ── Plan enforcement: messages_per_day ──────────────────────────
         # Only check for real (non-demo) clients so the demo widget is
         # never accidentally blocked.
@@ -758,54 +771,36 @@ def chat():
                     'contact_info': config.get('contact', {})
                 })
 
-        # Step 2: AI smart matching (primary matcher)
-        if ai_helper and ai_helper.enabled:
-            app.logger.info("Running AI smart matching...")
-            try:
-                ai_faq, ai_confidence = ai_helper.find_best_faq(message, faqs_list)
-                if ai_faq and ai_confidence > 0.5:
-                    # Shape response with vertical persona if available
-                    if vertical_system_prompt:
-                        response_text = ai_helper.generate_vertical_response(
-                            message, ai_faq, vertical_system_prompt
-                        )
-                    else:
-                        response_text = ai_faq.get('answer')
-                    log_conversation(client_id, message, response_text, matched=True, method='ai_smart')
-                    return jsonify({
-                        'success': True,
-                        'response': response_text,
-                        'confidence': ai_confidence,
-                        'method': 'ai_smart'
-                    })
-                # No FAQ match — use vertical persona to generate contextual response
-                elif faqs_list and vertical_system_prompt:
-                    response_text = ai_helper.generate_vertical_fallback(
-                        message, faqs_list, vertical_system_prompt
-                    )
-                    if response_text:
-                        log_conversation(client_id, message, response_text, matched=True, method='ai_vertical')
-                        return jsonify({
-                            'success': True,
-                            'response': response_text,
-                            'confidence': 0.6,
-                            'method': 'ai_vertical'
-                        })
-            except Exception as ai_error:
-                app.logger.error(f"AI smart matching error: {ai_error}")
-
-        # Step 3: Keyword matching fallback (used only if AI is disabled)
+        # Step 2: Smart keyword matching
         best_faq, confidence = find_best_match(message, faqs_list)
+
         if best_faq:
-            app.logger.info(f"Keyword fallback match: '{best_faq.get('id')}' | score: {confidence}")
+            app.logger.info(f"Smart match: '{best_faq.get('id')}' | confidence: {confidence}")
             response_text = best_faq.get('answer')
-            log_conversation(client_id, message, response_text, matched=True, method='keyword_fallback')
+            log_conversation(client_id, message, response_text, matched=True, method='smart_keyword')
             return jsonify({
                 'success': True,
                 'response': response_text,
                 'confidence': confidence,
-                'method': 'keyword_fallback'
+                'method': 'smart_keyword'
             })
+
+        # Step 3: AI fallback
+        if ai_helper and ai_helper.enabled:
+            app.logger.info("No smart match found, trying AI...")
+            try:
+                ai_faq, ai_confidence = ai_helper.find_best_faq(message, faqs_list)
+                if ai_faq and ai_confidence > 0.5:
+                    response_text = ai_faq.get('answer')
+                    log_conversation(client_id, message, response_text, matched=True, method='ai')
+                    return jsonify({
+                        'success': True,
+                        'response': response_text,
+                        'confidence': ai_confidence,
+                        'method': 'ai'
+                    })
+            except Exception as ai_error:
+                app.logger.error(f"AI error: {ai_error}")
 
         # Step 4: Fallback
         fallback = config.get('bot_settings', {}).get(
@@ -922,6 +917,7 @@ def signup():
         user = User(user_data)
         login_user(user)
         models.track_event('signup', user_id=user_id, metadata={'email': email, 'plan': 'free'})
+        send_welcome_email(email)
 
         # If they came from a pricing button, send them straight to upgrade
         if plan_from_form in ('starter', 'pro', 'agency'):
@@ -1180,34 +1176,7 @@ def create_client():
             </html>
             ''', 403
 
-        # Get vertical template selection
-        vertical = request.form.get('vertical', 'custom')
-        if vertical not in VERTICAL_PROMPTS:
-            vertical = 'general'
-
-        # Build initial branding_settings with vertical info
-        system_prompt = VERTICAL_PROMPTS.get(vertical)
-        initial_settings = {
-            'vertical': vertical,
-            'bot_settings': {
-                'system_prompt': system_prompt or '',
-                'welcome_message': 'Hi! How can I help you today?',
-                'fallback_message': "I'm not sure about that. Would you like to speak with our team? Type 'contact'!",
-                'lead_triggers': ['contact', 'sales', 'demo', 'speak', 'talk', 'human', 'agent']
-            }
-        }
-
-        client_id = models.create_client(current_user.id, company_name, initial_settings)
-
-        # Seed default FAQs for the vertical
-        default_faqs = VERTICAL_DEFAULT_FAQS.get(vertical, [])
-        for faq in default_faqs:
-            try:
-                models.add_faq(client_id, faq['question'], faq['answer'], [])
-            except Exception as faq_err:
-                app.logger.warning(f'Could not seed FAQ: {faq_err}')
-
-        app.logger.info(f'Created client {client_id} with vertical={vertical}')
+        client_id = models.create_client(current_user.id, company_name)
         return redirect(url_for('dashboard'))
 
     except Exception as e:
@@ -1800,28 +1769,6 @@ def upload_faqs():
         app.logger.error(f'Error uploading FAQs: {e}')
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/api/faqs/delete-all', methods=['POST'])
-@login_required
-def delete_all_faqs():
-    try:
-        data = request.get_json()
-        client_id = data.get('client_id')
-
-        if not client_id:
-            return jsonify({'success': False, 'error': 'Client ID required'}), 400
-
-        if not models.verify_client_ownership(current_user.id, client_id):
-            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
-
-        models.delete_all_faqs(client_id)
-        app.logger.info(f'Deleted all FAQs for client {client_id} by user {current_user.id}')
-        return jsonify({'success': True, 'message': 'All FAQs deleted successfully'})
-
-    except Exception as e:
-        app.logger.error(f'Error deleting all FAQs: {e}')
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
