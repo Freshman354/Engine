@@ -1803,6 +1803,28 @@ def upload_faqs():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/faqs/delete-all', methods=['POST'])
+@login_required
+def delete_all_faqs():
+    try:
+        data = request.get_json()
+        client_id = data.get('client_id')
+
+        if not client_id:
+            return jsonify({'success': False, 'error': 'Client ID required'}), 400
+
+        if not models.verify_client_ownership(current_user.id, client_id):
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+        models.delete_all_faqs(client_id)
+        app.logger.info(f'Deleted all FAQs for client {client_id} by user {current_user.id}')
+        return jsonify({'success': True, 'message': 'All FAQs deleted successfully'})
+
+    except Exception as e:
+        app.logger.error(f'Error deleting all FAQs: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 def process_csv_upload(file):
     import pandas as pd
     import io

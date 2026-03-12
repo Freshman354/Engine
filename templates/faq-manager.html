@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FAQ Manager - Chatbot Admin</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         /* ── THEME VARIABLES ── */
         :root {
@@ -107,24 +108,10 @@
             z-index: 100;
         }
 
-        .header-left h1 {
-            font-size: 24px;
-            font-weight: 800;
-            letter-spacing: -0.5px;
-        }
+        .header-left h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
+        .header-left p { color: var(--text-muted); font-size: 14px; margin-top: 2px; }
 
-        .header-left p {
-            color: var(--text-muted);
-            font-size: 14px;
-            margin-top: 2px;
-        }
-
-        .header-right {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            flex-wrap: wrap;
-        }
+        .header-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 
         .plan-status-bar {
             background: var(--plan-bar-bg);
@@ -136,75 +123,33 @@
         }
 
         .plan-status-bar strong { color: var(--text-main); }
-
-        .limit-warning {
-            color: #f87171;
-            font-weight: 700;
-            margin-left: 4px;
-        }
+        .limit-warning { color: #f87171; font-weight: 700; margin-left: 4px; }
 
         /* ── THEME TOGGLE ── */
-        .theme-toggle {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            user-select: none;
-        }
-
-        .theme-toggle-label {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-muted);
-        }
-
-        .toggle-switch {
-            position: relative;
-            width: 48px;
-            height: 26px;
-        }
-
+        .theme-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+        .theme-toggle-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+        .toggle-switch { position: relative; width: 48px; height: 26px; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
-
         .toggle-track {
-            position: absolute;
-            inset: 0;
+            position: absolute; inset: 0;
             background: rgba(99, 102, 241, 0.3);
             border: 1px solid rgba(99, 102, 241, 0.4);
-            border-radius: 999px;
-            transition: all 0.3s;
-            cursor: pointer;
+            border-radius: 999px; transition: all 0.3s; cursor: pointer;
         }
-
         .toggle-switch input:checked + .toggle-track {
             background: linear-gradient(135deg, var(--primary), var(--primary-dark));
             border-color: var(--primary);
         }
-
         .toggle-thumb {
-            position: absolute;
-            top: 3px;
-            left: 3px;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: white;
-            transition: transform 0.3s;
-            pointer-events: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
+            position: absolute; top: 3px; left: 3px;
+            width: 18px; height: 18px; border-radius: 50%; background: white;
+            transition: transform 0.3s; pointer-events: none;
+            display: flex; align-items: center; justify-content: center; font-size: 10px;
         }
-
         .toggle-switch input:checked ~ .toggle-thumb { transform: translateX(22px); }
 
         /* ── CONTAINER ── */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 36px 40px;
-        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 36px 40px; }
 
         /* ── CONTROLS ── */
         .controls {
@@ -222,404 +167,144 @@
             flex-wrap: wrap;
         }
 
-        .controls-left {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-
-        .controls-left label {
-            font-weight: 600;
-            color: var(--text-muted);
-            font-size: 14px;
-        }
-
+        .controls-left { display: flex; gap: 12px; align-items: center; }
+        .controls-left label { font-weight: 600; color: var(--text-muted); font-size: 14px; }
         .controls select {
             padding: 9px 14px;
             background: var(--input-bg);
             border: 1px solid var(--input-border);
-            border-radius: 8px;
-            font-size: 14px;
-            color: var(--text-main);
-            font-family: 'Inter', sans-serif;
-            cursor: pointer;
-            transition: border-color 0.2s;
+            border-radius: 8px; font-size: 14px; color: var(--text-main);
+            font-family: 'Inter', sans-serif; cursor: pointer; transition: border-color 0.2s;
         }
-
         .controls select:focus { outline: none; border-color: var(--primary); }
-
         .controls-right { display: flex; gap: 10px; flex-wrap: wrap; }
 
         /* ── BUTTONS ── */
         .btn {
-            padding: 10px 18px;
-            border-radius: 10px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: none;
-            font-size: 13px;
-            font-family: 'Inter', sans-serif;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            text-decoration: none;
+            padding: 10px 18px; border-radius: 10px; font-weight: 600;
+            cursor: pointer; transition: all 0.2s; border: none; font-size: 13px;
+            font-family: 'Inter', sans-serif; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
         }
-
-        .btn-primary {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: white;
-            box-shadow: 0 3px 12px rgba(99, 102, 241, 0.35);
-        }
+        .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; box-shadow: 0 3px 12px rgba(99, 102, 241, 0.35); }
         .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(99, 102, 241, 0.5); }
-
-        .btn-success {
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: white;
-            box-shadow: 0 3px 12px rgba(16, 185, 129, 0.3);
-        }
+        .btn-success { background: linear-gradient(135deg, #10b981, #059669); color: white; box-shadow: 0 3px 12px rgba(16, 185, 129, 0.3); }
         .btn-success:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(16, 185, 129, 0.45); }
-
-        .btn-upload {
-            background: linear-gradient(135deg, #0ea5e9, #0284c7);
-            color: white;
-            box-shadow: 0 3px 12px rgba(14, 165, 233, 0.3);
-        }
+        .btn-upload { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: white; box-shadow: 0 3px 12px rgba(14, 165, 233, 0.3); }
         .btn-upload:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(14, 165, 233, 0.45); }
-
-        .btn-cancel {
-            background: var(--input-bg);
-            color: var(--text-muted);
-            border: 1px solid var(--border);
-        }
+        .btn-cancel { background: var(--input-bg); color: var(--text-muted); border: 1px solid var(--border); }
         .btn-cancel:hover { background: var(--border); color: var(--text-main); }
+        .btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; box-shadow: 0 3px 12px rgba(239, 68, 68, 0.3); }
+        .btn-danger:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(239, 68, 68, 0.45); }
+        .btn-pdf { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; box-shadow: 0 3px 12px rgba(245, 158, 11, 0.3); }
+        .btn-pdf:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(245, 158, 11, 0.45); }
 
         /* ── ALERTS ── */
-        .alert {
-            padding: 14px 18px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            display: none;
-            font-weight: 600;
-            font-size: 14px;
-        }
-
-        .alert-success {
-            background: var(--success-bg);
-            color: var(--success-color);
-            border: 1px solid rgba(16, 185, 129, 0.3);
-        }
-
-        .alert-error {
-            background: var(--error-bg);
-            color: var(--error-color);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-        }
+        .alert { padding: 14px 18px; border-radius: 10px; margin-bottom: 20px; display: none; font-weight: 600; font-size: 14px; }
+        .alert-success { background: var(--success-bg); color: var(--success-color); border: 1px solid rgba(16, 185, 129, 0.3); }
+        .alert-error { background: var(--error-bg); color: var(--error-color); border: 1px solid rgba(239, 68, 68, 0.3); }
 
         /* ── FAQ LIST ── */
         .faq-list {
-            background: var(--card-bg);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            padding: 28px;
-            box-shadow: var(--shadow);
-            margin-bottom: 24px;
+            background: var(--card-bg); backdrop-filter: blur(12px);
+            border: 1px solid var(--border); border-radius: 20px;
+            padding: 28px; box-shadow: var(--shadow); margin-bottom: 24px;
         }
 
         /* ── FAQ ITEM ── */
         .faq-item {
-            padding: 20px 22px;
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            margin-bottom: 14px;
-            transition: all 0.25s;
-            background: var(--bg-secondary);
+            padding: 20px 22px; border: 1px solid var(--border);
+            border-radius: 14px; margin-bottom: 14px; transition: all 0.25s; background: var(--bg-secondary);
         }
-
-        .faq-item:hover {
-            border-color: var(--border-hover);
-            box-shadow: var(--shadow-glow);
-            transform: translateY(-2px);
-        }
-
-        .faq-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 10px;
-            gap: 12px;
-        }
-
-        .faq-question {
-            font-size: 15px;
-            font-weight: 700;
-            color: var(--text-main);
-            flex: 1;
-            line-height: 1.4;
-        }
-
+        .faq-item:hover { border-color: var(--border-hover); box-shadow: var(--shadow-glow); transform: translateY(-2px); }
+        .faq-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; gap: 12px; }
+        .faq-question { font-size: 15px; font-weight: 700; color: var(--text-main); flex: 1; line-height: 1.4; }
         .faq-actions { display: flex; gap: 8px; flex-shrink: 0; }
-
         .btn-small {
-            padding: 7px 13px;
-            font-size: 12px;
-            border-radius: 8px;
-            cursor: pointer;
-            border: none;
-            font-weight: 600;
-            font-family: 'Inter', sans-serif;
-            transition: all 0.2s;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
+            padding: 7px 13px; font-size: 12px; border-radius: 8px; cursor: pointer; border: none;
+            font-weight: 600; font-family: 'Inter', sans-serif; transition: all 0.2s;
+            display: inline-flex; align-items: center; gap: 4px;
         }
-
-        .btn-edit {
-            background: rgba(59, 130, 246, 0.15);
-            color: #60a5fa;
-            border: 1px solid rgba(59, 130, 246, 0.25);
-        }
+        .btn-edit { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.25); }
         .btn-edit:hover { background: rgba(59, 130, 246, 0.3); }
-
-        .btn-delete {
-            background: rgba(239, 68, 68, 0.15);
-            color: #f87171;
-            border: 1px solid rgba(239, 68, 68, 0.25);
-        }
+        .btn-delete { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.25); }
         .btn-delete:hover { background: rgba(239, 68, 68, 0.3); }
-
-        .faq-answer {
-            color: var(--text-muted);
-            margin-bottom: 14px;
-            line-height: 1.6;
-            font-size: 14px;
-        }
-
+        .faq-answer { color: var(--text-muted); margin-bottom: 14px; line-height: 1.6; font-size: 14px; }
         .faq-triggers { display: flex; flex-wrap: wrap; gap: 8px; }
-
-        .trigger-tag {
-            background: var(--tag-bg);
-            color: var(--tag-color);
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-        }
+        .trigger-tag { background: var(--tag-bg); color: var(--tag-color); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
 
         /* ── EMPTY STATE ── */
-        .empty-state {
-            text-align: center;
-            padding: 70px 20px;
-            color: var(--text-muted);
-        }
-
+        .empty-state { text-align: center; padding: 70px 20px; color: var(--text-muted); }
         .empty-state-icon { font-size: 60px; margin-bottom: 16px; }
         .empty-state p { font-size: 16px; }
 
         /* ── MODALS ── */
         .modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
+            display: none; position: fixed; top: 0; left: 0;
             width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(5px);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
+            background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px);
+            z-index: 1000; align-items: center; justify-content: center;
         }
-
         .modal-content {
-            background: var(--card-solid);
-            border: 1px solid var(--border);
-            border-radius: 24px;
-            padding: 36px;
-            max-width: 600px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 25px 70px rgba(0,0,0,0.5);
-            animation: slideUp 0.35s ease;
+            background: var(--card-solid); border: 1px solid var(--border);
+            border-radius: 24px; padding: 36px; max-width: 600px; width: 90%;
+            max-height: 90vh; overflow-y: auto;
+            box-shadow: 0 25px 70px rgba(0,0,0,0.5); animation: slideUp 0.35s ease;
         }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 28px;
-        }
-
-        .modal-header h2 {
-            font-size: 22px;
-            font-weight: 800;
-            color: var(--text-main);
-        }
-
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+        .modal-header h2 { font-size: 22px; font-weight: 800; color: var(--text-main); }
         .modal-close {
-            background: var(--input-bg);
-            border: 1px solid var(--border);
-            font-size: 20px;
-            cursor: pointer;
-            color: var(--text-muted);
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s;
+            background: var(--input-bg); border: 1px solid var(--border); font-size: 20px;
+            cursor: pointer; color: var(--text-muted); width: 36px; height: 36px;
+            border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;
         }
-
         .modal-close:hover { color: var(--text-main); background: var(--border); }
-
         .form-group { margin-bottom: 20px; }
-
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: var(--text-body);
-            font-size: 14px;
-        }
-
+        .form-group label { display: block; font-weight: 600; margin-bottom: 8px; color: var(--text-body); font-size: 14px; }
         .form-group input, .form-group textarea {
-            width: 100%;
-            padding: 12px 16px;
-            background: var(--input-bg);
-            border: 1px solid var(--input-border);
-            border-radius: 10px;
-            font-size: 14px;
-            font-family: 'Inter', sans-serif;
-            color: var(--text-main);
-            transition: border-color 0.2s, box-shadow 0.2s;
+            width: 100%; padding: 12px 16px; background: var(--input-bg);
+            border: 1px solid var(--input-border); border-radius: 10px; font-size: 14px;
+            font-family: 'Inter', sans-serif; color: var(--text-main); transition: border-color 0.2s, box-shadow 0.2s;
         }
-
-        .form-group input:focus, .form-group textarea:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-        }
-
+        .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); }
         .form-group input::placeholder, .form-group textarea::placeholder { color: var(--text-muted); }
         .form-group textarea { resize: vertical; min-height: 100px; }
-
         .hint { font-size: 12px; color: var(--text-muted); margin-top: 5px; }
-
         .modal-actions { display: flex; gap: 12px; margin-top: 28px; }
 
-        /* ── UPLOAD MODAL SPECIFIC ── */
-        .format-box {
-            padding: 14px 18px;
-            border-radius: 10px;
-            margin-bottom: 14px;
-            font-size: 13px;
-            line-height: 1.7;
+        /* ── DELETE ALL CONFIRM MODAL ── */
+        .confirm-modal-content {
+            background: var(--card-solid); border: 1px solid rgba(239,68,68,0.3);
+            border-radius: 24px; padding: 40px 36px; max-width: 440px; width: 90%;
+            box-shadow: 0 25px 70px rgba(0,0,0,0.5); text-align: center; animation: slideUp 0.35s ease;
         }
+        .confirm-icon { font-size: 52px; margin-bottom: 16px; }
+        .confirm-modal-content h2 { font-size: 22px; font-weight: 800; color: var(--text-main); margin-bottom: 12px; }
+        .confirm-modal-content p { color: var(--text-muted); font-size: 14px; line-height: 1.6; margin-bottom: 8px; }
+        .confirm-warning { color: #f87171; font-size: 13px; font-weight: 600; margin-bottom: 28px; }
+        .confirm-actions { display: flex; gap: 12px; justify-content: center; }
 
-        .format-box.blue {
-            background: var(--format-blue-bg);
-            border-left: 3px solid var(--format-blue-border);
-        }
-
-        .format-box.yellow {
-            background: var(--format-yellow-bg);
-            border-left: 3px solid var(--format-yellow-border);
-        }
-
-        .format-box strong {
-            display: block;
-            margin-bottom: 6px;
-            color: var(--text-main);
-            font-size: 14px;
-        }
-
+        /* ── UPLOAD MODAL ── */
+        .format-box { padding: 14px 18px; border-radius: 10px; margin-bottom: 14px; font-size: 13px; line-height: 1.7; }
+        .format-box.blue { background: var(--format-blue-bg); border-left: 3px solid var(--format-blue-border); }
+        .format-box.yellow { background: var(--format-yellow-bg); border-left: 3px solid var(--format-yellow-border); }
+        .format-box strong { display: block; margin-bottom: 6px; color: var(--text-main); font-size: 14px; }
         .format-box ul { margin-left: 18px; color: var(--text-body); }
-
-        .format-box code {
-            background: rgba(128,128,128,0.15);
-            padding: 1px 6px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 12px;
-            color: var(--tag-color);
-        }
-
-        .upload-dropzone {
-            border: 2px dashed var(--input-border);
-            border-radius: 14px;
-            padding: 40px 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin: 16px 0;
-            background: var(--drop-bg);
-        }
-
-        .upload-dropzone:hover, .upload-dropzone.dragover {
-            border-color: var(--primary);
-            background: var(--drop-hover-bg);
-        }
-
+        .format-box code { background: rgba(128,128,128,0.15); padding: 1px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; color: var(--tag-color); }
+        .upload-dropzone { border: 2px dashed var(--input-border); border-radius: 14px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.3s; margin: 16px 0; background: var(--drop-bg); }
+        .upload-dropzone:hover, .upload-dropzone.dragover { border-color: var(--primary); background: var(--drop-hover-bg); }
         .upload-dropzone .drop-icon { font-size: 44px; margin-bottom: 12px; }
         .upload-dropzone p { color: var(--text-muted); font-size: 14px; margin-bottom: 4px; }
         .upload-dropzone .file-types { color: var(--text-muted); font-size: 12px; opacity: 0.7; }
         .upload-dropzone .selected-name { color: var(--primary); font-weight: 700; display: none; }
-
         .progress-area { display: none; margin-top: 16px; }
-
-        .progress-bar-bg {
-            background: var(--border);
-            border-radius: 20px;
-            height: 8px;
-            overflow: hidden;
-        }
-
-        .progress-bar-fill {
-            background: linear-gradient(90deg, var(--primary), #a78bfa);
-            height: 100%;
-            width: 0%;
-            transition: width 0.4s ease;
-            border-radius: 20px;
-        }
-
-        .progress-status {
-            text-align: center;
-            font-size: 13px;
-            color: var(--text-muted);
-            margin-top: 10px;
-            font-weight: 500;
-        }
-
-        .download-template-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 13px;
-            color: var(--primary);
-            font-weight: 600;
-            cursor: pointer;
-            padding: 4px 0;
-            margin-bottom: 4px;
-        }
-
+        .progress-bar-bg { background: var(--border); border-radius: 20px; height: 8px; overflow: hidden; }
+        .progress-bar-fill { background: linear-gradient(90deg, var(--primary), #a78bfa); height: 100%; width: 0%; transition: width 0.4s ease; border-radius: 20px; }
+        .progress-status { text-align: center; font-size: 13px; color: var(--text-muted); margin-top: 10px; font-weight: 500; }
+        .download-template-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--primary); font-weight: 600; cursor: pointer; padding: 4px 0; margin-bottom: 4px; }
         .download-template-link:hover { text-decoration: underline; }
+        .embed-tip { margin-top: 18px; padding: 14px 16px; background: var(--tip-bg); border-left: 3px solid var(--warning); border-radius: 8px; font-size: 13px; color: var(--tip-color); line-height: 1.6; }
 
-        .embed-tip {
-            margin-top: 18px;
-            padding: 14px 16px;
-            background: var(--tip-bg);
-            border-left: 3px solid var(--warning);
-            border-radius: 8px;
-            font-size: 13px;
-            color: var(--tip-color);
-            line-height: 1.6;
-        }
-
-        @keyframes slideUp {
-            from { transform: translateY(40px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
+        @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
         @media (max-width: 768px) {
             .header { padding: 18px 20px; }
@@ -638,15 +323,12 @@
             <h1>📝 FAQ Manager</h1>
             <p>Add, edit, and manage your chatbot's FAQs</p>
         </div>
-
         <div class="header-right">
             <div class="plan-status-bar">
                 <strong>Plan:</strong> <span id="user-plan">Loading...</span> &nbsp;·&nbsp;
                 <strong>FAQs:</strong> <span id="faq-count">0</span> / <span id="faq-limit">0</span>
                 <span id="limit-warning" class="limit-warning" style="display:none;">⚠️ Limit Reached</span>
             </div>
-
-            <!-- THEME TOGGLE -->
             <label class="theme-toggle" title="Toggle light/dark theme">
                 <span class="theme-toggle-label" id="theme-label">🌙 Dark</span>
                 <div class="toggle-switch">
@@ -671,6 +353,8 @@
                 <button class="btn btn-primary" onclick="loadFAQs()">🔄 Refresh</button>
             </div>
             <div class="controls-right">
+                <button class="btn btn-pdf" onclick="exportPDF()">📄 Export PDF</button>
+                <button class="btn btn-danger" onclick="showDeleteAllModal()">🗑️ Delete All</button>
                 <button class="btn btn-upload" onclick="showUploadModal()">📤 Upload FAQs</button>
                 <button class="btn btn-success" onclick="openAddModal()">+ Add New FAQ</button>
             </div>
@@ -695,33 +379,42 @@
                 <h2 id="modal-title">Add New FAQ</h2>
                 <button class="modal-close" onclick="closeModal()">×</button>
             </div>
-
             <form id="faq-form">
                 <input type="hidden" id="faq-id">
-
                 <div class="form-group">
                     <label>Question</label>
                     <input type="text" id="faq-question" placeholder="What are your business hours?" required>
                     <div class="hint">The question your customers will ask</div>
                 </div>
-
                 <div class="form-group">
                     <label>Answer</label>
                     <textarea id="faq-answer" placeholder="We're open Monday to Friday, 9 AM - 6 PM EST." required></textarea>
                     <div class="hint">The response the chatbot will give</div>
                 </div>
-
                 <div class="form-group">
                     <label>Trigger Keywords</label>
                     <input type="text" id="faq-triggers" placeholder="hours, time, open, available" required>
                     <div class="hint">Keywords that trigger this answer (comma-separated)</div>
                 </div>
-
                 <div class="modal-actions">
                     <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancel</button>
                     <button type="submit" class="btn btn-success">Save FAQ</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- DELETE ALL CONFIRM MODAL -->
+    <div class="modal" id="delete-all-modal">
+        <div class="confirm-modal-content">
+            <div class="confirm-icon">🗑️</div>
+            <h2>Delete All FAQs?</h2>
+            <p>You are about to permanently delete <strong id="delete-all-count">all</strong> FAQs for this client.</p>
+            <p class="confirm-warning">⚠️ This cannot be undone.</p>
+            <div class="confirm-actions">
+                <button class="btn btn-cancel" onclick="closeDeleteAllModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="confirmDeleteAll()" id="confirm-delete-btn">Yes, Delete All</button>
+            </div>
         </div>
     </div>
 
@@ -732,7 +425,6 @@
                 <h2>📤 Upload FAQs</h2>
                 <button class="modal-close" onclick="closeUploadModal()">×</button>
             </div>
-
             <div class="format-box blue">
                 <strong>📋 CSV / Excel Format</strong>
                 <ul>
@@ -741,7 +433,6 @@
                     <li>Column 3: <code>category</code> (required)</li>
                 </ul>
             </div>
-
             <div class="format-box yellow">
                 <strong>📄 PDF Format</strong>
                 <ul>
@@ -751,9 +442,7 @@
                     <li>Or upload any document — AI will extract FAQs automatically!</li>
                 </ul>
             </div>
-
             <span class="download-template-link" onclick="downloadCSVTemplate()">⬇️ Download CSV Template</span>
-
             <div class="upload-dropzone" id="drop-zone" onclick="document.getElementById('faq-file-input').click()">
                 <div class="drop-icon">📁</div>
                 <p>Click to upload or drag and drop</p>
@@ -761,18 +450,15 @@
                 <p class="file-types">CSV, Excel (.xlsx), or PDF — max 10MB</p>
                 <input type="file" id="faq-file-input" accept=".csv,.xlsx,.xls,.pdf" style="display: none;" onchange="handleFileSelect(event)">
             </div>
-
             <div class="progress-area" id="progress-area">
                 <div class="progress-bar-bg">
                     <div class="progress-bar-fill" id="progress-fill"></div>
                 </div>
                 <p class="progress-status" id="progress-status">Processing...</p>
             </div>
-
             <div class="embed-tip">
                 💡 <strong>Tip:</strong> Download the CSV template to see the exact format needed. PDF uploads use AI extraction — Q: and A: labels give the best results.
             </div>
-
             <div class="modal-actions">
                 <button class="btn btn-cancel" onclick="closeUploadModal()">Cancel</button>
                 <button class="btn btn-upload" id="upload-submit-btn" onclick="startUpload()" disabled>Upload FAQs</button>
@@ -790,7 +476,6 @@
             localStorage.setItem('faqManagerTheme', isLight ? 'light' : 'dark');
         }
 
-        // Restore saved theme
         (function() {
             const saved = localStorage.getItem('faqManagerTheme') || 'dark';
             document.documentElement.setAttribute('data-theme', saved);
@@ -834,12 +519,8 @@
                     currentFAQs = data.faqs || [];
                     renderFAQs();
                     updateFaqCount();
-                } else {
-                    showError();
-                }
-            } catch (error) {
-                showError();
-            }
+                } else { showError(); }
+            } catch (error) { showError(); }
         }
 
         function updateFaqCount() {
@@ -859,7 +540,6 @@
                     </div>`;
                 return;
             }
-
             container.innerHTML = currentFAQs.map((faq, index) => `
                 <div class="faq-item">
                     <div class="faq-header">
@@ -906,34 +586,25 @@
                     body: JSON.stringify({ client_id: CLIENT_ID, faqs: updatedFAQs })
                 });
                 const data = await response.json();
-                if (data.success) {
-                    currentFAQs = updatedFAQs;
-                    renderFAQs();
-                    showSuccess();
-                    updateFaqCount();
-                } else { showError(); }
+                if (data.success) { currentFAQs = updatedFAQs; renderFAQs(); showSuccess(); updateFaqCount(); }
+                else { showError(); }
             } catch (e) { showError(); }
         }
 
-        function closeModal() {
-            document.getElementById('faq-modal').style.display = 'none';
-        }
+        function closeModal() { document.getElementById('faq-modal').style.display = 'none'; }
 
         document.getElementById('faq-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             const question = document.getElementById('faq-question').value.trim();
             const answer = document.getElementById('faq-answer').value.trim();
             const triggers = document.getElementById('faq-triggers').value.split(',').map(t => t.trim()).filter(Boolean);
-
             const newFAQ = {
                 id: editingIndex >= 0 ? currentFAQs[editingIndex].id : `faq_${Date.now()}`,
                 question, answer, triggers
             };
-
             const updatedFAQs = editingIndex >= 0
                 ? currentFAQs.map((f, i) => i === editingIndex ? newFAQ : f)
                 : [...currentFAQs, newFAQ];
-
             try {
                 const response = await fetch('/api/faqs', {
                     method: 'POST',
@@ -941,16 +612,130 @@
                     body: JSON.stringify({ client_id: CLIENT_ID, faqs: updatedFAQs })
                 });
                 const data = await response.json();
-                if (data.success) {
-                    currentFAQs = updatedFAQs;
-                    renderFAQs();
-                    closeModal();
-                    showSuccess();
-                    updateFaqCount();
-                } else { showError(data.error); }
+                if (data.success) { currentFAQs = updatedFAQs; renderFAQs(); closeModal(); showSuccess(); updateFaqCount(); }
+                else { showError(data.error); }
             } catch (e) { showError(); }
         });
 
+        // ── DELETE ALL ──
+        function showDeleteAllModal() {
+            if (currentFAQs.length === 0) { showError('No FAQs to delete.'); return; }
+            document.getElementById('delete-all-count').textContent = currentFAQs.length;
+            document.getElementById('delete-all-modal').style.display = 'flex';
+        }
+
+        function closeDeleteAllModal() {
+            document.getElementById('delete-all-modal').style.display = 'none';
+        }
+
+        async function confirmDeleteAll() {
+            const btn = document.getElementById('confirm-delete-btn');
+            btn.disabled = true;
+            btn.textContent = 'Deleting...';
+            try {
+                const response = await fetch('/api/faqs/delete-all', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: CLIENT_ID })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    currentFAQs = [];
+                    renderFAQs();
+                    updateFaqCount();
+                    closeDeleteAllModal();
+                    showSuccess('All FAQs deleted successfully.');
+                } else { showError(data.error); }
+            } catch (e) { showError('Failed to delete FAQs. Please try again.'); }
+            finally { btn.disabled = false; btn.textContent = 'Yes, Delete All'; }
+        }
+
+        // ── EXPORT PDF ──
+        function exportPDF() {
+            if (currentFAQs.length === 0) { showError('No FAQs to export.'); return; }
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+            const margin = 18;
+            const contentW = pageW - margin * 2;
+            let y = margin;
+
+            // Header bar
+            doc.setFillColor(99, 102, 241);
+            doc.rect(0, 0, pageW, 22, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text('FAQ Export', margin, 14);
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Generated: ${new Date().toLocaleDateString()} · ${currentFAQs.length} FAQs · Client: ${CLIENT_ID}`, pageW - margin, 14, { align: 'right' });
+
+            y = 32;
+
+            currentFAQs.forEach((faq, index) => {
+                // Estimate height needed
+                const qLines = doc.splitTextToSize(`Q: ${faq.question}`, contentW - 8);
+                const aLines = doc.splitTextToSize(`A: ${faq.answer}`, contentW - 8);
+                const blockH = 8 + (qLines.length * 5.5) + (aLines.length * 5) + 14;
+
+                // New page if needed
+                if (y + blockH > pageH - margin) {
+                    doc.addPage();
+                    y = margin;
+                }
+
+                // Card background
+                doc.setFillColor(245, 247, 250);
+                doc.roundedRect(margin, y, contentW, blockH, 3, 3, 'F');
+
+                // Index badge
+                doc.setFillColor(99, 102, 241);
+                doc.circle(margin + 7, y + 7, 5, 'F');
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(8);
+                doc.setFont('helvetica', 'bold');
+                doc.text(String(index + 1), margin + 7, y + 9.5, { align: 'center' });
+
+                // Question
+                doc.setTextColor(30, 41, 59);
+                doc.setFontSize(10);
+                doc.setFont('helvetica', 'bold');
+                doc.text(qLines, margin + 16, y + 9);
+
+                // Answer
+                const aY = y + 9 + (qLines.length * 5.5) + 2;
+                doc.setTextColor(100, 116, 139);
+                doc.setFontSize(9);
+                doc.setFont('helvetica', 'normal');
+                doc.text(aLines, margin + 16, aY);
+
+                // Triggers
+                if (faq.triggers && faq.triggers.length > 0) {
+                    const tY = aY + (aLines.length * 5) + 2;
+                    doc.setTextColor(139, 92, 246);
+                    doc.setFontSize(7.5);
+                    doc.setFont('helvetica', 'italic');
+                    doc.text('Keywords: ' + faq.triggers.slice(0, 8).join(', '), margin + 16, tY);
+                }
+
+                y += blockH + 5;
+            });
+
+            // Footer on last page
+            doc.setFontSize(8);
+            doc.setTextColor(148, 163, 184);
+            doc.setFont('helvetica', 'normal');
+            doc.text('Generated by Lumvi · lumvi.net', pageW / 2, pageH - 8, { align: 'center' });
+
+            doc.save(`faqs-${CLIENT_ID}-${Date.now()}.pdf`);
+            showSuccess(`Exported ${currentFAQs.length} FAQs as PDF.`);
+        }
+
+        // ── HELPERS ──
         function showSuccess(msg) {
             const el = document.getElementById('success-message');
             el.textContent = '✅ ' + (msg || 'Changes saved successfully!');
@@ -972,22 +757,14 @@
         }
 
         // ── UPLOAD FUNCTIONS ──
-        function showUploadModal() {
-            document.getElementById('upload-modal').style.display = 'flex';
-            resetUploadModal();
-        }
-
-        function closeUploadModal() {
-            document.getElementById('upload-modal').style.display = 'none';
-            resetUploadModal();
-        }
+        function showUploadModal() { document.getElementById('upload-modal').style.display = 'flex'; resetUploadModal(); }
+        function closeUploadModal() { document.getElementById('upload-modal').style.display = 'none'; resetUploadModal(); }
 
         function resetUploadModal() {
             selectedFile = null;
             document.getElementById('faq-file-input').value = '';
             const nameEl = document.getElementById('selected-file-name');
-            nameEl.style.display = 'none';
-            nameEl.textContent = '';
+            nameEl.style.display = 'none'; nameEl.textContent = '';
             document.getElementById('progress-area').style.display = 'none';
             document.getElementById('progress-fill').style.width = '0%';
             document.getElementById('progress-status').textContent = 'Processing...';
@@ -1001,8 +778,7 @@
             if (file.size > 10 * 1024 * 1024) { showError('File too large! Maximum size is 10MB.'); return; }
             selectedFile = file;
             const nameEl = document.getElementById('selected-file-name');
-            nameEl.textContent = '📎 ' + file.name;
-            nameEl.style.display = 'block';
+            nameEl.textContent = '📎 ' + file.name; nameEl.style.display = 'block';
             document.getElementById('upload-submit-btn').disabled = false;
         }
 
@@ -1012,11 +788,9 @@
             document.getElementById('progress-fill').style.width = '30%';
             document.getElementById('progress-status').textContent = 'Uploading file...';
             document.getElementById('upload-submit-btn').disabled = true;
-
             const formData = new FormData();
             formData.append('file', selectedFile);
             formData.append('client_id', CLIENT_ID);
-
             try {
                 document.getElementById('progress-fill').style.width = '60%';
                 document.getElementById('progress-status').textContent = 'Processing FAQs...';
@@ -1044,31 +818,29 @@
         dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
         dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
         dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
+            e.preventDefault(); dropZone.classList.remove('dragover');
             const file = e.dataTransfer.files[0];
             if (file) {
-                const dt = new DataTransfer();
-                dt.items.add(file);
+                const dt = new DataTransfer(); dt.items.add(file);
                 document.getElementById('faq-file-input').files = dt.files;
                 handleFileSelect({ target: { files: [file] } });
             }
         });
 
-        // Close on backdrop click / Escape
+        // Close on backdrop / Escape
         document.addEventListener('click', function(e) {
             if (e.target === document.getElementById('faq-modal')) closeModal();
             if (e.target === document.getElementById('upload-modal')) closeUploadModal();
+            if (e.target === document.getElementById('delete-all-modal')) closeDeleteAllModal();
         });
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') { closeModal(); closeUploadModal(); }
+            if (e.key === 'Escape') { closeModal(); closeUploadModal(); closeDeleteAllModal(); }
         });
 
-        // CSV Template download
         function downloadCSVTemplate() {
             const csv = `question,answer,category
 What are your business hours?,"We're open Monday-Friday 9 AM - 6 PM EST. Saturday 10 AM - 4 PM. Closed Sundays.",General
-How much does it cost?,"Starter: $15/mo | Agency: $60/mo | Enterprise: $199 lifetime",Pricing
+How much does it cost?,"Starter: $49/mo | Pro: $99/mo | Agency: $299/mo. All plans include a 14-day free trial!",Pricing
 Do you offer refunds?,"Yes! We offer a 7-day money-back guarantee no questions asked.",Policies
 Can I get a demo?,"Absolutely! Visit lumvi.net/demo to schedule a live demo.",Sales
 How do I get started?,"Simply sign up at lumvi.net and follow the setup wizard.",Getting Started`;

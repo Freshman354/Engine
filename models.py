@@ -490,6 +490,15 @@ def get_faqs(client_id):
     ]
 
 
+def delete_all_faqs(client_id):
+    """Delete all FAQs for a client"""
+    conn, cursor = get_db()
+    cursor.execute('DELETE FROM faqs WHERE client_id = %s', (client_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
 # =====================================================================
 # LEAD FUNCTIONS
 # =====================================================================
