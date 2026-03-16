@@ -171,6 +171,17 @@ PLAN_LIMITS = {
         'webhooks': False,
         'priority_support': False
     },
+    'solo': {
+        # $19/mo — single-website small business
+        'clients': 1,
+        'faqs_per_client': 999,
+        'messages_per_day': 999999,  # unlimited
+        'analytics': False,
+        'customization': True,
+        'white_label': False,
+        'webhooks': False,
+        'priority_support': False
+    },
     'starter': {
         # $49/mo — foot-in-door tier
         'clients': 3,
@@ -1089,7 +1100,8 @@ def create_client():
 
         # ---- Readable limit labels per plan ----
         plan_upgrade_hints = {
-            'free':    'Starter: 3 chatbots | Pro: 10 chatbots | Agency: Unlimited',
+            'free':    'Solo: 1 chatbot $19/mo | Starter: 3 chatbots | Pro: 10 chatbots | Agency: Unlimited',
+            'solo':    'Starter: 3 chatbots | Pro: 10 chatbots | Agency: Unlimited',
             'starter': 'Pro: 10 chatbots | Agency: Unlimited',
             'pro':     'Agency: Unlimited chatbots at $299/mo',
         }
@@ -2028,6 +2040,7 @@ def paypal_success():
 # =====================================================================
 
 PLAN_PRICES_FLW = {
+    'solo':    19.00,
     'starter': 49.00,
     'pro':     99.00,
     'agency':  299.00

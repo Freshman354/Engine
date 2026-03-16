@@ -108,9 +108,9 @@
         /* ── GRID ── */
         .pricing-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 24px;
-            max-width: 1100px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            max-width: 1300px;
             width: 100%;
             margin-bottom: 24px;
             align-items: start;
@@ -394,7 +394,11 @@
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-        @media (max-width: 900px) {
+        @media (max-width: 1100px) {
+            .pricing-grid { grid-template-columns: repeat(2, 1fr); max-width: 700px; }
+        }
+
+        @media (max-width: 640px) {
             .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
             .pricing-card.featured { transform: none; }
             .pricing-card.featured:hover { transform: translateY(-5px); }
@@ -422,6 +426,34 @@
     </div>
 
     <div class="pricing-grid">
+
+        <!-- SOLO -->
+        <div class="pricing-card solo-card">
+            <div class="plan-label" style="color:#34d399;">Solo</div>
+            <div class="price-row">
+                <span class="price-dollar" style="color:#34d399;">$</span>
+                <span class="price-amount" id="solo-price" style="color:#34d399;">19</span>
+            </div>
+            <div class="price-period">per month</div>
+            <div class="price-annual" id="solo-annual"></div>
+            <p class="plan-tagline">Perfect for small businesses with one website who want a real AI chatbot.</p>
+
+            <ul class="features-list">
+                <li><span class="check">✓</span> 1 chatbot</li>
+                <li><span class="check">✓</span> Unlimited messages</li>
+                <li><span class="check">✓</span> Unlimited FAQs</li>
+                <li><span class="check">✓</span> Lead capture forms</li>
+                <li><span class="check">✓</span> Custom branding & colors</li>
+                <li><span class="check">✓</span> Embed on any website</li>
+                <li><span class="check">✓</span> Email support</li>
+            </ul>
+
+            {% if user.plan_type == 'solo' %}
+                <button class="btn btn-current">Current Plan</button>
+            {% else %}
+                <button onclick="startPayment('solo')" class="btn" style="background:rgba(52,211,153,0.15);color:#34d399;border:1.5px solid rgba(52,211,153,0.4);">Upgrade to Solo →</button>
+            {% endif %}
+        </div>
 
         <!-- STARTER -->
         <div class="pricing-card">
@@ -521,7 +553,7 @@
             <span class="ent-feat">Custom integrations</span>
             <span class="ent-feat">Volume pricing</span>
         </div>
-        <a href="mailto:support@lumvi.net?subject=Enterprise%20Enquiry" class="btn-enterprise">Talk to us →</a>
+        <a href="/cdn-cgi/l/email-protection#afdcdadfdfc0dddbefc3dac2d9c681c1cadb90dcdacdc5caccdb92eac1dbcadddfddc6dcca8a9d9feac1dedac6ddd6" class="btn-enterprise">Talk to us →</a>
     </div>
 
     <!-- Payment Modal -->
@@ -568,7 +600,7 @@
     </div>
 
     <!-- Flutterwave Inline JS SDK -->
-    <script src="https://checkout.flutterwave.com/v3.js"></script>
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://checkout.flutterwave.com/v3.js"></script>
     <script>
         // Injected by Flask — never expose secret key here, only public key
         const FLW_PUBLIC_KEY = '{{ flw_public_key }}';
@@ -579,6 +611,7 @@
         let selectedPlan = '';
 
         const prices = {
+            solo:    { monthly: 19,  annual: Math.round(19  * 10 / 12), label: 'Solo' },
             starter: { monthly: 49,  annual: Math.round(49  * 10 / 12), label: 'Starter' },
             pro:     { monthly: 99,  annual: Math.round(99  * 10 / 12), label: 'Pro' },
             agency:  { monthly: 299, annual: Math.round(299 * 10 / 12), label: 'Agency' },
@@ -590,7 +623,7 @@
             isAnnual = document.getElementById('billingToggle').checked;
             document.getElementById('saveBadge').classList.toggle('visible', isAnnual);
 
-            ['starter', 'pro', 'agency'].forEach(function(plan) {
+            ['solo', 'starter', 'pro', 'agency'].forEach(function(plan) {
                 const el = document.getElementById(plan + '-price');
                 const annualEl = document.getElementById(plan + '-annual');
 
@@ -636,10 +669,13 @@
                 return;
             }
 
-            const planData = prices[selectedPlan];
-            const amount   = isAnnual ? planData.monthly * 10 : planData.monthly;
-            // tx_ref encodes plan + user_id so the callback can upgrade the right user
-            const txRef    = 'lumvi_' + selectedPlan + '_' + CURRENT_USER_ID + '_' + Date.now();
+            const planData   = prices[selectedPlan];
+            // Read directly from the toggle so we never get a stale value
+            const isAnnualNow = document.getElementById('billingToggle') 
+                                ? document.getElementById('billingToggle').checked 
+                                : false;
+            const amount     = isAnnualNow ? planData.monthly * 10 : planData.monthly;
+            const txRef      = 'lumvi_' + selectedPlan + '_' + CURRENT_USER_ID + '_' + Date.now();
 
             if (!FLW_PUBLIC_KEY) {
                 alert('Payment not configured. Please contact support@lumvi.net.');
@@ -660,8 +696,8 @@
                 },
                 customizations: {
                     title:       'Lumvi ' + planData.label + ' Plan',
-                    description: (isAnnual ? 'Annual' : 'Monthly') + ' subscription',
-                    logo:        'https://lumvi.net/static/logo.jpg'
+                    description: (isAnnualNow ? 'Annual' : 'Monthly') + ' subscription',
+                    logo:        'https://lumvi.net/static/logo.png'
                 },
                 callback: function(data) {
                     // This fires in-page on success before the redirect
@@ -690,11 +726,4 @@
         // Auto-open payment modal if user arrived from sales page pricing button
         (function() {
             const urlParams = new URLSearchParams(window.location.search);
-            const plan = urlParams.get('plan');
-            if (plan && prices[plan]) {
-                setTimeout(function() { startPayment(plan); }, 400);
-            }
-        })();
-    </script>
-</body>
-</html>
+            const plan = urlParams.get
