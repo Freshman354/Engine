@@ -627,9 +627,10 @@
                 const el = document.getElementById(plan + '-price');
                 const annualEl = document.getElementById(plan + '-annual');
 
+                // Set transition FIRST so the hide is animated
+                el.style.transition = 'opacity 0.15s, transform 0.15s';
                 el.style.opacity = '0';
                 el.style.transform = 'scale(0.85)';
-                el.style.transition = 'all 0.15s';
 
                 setTimeout(function() {
                     el.textContent = isAnnual ? prices[plan].annual : prices[plan].monthly;
@@ -638,7 +639,7 @@
                         : '';
                     el.style.opacity = '1';
                     el.style.transform = 'scale(1)';
-                }, 140);
+                }, 150);
             });
         }
 

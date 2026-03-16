@@ -228,9 +228,9 @@
         /* ── PRICING GRID ── */
         .pricing-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 28px;
-            max-width: 1100px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            max-width: 1280px;
             margin: 0 auto;
             align-items: start;
         }
@@ -433,7 +433,21 @@
             transform: translateY(-1px);
         }
 
-        /* ── ANNUAL NOTE ── */
+        .pricing-card.solo-card { border-color: rgba(34,211,160,0.18); }
+        .pricing-card.solo-card:hover { border-color: rgba(34,211,160,0.38); }
+        .pricing-card.solo-card .plan-name { color: #22d3a0; }
+        .pricing-card.solo-card .price-amount { color: #22d3a0; }
+        .pricing-card.solo-card .price-dollar { color: #22d3a0; }
+        .pricing-card.solo-card .check { background: rgba(34,211,160,0.12); color: #22d3a0; }
+        .plan-badge-solo {
+            background: linear-gradient(135deg, #22d3a0, #0ea875);
+            color: #fff; font-weight: 800;
+            padding: 5px 16px; border-radius: 0 0 10px 10px;
+            position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+            text-transform: uppercase; font-size: 11px; letter-spacing: 0.08em; white-space: nowrap;
+        }
+
+        
         .annual-note {
             text-align: center;
             margin-top: 20px;
@@ -616,13 +630,20 @@
 
         .footer a:hover { color: white; }
 
-        @media (max-width: 900px) {
-            .hero h1 { font-size: 34px; }
-            .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
+        @media (max-width: 1100px) {
+            .pricing-grid { grid-template-columns: repeat(2, 1fr); max-width: 680px; }
             .pricing-card.featured { transform: none; }
             .pricing-card.featured:hover { transform: translateY(-6px); }
+        }
+
+        @media (max-width: 900px) {
+            .hero h1 { font-size: 34px; }
             .cta-section h2 { font-size: 30px; }
             .enterprise-strip { flex-direction: column; }
+        }
+
+        @media (max-width: 600px) {
+            .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
         }
     </style>
 </head>
@@ -696,6 +717,29 @@
         </div>
 
         <div class="pricing-grid">
+
+            <!-- SOLO -->
+            <div class="pricing-card solo-card">
+                <div class="plan-badge-solo">Small Business</div>
+                <div class="plan-name" style="margin-top:20px;">Solo</div>
+                <div class="price-row">
+                    <span class="price-dollar">$</span>
+                    <span class="price-amount" id="solo-price">19</span>
+                </div>
+                <div class="price-period">per month</div>
+                <div class="price-annual" id="solo-annual"></div>
+                <p class="plan-tagline">One website, one chatbot. Everything a small business needs — nothing they don't.</p>
+                <ul class="features-list">
+                    <li><span class="check">✓</span> 1 chatbot</li>
+                    <li><span class="check">✓</span> Unlimited messages</li>
+                    <li><span class="check">✓</span> Unlimited FAQs</li>
+                    <li><span class="check">✓</span> Lead capture forms</li>
+                    <li><span class="check">✓</span> Custom branding &amp; colors</li>
+                    <li><span class="check">✓</span> Embed on any website</li>
+                    <li><span class="check">✓</span> Email support</li>
+                </ul>
+                <a href="/signup?plan=solo" class="btn" style="background:rgba(34,211,160,0.1);color:#22d3a0;border:1px solid rgba(34,211,160,0.3);display:block;width:100%;padding:14px;border-radius:10px;font-weight:700;text-align:center;text-decoration:none;transition:all 0.2s;font-size:15px;">Start Free Trial →</a>
+            </div>
 
             <!-- STARTER -->
             <div class="pricing-card">
@@ -796,7 +840,7 @@
             <h2>What Agencies Say</h2>
 
             <div class="testimonial">
-                <div class="testimonial-text">We were spending $370/month on Intercom for 5 clients. Now we pay a flat fee for all 10 clients. The ROI was immediate, and our clients love it.</div>
+                <div class="testimonial-text">We were spending $370/month on Intercom for 5 clients. Now we pay a flat fee for all 15 clients. The ROI was immediate, and our clients love it.</div>
                 <div class="testimonial-author">— Sarah M., Digital Marketing Agency</div>
             </div>
 
@@ -827,6 +871,7 @@
 
     <script>
         const prices = {
+            solo:    { monthly: 19,  annual: Math.round(19  * 10 / 12) },
             starter: { monthly: 49,  annual: Math.round(49  * 10 / 12) },
             pro:     { monthly: 99,  annual: Math.round(99  * 10 / 12) },
             agency:  { monthly: 299, annual: Math.round(299 * 10 / 12) },
@@ -837,13 +882,13 @@
             document.getElementById('saveBadge').classList.toggle('visible', isAnnual);
             document.getElementById('annualNote').style.opacity = isAnnual ? '1' : '0';
 
-            ['starter', 'pro', 'agency'].forEach(function(plan) {
+            ['solo', 'starter', 'pro', 'agency'].forEach(function(plan) {
                 const el = document.getElementById(plan + '-price');
                 const annualEl = document.getElementById(plan + '-annual');
 
+                el.style.transition = 'opacity 0.15s, transform 0.15s';
                 el.style.opacity = '0';
                 el.style.transform = 'scale(0.85)';
-                el.style.transition = 'all 0.15s';
 
                 setTimeout(function() {
                     el.textContent = isAnnual ? prices[plan].annual : prices[plan].monthly;
@@ -852,7 +897,7 @@
                         : '';
                     el.style.opacity = '1';
                     el.style.transform = 'scale(1)';
-                }, 140);
+                }, 150);
             });
         }
     </script>
