@@ -2355,7 +2355,7 @@ def admin_set_plan():
         email = request.form.get('email', '').strip().lower()
         plan = request.form.get('plan', '').strip().lower()
 
-        valid_plans = ['free', 'starter', 'pro', 'agency', 'enterprise']
+        valid_plans = ['free', 'solo', 'starter', 'pro', 'agency', 'enterprise']
 
         if secret != ADMIN_SECRET:
             error = 'Invalid admin secret.'
@@ -2409,6 +2409,7 @@ def admin_set_plan():
     <label>New Plan</label>
     <select name="plan">
       <option value="free">Free</option>
+      <option value="solo">Solo ($19/mo)</option>
       <option value="starter">Starter ($49/mo)</option>
       <option value="pro">Pro ($99/mo)</option>
       <option value="agency">Agency ($299/mo)</option>
