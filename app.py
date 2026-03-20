@@ -36,12 +36,15 @@ app.register_blueprint(admin_bp)
 app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev_key_change_this_in_prod")
 
 # ── Flask-Mail (password reset emails) ──────────────────────────────
-app.config['MAIL_SERVER']   = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_SERVER']   = os.environ.get('MAIL_SERVER', 'smtp-relay.brevo.com')
 app.config['MAIL_PORT']     = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS']  = True
+app.config['MAIL_USE_SSL']  = False
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', '')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_USERNAME', 'noreply@lumvi.net')
+app.config['MAIL_DEFAULT_SENDER'] = ('Lumvi', os.environ.get('MAIL_USERNAME', 'noreply@lumvi.net'))
+app.config['MAIL_MAX_EMAILS'] = None
+app.config['MAIL_ASCII_ATTACHMENTS'] = False
 mail = Mail(app)
 
 
@@ -139,7 +142,9 @@ def send_welcome_email(email):
         mail.send(msg)
         app.logger.info(f"Welcome email sent to {email}")
     except Exception as e:
-        app.logger.error(f"Welcome email failed for {email}: {e}")
+        app.logger.error(f"Welcome email failed for {email}: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # Initialize AI helper at app startup
@@ -982,7 +987,9 @@ def forgot_password():
                 )
                 mail.send(msg)
             except Exception as e:
-                app.logger.error(f"Password reset email failed: {e}")
+                app.logger.error(f"Password reset email failed: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
 
         return render_template('forgot_password.html', success=success_msg)
 
