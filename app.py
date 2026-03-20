@@ -42,7 +42,7 @@ app.config['MAIL_USE_TLS']  = True
 app.config['MAIL_USE_SSL']  = False
 app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME', '')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD', '')
-app.config['MAIL_DEFAULT_SENDER'] = ('Lumvi', os.environ.get('MAIL_USERNAME', 'noreply@lumvi.net'))
+app.config['MAIL_DEFAULT_SENDER'] = 'Lumvi <support@lumvi.net>'
 app.config['MAIL_MAX_EMAILS'] = None
 app.config['MAIL_ASCII_ATTACHMENTS'] = False
 mail = Mail(app)
@@ -52,7 +52,8 @@ def send_welcome_email(email):
     """Send a branded welcome email to a new Lumvi user."""
     try:
         msg = Message(
-            subject="Welcome to Lumvi — your AI chatbot is ready 🚀",
+            subject="Welcome to Lumvi — your AI chatbot is ready",
+            sender="Lumvi <support@lumvi.net>",
             recipients=[email],
             html=f"""
 <!DOCTYPE html>
@@ -964,6 +965,7 @@ def forgot_password():
             try:
                 msg = Message(
                     subject="Reset your Lumvi password",
+                    sender="Lumvi <support@lumvi.net>",
                     recipients=[email],
                     html=f"""
                     <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#f8fafc;padding:40px;border-radius:16px;">
