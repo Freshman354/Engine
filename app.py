@@ -970,7 +970,7 @@ def forgot_password():
                     html=f"""
                     <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#f8fafc;padding:40px;border-radius:16px;">
                         <div style="text-align:center;margin-bottom:32px;">
-                            <div style="display:inline-block;background:linear-gradient(135deg,#6366f1,#a78bfa);border-radius:12px;padding:12px 20px;font-size:24px;font-weight:800;margin-bottom:12px;">⚡ Lumvi</div>
+                            <div style="display:inline-block;background:linear-gradient(135deg,#6366f1,#a78bfa);border-radius:12px;padding:12px 20px;font-size:24px;font-weight:800;margin-bottom:12px;">Lumvi</div>
                         </div>
                         <h2 style="margin:0 0 12px;font-size:22px;font-weight:700;">Reset your password</h2>
                         <p style="color:#94a3b8;margin:0 0 28px;line-height:1.6;">

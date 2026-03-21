@@ -406,8 +406,10 @@
     <!-- SIDEBAR -->
     <aside class="sidebar">
         <div class="sidebar-logo">
-            <div class="logo-icon">💬</div>
+            <a href="#" class="logo">
+            <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi Logo">
             <span class="logo-text">Lumvi</span>
+        </a>
         </div>
         <nav class="sidebar-nav">
             <div class="nav-section-label">Main</div>
@@ -464,10 +466,10 @@
                     <p>Manage your chatbot clients and monitor activity</p>
                 </div>
                 <div class="page-header-actions">
-                    <a href="/affiliate-dashboard" class="btn btn-affiliate">💰 Affiliate</a>
-                    <a href="/sales" class="btn btn-secondary">🌐 Sales Page</a>
+                    <a href="/affiliate-dashboard" class="btn btn-affiliate">Affiliate</a>
+                    <a href="/sales" class="btn btn-secondary">Sales Page</a>
                     {% if limit_reached %}
-                        <a href="/upgrade" class="btn btn-upgrade">🚀 Upgrade</a>
+                        <a href="/upgrade" class="btn btn-upgrade">Upgrade</a>
                     {% else %}
                         <button class="btn btn-primary" onclick="openNewClientModal()">+ New Client</button>
                     {% endif %}
@@ -600,7 +602,6 @@
             {% else %}
             <div class="clients-table-wrap">
                 <div class="empty-state">
-                    <div class="empty-icon">🚀</div>
                     <h2>No Clients Yet</h2>
                     <p>Create your first client to get started with your chatbot</p>
                     <button class="btn btn-primary" onclick="openNewClientModal()">+ Create First Client</button>

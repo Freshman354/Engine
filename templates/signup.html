@@ -276,10 +276,10 @@
 </head>
 <body>
 
-    <a href="/" class="logo">
-        <div class="logo-mark">⚡</div>
-        <span class="logo-text">Lumvi</span>
-    </a>
+    <a href="#" class="logo">
+            <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi Logo">
+            <span class="logo-text">Lumvi</span>
+        </a>
 
     <div class="card">
         <div class="card-header">
@@ -289,7 +289,7 @@
 
         {% if plan_param in ['starter', 'pro', 'agency'] %}
         <div class="paid-plan-pill">
-            <span style="font-size:20px">🚀</span>
+            <span style="font-size:20px"></span>
             <div>
                 <strong>{{ plan_param | capitalize }} Plan selected</strong>
                 <span>Sign up to complete your purchase</span>
@@ -297,7 +297,7 @@
         </div>
         {% else %}
         <div class="plan-pill">
-            <span class="plan-pill-icon">✨</span>
+            <span class="plan-pill-icon"></span>
             <div class="plan-pill-text">
                 <strong>Free plan — no credit card needed</strong>
                 <span>1 chatbot • 5 FAQs • 50 messages/day • Upgrade anytime</span>
