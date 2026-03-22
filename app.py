@@ -52,7 +52,7 @@ def send_welcome_email(email):
     """Send a branded welcome email to a new Lumvi user."""
     try:
         msg = Message(
-            subject="Welcome to Lumvi — your AI chatbot is ready",
+            subject="Welcome to Lumvi — your AI chatbot is ready 🚀",
             sender="Lumvi <support@lumvi.net>",
             recipients=[email],
             html=f"""
@@ -271,6 +271,8 @@ try:
         pass  # column may not have a constraint — that's fine
     if hasattr(models, 'migrate_faqs_table'):
         models.migrate_faqs_table()
+    if hasattr(models, 'migrate_subscription_expiry'):
+        models.migrate_subscription_expiry()
     print("✅ Database initialized/migrated successfully!")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
@@ -655,6 +657,48 @@ def get_client_owner_plan(client_id):
         return 'free'  # safest default
 
 
+def get_subscription_status(user):
+    """
+    Returns a dict with subscription info for a user.
+    status: 'active' | 'expired' | 'grace' | 'free'
+    """
+    from datetime import datetime
+    plan = user.get('plan_type', 'free')
+
+    # Free and enterprise plans don't expire
+    if plan in ('free', 'enterprise'):
+        return {'status': 'free', 'expires_at': None, 'grace_ends_at': None}
+
+    expires_at = user.get('subscription_expires_at')
+    grace_ends_at = user.get('grace_period_ends_at')
+
+    # No expiry set yet — treat as active (legacy users / manual upgrades)
+    if not expires_at:
+        return {'status': 'active', 'expires_at': None, 'grace_ends_at': None}
+
+    now = datetime.utcnow()
+
+    # Handle string dates from DB
+    if isinstance(expires_at, str):
+        try:
+            expires_at = datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S.%f')
+        except ValueError:
+            expires_at = datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S')
+
+    if isinstance(grace_ends_at, str):
+        try:
+            grace_ends_at = datetime.strptime(grace_ends_at, '%Y-%m-%d %H:%M:%S.%f')
+        except ValueError:
+            grace_ends_at = datetime.strptime(grace_ends_at, '%Y-%m-%d %H:%M:%S')
+
+    if now < expires_at:
+        return {'status': 'active', 'expires_at': expires_at, 'grace_ends_at': grace_ends_at}
+    elif grace_ends_at and now < grace_ends_at:
+        return {'status': 'grace', 'expires_at': expires_at, 'grace_ends_at': grace_ends_at}
+    else:
+        return {'status': 'expired', 'expires_at': expires_at, 'grace_ends_at': grace_ends_at}
+
+
 # =====================================================================
 # API ENDPOINTS
 # =====================================================================
@@ -970,7 +1014,7 @@ def forgot_password():
                     html=f"""
                     <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#f8fafc;padding:40px;border-radius:16px;">
                         <div style="text-align:center;margin-bottom:32px;">
-                            <div style="display:inline-block;background:linear-gradient(135deg,#6366f1,#a78bfa);border-radius:12px;padding:12px 20px;font-size:24px;font-weight:800;margin-bottom:12px;">Lumvi</div>
+                            <div style="display:inline-block;background:linear-gradient(135deg,#6366f1,#a78bfa);border-radius:12px;padding:12px 20px;font-size:24px;font-weight:800;margin-bottom:12px;">⚡ Lumvi</div>
                         </div>
                         <h2 style="margin:0 0 12px;font-size:22px;font-weight:700;">Reset your password</h2>
                         <p style="color:#94a3b8;margin:0 0 28px;line-height:1.6;">
@@ -1008,7 +1052,15 @@ def reset_password(token):
     if not token_data:
         return render_template('reset_password.html', error="This reset link is invalid or has already been used.")
 
-    if datetime.utcnow() > token_data['expires_at']:
+    # Handle expires_at as either datetime or string
+    expires_at = token_data['expires_at']
+    if isinstance(expires_at, str):
+        try:
+            expires_at = datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S.%f')
+        except ValueError:
+            expires_at = datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S')
+
+    if datetime.utcnow() > expires_at:
         models.delete_password_reset_token(token)
         return render_template('reset_password.html', error="This reset link has expired. Please request a new one.")
 
@@ -1043,9 +1095,30 @@ def login():
         user_data = models.verify_user(email, password)
 
         if user_data:
+            # Auto-downgrade if grace period has ended (skip for admins)
+            if not user_data.get('is_admin'):
+                sub = get_subscription_status(user_data)
+                if sub['status'] == 'expired':
+                    conn, cursor = models.get_db()
+                    cursor.execute(
+                        "UPDATE users SET plan_type='free', subscription_expires_at=NULL, grace_period_ends_at=NULL WHERE id=%s",
+                        (user_data['id'],)
+                    )
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+                    user_data['plan_type'] = 'free'
+                    app.logger.info(f"Auto-downgraded user {user_data['id']} to free (grace period ended)")
+
             user = User(user_data)
             login_user(user)
             models.track_event('login', user_id=user_data['id'], metadata={'email': email})
+
+            # Pass subscription status to dashboard via session
+            fresh = models.get_user_by_id(user_data['id'])
+            sub = get_subscription_status(fresh)
+            session['sub_status'] = sub['status']
+
             return redirect(url_for('dashboard'))
         else:
             return render_template('login.html', error='Invalid email or password')
@@ -1074,9 +1147,12 @@ def dashboard():
     plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
     client_limit = plan_limits['clients']
     client_count = len(clients)
-    # For unlimited plans (agency/enterprise) show a clean display
     slots_display = 'Unlimited' if client_limit >= 999999 else str(client_limit)
     limit_reached = False if client_limit >= 999999 else client_count >= client_limit
+
+    # Subscription status for popup
+    sub_status = session.pop('sub_status', None)
+    sub_info = get_subscription_status(fresh_user) if fresh_user else {'status': 'free'}
 
     template = 'dashboard_enterprise.html'
     return render_template(
@@ -1088,7 +1164,10 @@ def dashboard():
         client_count=client_count,
         client_limit=client_limit,
         slots_display=slots_display,
-        limit_reached=limit_reached
+        limit_reached=limit_reached,
+        sub_status=sub_info['status'],
+        sub_expires_at=sub_info.get('expires_at'),
+        sub_grace_ends_at=sub_info.get('grace_ends_at')
     )
 
 
@@ -2137,6 +2216,7 @@ def flutterwave_callback():
 
     models.record_payment(current_user.id, paid_amount, plan,
                           provider='flutterwave', reference=str(transaction_id))
+    models.set_subscription_expiry(current_user.id)
     models.track_event('plan_upgrade', user_id=current_user.id,
                        metadata={'plan': plan, 'provider': 'flutterwave',
                                  'amount': paid_amount, 'tx_ref': tx_ref})
@@ -2210,6 +2290,7 @@ def flutterwave_webhook():
     conn.close()
 
     models.record_payment(user_id, amount, plan, provider='flutterwave', reference=txn_id)
+    models.set_subscription_expiry(user_id)
     models.track_event('plan_upgrade', user_id=user_id,
                        metadata={'plan': plan, 'provider': 'flutterwave_webhook',
                                  'amount': amount, 'tx_ref': tx_ref})

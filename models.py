@@ -196,6 +196,53 @@ def migrate_faqs_table():
     print("✅ FAQs table migration complete")
 
 
+def migrate_subscription_expiry():
+    """Add subscription_expires_at and grace_period_ends_at to users table."""
+    conn, cursor = get_db()
+    print("🔧 Running subscription expiry migration...")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMP")
+    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS grace_period_ends_at TIMESTAMP")
+    conn.commit()
+    cursor.close()
+    conn.close()
+    print("✅ Subscription expiry migration complete")
+
+
+def set_subscription_expiry(user_id):
+    """Set subscription_expires_at to 30 days from now and grace to 33 days."""
+    conn, cursor = get_db()
+    cursor.execute(
+        '''UPDATE users
+           SET subscription_expires_at = NOW() + INTERVAL '30 days',
+               grace_period_ends_at    = NOW() + INTERVAL '33 days'
+           WHERE id = %s''',
+        (user_id,)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def downgrade_expired_users():
+    """Downgrade non-admin users whose grace period has ended to free plan."""
+    conn, cursor = get_db()
+    cursor.execute(
+        '''UPDATE users
+           SET plan_type = 'free',
+               subscription_expires_at = NULL,
+               grace_period_ends_at    = NULL
+           WHERE plan_type NOT IN ('free', 'enterprise')
+             AND is_admin IS NOT TRUE
+             AND grace_period_ends_at IS NOT NULL
+             AND grace_period_ends_at < NOW()'''
+    )
+    count = cursor.rowcount
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return count
+
+
 # =====================================================================
 # PLAN ENFORCEMENT
 # =====================================================================
