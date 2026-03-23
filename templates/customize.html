@@ -421,7 +421,7 @@
             
             <div class="form-group">
                 <label>Client ID</label>
-                <input type="text" id="client-id" placeholder="demo" value="demo">
+                <input type="text" id="client-id" placeholder="demo" value="demo" readonly>
                 <div class="hint">Unique identifier for this client</div>
             </div>
             
@@ -573,6 +573,12 @@
         let userPlanType = 'free';
         
         window.onload = function() {
+            // Set client-id from URL param first
+            const urlParams = new URLSearchParams(window.location.search);
+            const clientIdFromUrl = urlParams.get('client_id');
+            if (clientIdFromUrl) {
+                document.getElementById('client-id').value = clientIdFromUrl;
+            }
             loadUserInfo();
             loadConfig();
             attachEventListeners();
@@ -705,7 +711,7 @@
         }
         
         function populateForm(config) {
-            document.getElementById('company-name').value    = config.branding?.company_name    || '';
+            document.getElementById('company-name').value    = config.branding?.company_name !== 'Lumvi' ? (config.branding?.company_name || '') : '';
             document.getElementById('logo-url').value        = config.branding?.logo_url        || '';
             document.getElementById('primary-color').value   = config.branding?.primary_color   || '#667eea';
             document.getElementById('secondary-color').value = config.branding?.secondary_color || '#764ba2';
