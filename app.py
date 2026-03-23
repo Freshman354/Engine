@@ -182,7 +182,7 @@ PLAN_LIMITS = {
         'clients': 1,
         'faqs_per_client': 999,
         'messages_per_day': 999999,  # unlimited
-        'analytics': False,
+        'analytics': True,
         'customization': True,
         'white_label': False,
         'webhooks': False,
@@ -1317,6 +1317,8 @@ def widget():
         client['welcome_message'] = bot_settings.get('welcome_message') or client.get('welcome_message') or 'Hi! How can I help you today?'
         client['widget_color'] = branding.get('primary_color') or client.get('widget_color') or '#667eea'
         client['remove_branding'] = branding.get('remove_branding', client.get('remove_branding', 0))
+        # Pass full branding_settings as dict so chat.html can access quick_replies
+        client['branding_settings'] = branding_settings
 
     return render_template('chat.html', client=client)
 
