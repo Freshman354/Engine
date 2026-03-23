@@ -421,7 +421,7 @@
             
             <div class="form-group">
                 <label>Client ID</label>
-                <input type="text" id="client-id" placeholder="demo" value="demo" readonly>
+                <input type="text" id="client-id" placeholder="Loading..." value="" readonly>
                 <div class="hint">Unique identifier for this client</div>
             </div>
             
@@ -752,7 +752,11 @@
         }
         
         async function saveChanges() {
-            const clientId       = document.getElementById('client-id').value || 'demo';
+            const clientId = document.getElementById('client-id').value.trim();
+            if (!clientId) {
+                showError('No client ID found. Please go back to dashboard and try again.');
+                return;
+            }
             const removeBranding = document.getElementById('remove-branding')?.checked || false;
 
             // Only include webhook_url if the field is enabled (pro/agency/enterprise)
