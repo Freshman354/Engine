@@ -585,12 +585,12 @@
         <div class="actions">
             {% set limit_reached = (user.plan_type == 'starter' and clients|length >= 5) or (user.plan_type == 'agency' and clients|length >= 15) %}
             {% if limit_reached %}
-                <a href="/upgrade" class="btn btn-upgrade">🚀 Upgrade to Add More Clients</a>
+                <a href="/upgrade" class="btn btn-upgrade"> Upgrade to Add More Clients</a>
             {% else %}
                 <button class="btn btn-primary" onclick="openNewClientModal()">+ New Client</button>
             {% endif %}
-            <a href="/sales" class="btn btn-secondary">🌐 View Sales Page</a>
-            <a href="/affiliate-dashboard" class="btn btn-affiliate">💰 Affiliate Program</a>
+            <a href="/sales" class="btn btn-secondary"> View Sales Page</a>
+            <a href="/affiliate-dashboard" class="btn btn-affiliate"> Affiliate Program</a>
         </div>
 
         <!-- CLIENTS GRID -->
