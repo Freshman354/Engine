@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Help Center Manager | Lumvi</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --dark-bg: #0f172a;
+            --card-bg: rgba(30,41,59,0.8);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: rgba(255,255,255,0.1);
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Inter',sans-serif; background:var(--dark-bg); color:var(--text-main); min-height:100vh; padding:40px 20px; }
+        .container { max-width:860px; margin:0 auto; }
+        .page-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:32px; flex-wrap:wrap; gap:16px; }
+        .page-header h1 { font-size:24px; font-weight:800; }
+        .page-header p { color:var(--text-muted); font-size:14px; margin-top:4px; }
+        .btn { padding:10px 20px; border-radius:9px; font-weight:700; font-size:14px; cursor:pointer; border:none; font-family:'Inter',sans-serif; transition:all 0.2s; text-decoration:none; display:inline-block; }
+        .btn-primary { background:var(--primary); color:white; }
+        .btn-primary:hover { background:#4f46e5; transform:translateY(-1px); }
+        .btn-secondary { background:transparent; color:var(--text-muted); border:1px solid var(--border); }
+        .btn-secondary:hover { color:white; border-color:rgba(255,255,255,0.3); }
+        .btn-danger { background:rgba(239,68,68,0.15); color:#fca5a5; border:1px solid rgba(239,68,68,0.3); }
+        .btn-danger:hover { background:rgba(239,68,68,0.25); }
+        .btn-sm { padding:7px 14px; font-size:13px; }
+
+        /* Article list */
+        .articles-list { display:flex; flex-direction:column; gap:12px; margin-bottom:32px; }
+        .article-card { background:var(--card-bg); border:1px solid var(--border); border-radius:14px; padding:20px 24px; display:flex; align-items:center; justify-content:space-between; gap:16px; transition:border-color 0.2s; }
+        .article-card:hover { border-color:rgba(99,102,241,0.4); }
+        .article-info { flex:1; min-width:0; }
+        .article-title { font-size:15px; font-weight:600; margin-bottom:4px; }
+        .article-meta { font-size:12px; color:var(--text-muted); }
+        .article-actions { display:flex; gap:8px; flex-shrink:0; }
+        .empty-state { text-align:center; padding:60px 20px; color:var(--text-muted); }
+        .empty-state .icon { font-size:48px; margin-bottom:16px; }
+        .empty-state p { font-size:15px; margin-bottom:20px; }
+
+        /* Modal */
+        .modal { display:none; position:fixed; inset:0; z-index:1000; background:rgba(10,15,28,0.85); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:20px; }
+        .modal.active { display:flex; }
+        .modal-content { background:#1e293b; border:1px solid var(--border); border-radius:18px; padding:36px; width:100%; max-width:580px; position:relative; }
+        .modal-title { font-size:20px; font-weight:800; margin-bottom:24px; }
+        .form-group { margin-bottom:20px; }
+        .form-group label { display:block; font-size:13px; font-weight:600; color:var(--text-muted); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.05em; }
+        .form-group input, .form-group textarea, .form-group select { width:100%; padding:11px 14px; background:rgba(15,23,42,0.6); border:1px solid var(--border); border-radius:9px; color:var(--text-main); font-size:14px; font-family:'Inter',sans-serif; transition:border-color 0.2s; }
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline:none; border-color:var(--primary); }
+        .form-group textarea { resize:vertical; min-height:140px; line-height:1.6; }
+        .form-group select option { background:#1e293b; }
+        .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:8px; }
+        .close-btn { position:absolute; top:18px; right:20px; font-size:22px; color:var(--text-muted); cursor:pointer; line-height:1; background:none; border:none; }
+        .close-btn:hover { color:white; }
+
+        /* Toast */
+        .toast { position:fixed; bottom:24px; right:24px; padding:12px 20px; border-radius:10px; font-size:14px; font-weight:600; z-index:9999; animation:slideIn 0.3s ease; }
+        .toast.success { background:#064e3b; color:#6ee7b7; border:1px solid #059669; }
+        .toast.error { background:#450a0a; color:#fca5a5; border:1px solid #dc2626; }
+        @keyframes slideIn { from { transform:translateY(20px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+
+        .back-link { color:var(--text-muted); text-decoration:none; font-size:14px; margin-bottom:24px; display:inline-flex; align-items:center; gap:6px; }
+        .back-link:hover { color:white; }
+        .category-badge { display:inline-block; padding:2px 8px; background:rgba(99,102,241,0.15); color:#a5b4fc; border-radius:999px; font-size:11px; font-weight:600; margin-left:8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/dashboard" class="back-link">← Back to Dashboard</a>
+
+        <div class="page-header">
+            <div>
+                <h1>📚 Help Center</h1>
+                <p>Articles your visitors can browse in the Help Center tab of your chatbot.</p>
+            </div>
+            <button class="btn btn-primary" onclick="openModal()">+ New Article</button>
+        </div>
+
+        <div id="articles-list" class="articles-list">
+            <div class="empty-state">
+                <div class="icon">📄</div>
+                <p>Loading articles...</p>
+            </div>
+        </div>
+
+        <a href="/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
+    </div>
+
+    <!-- Create / Edit Modal -->
+    <div class="modal" id="articleModal">
+        <div class="modal-content">
+            <button class="close-btn" onclick="closeModal()">×</button>
+            <div class="modal-title" id="modal-title">New Article</div>
+            <input type="hidden" id="edit-id">
+            <div class="form-group">
+                <label>Title</label>
+                <input type="text" id="article-title" placeholder="e.g. How do I reset my password?">
+            </div>
+            <div class="form-group">
+                <label>Category</label>
+                <input type="text" id="article-category" placeholder="e.g. Getting Started, Billing, FAQs" value="General">
+            </div>
+            <div class="form-group">
+                <label>Content</label>
+                <textarea id="article-content" placeholder="Write your article content here. Keep it clear and helpful."></textarea>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveArticle()">Save Article</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const CLIENT_ID = '{{ client_id }}';
+        let articles = [];
+
+        async function loadArticles() {
+            try {
+                const res = await fetch(`/api/articles/manage?client_id=${CLIENT_ID}`);
+                const data = await res.json();
+                articles = data.articles || [];
+                renderArticles();
+            } catch(e) {
+                showToast('Failed to load articles', 'error');
+            }
+        }
+
+        function renderArticles() {
+            const container = document.getElementById('articles-list');
+            if (!articles.length) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="icon">📄</div>
+                        <p>No articles yet. Create your first one to populate the Help Center!</p>
+                        <button class="btn btn-primary" onclick="openModal()">+ Create First Article</button>
+                    </div>`;
+                return;
+            }
+            container.innerHTML = articles.map(a => `
+                <div class="article-card">
+                    <div class="article-info">
+                        <div class="article-title">
+                            ${escapeHtml(a.title)}
+                            <span class="category-badge">${escapeHtml(a.category || 'General')}</span>
+                        </div>
+                        <div class="article-meta">${a.content.substring(0, 80)}${a.content.length > 80 ? '...' : ''}</div>
+                    </div>
+                    <div class="article-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="editArticle(${a.id})">✏️ Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteArticle(${a.id})">🗑️</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function openModal(id) {
+            document.getElementById('modal-title').textContent = id ? 'Edit Article' : 'New Article';
+            document.getElementById('edit-id').value = id || '';
+            if (!id) {
+                document.getElementById('article-title').value = '';
+                document.getElementById('article-category').value = 'General';
+                document.getElementById('article-content').value = '';
+            }
+            document.getElementById('articleModal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('articleModal').classList.remove('active');
+        }
+
+        function editArticle(id) {
+            const a = articles.find(x => x.id === id);
+            if (!a) return;
+            document.getElementById('article-title').value = a.title;
+            document.getElementById('article-category').value = a.category || 'General';
+            document.getElementById('article-content').value = a.content;
+            openModal(id);
+        }
+
+        async function saveArticle() {
+            const id = document.getElementById('edit-id').value;
+            const title = document.getElementById('article-title').value.trim();
+            const category = document.getElementById('article-category').value.trim() || 'General';
+            const content = document.getElementById('article-content').value.trim();
+
+            if (!title || !content) {
+                showToast('Title and content are required', 'error');
+                return;
+            }
+
+            const method = id ? 'PUT' : 'POST';
+            const body = { client_id: CLIENT_ID, title, category, content };
+            if (id) body.id = parseInt(id);
+
+            try {
+                const res = await fetch('/api/articles/manage', {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                const data = await res.json();
+                if (data.success) {
+                    closeModal();
+                    loadArticles();
+                    showToast(id ? 'Article updated!' : 'Article created!', 'success');
+                } else {
+                    showToast(data.error || 'Failed to save', 'error');
+                }
+            } catch(e) {
+                showToast('Network error', 'error');
+            }
+        }
+
+        async function deleteArticle(id) {
+            if (!confirm('Delete this article? This cannot be undone.')) return;
+            try {
+                const res = await fetch('/api/articles/manage', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: CLIENT_ID, id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    loadArticles();
+                    showToast('Article deleted', 'success');
+                }
+            } catch(e) {
+                showToast('Failed to delete', 'error');
+            }
+        }
+
+        function showToast(msg, type) {
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            t.textContent = msg;
+            document.body.appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        // Close modal on backdrop click
+        document.getElementById('articleModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+
+        loadArticles();
+    </script>
+</body>
+</html>

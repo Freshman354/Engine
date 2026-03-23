@@ -176,9 +176,106 @@
             text-decoration: none;
             font-weight: 600;
         }
+
+        /* ── TABS ── */
+        .chat-tabs {
+            display: flex;
+            border-bottom: 1px solid #e5e7eb;
+            background: white;
+        }
+        .chat-tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 600;
+            color: #6b7280;
+            cursor: pointer;
+            border: none;
+            background: none;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .chat-tab.active {
+            color: {{ client.widget_color or '#6366f1' }};
+            border-bottom-color: {{ client.widget_color or '#6366f1' }};
+        }
+        .tab-panel { display: none; flex: 1; overflow-y: auto; flex-direction: column; }
+        .tab-panel.active { display: flex; }
+
+        /* ── HELP CENTER ── */
+        .help-search {
+            padding: 14px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #f9fafb;
+        }
+        .help-search input {
+            width: 100%;
+            padding: 9px 14px;
+            border: 1px solid #e5e7eb;
+            border-radius: 20px;
+            font-size: 13px;
+            outline: none;
+            background: white;
+        }
+        .help-search input:focus { border-color: {{ client.widget_color or '#6366f1' }}; }
+        .help-category {
+            padding: 10px 16px 4px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #9ca3af;
+        }
+        .help-article {
+            padding: 14px 16px;
+            border-bottom: 1px solid #f3f4f6;
+            cursor: pointer;
+            transition: background 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+        .help-article:hover { background: #f9fafb; }
+        .help-article-title {
+            font-size: 13px;
+            font-weight: 500;
+            color: #1f2937;
+            line-height: 1.4;
+        }
+        .help-article-arrow { color: #9ca3af; font-size: 16px; flex-shrink: 0; }
+        .help-empty {
+            padding: 40px 20px;
+            text-align: center;
+            color: #9ca3af;
+            font-size: 13px;
+        }
+        /* Article detail view */
+        .article-detail { display: none; flex-direction: column; flex: 1; }
+        .article-detail.active { display: flex; }
+        .article-back {
+            padding: 12px 16px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            color: {{ client.widget_color or '#6366f1' }};
+            font-weight: 600;
+            background: white;
+        }
+        .article-body {
+            padding: 20px 16px;
+            flex: 1;
+            overflow-y: auto;
+        }
+        .article-body h2 { font-size: 16px; font-weight: 700; margin-bottom: 12px; color: #111827; }
+        .article-body p { font-size: 13px; color: #374151; line-height: 1.7; white-space: pre-line; }
     </style>
 </head>
-<body>
+<body style="display:flex;flex-direction:column;height:100vh;">
     <div class="chat-header">
         <div class="bot-avatar-header">🤖</div>
         <div class="header-text">
@@ -186,48 +283,79 @@
             <div class="status">● Online • Typically replies instantly</div>
         </div>
     </div>
-    <div class="chat-messages" id="messages">
-        <div class="timestamp" id="current-time"></div>
-        <div class="message bot">
-            <div class="message-avatar">🤖</div>
-            <div class="message-bubble">
-                <div class="sender-name">{{ client.bot_name or 'Team Support' }}</div>
-                <div class="message-content">{{ client.welcome_message or "Welcome! 😊 Please choose an option below that best describes what you need." }}</div>
-                <div class="quick-replies" id="quick-replies">
-                    {% set qr = client.get('branding_settings', {}).get('bot_settings', {}).get('quick_replies', []) if client.branding_settings is mapping else [] %}
-                    {% if qr %}
-                        {% for btn in qr[:3] %}
-                        <button class="quick-reply-btn" onclick="sendQuickReply('{{ btn | e }}')">{{ btn }}</button>
-                        {% endfor %}
-                    {% else %}
-                        <button class="quick-reply-btn" onclick="sendQuickReply('What are your services?')">What are your services?</button>
-                        <button class="quick-reply-btn" onclick="sendQuickReply('How do I get started?')">How do I get started?</button>
-                        <button class="quick-reply-btn" onclick="sendQuickReply('Contact us')">Contact us</button>
-                    {% endif %}
+
+    <!-- TABS -->
+    <div class="chat-tabs">
+        <button class="chat-tab active" id="tab-conversation" onclick="switchTab('conversation')">Conversation</button>
+        <button class="chat-tab" id="tab-helpcenter" onclick="switchTab('helpcenter')">❔Help Center</button>
+    </div>
+
+    <!-- CONVERSATION PANEL -->
+    <div class="tab-panel active" id="panel-conversation" style="flex:1;overflow-y:auto;flex-direction:column;">
+        <div class="chat-messages" id="messages">
+            <div class="timestamp" id="current-time"></div>
+            <div class="message bot">
+                <div class="message-avatar">🤖</div>
+                <div class="message-bubble">
+                    <div class="sender-name">{{ client.bot_name or 'Team Support' }}</div>
+                    <div class="message-content">{{ client.welcome_message or "Welcome! 😊 Please choose an option below that best describes what you need." }}</div>
+                    <div class="quick-replies" id="quick-replies">
+                        {% set qr = client.get('branding_settings', {}).get('bot_settings', {}).get('quick_replies', []) if client.branding_settings is mapping else [] %}
+                        {% if qr %}
+                            {% for btn in qr[:3] %}
+                            <button class="quick-reply-btn" onclick="sendQuickReply('{{ btn | e }}')">{{ btn }}</button>
+                            {% endfor %}
+                        {% else %}
+                            <button class="quick-reply-btn" onclick="sendQuickReply('What are your services?')">What are your services?</button>
+                            <button class="quick-reply-btn" onclick="sendQuickReply('How do I get started?')">How do I get started?</button>
+                            <button class="quick-reply-btn" onclick="sendQuickReply('Contact us')">Contact us</button>
+                        {% endif %}
+                    </div>
+                    <div class="message-time">Just now</div>
                 </div>
-                <div class="message-time">Just now</div>
+            </div>
+            <div class="message bot">
+                <div class="message-avatar">🤖</div>
+                <div class="typing-indicator" id="typing">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
             </div>
         </div>
-        <div class="message bot">
-            <div class="message-avatar">🤖</div>
-            <div class="typing-indicator" id="typing">
-                <div class="typing-dot"></div>
-                <div class="typing-dot"></div>
-                <div class="typing-dot"></div>
+        <div class="chat-input-area">
+            <input type="text" class="chat-input" id="messageInput" placeholder="Type a message" autocomplete="off">
+            <button class="send-button" id="sendButton">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path>
+                </svg>
+            </button>
+        </div>
+        {% if not client.remove_branding %}
+        <div class="powered-by">Powered by <a href="https://lumvi.net" target="_blank">Lumvi</a></div>
+        {% endif %}
+    </div>
+
+    <!-- HELP CENTER PANEL -->
+    <div class="tab-panel" id="panel-helpcenter" style="flex:1;flex-direction:column;">
+        <!-- Article list -->
+        <div id="help-list" style="display:flex;flex-direction:column;flex:1;overflow-y:auto;">
+            <div class="help-search">
+                <input type="text" id="help-search-input" placeholder="🔍 Search articles..." oninput="filterArticles()">
+            </div>
+            <div id="help-articles-container">
+                <div class="help-empty">Loading articles...</div>
+            </div>
+        </div>
+        <!-- Article detail -->
+        <div id="help-detail" class="article-detail">
+            <div class="article-back" onclick="showArticleList()">← Back</div>
+            <div class="article-body">
+                <h2 id="detail-title"></h2>
+                <p id="detail-content"></p>
             </div>
         </div>
     </div>
-    <div class="chat-input-area">
-        <input type="text" class="chat-input" id="messageInput" placeholder="Type a message" autocomplete="off">
-        <button class="send-button" id="sendButton">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"></path>
-            </svg>
-        </button>
-    </div>
-    {% if not client.remove_branding %}
-    <div class="powered-by">Powered by <a href="https://lumvi.net" target="_blank">Lumvi</a></div>
-    {% endif %}
     <script>
         const CLIENT_ID = '{{ client.client_id }}';
         const messagesContainer = document.getElementById('messages');
@@ -413,6 +541,79 @@
         messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
         messageInput.focus();
         scrollToBottom();
+
+        // ── TABS ──
+        function switchTab(tab) {
+            document.querySelectorAll('.chat-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+            document.getElementById('panel-' + tab).classList.add('active');
+            if (tab === 'helpcenter') loadArticles();
+        }
+
+        // ── HELP CENTER ──
+        let allArticles = [];
+
+        async function loadArticles() {
+            try {
+                const res = await fetch('/api/articles?client_id=' + CLIENT_ID);
+                const data = await res.json();
+                allArticles = data.articles || [];
+                renderArticles(allArticles);
+            } catch(e) {
+                document.getElementById('help-articles-container').innerHTML =
+                    '<div class="help-empty">Could not load articles.</div>';
+            }
+        }
+
+        function renderArticles(articles) {
+            const container = document.getElementById('help-articles-container');
+            if (!articles.length) {
+                container.innerHTML = '<div class="help-empty">No articles yet. Check back soon!</div>';
+                return;
+            }
+            // Group by category
+            const grouped = {};
+            articles.forEach(a => {
+                const cat = a.category || 'General';
+                if (!grouped[cat]) grouped[cat] = [];
+                grouped[cat].push(a);
+            });
+            let html = '';
+            Object.keys(grouped).forEach(cat => {
+                html += `<div class="help-category">${cat}</div>`;
+                grouped[cat].forEach(a => {
+                    html += `<div class="help-article" onclick="showArticle(${a.id})">
+                        <div class="help-article-title">${escapeHtml(a.title)}</div>
+                        <div class="help-article-arrow">›</div>
+                    </div>`;
+                });
+            });
+            container.innerHTML = html;
+        }
+
+        function filterArticles() {
+            const q = document.getElementById('help-search-input').value.toLowerCase();
+            const filtered = allArticles.filter(a =>
+                a.title.toLowerCase().includes(q) || a.content.toLowerCase().includes(q)
+            );
+            renderArticles(filtered);
+        }
+
+        function showArticle(id) {
+            const article = allArticles.find(a => a.id === id);
+            if (!article) return;
+            document.getElementById('detail-title').textContent = article.title;
+            document.getElementById('detail-content').textContent = article.content;
+            document.getElementById('help-list').style.display = 'none';
+            document.getElementById('help-detail').classList.add('active');
+        }
+
+        function showArticleList() {
+            document.getElementById('help-list').style.display = 'flex';
+            document.getElementById('help-detail').classList.remove('active');
+        }
+
         console.log('✅ Chat widget with lead capture loaded');
     </script>
 </body>
