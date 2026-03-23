@@ -286,8 +286,8 @@
 
     <!-- TABS -->
     <div class="chat-tabs">
-        <button class="chat-tab active" id="tab-conversation" onclick="switchTab('conversation')">Conversation</button>
-        <button class="chat-tab" id="tab-helpcenter" onclick="switchTab('helpcenter')">❔Help Center</button>
+        <button class="chat-tab active" id="tab-conversation" onclick="switchTab('conversation')">💬 Conversation</button>
+        <button class="chat-tab" id="tab-helpcenter" onclick="switchTab('helpcenter')">📚 Help Center</button>
     </div>
 
     <!-- CONVERSATION PANEL -->
@@ -306,8 +306,8 @@
                             <button class="quick-reply-btn" onclick="sendQuickReply('{{ btn | e }}')">{{ btn }}</button>
                             {% endfor %}
                         {% else %}
-                            <button class="quick-reply-btn" onclick="sendQuickReply('What are your services?')">What are your services?</button>
-                            <button class="quick-reply-btn" onclick="sendQuickReply('How do I get started?')">How do I get started?</button>
+                            <button class="quick-reply-btn" onclick="sendQuickReply('What are your business hours?')">What are your business hours?</button>
+                            <button class="quick-reply-btn" onclick="sendQuickReply('What are your prices?')">What are your prices?</button>
                             <button class="quick-reply-btn" onclick="sendQuickReply('Contact us')">Contact us</button>
                         {% endif %}
                     </div>
