@@ -167,16 +167,36 @@
             flex-wrap: wrap;
         }
 
-        .controls-left { display: flex; gap: 12px; align-items: center; }
+        .controls-left { display: flex; gap: 12px; align-items: center; flex: 1; }
         .controls-left label { font-weight: 600; color: var(--text-muted); font-size: 14px; }
-        .controls select {
-            padding: 9px 14px;
+
+        .search-wrap {
+            display: flex; align-items: center;
             background: var(--input-bg);
             border: 1px solid var(--input-border);
-            border-radius: 8px; font-size: 14px; color: var(--text-main);
-            font-family: 'Inter', sans-serif; cursor: pointer; transition: border-color 0.2s;
+            border-radius: 10px; padding: 0 12px;
+            gap: 8px; flex: 1; max-width: 420px;
+            transition: border-color 0.2s;
         }
-        .controls select:focus { outline: none; border-color: var(--primary); }
+        .search-wrap:focus-within { border-color: var(--primary); }
+        .search-icon { font-size: 14px; opacity: 0.5; flex-shrink: 0; }
+        .search-wrap input {
+            flex: 1; padding: 10px 0;
+            background: transparent; border: none;
+            font-size: 14px; color: var(--text-main);
+            font-family: 'Inter', sans-serif; outline: none;
+        }
+        .search-wrap input::placeholder { color: var(--text-muted); }
+        .search-clear {
+            background: none; border: none; cursor: pointer;
+            color: var(--text-muted); font-size: 14px; padding: 2px 4px;
+            border-radius: 4px; flex-shrink: 0;
+        }
+        .search-clear:hover { color: var(--text-main); }
+        .search-results-count {
+            font-size: 12px; color: var(--text-muted);
+            margin-bottom: 12px; padding: 0 4px;
+        }
         .controls-right { display: flex; gap: 10px; flex-wrap: wrap; }
 
         /* ── BUTTONS ── */
@@ -345,12 +365,11 @@
         <!-- CONTROLS -->
         <div class="controls">
             <div class="controls-left">
-                <label for="client-select">Client:</label>
-                <select id="client-select">
-                    <option value="default">Default</option>
-                    <option value="demo">Demo</option>
-                </select>
-                <button class="btn btn-primary" onclick="loadFAQs()">🔄 Refresh</button>
+                <div class="search-wrap">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="faq-search" placeholder="Search questions, answers or keywords..." oninput="filterFAQs()" autocomplete="off">
+                    <button class="search-clear" id="search-clear" onclick="clearSearch()" style="display:none;">✕</button>
+                </div>
             </div>
             <div class="controls-right">
                 <button class="btn btn-pdf" onclick="exportPDF()">📄 Export PDF</button>
@@ -361,6 +380,7 @@
         </div>
 
         <div id="toast" style="position:fixed;bottom:28px;right:28px;z-index:9999;padding:14px 22px;border-radius:12px;font-size:14px;font-weight:700;display:none;box-shadow:0 8px 24px rgba(0,0,0,0.3);max-width:320px;"></div>
+        <div class="search-results-count" id="search-results-count" style="display:none;"></div>
 
         <div class="faq-list" id="faq-list">
             <div class="empty-state">
@@ -505,7 +525,6 @@
 
         window.onload = function() {
             const clientId = urlParams.get('client_id') || 'demo';
-            document.getElementById('client-select').value = clientId;
             loadFAQs();
         };
 
@@ -516,6 +535,9 @@
                 const data = await response.json();
                 if (data.success) {
                     currentFAQs = data.faqs || [];
+                    document.getElementById('faq-search').value = '';
+                    document.getElementById('search-clear').style.display = 'none';
+                    document.getElementById('search-results-count').style.display = 'none';
                     renderFAQs();
                     updateFaqCount();
                 } else { showError(); }
@@ -529,31 +551,64 @@
             w.style.display = currentFAQs.length >= faqLimit ? 'inline' : 'none';
         }
 
-        function renderFAQs() {
+        function renderFAQs(faqs) {
+            // If called with a filtered list use it, otherwise use all
+            const list = faqs !== undefined ? faqs : currentFAQs;
             const container = document.getElementById('faq-list');
-            if (currentFAQs.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-state-icon">📝</div>
-                        <p>No FAQs yet. Click <strong>Add New FAQ</strong> or <strong>Upload FAQs</strong> to get started!</p>
-                    </div>`;
+            if (list.length === 0) {
+                const q = document.getElementById('faq-search').value.trim();
+                container.innerHTML = q
+                    ? `<div class="empty-state"><div class="empty-state-icon">🔍</div><p>No FAQs match "<strong>${escapeHtml(q)}</strong>". Try a different keyword.</p></div>`
+                    : `<div class="empty-state"><div class="empty-state-icon">📝</div><p>No FAQs yet. Click <strong>Add New FAQ</strong> or <strong>Upload FAQs</strong> to get started!</p></div>`;
                 return;
             }
-            container.innerHTML = currentFAQs.map((faq, index) => `
+            container.innerHTML = list.map((faq, index) => {
+                // index into currentFAQs for edit/delete
+                const realIndex = faqs !== undefined ? currentFAQs.indexOf(faq) : index;
+                return `
                 <div class="faq-item">
                     <div class="faq-header">
                         <div class="faq-question">${escapeHtml(faq.question)}</div>
                         <div class="faq-actions">
-                            <button class="btn-small btn-edit" onclick="editFAQ(${index})">✏️ Edit</button>
-                            <button class="btn-small btn-delete" onclick="deleteFAQ(${index})">🗑️ Delete</button>
+                            <button class="btn-small btn-edit" onclick="editFAQ(${realIndex})">✏️ Edit</button>
+                            <button class="btn-small btn-delete" onclick="deleteFAQ(${realIndex})">🗑️ Delete</button>
                         </div>
                     </div>
                     <div class="faq-answer">${escapeHtml(faq.answer)}</div>
                     <div class="faq-triggers">
-                        ${faq.triggers.map(t => `<span class="trigger-tag">${escapeHtml(t)}</span>`).join('')}
+                        ${(faq.triggers || []).map(t => `<span class="trigger-tag">${escapeHtml(t)}</span>`).join('')}
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
+        }
+
+        function filterFAQs() {
+            const q = document.getElementById('faq-search').value.trim().toLowerCase();
+            const clearBtn = document.getElementById('search-clear');
+            const countEl = document.getElementById('search-results-count');
+            clearBtn.style.display = q ? 'block' : 'none';
+
+            if (!q) {
+                countEl.style.display = 'none';
+                renderFAQs();
+                return;
+            }
+            const filtered = currentFAQs.filter(faq => {
+                const triggers = (faq.triggers || []).join(' ').toLowerCase();
+                return faq.question.toLowerCase().includes(q)
+                    || faq.answer.toLowerCase().includes(q)
+                    || triggers.includes(q);
+            });
+            countEl.style.display = 'block';
+            countEl.textContent = `${filtered.length} of ${currentFAQs.length} FAQs match "${q}"`;
+            renderFAQs(filtered);
+        }
+
+        function clearSearch() {
+            document.getElementById('faq-search').value = '';
+            document.getElementById('search-clear').style.display = 'none';
+            document.getElementById('search-results-count').style.display = 'none';
+            renderFAQs();
         }
 
         function openAddModal() {
