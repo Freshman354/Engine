@@ -153,6 +153,9 @@ ai_helper = get_ai_helper(Config.GEMINI_API_KEY, Config.GEMINI_MODEL)
 
 if ai_helper and ai_helper.enabled:
     app.logger.info("✅ Gemini AI initialized")
+    print("✅ AI Helper ENABLED — using Gemini for smart matching")
+else:
+    print("❌ AI Helper DISABLED — no API key provided. Set GEMINI_API_KEY in environment variables.")
 
 configure({
     "mode": os.getenv('PAYPAL_MODE', 'sandbox'),
