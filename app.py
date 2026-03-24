@@ -365,7 +365,12 @@ STOP_WORDS = {
 }
 
 GENERIC_TAGS = {
-    'information', 'info', 'details', 'learn'
+    'information', 'info', 'details', 'learn',
+    'business', 'service', 'services', 'product', 'products',
+    'use', 'used', 'using', 'need', 'want', 'like', 'work',
+    'platform', 'system', 'tool', 'website', 'site', 'account',
+    'help', 'support', 'contact', 'team', 'company', 'client',
+    'way', 'ways', 'option', 'options', 'type', 'types', 'kind'
 }
 
 
@@ -375,21 +380,27 @@ def extract_keywords(text):
 
 
 def compute_tag_weights(faqs_list):
+    """Count frequency of both triggers AND question keywords so common words get low weight."""
     tag_frequency = Counter()
     for faq in faqs_list:
+        # Count explicit triggers
         for tag in faq.get('triggers', []):
             tag_frequency[tag.lower()] += 1
+        # Also count question keywords so high-frequency words get penalised
+        for kw in extract_keywords(faq.get('question', '')):
+            tag_frequency[kw] += 1
 
     tag_weights = {}
     for tag, freq in tag_frequency.items():
         if tag in GENERIC_TAGS:
-            tag_weights[tag] = 0.2
+            tag_weights[tag] = 0.05   # near-zero weight for generic words
         else:
-            tag_weights[tag] = round(1.0 / freq, 2)
+            tag_weights[tag] = round(1.0 / freq, 3)
     return tag_weights
 
 
-def find_best_match(user_query, faqs_list, confidence_threshold=0.15):
+def find_best_match(user_query, faqs_list, confidence_threshold=0.35):
+    """Keyword matcher — used only when AI is disabled. Threshold raised to reduce false positives."""
     if not user_query or not faqs_list:
         return None, 0.0
 
@@ -412,8 +423,8 @@ def find_best_match(user_query, faqs_list, confidence_threshold=0.15):
         if not matched_tags:
             continue
 
-        raw_score = sum(tag_weights.get(tag, 0.5) for tag in matched_tags)
-        max_possible = sum(tag_weights.get(tag, 0.5) for tag in all_tags)
+        raw_score = sum(tag_weights.get(tag, 0.3) for tag in matched_tags)
+        max_possible = sum(tag_weights.get(tag, 0.3) for tag in all_tags)
         normalized = raw_score / max_possible if max_possible > 0 else 0.0
         coverage = len(matched_tags) / len(query_keyword_set)
         final_score = (normalized * 0.7) + (coverage * 0.3)
