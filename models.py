@@ -4,6 +4,7 @@ import bcrypt
 import secrets
 from datetime import datetime
 import json
+import uuid
 import os
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -514,22 +515,36 @@ def delete_client(client_id):
 def save_faqs(client_id, faqs):
     """Save FAQs for a client (replaces all existing)"""
     conn, cursor = get_db()
-    cursor.execute('DELETE FROM faqs WHERE client_id = %s', (client_id,))
-    for faq in faqs:
-        cursor.execute(
-            'INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers) VALUES (%s, %s, %s, %s, %s, %s)',
-            (
-                client_id,
-                faq['id'],
-                faq['question'],
-                faq['answer'],
-                faq.get('category', 'General'),
-                json.dumps(faq['triggers'])
+    try:
+        cursor.execute('DELETE FROM faqs WHERE client_id = %s', (client_id,))
+        for faq in faqs:
+            faq_id = faq.get('id') or faq.get('faq_id') or str(uuid.uuid4())
+            triggers = faq.get('triggers', [])
+            # Ensure triggers is a list
+            if isinstance(triggers, str):
+                try:
+                    triggers = json.loads(triggers)
+                except Exception:
+                    triggers = [t.strip() for t in triggers.split(',') if t.strip()]
+            cursor.execute(
+                'INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers) VALUES (%s, %s, %s, %s, %s, %s)',
+                (
+                    client_id,
+                    str(faq_id),
+                    faq.get('question', ''),
+                    faq.get('answer', ''),
+                    faq.get('category', 'General'),
+                    json.dumps(triggers)
+                )
             )
-        )
-    conn.commit()
-    cursor.close()
-    conn.close()
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        cursor.close()
+        conn.close()
+
 
 def get_faqs(client_id):
     """Get all FAQs for a client"""
@@ -538,16 +553,24 @@ def get_faqs(client_id):
     faqs = cursor.fetchall()
     cursor.close()
     conn.close()
-    return [
-        {
-            'id': faq['faq_id'],
-            'question': faq['question'],
-            'answer': faq['answer'],
+    result = []
+    for faq in faqs:
+        triggers = faq.get('triggers', '[]') or '[]'
+        if isinstance(triggers, list):
+            parsed_triggers = triggers
+        else:
+            try:
+                parsed_triggers = json.loads(triggers)
+            except Exception:
+                parsed_triggers = [t.strip() for t in triggers.split(',') if t.strip()]
+        result.append({
+            'id': faq.get('faq_id') or str(faq.get('id', '')),
+            'question': faq.get('question', ''),
+            'answer': faq.get('answer', ''),
             'category': faq.get('category', 'General'),
-            'triggers': json.loads(faq['triggers'])
-        }
-        for faq in faqs
-    ]
+            'triggers': parsed_triggers
+        })
+    return result
 
 
 def delete_all_faqs(client_id):

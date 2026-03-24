@@ -360,8 +360,7 @@
             </div>
         </div>
 
-        <div class="alert alert-success" id="success-message">✅ Changes saved successfully!</div>
-        <div class="alert alert-error" id="error-message">❌ Error saving changes. Please try again.</div>
+        <div id="toast" style="position:fixed;bottom:28px;right:28px;z-index:9999;padding:14px 22px;border-radius:12px;font-size:14px;font-weight:700;display:none;box-shadow:0 8px 24px rgba(0,0,0,0.3);max-width:320px;"></div>
 
         <div class="faq-list" id="faq-list">
             <div class="empty-state">
@@ -571,7 +570,12 @@
             document.getElementById('faq-id').value = faq.id;
             document.getElementById('faq-question').value = faq.question;
             document.getElementById('faq-answer').value = faq.answer;
-            document.getElementById('faq-triggers').value = faq.triggers.join(', ');
+            // triggers can be a string (JSON) or array depending on DB format
+            let triggers = faq.triggers || [];
+            if (typeof triggers === 'string') {
+                try { triggers = JSON.parse(triggers); } catch(e) { triggers = triggers.split(',').map(t => t.trim()).filter(Boolean); }
+            }
+            document.getElementById('faq-triggers').value = Array.isArray(triggers) ? triggers.join(', ') : '';
             editingIndex = index;
             document.getElementById('faq-modal').style.display = 'flex';
         }
@@ -736,18 +740,29 @@
         }
 
         // ── HELPERS ──
+        function showToast(msg, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            if (type === 'success') {
+                toast.style.background = '#064e3b';
+                toast.style.color = '#6ee7b7';
+                toast.style.border = '1px solid #059669';
+            } else {
+                toast.style.background = '#450a0a';
+                toast.style.color = '#fca5a5';
+                toast.style.border = '1px solid #dc2626';
+            }
+            toast.style.display = 'block';
+            clearTimeout(toast._timer);
+            toast._timer = setTimeout(() => { toast.style.display = 'none'; }, 3500);
+        }
+
         function showSuccess(msg) {
-            const el = document.getElementById('success-message');
-            el.textContent = '✅ ' + (msg || 'Changes saved successfully!');
-            el.style.display = 'block';
-            setTimeout(() => { el.style.display = 'none'; }, 3500);
+            showToast('✔️ ' + (msg || 'Changes saved successfully!'), 'success');
         }
 
         function showError(msg) {
-            const el = document.getElementById('error-message');
-            el.textContent = '❌ ' + (msg || 'Error saving changes. Please try again.');
-            el.style.display = 'block';
-            setTimeout(() => { el.style.display = 'none'; }, 3500);
+            showToast('❌ ' + (msg || 'Error saving changes. Please try again.'), 'error');
         }
 
         function escapeHtml(text) {
