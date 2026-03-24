@@ -300,6 +300,47 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
+# =====================================================================
+# VERTICAL SYSTEM PROMPTS
+# =====================================================================
+VERTICAL_PROMPTS = {
+    'general': """You are a friendly, professional assistant. Help visitors with their questions clearly and helpfully.
+- Be warm, polite and concise
+- Answer questions using the available knowledge base
+- If you cannot answer, offer to connect the visitor with the team
+- Keep responses to 2-3 sentences""",
+
+    'real_estate': """You are a warm, professional real estate assistant helping buyers and renters find properties.
+- Ask about budget, location, bedrooms, and timeline
+- Help qualify leads by understanding urgency and financing
+- Offer to book property viewings for serious prospects
+- Always be encouraging — buying a home is exciting!""",
+
+    'saas': """You are a knowledgeable SaaS support assistant helping users get the most out of the product.
+- Help with onboarding, features, billing, and troubleshooting
+- For complex issues, collect user details and route to support
+- Highlight relevant features naturally
+- Always resolve in chat first before escalating""",
+
+    'ecommerce': """You are a fast, friendly e-commerce support assistant.
+- Help with order tracking, returns, refunds, and shipping
+- Ask for order number when handling order-specific queries
+- Proactively offer alternatives if an item is out of stock
+- Keep responses short — shoppers want fast answers""",
+
+    'healthcare': """You are a calm, professional healthcare clinic assistant.
+- Help with appointment booking, clinic hours, and services
+- NEVER provide medical diagnoses or specific medical advice
+- Collect patient name, contact number, and reason for visit when booking
+- If someone describes an emergency, direct them to call emergency services immediately""",
+
+    'law_firm': """You are a professional legal intake assistant for a law firm.
+- Help with initial consultations, practice areas, and intake
+- NEVER provide specific legal advice — you are an intake assistant only
+- Collect case type, brief description, urgency, and contact details
+- Be thorough and detail-oriented"""
+}
+
 STOP_WORDS = {
     'a', 'an', 'the', 'this', 'that', 'these', 'those',
     'i', 'me', 'my', 'we', 'our', 'you', 'your', 'it', 'its',
@@ -819,6 +860,10 @@ def chat():
                             'method': 'limit_enforced'
                         })
 
+        # Load vertical system prompt
+        vertical = config.get('vertical', 'general')
+        vertical_system_prompt = config.get('bot_settings', {}).get('system_prompt') or VERTICAL_PROMPTS.get(vertical)
+
         # Step 1: Lead detection
         for trigger in lead_triggers:
             if trigger.lower() in message_lower:
@@ -832,36 +877,53 @@ def chat():
                     'contact_info': config.get('contact', {})
                 })
 
-        # Step 2: Smart keyword matching
-        best_faq, confidence = find_best_match(message, faqs_list)
-
-        if best_faq:
-            app.logger.info(f"Smart match: '{best_faq.get('id')}' | confidence: {confidence}")
-            response_text = best_faq.get('answer')
-            log_conversation(client_id, message, response_text, matched=True, method='smart_keyword')
-            return jsonify({
-                'success': True,
-                'response': response_text,
-                'confidence': confidence,
-                'method': 'smart_keyword'
-            })
-
-        # Step 3: AI fallback
+        # Step 2: AI smart matching (primary — most accurate at scale)
         if ai_helper and ai_helper.enabled:
-            app.logger.info("No smart match found, trying AI...")
             try:
                 ai_faq, ai_confidence = ai_helper.find_best_faq(message, faqs_list)
                 if ai_faq and ai_confidence > 0.5:
-                    response_text = ai_faq.get('answer')
-                    log_conversation(client_id, message, response_text, matched=True, method='ai')
+                    # Shape response with vertical persona if available
+                    if vertical_system_prompt:
+                        response_text = ai_helper.generate_vertical_response(
+                            message, ai_faq, vertical_system_prompt
+                        )
+                    else:
+                        response_text = ai_faq.get('answer')
+                    log_conversation(client_id, message, response_text, matched=True, method='ai_smart')
                     return jsonify({
                         'success': True,
                         'response': response_text,
                         'confidence': ai_confidence,
-                        'method': 'ai'
+                        'method': 'ai_smart'
                     })
+                # No FAQ match — use vertical persona to generate contextual response
+                elif faqs_list and vertical_system_prompt:
+                    response_text = ai_helper.generate_vertical_fallback(
+                        message, faqs_list, vertical_system_prompt
+                    )
+                    if response_text:
+                        log_conversation(client_id, message, response_text, matched=True, method='ai_vertical')
+                        return jsonify({
+                            'success': True,
+                            'response': response_text,
+                            'confidence': 0.6,
+                            'method': 'ai_vertical'
+                        })
             except Exception as ai_error:
-                app.logger.error(f"AI error: {ai_error}")
+                app.logger.error(f"AI smart matching error: {ai_error}")
+
+        # Step 3: Keyword matching fallback (used only if AI is disabled or failed)
+        best_faq, confidence = find_best_match(message, faqs_list)
+        if best_faq:
+            app.logger.info(f"Keyword fallback match: '{best_faq.get('id')}' | score: {confidence}")
+            response_text = best_faq.get('answer')
+            log_conversation(client_id, message, response_text, matched=True, method='keyword_fallback')
+            return jsonify({
+                'success': True,
+                'response': response_text,
+                'confidence': confidence,
+                'method': 'keyword_fallback'
+            })
 
         # Step 4: Fallback
         fallback = config.get('bot_settings', {}).get(
