@@ -579,6 +579,9 @@
                                     <!-- FAQs: all plans -->
                                     <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">📝 FAQs</a>
                                     <a href="/help-center?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">📚 Help Center</a>
+                                    {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}
+                                    <a href="/manage-client-users?client_id={{ client.client_id }}" class="btn-xs" style="background:rgba(167,139,250,0.12);color:#a78bfa;">👤 Client Login</a>
+                                    {% endif %}
 
                                     <!-- Embed: all plans (issue 4 fix) -->
                                     <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed">📋 Embed</button>

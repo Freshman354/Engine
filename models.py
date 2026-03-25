@@ -180,6 +180,20 @@ def init_db():
         )
     ''')
 
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS client_users (
+            id SERIAL PRIMARY KEY,
+            client_id TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            name TEXT,
+            role TEXT DEFAULT 'client',
+            invited_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_login TIMESTAMP
+        )
+    ''')
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -1149,6 +1163,109 @@ def delete_article(article_id, client_id):
         'DELETE FROM articles WHERE id=%s AND client_id=%s',
         (article_id, client_id)
     )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+# =====================================================================
+# CLIENT PORTAL USERS
+# =====================================================================
+
+def create_client_user(client_id, email, password, name, invited_by):
+    """Create a client-facing login. Returns id or None if email exists."""
+    import hashlib, os as _os
+    salt = _os.urandom(32)
+    pw_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
+    stored = salt.hex() + ':' + pw_hash.hex()
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''INSERT INTO client_users (client_id, email, password_hash, name, invited_by)
+               VALUES (%s, %s, %s, %s, %s) RETURNING id''',
+            (client_id, email.lower().strip(), stored, name, invited_by)
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return row['id'] if row else None
+    except Exception:
+        return None
+
+
+def verify_client_user(email, password):
+    """Verify client user credentials. Returns user dict or None."""
+    import hashlib
+    conn, cursor = get_db()
+    cursor.execute('SELECT * FROM client_users WHERE email = %s', (email.lower().strip(),))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if not row:
+        return None
+    stored = row['password_hash']
+    try:
+        salt_hex, hash_hex = stored.split(':')
+        salt = bytes.fromhex(salt_hex)
+        pw_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
+        if pw_hash.hex() == hash_hex:
+            conn, cursor = get_db()
+            cursor.execute('UPDATE client_users SET last_login=NOW() WHERE id=%s', (row['id'],))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return dict(row)
+    except Exception:
+        pass
+    return None
+
+
+def get_client_users(client_id):
+    """Get all users for a client."""
+    conn, cursor = get_db()
+    cursor.execute(
+        '''SELECT id, client_id, email, name, role, created_at, last_login
+           FROM client_users WHERE client_id = %s ORDER BY created_at DESC''',
+        (client_id,)
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    for r in rows:
+        for col in ('created_at', 'last_login'):
+            if r.get(col):
+                r[col] = r[col].isoformat()
+    return rows
+
+
+def get_client_user_by_id(user_id):
+    conn, cursor = get_db()
+    cursor.execute('SELECT * FROM client_users WHERE id = %s', (user_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_client_user(client_user_id, client_id):
+    conn, cursor = get_db()
+    cursor.execute(
+        'DELETE FROM client_users WHERE id = %s AND client_id = %s',
+        (client_user_id, client_id)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def update_client_user_password(client_user_id, new_password):
+    import hashlib, os as _os
+    salt = _os.urandom(32)
+    pw_hash = hashlib.pbkdf2_hmac('sha256', new_password.encode(), salt, 100000)
+    stored = salt.hex() + ':' + pw_hash.hex()
+    conn, cursor = get_db()
+    cursor.execute('UPDATE client_users SET password_hash=%s WHERE id=%s', (stored, client_user_id))
     conn.commit()
     cursor.close()
     conn.close()

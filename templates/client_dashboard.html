@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Portal — {{ client.company_name or 'My Portal' }}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;}
+        body{font-family:'Inter',sans-serif;background:#f1f5f9;color:#1e293b;min-height:100vh;}
+        .topbar{background:#fff;border-bottom:1px solid #e2e8f0;padding:0 32px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+        .brand{font-size:18px;font-weight:800;color:#6366f1;}
+        .brand span{color:#1e293b;}
+        .user-info{display:flex;align-items:center;gap:12px;font-size:14px;color:#64748b;}
+        .user-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#a78bfa);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;}
+        .logout-btn{padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600;color:#ef4444;border:1px solid rgba(239,68,68,0.3);background:rgba(239,68,68,0.05);text-decoration:none;transition:all 0.2s;}
+        .logout-btn:hover{background:rgba(239,68,68,0.1);}
+        .container{max-width:1100px;margin:0 auto;padding:32px 24px;}
+        .page-title{font-size:24px;font-weight:800;margin-bottom:4px;}
+        .page-sub{color:#64748b;font-size:14px;margin-bottom:28px;}
+        .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:28px;}
+        .stat-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:20px 24px;}
+        .stat-label{font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;}
+        .stat-value{font-size:28px;font-weight:800;color:#1e293b;}
+        .section{background:#fff;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:24px;overflow:hidden;}
+        .section-header{padding:18px 24px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;}
+        .section-title{font-size:15px;font-weight:700;}
+        .section-body{padding:20px 24px;}
+        table{width:100%;border-collapse:collapse;}
+        th{text-align:left;font-size:12px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em;padding:8px 12px;border-bottom:1px solid #f1f5f9;}
+        td{padding:12px;font-size:14px;color:#374151;border-bottom:1px solid #f8fafc;}
+        tr:last-child td{border-bottom:none;}
+        tr:hover td{background:#f8fafc;}
+        .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;}
+        .badge-green{background:rgba(16,185,129,0.1);color:#059669;}
+        .empty{text-align:center;padding:40px;color:#94a3b8;font-size:14px;}
+        .tabs{display:flex;border-bottom:1px solid #e2e8f0;padding:0 24px;}
+        .tab{padding:14px 16px;font-size:14px;font-weight:600;color:#94a3b8;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.2s;}
+        .tab.active{color:#6366f1;border-bottom-color:#6366f1;}
+        .tab-panel{display:none;padding:20px 24px;}
+        .tab-panel.active{display:block;}
+        @media(max-width:640px){.stats{grid-template-columns:1fr;}.topbar{padding:0 16px;}.container{padding:20px 16px;}}
+    </style>
+</head>
+<body>
+    <div class="topbar">
+        <div class="brand">{{ client.company_name or 'Client Portal' }}</div>
+        <div class="user-info">
+            <div class="user-avatar">{{ client_user_name[0]|upper if client_user_name else 'C' }}</div>
+            <span>{{ client_user_name or client_user_email }}</span>
+            <a href="/client-logout" class="logout-btn">Logout</a>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="page-title">Welcome, {{ client_user_name or 'there' }} 👋</div>
+        <div class="page-sub">Here's an overview of your chatbot activity.</div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">Total Leads</div>
+                <div class="stat-value">{{ lead_count }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">FAQs Trained</div>
+                <div class="stat-value">{{ faq_count }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Help Articles</div>
+                <div class="stat-value">{{ articles|length }}</div>
+            </div>
+        </div>
+
+        <!-- LEADS -->
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">📥 Captured Leads</div>
+                <span style="font-size:13px;color:#94a3b8;">{{ lead_count }} total</span>
+            </div>
+            {% if leads %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Company</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lead in leads[:50] %}
+                    <tr>
+                        <td><strong>{{ lead.name or '—' }}</strong></td>
+                        <td>{{ lead.email or '—' }}</td>
+                        <td>{{ lead.phone or '—' }}</td>
+                        <td>{{ lead.company or '—' }}</td>
+                        <td style="color:#94a3b8;font-size:12px;">{{ lead.created_at[:10] if lead.created_at else '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">No leads captured yet. Your chatbot will collect leads here automatically.</div>
+            {% endif %}
+        </div>
+
+        <!-- FAQs -->
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">📝 Your FAQs</div>
+                <span style="font-size:13px;color:#94a3b8;">{{ faq_count }} total</span>
+            </div>
+            {% if faqs %}
+            <table>
+                <thead>
+                    <tr><th>Question</th><th>Answer</th></tr>
+                </thead>
+                <tbody>
+                    {% for faq in faqs[:20] %}
+                    <tr>
+                        <td style="font-weight:600;max-width:300px;">{{ faq.question }}</td>
+                        <td style="color:#64748b;max-width:400px;">{{ faq.answer[:120] }}{{ '...' if faq.answer|length > 120 else '' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if faq_count > 20 %}
+            <div style="padding:12px 24px;font-size:13px;color:#94a3b8;border-top:1px solid #f1f5f9;">Showing 20 of {{ faq_count }} FAQs.</div>
+            {% endif %}
+            {% else %}
+            <div class="empty">No FAQs yet. Your chatbot administrator will add them shortly.</div>
+            {% endif %}
+        </div>
+
+        <!-- Help Center Articles -->
+        {% if articles %}
+        <div class="section">
+            <div class="section-header">
+                <div class="section-title">📚 Help Center Articles</div>
+            </div>
+            <table>
+                <thead>
+                    <tr><th>Title</th><th>Category</th></tr>
+                </thead>
+                <tbody>
+                    {% for article in articles %}
+                    <tr>
+                        <td style="font-weight:600;">{{ article.title }}</td>
+                        <td><span class="badge badge-green">{{ article.category or 'General' }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

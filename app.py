@@ -2946,6 +2946,183 @@ def client_portal():
 # LEGAL PAGES
 # =====================================================================
 
+# =====================================================================
+# CLIENT PORTAL — CLIENT-FACING LOGINS (Pro / Agency / Enterprise)
+# =====================================================================
+
+@app.route('/client-login', methods=['GET', 'POST'])
+def client_login():
+    """Login page for client-facing users."""
+    if request.method == 'POST':
+        email    = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
+        user     = models.verify_client_user(email, password)
+        if user:
+            session['client_user_id']  = user['id']
+            session['client_user_email'] = user['email']
+            session['client_user_name']  = user.get('name', email)
+            session['client_user_client_id'] = user['client_id']
+            return redirect(url_for('client_dashboard'))
+        return render_template('client_login.html', error='Invalid email or password')
+    return render_template('client_login.html')
+
+
+@app.route('/client-logout')
+def client_logout():
+    session.pop('client_user_id', None)
+    session.pop('client_user_email', None)
+    session.pop('client_user_name', None)
+    session.pop('client_user_client_id', None)
+    return redirect(url_for('client_login'))
+
+
+def client_login_required(f):
+    """Decorator for client-portal routes."""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get('client_user_id'):
+            return redirect(url_for('client_login'))
+        return f(*args, **kwargs)
+    return decorated
+
+
+@app.route('/client-dashboard')
+@client_login_required
+def client_dashboard():
+    client_id   = session['client_user_client_id']
+    client      = models.get_client_by_id(client_id)
+    leads       = models.get_leads(client_id)
+    faqs        = models.get_faqs(client_id)
+    articles    = models.get_articles(client_id)
+    # Serialize datetimes
+    for lead in leads:
+        if lead.get('created_at') and not isinstance(lead['created_at'], str):
+            lead['created_at'] = lead['created_at'].isoformat()
+    branding = {}
+    if client and client.get('branding_settings'):
+        try:
+            bs = json.loads(client['branding_settings']) if isinstance(client['branding_settings'], str) else client['branding_settings']
+            branding = bs.get('branding', {})
+        except Exception:
+            pass
+    return render_template(
+        'client_dashboard.html',
+        client=client,
+        branding=branding,
+        leads=leads,
+        faqs=faqs,
+        articles=articles,
+        client_user_name=session.get('client_user_name'),
+        client_user_email=session.get('client_user_email'),
+        faq_count=len(faqs),
+        lead_count=len(leads)
+    )
+
+
+# ── Agency owner: manage client logins ──────────────────────────────
+
+@app.route('/api/client-users', methods=['GET'])
+@login_required
+def list_client_users():
+    """List all client portal users for a given chatbot."""
+    client_id = request.args.get('client_id')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    users = models.get_client_users(client_id)
+    return jsonify({'success': True, 'users': users})
+
+
+@app.route('/api/client-users/invite', methods=['POST'])
+@login_required
+def invite_client_user():
+    """Create a client portal login (Pro / Agency / Enterprise only)."""
+    user = models.get_user_by_id(current_user.id)
+    plan = user.get('plan_type', 'free')
+    if plan not in ('pro', 'agency', 'enterprise', 'solo'):
+        return jsonify({'success': False, 'error': 'Client logins require Pro plan or above'}), 403
+
+    data      = request.get_json()
+    client_id = data.get('client_id')
+    email     = data.get('email', '').strip()
+    name      = data.get('name', '').strip()
+    password  = data.get('password', '').strip()
+
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not email or not password:
+        return jsonify({'success': False, 'error': 'Email and password are required'}), 400
+    if len(password) < 6:
+        return jsonify({'success': False, 'error': 'Password must be at least 6 characters'}), 400
+
+    uid = models.create_client_user(client_id, email, password, name, current_user.id)
+    if not uid:
+        return jsonify({'success': False, 'error': 'Email already exists or could not be created'}), 400
+
+    # Send welcome email to client
+    try:
+        client = models.get_client_by_id(client_id)
+        company = client.get('company_name', 'your chatbot portal') if client else 'your chatbot portal'
+        msg = Message(
+            subject=f"Your client portal access — {company}",
+            sender="Lumvi <support@lumvi.net>",
+            recipients=[email],
+            html=f"""
+<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#f8fafc;padding:40px;border-radius:16px;">
+  <div style="text-align:center;margin-bottom:28px;">
+    <div style="display:inline-block;background:linear-gradient(135deg,#6366f1,#a78bfa);border-radius:12px;padding:10px 20px;font-size:22px;font-weight:800;">⚡ {company}</div>
+  </div>
+  <h2 style="margin:0 0 12px;font-size:20px;">Your portal access is ready</h2>
+  <p style="color:#94a3b8;margin:0 0 24px;line-height:1.6;">Hi {name or email}, you've been given access to your client portal where you can view your leads, FAQs and analytics.</p>
+  <div style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:16px;margin-bottom:24px;">
+    <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;">Login URL</p>
+    <p style="margin:0;font-size:14px;color:#a5b4fc;">lumvi.net/client-login</p>
+    <p style="margin:12px 0 6px;font-size:13px;color:#94a3b8;">Email</p>
+    <p style="margin:0;font-size:14px;color:#f8fafc;">{email}</p>
+    <p style="margin:12px 0 6px;font-size:13px;color:#94a3b8;">Password</p>
+    <p style="margin:0;font-size:14px;color:#f8fafc;">{password}</p>
+  </div>
+  <a href="https://lumvi.net/client-login" style="display:block;text-align:center;background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff;text-decoration:none;padding:14px;border-radius:10px;font-weight:700;">Access My Portal →</a>
+</div>"""
+        )
+        mail.send(msg)
+    except Exception as e:
+        app.logger.error(f"Client invite email failed: {e}")
+
+    app.logger.info(f"Client user created: {email} for client {client_id} by user {current_user.id}")
+    return jsonify({'success': True, 'id': uid, 'message': f'Login created for {email}'})
+
+
+@app.route('/api/client-users/delete', methods=['POST'])
+@login_required
+def delete_client_user():
+    data      = request.get_json()
+    client_id = data.get('client_id')
+    user_id   = data.get('user_id')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    models.delete_client_user(user_id, client_id)
+    return jsonify({'success': True})
+
+
+@app.route('/manage-client-users')
+@login_required
+def manage_client_users_page():
+    """Page for agency owners to manage client logins."""
+    client_id = request.args.get('client_id')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return "Unauthorized", 403
+    user = models.get_user_by_id(current_user.id)
+    plan = user.get('plan_type', 'free')
+    if plan not in ('pro', 'agency', 'enterprise', 'solo'):
+        return render_template('upgrade_required.html',
+            feature='Client Logins',
+            description='Give your clients their own portal to view leads and analytics.',
+            min_plan='Pro'), 403
+    client = models.get_client_by_id(client_id)
+    return render_template('manage_client_users.html', client=client, client_id=client_id)
+
+
 @app.route('/terms')
 def terms():
     return render_template('terms.html')
