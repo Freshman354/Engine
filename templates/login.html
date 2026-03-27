@@ -3,246 +3,396 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Lumvi</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>Sign In — Lumvi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
         :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --dark-bg: #0f172a;
-            --card-bg: rgba(30, 41, 59, 0.8);
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --border: rgba(99, 102, 241, 0.25);
-            --input-bg: rgba(15, 23, 42, 0.6);
-            --accent: #06b6d4;
+            --cream:   #F7F4EF;
+            --panel:   #EDEAE3;
+            --gold:    #B8924A;
+            --gold-dk: #9A7A3A;
+            --dark:    #1C1917;
+            --mid:     #57534E;
+            --sub:     #A8A29E;
+            --border:  #E7E2DA;
+            --white:   #FFFFFF;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--dark-bg);
-            background-image:
-                radial-gradient(ellipse at 20% 50%, rgba(99,102,241,0.12) 0%, transparent 60%),
-                radial-gradient(ellipse at 80% 20%, rgba(167,139,250,0.08) 0%, transparent 50%);
+            font-family: 'DM Sans', sans-serif;
+            background: var(--cream);
+            display: flex;
             min-height: 100vh;
+        }
+
+        /* ── LEFT PANEL ── */
+        .left-panel {
+            width: 45%;
+            background: var(--panel);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 20px;
-            color: var(--text-main);
+            padding: 48px 40px;
+            position: relative;
+            overflow: hidden;
         }
 
-        /* Logo */
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 32px;
+        .left-panel::before {
+            content: '';
+            position: absolute;
+            width: 420px; height: 420px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(184,146,74,0.12) 0%, transparent 70%);
+            top: -60px; right: -60px;
+            pointer-events: none;
+        }
+
+        .left-panel::after {
+            content: '';
+            position: absolute;
+            width: 280px; height: 280px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(184,146,74,0.08) 0%, transparent 70%);
+            bottom: -40px; left: -40px;
+            pointer-events: none;
+        }
+
+        .brand-top {
+            position: absolute;
+            top: 32px; left: 36px;
+            display: flex; align-items: center; gap: 10px;
             text-decoration: none;
         }
-        .logo-mark {
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, var(--primary), #a78bfa);
+
+        .brand-mark {
+            width: 36px; height: 36px;
+            background: var(--dark);
             border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; color: #fff;
+            font-family: 'Fraunces', serif;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .brand-name {
+            font-family: 'Fraunces', serif;
+            font-size: 18px; font-weight: 600;
+            color: var(--dark); letter-spacing: -0.3px;
+        }
+
+        .illustration-wrap {
+            width: 100%; max-width: 340px;
+            margin-bottom: 32px; position: relative; z-index: 1;
+        }
+
+        .illustration-wrap svg {
+            width: 100%; height: auto;
+        }
+
+        .left-copy { text-align: center; position: relative; z-index: 1; }
+
+        .left-copy h2 {
+            font-family: 'Fraunces', serif;
+            font-size: 22px; font-weight: 600;
+            color: var(--dark); line-height: 1.35;
+            margin-bottom: 10px; letter-spacing: -0.3px;
+        }
+
+        .left-copy p {
+            font-size: 14px; color: var(--mid);
+            font-weight: 300; line-height: 1.6;
+        }
+
+        .dots {
+            display: flex; gap: 7px; justify-content: center;
+            margin-top: 24px;
+        }
+
+        .dot {
+            width: 8px; height: 8px; border-radius: 999px;
+            background: var(--sub); transition: all 0.3s;
+        }
+
+        .dot.active { width: 22px; background: var(--gold); }
+
+        /* ── RIGHT PANEL ── */
+        .right-panel {
+            flex: 1;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
-            box-shadow: 0 0 20px rgba(99,102,241,0.4);
-        }
-        .logo-text {
-            font-size: 22px;
-            font-weight: 800;
-            background: linear-gradient(135deg, #f8fafc, #a78bfa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            padding: 48px 40px;
+            background: var(--white);
         }
 
-        /* Card */
-        .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            padding: 40px;
-            width: 100%;
-            max-width: 420px;
-            backdrop-filter: blur(20px);
-            box-shadow: 0 25px 60px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05);
+        .form-box { width: 100%; max-width: 380px; }
+
+        .form-header { margin-bottom: 32px; }
+
+        .form-header h1 {
+            font-family: 'Fraunces', serif;
+            font-size: 30px; font-weight: 700;
+            color: var(--dark); letter-spacing: -0.5px;
+            margin-bottom: 6px;
         }
 
-        .card-header {
-            text-align: center;
-            margin-bottom: 32px;
-        }
-        .card-header h1 {
-            font-size: 26px;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-        .card-header p {
-            color: var(--text-muted);
-            font-size: 14px;
+        .form-header p { font-size: 14px; color: var(--sub); font-weight: 300; }
+
+        .form-group { margin-bottom: 18px; }
+
+        .form-group label {
+            display: block; font-size: 12px; font-weight: 500;
+            color: var(--mid); margin-bottom: 7px;
+            text-transform: uppercase; letter-spacing: 0.06em;
         }
 
-        /* Form */
-        .form-group { margin-bottom: 20px; }
+        .input-wrap { position: relative; }
 
-        label {
-            display: block;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+        .form-group input {
+            width: 100%; padding: 13px 16px;
+            background: var(--cream);
+            border: 1.5px solid var(--border);
+            border-radius: 10px; font-size: 14px;
+            color: var(--dark); font-family: 'DM Sans', sans-serif;
+            transition: all 0.2s; outline: none;
         }
 
-        input {
-            width: 100%;
-            padding: 13px 16px;
-            background: var(--input-bg);
-            border: 1px solid rgba(99,102,241,0.2);
-            border-radius: 10px;
-            font-size: 14px;
-            color: var(--text-main);
-            font-family: 'Inter', sans-serif;
-            transition: all 0.2s;
-        }
-        input::placeholder { color: #475569; }
-        input:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
-            background: rgba(15,23,42,0.9);
+        .form-group input::placeholder { color: var(--sub); }
+
+        .form-group input:focus {
+            border-color: var(--gold);
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(184,146,74,0.12);
         }
 
-        /* Button */
-        .btn {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, var(--primary), #7c3aed);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 15px;
-            font-weight: 700;
-            cursor: pointer;
-            font-family: 'Inter', sans-serif;
-            transition: all 0.2s;
-            margin-top: 8px;
-            box-shadow: 0 4px 15px rgba(99,102,241,0.4);
-        }
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(99,102,241,0.5);
-        }
-        .btn:active { transform: translateY(0); }
-
-        /* Error */
-        .error {
-            background: rgba(239,68,68,0.1);
-            border: 1px solid rgba(239,68,68,0.3);
-            color: #fca5a5;
-            padding: 12px 16px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            font-size: 14px;
+        .pw-toggle {
+            position: absolute; right: 14px; top: 50%;
+            transform: translateY(-50%);
+            background: none; border: none; cursor: pointer;
+            color: var(--sub); font-size: 16px; padding: 0;
         }
 
-        /* Divider */
+        .forgot-row {
+            display: flex; justify-content: flex-end;
+            margin-top: -10px; margin-bottom: 20px;
+        }
+
+        .forgot-row a {
+            font-size: 12px; color: var(--gold); font-weight: 500;
+            text-decoration: none;
+        }
+
+        .forgot-row a:hover { text-decoration: underline; }
+
+        .btn-submit {
+            width: 100%; padding: 14px;
+            background: var(--gold);
+            color: #fff; border: none; border-radius: 10px;
+            font-size: 15px; font-weight: 600;
+            font-family: 'DM Sans', sans-serif;
+            cursor: pointer; transition: all 0.25s;
+            letter-spacing: 0.01em;
+        }
+
+        .btn-submit:hover {
+            background: var(--gold-dk);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(184,146,74,0.35);
+        }
+
         .divider {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin: 24px 0;
+            display: flex; align-items: center; gap: 12px;
+            margin: 22px 0; color: var(--sub); font-size: 12px;
         }
+
         .divider::before, .divider::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: rgba(99,102,241,0.2);
-        }
-        .divider span {
-            color: var(--text-muted);
-            font-size: 13px;
+            content: ''; flex: 1; height: 1px; background: var(--border);
         }
 
-        /* Footer link */
-        .footer-link {
-            text-align: center;
-            font-size: 14px;
-            color: var(--text-muted);
+        .btn-social {
+            width: 100%; padding: 12px;
+            background: var(--cream); border: 1.5px solid var(--border);
+            border-radius: 10px; font-size: 14px; font-weight: 500;
+            color: var(--dark); font-family: 'DM Sans', sans-serif;
+            cursor: pointer; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center; gap: 9px;
+            margin-bottom: 10px; text-decoration: none;
         }
-        .footer-link a {
-            color: var(--primary);
-            text-decoration: none;
-            font-weight: 600;
-            transition: color 0.2s;
-        }
-        .footer-link a:hover { color: #a78bfa; }
 
-        /* Back to home */
-        .back-home {
-            margin-top: 24px;
-            text-align: center;
+        .btn-social:hover { border-color: var(--gold); background: #fff; }
+
+        .error-box {
+            background: #FEF2F2; border: 1px solid #FECACA;
+            color: #DC2626; padding: 12px 14px; border-radius: 9px;
+            font-size: 13px; margin-bottom: 18px;
         }
-        .back-home a {
-            color: var(--text-muted);
-            text-decoration: none;
-            font-size: 13px;
-            transition: color 0.2s;
+
+        .signup-link {
+            text-align: center; margin-top: 24px;
+            font-size: 13px; color: var(--sub);
         }
-        .back-home a:hover { color: var(--text-main); }
+
+        .signup-link a { color: var(--gold); font-weight: 600; text-decoration: none; }
+        .signup-link a:hover { text-decoration: underline; }
+
+        .copyright {
+            text-align: center; margin-top: 32px;
+            font-size: 11px; color: var(--sub);
+        }
+
+        @media (max-width: 768px) {
+            .left-panel { display: none; }
+            .right-panel { padding: 32px 20px; }
+        }
     </style>
 </head>
 <body>
 
-    <a href="/" class="logo">
-        <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi Logo" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid rgba(99,102,241,0.4);box-shadow:0 0 16px rgba(99,102,241,0.3);">
-        <span class="logo-text">Lumvi</span>
-    </a>
+    <!-- LEFT PANEL -->
+    <div class="left-panel">
+        <a href="/" class="logo">
+            <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi Logo" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid rgba(99,102,241,0.4);box-shadow:0 0 16px rgba(99,102,241,0.3);">
+            <span class="logo-text">Lumvi</span>
+        </a>
 
-    <div class="card">
-        <div class="card-header">
-            <h1>Welcome back</h1>
-            <p>Log in to manage your chatbots</p>
+        <div class="illustration-wrap">
+            <!-- Inline SVG illustration -->
+            <svg viewBox="0 0 400 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Background shape -->
+                <ellipse cx="200" cy="280" rx="160" ry="20" fill="rgba(184,146,74,0.08)"/>
+
+                <!-- Desk surface -->
+                <rect x="60" y="220" width="280" height="12" rx="6" fill="#D4C4A8"/>
+
+                <!-- Monitor -->
+                <rect x="120" y="100" width="160" height="110" rx="8" fill="#1C1917"/>
+                <rect x="128" y="108" width="144" height="86" rx="4" fill="#2D2A26"/>
+                <!-- Screen content -->
+                <rect x="136" y="116" width="60" height="8" rx="3" fill="#B8924A" opacity="0.8"/>
+                <rect x="136" y="130" width="128" height="5" rx="2.5" fill="#57534E" opacity="0.5"/>
+                <rect x="136" y="140" width="100" height="5" rx="2.5" fill="#57534E" opacity="0.5"/>
+                <!-- Chart bars on screen -->
+                <rect x="136" y="165" width="14" height="22" rx="3" fill="#B8924A"/>
+                <rect x="154" y="158" width="14" height="29" rx="3" fill="#B8924A" opacity="0.7"/>
+                <rect x="172" y="152" width="14" height="35" rx="3" fill="#B8924A" opacity="0.9"/>
+                <rect x="190" y="162" width="14" height="25" rx="3" fill="#B8924A" opacity="0.6"/>
+                <rect x="208" y="155" width="14" height="32" rx="3" fill="#B8924A" opacity="0.8"/>
+                <rect x="226" y="148" width="14" height="39" rx="3" fill="#B8924A"/>
+                <!-- Monitor stand -->
+                <rect x="192" y="210" width="16" height="14" rx="2" fill="#D4C4A8"/>
+                <rect x="178" y="222" width="44" height="6" rx="3" fill="#C4B49A"/>
+
+                <!-- Person sitting -->
+                <!-- Body -->
+                <ellipse cx="110" cy="195" rx="22" ry="28" fill="#B8924A"/>
+                <!-- Head -->
+                <circle cx="110" cy="155" r="18" fill="#F5CBA7"/>
+                <!-- Hair -->
+                <ellipse cx="110" cy="145" rx="18" ry="10" fill="#3D2B1F"/>
+                <ellipse cx="94" cy="155" rx="5" ry="8" fill="#3D2B1F"/>
+                <!-- Arm pointing at screen -->
+                <path d="M125 185 Q160 175 175 168" stroke="#F5CBA7" stroke-width="8" stroke-linecap="round"/>
+                <!-- Legs -->
+                <rect x="96" y="218" width="14" height="24" rx="7" fill="#4A3728" transform="rotate(-5 96 218)"/>
+                <rect x="114" y="218" width="14" height="24" rx="7" fill="#4A3728" transform="rotate(5 114 218)"/>
+                <!-- Shoes -->
+                <ellipse cx="93" cy="241" rx="11" ry="5" fill="#2D2010"/>
+                <ellipse cx="121" cy="241" rx="11" ry="5" fill="#2D2010"/>
+
+                <!-- Floating card 1 -->
+                <g transform="translate(280, 120)">
+                    <rect width="90" height="56" rx="10" fill="white" filter="url(#shadow)"/>
+                    <rect x="10" y="12" width="30" height="5" rx="2.5" fill="#B8924A"/>
+                    <rect x="10" y="22" width="70" height="4" rx="2" fill="#E7E2DA"/>
+                    <rect x="10" y="30" width="50" height="4" rx="2" fill="#E7E2DA"/>
+                    <rect x="10" y="42" width="24" height="8" rx="4" fill="#B8924A"/>
+                </g>
+
+                <!-- Floating card 2 -->
+                <g transform="translate(30, 110)">
+                    <rect width="76" height="50" rx="10" fill="white" filter="url(#shadow)"/>
+                    <circle cx="20" cy="20" r="10" fill="rgba(184,146,74,0.15)"/>
+                    <text x="16" y="25" font-size="12" fill="#B8924A">✓</text>
+                    <rect x="36" y="14" width="30" height="4" rx="2" fill="#1C1917"/>
+                    <rect x="36" y="22" width="24" height="4" rx="2" fill="#A8A29E"/>
+                    <rect x="10" y="36" width="56" height="6" rx="3" fill="#E7E2DA"/>
+                </g>
+
+                <defs>
+                    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="rgba(0,0,0,0.1)"/>
+                    </filter>
+                </defs>
+            </svg>
         </div>
 
-        {% if error %}
-        <div class="error">⚠️ {{ error }}</div>
-        {% endif %}
+        <div class="left-copy">
+            <h2>Manage your chatbots<br>and grow your clients</h2>
+            <p>The white-label AI chatbot platform built<br>for agencies and growing businesses.</p>
+            <div class="dots">
+                <div class="dot active"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+            </div>
+        </div>
+    </div>
 
-        <form method="POST">
-            <div class="form-group">
-                <label>Email Address</label>
-                <input type="email" name="email" placeholder="you@company.com" required autofocus>
+    <!-- RIGHT PANEL -->
+    <div class="right-panel">
+        <div class="form-box">
+            <div class="form-header">
+                <h1>Welcome Back!</h1>
+                <p>Please sign in to continue</p>
             </div>
 
-            <div class="form-group">
-                <label>Password</label>
-                <input type="password" name="password" placeholder="••••••••" required>
-                <div style="text-align:right;margin-top:6px;">
-                    <a href="/forgot-password" style="font-size:12px;color:#6366f1;text-decoration:none;font-weight:600;">Forgot password?</a>
+            {% if error %}
+            <div class="error-box">⚠️ {{ error }}</div>
+            {% endif %}
+
+            <form method="POST">
+                <div class="form-group">
+                    <label>Email Address</label>
+                    <input type="email" name="email" placeholder="you@company.com" required autofocus>
                 </div>
+
+                <div class="form-group">
+                    <label>Password</label>
+                    <div class="input-wrap">
+                        <input type="password" name="password" id="password-field" placeholder="••••••••" required>
+                        <button type="button" class="pw-toggle" onclick="togglePw()">👁</button>
+                    </div>
+                </div>
+
+                <div class="forgot-row">
+                    <a href="/forgot-password">Forgot password?</a>
+                </div>
+
+                <button type="submit" class="btn-submit">Sign In</button>
+            </form>
+
+            <div class="divider">or</div>
+
+            <div class="signup-link">
+                Don't have an account? <a href="/signup">Go to Registration</a>
             </div>
 
-            <button type="submit" class="btn">Log In →</button>
-        </form>
-
-        <div class="divider"><span>Don't have an account?</span></div>
-
-        <div class="footer-link">
-            <a href="/signup">Create a free account →</a>
+            <div class="copyright">© 2026 Lumvi Platform</div>
         </div>
     </div>
 
-    <div class="back-home">
-        <a href="/">← Back to Lumvi.net</a>
-    </div>
-
+    <script>
+        function togglePw() {
+            const f = document.getElementById('password-field');
+            f.type = f.type === 'password' ? 'text' : 'password';
+        }
+    </script>
 </body>
 </html>
