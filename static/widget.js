@@ -37,7 +37,7 @@
         </svg>
     `;
     
-    // Button styles
+    // Button styles — color loaded from client config below
     Object.assign(button.style, {
         position: 'fixed',
         bottom: '20px',
@@ -56,6 +56,21 @@
         justifyContent: 'center',
         transition: 'all 0.3s ease'
     });
+
+    // Fetch client config and apply brand color to button
+    fetch(`${baseUrl}/api/config?client_id=${clientId}`)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success && data.config) {
+                var color = (data.config.branding && data.config.branding.primary_color) || '#6366f1';
+                button.style.background = color;
+                button.style.boxShadow = '0 4px 16px ' + color + '66';
+                // Store color for hover effects
+                button._brandColor = color;
+            }
+        })
+        .catch(function() {});
+
     
     // Create chat container
     const container = document.createElement('div');
@@ -96,12 +111,14 @@
     // Button hover effects
     button.addEventListener('mouseenter', function() {
         this.style.transform = 'scale(1.1)';
-        this.style.boxShadow = '0 6px 24px rgba(99, 102, 241, 0.6)';
+        var c = this._brandColor || '#6366f1';
+        this.style.boxShadow = '0 6px 24px ' + c + '99';
     });
     
     button.addEventListener('mouseleave', function() {
         this.style.transform = 'scale(1)';
-        this.style.boxShadow = '0 4px 16px rgba(99, 102, 241, 0.4)';
+        var c = this._brandColor || '#6366f1';
+        this.style.boxShadow = '0 4px 16px ' + c + '66';
     });
     
     // Toggle chat
