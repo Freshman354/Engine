@@ -3,896 +3,664 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Lumvi</title>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <title>Dashboard — Lumvi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary: #4F6EF7;
-            --primary-light: #EEF1FF;
-            --primary-dark: #3451d1;
-            --sidebar-bg: #ffffff;
-            --page-bg: #F5F6FA;
-            --card-bg: #ffffff;
-            --text-main: #1a1d2e;
-            --text-muted: #8b92a5;
-            --text-light: #b0b7c3;
-            --border: #eceef3;
-            --success: #22c55e;
-            --success-light: #f0fdf4;
-            --warning: #f59e0b;
-            --warning-light: #fffbeb;
-            --danger: #ef4444;
-            --danger-light: #fef2f2;
-            --sidebar-width: 220px;
-        }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+    --cream:#F7F4EF; --cream2:#F0EBE1; --panel:#EDEAE3;
+    --gold:#B8924A; --gold-lt:rgba(184,146,74,0.12); --gold-dk:#9A7A3A;
+    --dark:#1C1917; --mid:#57534E; --sub:#A8A29E; --border:#E7E2DA;
+    --white:#FFFFFF;
+    --success:#16A34A; --success-lt:#F0FDF4;
+    --danger:#EF4444; --danger-lt:#FEF2F2;
+    --warning:#D97706; --warning-lt:#FFFBEB;
+    --sidebar-w:224px;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;display:flex;}
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+/* ── SIDEBAR ── */
+.sidebar{
+    width:var(--sidebar-w);background:var(--white);
+    border-right:1px solid var(--border);
+    display:flex;flex-direction:column;
+    position:fixed;top:0;left:0;height:100vh;z-index:50;
+    transition:transform 0.3s ease;
+}
+.sidebar-logo{
+    padding:20px 18px;border-bottom:1px solid var(--border);
+    display:flex;align-items:center;gap:10px;
+}
+.logo-img{width:34px;height:34px;border-radius:9px;object-fit:cover;flex-shrink:0;}
+.logo-text{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
+.sidebar-nav{flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
+.nav-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--sub);padding:10px 10px 4px;margin-top:6px;}
+.nav-item{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 12px;border-radius:9px;
+    text-decoration:none;color:var(--mid);
+    font-size:13.5px;font-weight:500;
+    transition:all 0.15s;cursor:pointer;
+}
+.nav-item:hover{background:var(--cream);color:var(--dark);}
+.nav-item.active{background:var(--gold-lt);color:var(--gold-dk);font-weight:600;}
+.nav-item svg{width:16px;height:16px;flex-shrink:0;opacity:0.65;}
+.nav-item.active svg{opacity:1;}
+.nav-badge{
+    margin-left:auto;background:var(--gold);color:#fff;
+    font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;
+}
+.sidebar-footer{padding:14px 12px;border-top:1px solid var(--border);}
+.user-profile{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;cursor:pointer;transition:background 0.15s;}
+.user-profile:hover{background:var(--cream);}
+.user-avatar{width:32px;height:32px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;}
+.user-info{flex:1;min-width:0;}
+.user-name{font-size:13px;font-weight:600;color:var(--dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.user-plan{font-size:11px;color:var(--sub);text-transform:capitalize;}
 
-        body {
-            font-family: 'DM Sans', sans-serif;
-            background: var(--page-bg);
-            color: var(--text-main);
-            min-height: 100vh;
-            display: flex;
-        }
+/* ── MAIN ── */
+.main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh;}
 
-        /* ── SIDEBAR ── */
-        .sidebar {
-            width: var(--sidebar-width);
-            background: var(--sidebar-bg);
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            position: fixed;
-            top: 0; left: 0;
-            height: 100vh;
-            z-index: 50;
-        }
+/* ── TOPBAR ── */
+.topbar{
+    background:var(--white);border-bottom:1px solid var(--border);
+    padding:0 28px;height:60px;
+    display:flex;align-items:center;justify-content:space-between;
+    position:sticky;top:0;z-index:40;
+}
+.topbar-left{display:flex;align-items:center;gap:12px;}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:6px;border-radius:8px;color:var(--mid);}
+.hamburger:hover{background:var(--cream);}
+.topbar-title{font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--dark);}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.plan-chip{padding:4px 12px;background:var(--gold-lt);color:var(--gold-dk);border-radius:20px;font-size:12px;font-weight:600;text-transform:capitalize;border:1px solid rgba(184,146,74,0.2);}
+.btn-logout{padding:7px 14px;background:transparent;color:var(--sub);border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;transition:all 0.15s;font-family:'DM Sans',sans-serif;}
+.btn-logout:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-lt);}
 
-        .sidebar-logo {
-            padding: 22px 20px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+/* ── PAGE CONTENT ── */
+.page-content{padding:28px 28px;}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:14px;}
+.page-header h1{font-family:'Fraunces',serif;font-size:24px;font-weight:700;letter-spacing:-0.3px;margin-bottom:2px;}
+.page-header p{font-size:13px;color:var(--sub);}
+.page-header-actions{display:flex;gap:10px;flex-wrap:wrap;}
 
-        .logo-icon {
-            width: 34px; height: 34px;
-            background: var(--primary);
-            border-radius: 9px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 16px; flex-shrink: 0;
-        }
+/* ── BUTTONS ── */
+.btn{
+    padding:9px 18px;border-radius:9px;font-weight:600;
+    cursor:pointer;text-decoration:none;
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:13.5px;transition:all 0.2s;
+    border:none;font-family:'DM Sans',sans-serif;
+}
+.btn-primary{background:var(--gold);color:#fff;box-shadow:0 2px 8px rgba(184,146,74,0.3);}
+.btn-primary:hover{background:var(--gold-dk);transform:translateY(-1px);box-shadow:0 4px 14px rgba(184,146,74,0.4);}
+.btn-secondary{background:var(--white);color:var(--dark);border:1px solid var(--border);}
+.btn-secondary:hover{background:var(--cream);border-color:#ccc;}
+.btn-upgrade{background:linear-gradient(135deg,var(--warning),#b45309);color:#fff;box-shadow:0 2px 8px rgba(217,119,6,0.3);}
+.btn-upgrade:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(217,119,6,0.4);}
+.btn-affiliate{background:var(--success-lt);color:var(--success);border:1px solid #bbf7d0;}
+.btn-affiliate:hover{background:#dcfce7;}
+.btn-danger{background:var(--danger);color:#fff;}
+.btn-danger:hover{background:#dc2626;}
+.btn-cancel{background:var(--white);color:var(--mid);border:1px solid var(--border);}
 
-        .logo-text { font-size: 17px; font-weight: 700; color: var(--text-main); letter-spacing: -0.3px; }
+/* ── STATS ── */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px;}
+.stat-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px 22px;transition:all 0.2s;}
+.stat-card:hover{box-shadow:0 4px 20px rgba(0,0,0,0.06);border-color:rgba(184,146,74,0.2);}
+.stat-label{font-size:12px;color:var(--sub);font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.stat-icon{width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:11px;}
+.stat-value{font-size:26px;font-weight:700;letter-spacing:-0.5px;color:var(--dark);font-family:'Fraunces',serif;}
+.stat-trend{font-size:12px;font-weight:600;display:flex;align-items:center;gap:2px;margin-left:8px;}
+.stat-trend.up{color:var(--success);}
+.stat-trend.neutral{color:var(--sub);}
+.stat-sub{font-size:11px;color:var(--sub);margin-top:4px;}
 
-        .sidebar-nav {
-            flex: 1;
-            padding: 16px 12px;
-            display: flex; flex-direction: column; gap: 2px;
-            overflow-y: auto;
-        }
+/* ── SECTION ── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.section-title{font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--dark);}
 
-        .nav-section-label {
-            font-size: 10px; font-weight: 600;
-            text-transform: uppercase; letter-spacing: 1px;
-            color: var(--text-light);
-            padding: 10px 10px 6px; margin-top: 8px;
-        }
+/* ── TABLE ── */
+.clients-table-wrap{background:var(--white);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+.clients-table{width:100%;border-collapse:collapse;}
+.clients-table thead tr{background:var(--cream);border-bottom:1px solid var(--border);}
+.clients-table th{padding:11px 20px;text-align:left;font-size:11px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:0.06em;}
+.clients-table td{padding:14px 20px;font-size:13.5px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.clients-table tbody tr:last-child td{border-bottom:none;}
+.clients-table tbody tr:hover{background:var(--cream);}
+.client-cell{display:flex;align-items:center;gap:12px;}
+.client-avatar-sm{
+    width:36px;height:36px;border-radius:10px;
+    background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:var(--gold-dk);flex-shrink:0;
+}
+.client-cell-name{font-weight:600;color:var(--dark);font-size:14px;}
+.client-cell-id{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;}
+.status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;}
+.status-badge.active{background:var(--success-lt);color:var(--success);}
+.status-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;}
 
-        .nav-item {
-            display: flex; align-items: center; gap: 10px;
-            padding: 9px 12px; border-radius: 9px;
-            text-decoration: none; color: var(--text-muted);
-            font-size: 13.5px; font-weight: 500;
-            transition: all 0.15s; cursor: pointer;
-        }
+/* ── ACTION BUTTONS ── */
+.table-actions{display:flex;gap:5px;flex-wrap:wrap;}
+.btn-xs{
+    padding:5px 10px;font-size:11.5px;border-radius:7px;border:none;
+    cursor:pointer;font-weight:600;text-decoration:none;
+    display:inline-flex;align-items:center;gap:3px;
+    transition:all 0.15s;font-family:'DM Sans',sans-serif;
+}
+.btn-xs-manage{background:var(--gold-lt);color:var(--gold-dk);}
+.btn-xs-manage:hover{background:rgba(184,146,74,0.2);}
+.btn-xs-analytics{background:var(--success-lt);color:var(--success);}
+.btn-xs-analytics:hover{background:#dcfce7;}
+.btn-xs-theme{background:var(--warning-lt);color:var(--warning);}
+.btn-xs-theme:hover{background:#fef3c7;}
+.btn-xs-embed{background:#fdf2f8;color:#9d174d;}
+.btn-xs-embed:hover{background:#fce7f3;}
+.btn-xs-locked{background:var(--panel);color:var(--sub);cursor:not-allowed;}
+.btn-xs-delete{background:var(--danger-lt);color:var(--danger);}
+.btn-xs-delete:hover{background:#fecaca;}
 
-        .nav-item:hover { background: var(--page-bg); color: var(--text-main); }
-        .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
-        .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.7; }
-        .nav-item.active svg { opacity: 1; }
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:60px 20px;}
+.empty-icon{width:64px;height:64px;background:var(--gold-lt);border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px;}
+.empty-state h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:6px;}
+.empty-state p{color:var(--sub);font-size:14px;margin-bottom:20px;}
 
-        .nav-badge {
-            margin-left: auto;
-            background: var(--primary); color: white;
-            font-size: 10px; font-weight: 700;
-            padding: 2px 7px; border-radius: 20px;
-        }
+/* ── MODALS ── */
+.modal,.delete-modal,.embed-modal{
+    display:none;position:fixed;inset:0;
+    background:rgba(28,25,23,0.5);backdrop-filter:blur(4px);
+    z-index:1000;align-items:center;justify-content:center;padding:20px;
+}
+.modal-content,.embed-modal-content{
+    background:var(--white);border:1px solid var(--border);
+    border-radius:20px;padding:32px;max-width:460px;width:100%;
+    box-shadow:0 20px 60px rgba(0,0,0,0.1);
+    animation:slideUp 0.25s ease;
+}
+.delete-modal-content{
+    background:var(--white);border:1px solid var(--border);
+    border-radius:20px;padding:32px;max-width:420px;width:100%;
+    box-shadow:0 20px 60px rgba(0,0,0,0.12);
+    animation:slideUp 0.25s ease;text-align:center;
+}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;}
+.modal-header h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;}
+.modal-close{background:var(--cream);border:1px solid var(--border);font-size:18px;cursor:pointer;color:var(--mid);width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
+.modal-close:hover{background:var(--panel);color:var(--dark);}
+.form-group{margin-bottom:18px;}
+.form-group label{display:block;font-size:12px;font-weight:600;color:var(--mid);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;}
+.form-group input,.form-group select{width:100%;padding:11px 14px;background:var(--cream);border:1.5px solid var(--border);border-radius:9px;font-size:14px;color:var(--dark);font-family:'DM Sans',sans-serif;transition:all 0.2s;outline:none;}
+.form-group input:focus,.form-group select:focus{border-color:var(--gold);background:var(--white);box-shadow:0 0 0 3px var(--gold-lt);}
+.delete-icon{width:56px;height:56px;border-radius:16px;background:var(--danger-lt);display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 16px;}
+.delete-modal-content h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:8px;}
+.delete-modal-content p{color:var(--sub);font-size:14px;line-height:1.6;margin-bottom:6px;}
+.delete-client-name{font-weight:700;color:var(--danger);background:var(--danger-lt);padding:6px 14px;border-radius:8px;display:inline-block;margin:10px 0 20px;font-size:14px;}
+.delete-modal-actions{display:flex;gap:10px;margin-top:8px;}
+.embed-modal-content{max-width:640px;}
+.embed-modal-content h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:6px;}
+.embed-modal-content>p{color:var(--sub);font-size:13px;margin-bottom:18px;line-height:1.6;}
+.embed-modal-content>p code{background:var(--cream);padding:1px 7px;border-radius:4px;color:var(--gold-dk);font-family:'DM Mono',monospace;font-size:12px;}
+.embed-textarea-wrapper{position:relative;}
+#embedCodeText{width:100%;height:190px;padding:16px;background:#1C1917;border:1px solid #3D3530;border-radius:12px;font-family:'DM Mono',monospace;font-size:12.5px;color:#D4C4A8;resize:none;line-height:1.7;outline:none;}
+.embed-lang-tag{position:absolute;top:10px;right:10px;background:var(--gold);color:#fff;padding:2px 9px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:0.5px;}
+.embed-actions{margin-top:16px;display:flex;gap:10px;}
+.embed-tip{margin-top:16px;padding:12px 16px;background:var(--warning-lt);border-left:3px solid var(--warning);border-radius:8px;font-size:12.5px;color:#92400e;line-height:1.6;}
 
-        .sidebar-footer { padding: 14px 12px; border-top: 1px solid var(--border); }
+/* ── VERTICAL CARDS ── */
+.vertical-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+.vertical-card{background:var(--cream);border:1.5px solid var(--border);border-radius:12px;padding:14px 10px;text-align:center;cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;align-items:center;gap:6px;}
+.vertical-card:hover{border-color:rgba(184,146,74,0.4);background:var(--gold-lt);}
+.vertical-card.selected{border-color:var(--gold);background:var(--gold-lt);box-shadow:0 0 0 3px rgba(184,146,74,0.15);}
+.vertical-icon{font-size:22px;}
+.vertical-label{font-size:12px;font-weight:600;color:var(--mid);}
+.vertical-card.selected .vertical-label{color:var(--gold-dk);}
+.vertical-preview{background:rgba(184,146,74,0.06);border:1px solid rgba(184,146,74,0.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--mid);line-height:1.5;min-height:36px;}
 
-        .user-profile {
-            display: flex; align-items: center; gap: 10px;
-            padding: 8px 10px; border-radius: 9px;
-            cursor: pointer; transition: background 0.15s;
-        }
-        .user-profile:hover { background: var(--page-bg); }
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;color:#fff;z-index:9999;opacity:0;transform:translateY(10px);transition:all 0.3s;pointer-events:none;}
+.toast.show{opacity:1;transform:translateY(0);}
+.toast.success{background:var(--success);}
+.toast.error{background:var(--danger);}
 
-        .user-avatar {
-            width: 32px; height: 32px; border-radius: 50%;
-            background: linear-gradient(135deg, var(--primary), #818cf8);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 13px; font-weight: 700; color: white; flex-shrink: 0;
-        }
+/* ── MOBILE OVERLAY ── */
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(28,25,23,0.5);z-index:49;}
 
-        .user-info { flex: 1; min-width: 0; }
-        .user-name { font-size: 13px; font-weight: 600; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .user-plan { font-size: 11px; color: var(--text-muted); }
+@keyframes slideUp{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
 
-        /* ── MAIN ── */
-        .main { margin-left: var(--sidebar-width); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
-
-        .topbar {
-            background: var(--card-bg); border-bottom: 1px solid var(--border);
-            padding: 0 32px; height: 60px;
-            display: flex; align-items: center; justify-content: space-between;
-            position: sticky; top: 0; z-index: 40;
-        }
-
-        .topbar-title { font-size: 15px; font-weight: 600; color: var(--text-main); }
-        .topbar-right { display: flex; align-items: center; gap: 12px; }
-
-        .plan-chip {
-            padding: 4px 12px;
-            background: var(--primary-light); color: var(--primary);
-            border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: capitalize;
-        }
-
-        .btn-topbar-logout {
-            padding: 7px 14px; background: transparent;
-            color: var(--text-muted); border: 1px solid var(--border);
-            border-radius: 8px; font-size: 13px; font-weight: 500;
-            cursor: pointer; text-decoration: none; transition: all 0.15s;
-            font-family: 'DM Sans', sans-serif;
-        }
-        .btn-topbar-logout:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-light); }
-
-        .page-content { padding: 28px 32px; }
-
-        .page-header {
-            display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 24px;
-        }
-        .page-header-left h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 2px; }
-        .page-header-left p { font-size: 13px; color: var(--text-muted); }
-        .page-header-actions { display: flex; gap: 10px; }
-
-        /* ── BUTTONS ── */
-        .btn {
-            padding: 9px 18px; border-radius: 9px; font-weight: 600;
-            cursor: pointer; text-decoration: none;
-            display: inline-flex; align-items: center; gap: 6px;
-            font-size: 13.5px; transition: all 0.15s;
-            border: none; font-family: 'DM Sans', sans-serif;
-        }
-        .btn-primary { background: var(--primary); color: white; box-shadow: 0 2px 8px rgba(79,110,247,0.3); }
-        .btn-primary:hover { background: var(--primary-dark); box-shadow: 0 4px 12px rgba(79,110,247,0.4); transform: translateY(-1px); }
-        .btn-secondary { background: var(--card-bg); color: var(--text-main); border: 1px solid var(--border); }
-        .btn-secondary:hover { background: var(--page-bg); border-color: #d1d5e0; }
-        .btn-upgrade { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; box-shadow: 0 2px 8px rgba(245,158,11,0.3); }
-        .btn-upgrade:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245,158,11,0.4); }
-        .btn-affiliate { background: var(--success-light); color: #16a34a; border: 1px solid #bbf7d0; }
-        .btn-affiliate:hover { background: #dcfce7; }
-
-        /* ── STATS ── */
-        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
-
-        .stat-card {
-            background: var(--card-bg); border: 1px solid var(--border);
-            border-radius: 14px; padding: 20px 22px; transition: box-shadow 0.2s;
-        }
-        .stat-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.07); }
-
-        .stat-label {
-            font-size: 12px; color: var(--text-muted); font-weight: 500;
-            margin-bottom: 10px; display: flex; align-items: center; gap: 6px;
-        }
-        .stat-label-icon { width: 20px; height: 20px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 11px; }
-        .stat-value-row { display: flex; align-items: baseline; gap: 8px; }
-        .stat-value { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; color: var(--text-main); }
-        .stat-trend { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 2px; }
-        .stat-trend.up { color: var(--success); }
-        .stat-trend.down { color: var(--danger); }
-        .stat-trend.neutral { color: var(--text-muted); }
-        .stat-sub { font-size: 11px; color: var(--text-light); margin-top: 4px; }
-
-        /* ── SECTION ── */
-        .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-        .section-title { font-size: 15px; font-weight: 700; }
-
-        /* ── TABLE ── */
-        .clients-table-wrap { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
-
-        .clients-table { width: 100%; border-collapse: collapse; }
-        .clients-table thead tr { background: #fafbfc; border-bottom: 1px solid var(--border); }
-        .clients-table th { padding: 11px 20px; text-align: left; font-size: 11.5px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-        .clients-table td { padding: 14px 20px; font-size: 13.5px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-        .clients-table tbody tr:last-child td { border-bottom: none; }
-        .clients-table tbody tr:hover { background: #fafbfc; }
-
-        .client-cell { display: flex; align-items: center; gap: 12px; }
-        .client-avatar-sm {
-            width: 36px; height: 36px; border-radius: 10px;
-            background: linear-gradient(135deg, var(--primary), #818cf8);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 14px; font-weight: 700; color: white; flex-shrink: 0;
-        }
-        .client-cell-name { font-weight: 600; color: var(--text-main); font-size: 14px; }
-        .client-cell-id { font-size: 11px; color: var(--text-muted); font-family: 'DM Mono', monospace; }
-
-        .status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-        .status-badge.active { background: var(--success-light); color: #16a34a; }
-        .status-badge::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-
-        .table-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-
-        .btn-xs {
-            padding: 5px 11px; font-size: 12px; border-radius: 7px;
-            border: none; cursor: pointer; font-weight: 600;
-            text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
-            transition: all 0.15s; font-family: 'DM Sans', sans-serif;
-        }
-        .btn-xs-manage { background: var(--primary-light); color: var(--primary); }
-        .btn-xs-manage:hover { background: #dde3ff; }
-        .btn-xs-analytics { background: var(--success-light); color: #16a34a; }
-        .btn-xs-analytics:hover { background: #dcfce7; }
-        .btn-xs-theme { background: var(--warning-light); color: #b45309; }
-        .btn-xs-theme:hover { background: #fef3c7; }
-        .btn-xs-embed { background: #fdf2f8; color: #9d174d; }
-        .btn-xs-embed:hover { background: #fce7f3; }
-        .btn-xs-locked { background: var(--page-bg); color: var(--text-light); cursor: not-allowed; }
-
-        /* ── DELETE BUTTON ── */
-        .btn-xs-delete { background: var(--danger-light); color: var(--danger); }
-        .btn-xs-delete:hover { background: #fecaca; }
-
-        /* ── EMPTY STATE ── */
-        .empty-state { text-align: center; padding: 60px 20px; }
-        .empty-icon { width: 64px; height: 64px; background: var(--primary-light); border-radius: 18px; display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 0 auto 16px; }
-        .empty-state h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
-        .empty-state p { color: var(--text-muted); font-size: 14px; margin-bottom: 20px; }
-
-        /* ── MODALS ── */
-        .modal {
-            display: none; position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.4); backdrop-filter: blur(4px);
-            z-index: 1000; align-items: center; justify-content: center;
-        }
-
-        .modal-content {
-            background: var(--card-bg); border: 1px solid var(--border);
-            border-radius: 20px; padding: 32px; max-width: 460px; width: 90%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.12);
-            animation: slideUp 0.25s ease;
-        }
-
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-        .modal-header h2 { font-size: 18px; font-weight: 700; }
-
-        .modal-close {
-            background: var(--page-bg); border: 1px solid var(--border);
-            font-size: 18px; cursor: pointer; color: var(--text-muted);
-            width: 32px; height: 32px; border-radius: 8px;
-            display: flex; align-items: center; justify-content: center; transition: all 0.15s;
-        }
-        .modal-close:hover { background: var(--border); color: var(--text-main); }
-
-        .form-group { margin-bottom: 18px; }
-        .form-group label { display: block; font-weight: 600; margin-bottom: 7px; color: var(--text-main); font-size: 13.5px; }
-        .form-group input {
-            width: 100%; padding: 10px 14px;
-            background: var(--page-bg); border: 1px solid var(--border);
-            border-radius: 9px; font-size: 14px; color: var(--text-main);
-            font-family: 'DM Sans', sans-serif; transition: border-color 0.15s;
-        }
-        .form-group input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,110,247,0.12); background: white; }
-        .form-group input::placeholder { color: var(--text-light); }
-
-        /* ── DELETE CONFIRM MODAL ── */
-        .delete-modal {
-            display: none; position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.45); backdrop-filter: blur(4px);
-            z-index: 1100; align-items: center; justify-content: center;
-        }
-
-        .delete-modal-content {
-            background: var(--card-bg); border: 1px solid var(--border);
-            border-radius: 20px; padding: 32px; max-width: 420px; width: 90%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
-            animation: slideUp 0.25s ease;
-            text-align: center;
-        }
-
-        .delete-icon {
-            width: 56px; height: 56px; border-radius: 16px;
-            background: var(--danger-light);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 24px; margin: 0 auto 16px;
-        }
-
-        .delete-modal-content h2 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
-        .delete-modal-content p { color: var(--text-muted); font-size: 14px; line-height: 1.6; margin-bottom: 6px; }
-
-        .delete-client-name {
-            font-weight: 700; color: var(--danger);
-            background: var(--danger-light);
-            padding: 6px 14px; border-radius: 8px;
-            display: inline-block; margin: 10px 0 20px;
-            font-size: 14px;
-        }
-
-        .delete-modal-actions { display: flex; gap: 10px; margin-top: 8px; }
-        .btn-danger { background: var(--danger); color: white; flex: 1; justify-content: center; }
-        .btn-danger:hover { background: #dc2626; }
-        .btn-cancel { flex: 1; justify-content: center; }
-
-        /* ── EMBED MODAL ── */
-        .embed-modal {
-            display: none; position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.45); backdrop-filter: blur(4px);
-            z-index: 9999; align-items: center; justify-content: center;
-        }
-
-        .embed-modal-content {
-            background: var(--card-bg); border: 1px solid var(--border);
-            padding: 36px; border-radius: 20px; max-width: 660px; width: 90%;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.12);
-            animation: slideUp 0.25s ease;
-        }
-
-        .embed-modal-content h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
-        .embed-modal-content > p { color: var(--text-muted); font-size: 13px; margin-bottom: 18px; line-height: 1.6; }
-        .embed-modal-content > p code { background: var(--page-bg); padding: 1px 7px; border-radius: 4px; color: var(--primary); font-family: 'DM Mono', monospace; font-size: 12px; }
-
-        .embed-textarea-wrapper { position: relative; }
-
-        #embedCodeText {
-            width: 100%; height: 200px; padding: 18px;
-            background: #1a1d2e; border: 1px solid #2d3148;
-            border-radius: 12px; font-family: 'DM Mono', monospace;
-            font-size: 12.5px; color: #a5b4fc; resize: none; line-height: 1.7;
-        }
-        #embedCodeText:focus { outline: none; border-color: var(--primary); }
-
-        .embed-lang-tag {
-            position: absolute; top: 10px; right: 10px;
-            background: var(--primary); color: white;
-            padding: 2px 9px; border-radius: 5px;
-            font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
-        }
-
-        .embed-actions { margin-top: 16px; display: flex; gap: 10px; }
-
-        .embed-tip {
-            margin-top: 16px; padding: 12px 16px;
-            background: var(--warning-light); border-left: 3px solid var(--warning);
-            border-radius: 8px; font-size: 12.5px; color: #92400e; line-height: 1.6;
-        }
-
-        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-        /* ── TOAST ── */
-        .toast {
-            position: fixed; bottom: 24px; right: 24px;
-            padding: 12px 20px; border-radius: 10px;
-            font-size: 14px; font-weight: 600;
-            color: white; z-index: 9999;
-            opacity: 0; transform: translateY(10px);
-            transition: all 0.3s; pointer-events: none;
-        }
-        .toast.show { opacity: 1; transform: translateY(0); }
-        .toast.success { background: #16a34a; }
-        .toast.error { background: var(--danger); }
-
-        /* ── RESPONSIVE ── */
-        @media (max-width: 1024px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
-        @media (max-width: 768px) {
-            .sidebar { display: none; }
-            .main { margin-left: 0; }
-            .page-content { padding: 20px 16px; }
-            .topbar { padding: 0 16px; }
-            .stats-row { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-            .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
-        }
+/* ── RESPONSIVE ── */
+@media(max-width:1100px){.stats-row{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:768px){
+    .sidebar{transform:translateX(-100%);}
+    .sidebar.open{transform:translateX(0);}
+    .sidebar-overlay.open{display:block;}
+    .main{margin-left:0;}
+    .topbar{padding:0 16px;}
+    .hamburger{display:flex;}
+    .page-content{padding:20px 16px;}
+    .stats-row{grid-template-columns:repeat(2,1fr);gap:12px;}
+    .page-header{flex-direction:column;align-items:flex-start;}
+    .clients-table th:nth-child(2),.clients-table td:nth-child(2){display:none;}
+}
+@media(max-width:480px){
+    .stats-row{grid-template-columns:1fr 1fr;}
+    .table-actions{gap:4px;}
+    .btn-xs{padding:4px 8px;font-size:11px;}
+}
     </style>
 </head>
 <body>
 
-    <!-- SIDEBAR -->
-    <aside class="sidebar">
-        <div class="sidebar-logo">
-            <div class="logo-icon">💬</div>
-            <span class="logo-text">Lumvi</span>
-        </div>
-        <nav class="sidebar-nav">
-            <div class="nav-section-label">Main</div>
-            <a href="/dashboard" class="nav-item active">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                Dashboard
-                {% if clients %}<span class="nav-badge">{{ clients|length }}</span>{% endif %}
-            </a>
-            <a href="/sales" class="nav-item">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                Sales Page
-            </a>
-            <a href="/affiliate-dashboard" class="nav-item">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-                Affiliate
-            </a>
-            {% if plan_type in ('agency', 'enterprise') or user.is_admin %}
-            <a href="/client-portal" class="nav-item">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                Client Portal
-            </a>
-            {% endif %}
-            <div class="nav-section-label">Account</div>
-            <a href="/upgrade" class="nav-item">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-                Upgrade Plan
-            </a>
-            <a href="/logout" class="nav-item">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                Logout
-            </a>
-        </nav>
-        <div class="sidebar-footer">
-            <div class="user-profile">
-                <div class="user-avatar">{{ user.email[0]|upper }}</div>
-                <div class="user-info">
-                    <div class="user-name">{{ user.email }}</div>
-                    <div class="user-plan">{{ (plan_type or user.plan_type)|title }} Plan</div>
-                </div>
+<!-- SIDEBAR OVERLAY -->
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+        <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi" class="logo-img">
+        <span class="logo-text">Lumvi</span>
+    </div>
+    <nav class="sidebar-nav">
+        <div class="nav-label">Main</div>
+        <a href="/dashboard" class="nav-item active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Dashboard
+            {% if clients %}<span class="nav-badge">{{ clients|length }}</span>{% endif %}
+        </a>
+        <a href="/sales" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            Sales Page
+        </a>
+        <a href="/affiliate-dashboard" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            Affiliate
+        </a>
+        {% if plan_type in ('agency', 'enterprise') or user.is_admin %}
+        <a href="/client-portal" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Client Portal
+        </a>
+        {% endif %}
+        <div class="nav-label">Account</div>
+        <a href="/upgrade" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            Upgrade Plan
+        </a>
+        <a href="/support" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Support
+        </a>
+        <a href="/logout" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Logout
+        </a>
+    </nav>
+    <div class="sidebar-footer">
+        <div class="user-profile">
+            <div class="user-avatar">{{ user.email[0]|upper }}</div>
+            <div class="user-info">
+                <div class="user-name">{{ user.email }}</div>
+                <div class="user-plan">{{ (plan_type or user.plan_type)|title }} Plan</div>
             </div>
         </div>
-    </aside>
+    </div>
+</aside>
 
-    <!-- MAIN -->
-    <div class="main">
-        <div class="topbar">
+<!-- MAIN -->
+<div class="main">
+
+    <!-- TOPBAR -->
+    <div class="topbar">
+        <div class="topbar-left">
+            <button class="hamburger" onclick="openSidebar()" aria-label="Menu">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
             <span class="topbar-title">Dashboard</span>
-            <div class="topbar-right">
-                <span class="plan-chip">{{ plan_type or user.plan_type }}</span>
-                <a href="/logout" class="btn-topbar-logout">Logout</a>
-            </div>
         </div>
+        <div class="topbar-right">
+            <span class="plan-chip">{{ plan_type or user.plan_type }}</span>
+            <a href="/logout" class="btn-logout">Logout</a>
+        </div>
+    </div>
 
-        <div class="page-content">
+    <div class="page-content">
 
-            <!-- PAGE HEADER -->
-            <div class="page-header">
-                <div class="page-header-left">
-                    <h1>Overview</h1>
-                    <p>Manage your chatbot clients and monitor activity</p>
-                </div>
-                <div class="page-header-actions">
-                    <a href="/affiliate-dashboard" class="btn btn-affiliate">💰 Affiliate</a>
-                    <a href="/sales" class="btn btn-secondary">🌐 Sales Page</a>
-                    {% if limit_reached %}
-                        <a href="/upgrade" class="btn btn-upgrade">🚀 Upgrade</a>
-                    {% else %}
-                        <button class="btn btn-primary" onclick="openNewClientModal()">+ New Client</button>
-                    {% endif %}
-                </div>
+        <!-- PAGE HEADER -->
+        <div class="page-header">
+            <div>
+                <h1>Overview</h1>
+                <p>Manage your chatbot clients and monitor activity</p>
             </div>
-
-            <!-- STATS CARDS — use server-provided variables, not hardcoded guesses -->
-            <div class="stats-row">
-                <div class="stat-card">
-                    <div class="stat-label">
-                        <div class="stat-label-icon" style="background:#eef1ff;">🏢</div>
-                        Total Clients
-                    </div>
-                    <div class="stat-value-row">
-                        <span class="stat-value">{{ client_count or clients|length }}</span>
-                    </div>
-                    <div class="stat-sub">
-                        {% if slots_display == 'Unlimited' %}Unlimited plan
-                        {% else %}of {{ slots_display }} allowed{% endif %}
-                    </div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-label">
-                        <div class="stat-label-icon" style="background:#f0fdf4;">📊</div>
-                        Active Bots
-                    </div>
-                    <div class="stat-value-row">
-                        <span class="stat-value">{{ clients|length }}</span>
-                        <span class="stat-trend up">↑ Live</span>
-                    </div>
-                    <div class="stat-sub">All clients running</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-label">
-                        <div class="stat-label-icon" style="background:#fffbeb;">⭐</div>
-                        Current Plan
-                    </div>
-                    <div class="stat-value-row">
-                        <span class="stat-value" style="font-size:20px; text-transform:capitalize;">{{ plan_type or user.plan_type }}</span>
-                    </div>
-                    <div class="stat-sub"><a href="/upgrade" style="color:var(--primary); text-decoration:none; font-weight:600;">Upgrade →</a></div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-label">
-                        <div class="stat-label-icon" style="background:#fdf2f8;">💬</div>
-                        Slots Used
-                    </div>
-                    <div class="stat-value-row">
-                        <span class="stat-value">{{ client_count or clients|length }}</span>
-                        <span class="stat-trend neutral">/ {{ slots_display or '∞' }}</span>
-                    </div>
-                    <div class="stat-sub">
-                        {% if limit_reached %}
-                            <span style="color:var(--warning); font-weight:600;">⚠️ Limit reached</span>
-                        {% else %}
-                            Slots available
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <!-- CLIENTS TABLE -->
-            <div class="section-header">
-                <span class="section-title">Your Clients</span>
-                {% if not limit_reached %}
-                <button class="btn btn-primary" onclick="openNewClientModal()">+ Add Client</button>
+            <div class="page-header-actions">
+                <a href="/affiliate-dashboard" class="btn btn-affiliate">💰 Affiliate</a>
+                <a href="/sales" class="btn btn-secondary">🌐 Sales Page</a>
+                {% if limit_reached %}
+                    <a href="/upgrade" class="btn btn-upgrade">🚀 Upgrade</a>
+                {% else %}
+                    <button class="btn btn-primary" onclick="openNewClientModal()">+ New Client</button>
                 {% endif %}
             </div>
+        </div>
 
-            {% if clients %}
-            <div class="clients-table-wrap">
-                <table class="clients-table">
-                    <thead>
-                        <tr>
-                            <th>Client</th>
-                            <th>Client ID</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for client in clients %}
-                        <tr id="row-{{ client.client_id }}">
-                            <td>
-                                <div class="client-cell">
-                                    <div class="client-avatar-sm">{{ client.company_name[0]|upper }}</div>
-                                    <div>
-                                        <div class="client-cell-name">{{ client.company_name }}</div>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                                <span style="font-family:'DM Mono',monospace; font-size:12px; color:var(--text-muted); background:var(--page-bg); padding:3px 8px; border-radius:5px;">{{ client.client_id }}</span>
-                            </td>
-                            <td>
-                                <span class="status-badge active">Active</span>
-                            </td>
-                            <td>
-                                <div class="table-actions">
-                                    <!-- FAQs: all plans -->
-                                    <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">📝 FAQs</a>
-                                    <a href="/help-center?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">📚 Help Center</a>
-                                    {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}
-                                    <a href="/manage-client-users?client_id={{ client.client_id }}" class="btn-xs" style="background:rgba(167,139,250,0.12);color:#a78bfa;">👤 Client Login</a>
-                                    {% endif %}
-
-                                    <!-- Embed: all plans (issue 4 fix) -->
-                                    <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed">📋 Embed</button>
-
-                                    {% if plan_limits.analytics %}
-                                        <a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics">📊 Analytics</a>
-                                    {% else %}
-                                        <button class="btn-xs btn-xs-locked" disabled title="Analytics available on Pro and Agency plans">📊 Analytics 🔒</button>
-                                    {% endif %}
-
-                                    {% if plan_limits.customization %}
-                                        <a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme">🎨 Theme</a>
-                                    {% else %}
-                                        <button class="btn-xs btn-xs-locked" disabled title="Customization available on Solo plan and above">🎨 Theme 🔒</button>
-                                    {% endif %}
-
-                                    <!-- Delete: all plans -->
-                                    <button class="btn-xs btn-xs-delete"
-                                        data-client-id="{{ client.client_id }}"
-                                        data-client-name="{{ client.company_name }}"
-                                        onclick="confirmDelete(this.dataset.clientId, this.dataset.clientName)">🗑️ Delete</button>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            {% else %}
-            <div class="clients-table-wrap">
-                <div class="empty-state">
-                    <div class="empty-icon">🚀</div>
-                    <h2>No Clients Yet</h2>
-                    <p>Create your first client to get started with your chatbot</p>
-                    <button class="btn btn-primary" onclick="openNewClientModal()">+ Create First Client</button>
+        <!-- STATS -->
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-label"><div class="stat-icon" style="background:var(--gold-lt);">🏢</div>Total Clients</div>
+                <div style="display:flex;align-items:baseline;">
+                    <span class="stat-value">{{ client_count or clients|length }}</span>
+                </div>
+                <div class="stat-sub">
+                    {% if slots_display == 'Unlimited' %}Unlimited plan
+                    {% else %}of {{ slots_display }} allowed{% endif %}
                 </div>
             </div>
+            <div class="stat-card">
+                <div class="stat-label"><div class="stat-icon" style="background:var(--success-lt);">📊</div>Active Bots</div>
+                <div style="display:flex;align-items:baseline;">
+                    <span class="stat-value">{{ clients|length }}</span>
+                    <span class="stat-trend up">↑ Live</span>
+                </div>
+                <div class="stat-sub">All clients running</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label"><div class="stat-icon" style="background:var(--warning-lt);">⭐</div>Current Plan</div>
+                <div style="display:flex;align-items:baseline;">
+                    <span class="stat-value" style="font-size:20px;text-transform:capitalize;">{{ plan_type or user.plan_type }}</span>
+                </div>
+                <div class="stat-sub"><a href="/upgrade" style="color:var(--gold);text-decoration:none;font-weight:600;">Upgrade →</a></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label"><div class="stat-icon" style="background:#fdf2f8;">💬</div>Slots Used</div>
+                <div style="display:flex;align-items:baseline;">
+                    <span class="stat-value">{{ client_count or clients|length }}</span>
+                    <span class="stat-trend neutral">/ {{ slots_display or '∞' }}</span>
+                </div>
+                <div class="stat-sub">
+                    {% if limit_reached %}
+                        <span style="color:var(--warning);font-weight:600;">⚠️ Limit reached</span>
+                    {% else %}Slots available{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- CLIENTS TABLE -->
+        <div class="section-header">
+            <span class="section-title">Your Clients</span>
+            {% if not limit_reached %}
+            <button class="btn btn-primary" onclick="openNewClientModal()">+ Add Client</button>
             {% endif %}
-
         </div>
-    </div>
 
-    <!-- NEW CLIENT MODAL -->
-    <div class="modal" id="new-client-modal">
-        <div class="modal-content" style="max-width:620px;width:95%;">
-            <div class="modal-header">
-                <h2>Create New Client</h2>
-                <button class="modal-close" onclick="closeModal()">×</button>
+        {% if clients %}
+        <div class="clients-table-wrap">
+            <table class="clients-table">
+                <thead>
+                    <tr>
+                        <th>Client</th>
+                        <th>Client ID</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for client in clients %}
+                    <tr id="row-{{ client.client_id }}">
+                        <td>
+                            <div class="client-cell">
+                                <div class="client-avatar-sm">{{ client.company_name[0]|upper }}</div>
+                                <div>
+                                    <div class="client-cell-name">{{ client.company_name }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--sub);background:var(--cream);padding:3px 8px;border-radius:5px;">{{ client.client_id }}</span>
+                        </td>
+                        <td><span class="status-badge active">Active</span></td>
+                        <td>
+                            <div class="table-actions">
+                                <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">📝 FAQs</a>
+                                <a href="/help-center?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">📚 Help</a>
+                                {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}
+                                <a href="/manage-client-users?client_id={{ client.client_id }}" class="btn-xs" style="background:rgba(184,146,74,0.1);color:var(--gold-dk);">👤 Logins</a>
+                                {% endif %}
+                                <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed">📋 Embed</button>
+                                {% if plan_limits.analytics %}
+                                    <a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics">📊 Analytics</a>
+                                {% else %}
+                                    <button class="btn-xs btn-xs-locked" disabled title="Analytics on Pro and above">📊 🔒</button>
+                                {% endif %}
+                                {% if plan_limits.customization %}
+                                    <a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme">🎨 Theme</a>
+                                {% else %}
+                                    <button class="btn-xs btn-xs-locked" disabled title="Customization on Solo and above">🎨 🔒</button>
+                                {% endif %}
+                                <button class="btn-xs btn-xs-delete"
+                                    data-client-id="{{ client.client_id }}"
+                                    data-client-name="{{ client.company_name }}"
+                                    onclick="confirmDelete(this.dataset.clientId, this.dataset.clientName)">🗑️</button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="clients-table-wrap">
+            <div class="empty-state">
+                <div class="empty-icon"></div>
+                <h2>No Clients Yet</h2>
+                <p>Create your first chatbot client to get started</p>
+                <button class="btn btn-primary" onclick="openNewClientModal()">+ Create First Client</button>
             </div>
-            <form method="POST" action="/create-client">
-                <div class="form-group">
-                    <label>Company Name</label>
-                    <input type="text" name="company_name" placeholder="Acme Corporation" required autofocus>
-                </div>
+        </div>
+        {% endif %}
 
-                <div class="form-group">
-                    <label>Industry Template</label>
-                    <p style="font-size:13px;color:#64748b;margin:-4px 0 12px;">Pre-configures the bot tone, prompts and starter FAQs for this industry.</p>
-                    <input type="hidden" name="vertical" id="vertical-input" value="general">
-                    <div class="vertical-grid">
-                        <div class="vertical-card selected" data-vertical="general" onclick="selectVertical(this)">
-                            <span class="vertical-icon">&#127760;</span>
-                            <span class="vertical-label">General</span>
-                        </div>
-                        <div class="vertical-card" data-vertical="real_estate" onclick="selectVertical(this)">
-                            <span class="vertical-icon">&#127968;</span>
-                            <span class="vertical-label">Real Estate</span>
-                        </div>
-                        <div class="vertical-card" data-vertical="saas" onclick="selectVertical(this)">
-                            <span class="vertical-icon">&#128187;</span>
-                            <span class="vertical-label">SaaS Support</span>
-                        </div>
-                        <div class="vertical-card" data-vertical="ecommerce" onclick="selectVertical(this)">
-                            <span class="vertical-icon">&#128722;</span>
-                            <span class="vertical-label">E-commerce</span>
-                        </div>
-                        <div class="vertical-card" data-vertical="healthcare" onclick="selectVertical(this)">
-                            <span class="vertical-icon">&#127973;</span>
-                            <span class="vertical-label">Healthcare</span>
-                        </div>
-                        <div class="vertical-card" data-vertical="law_firm" onclick="selectVertical(this)">
-                            <span class="vertical-icon">&#9878;&#65039;</span>
-                            <span class="vertical-label">Law Firm</span>
-                        </div>
+    </div>
+</div>
+
+<!-- NEW CLIENT MODAL -->
+<div class="modal" id="new-client-modal">
+    <div class="modal-content" style="max-width:620px;width:95%;">
+        <div class="modal-header">
+            <h2>Create New Client</h2>
+            <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <form method="POST" action="/create-client">
+            <div class="form-group">
+                <label>Company Name</label>
+                <input type="text" name="company_name" placeholder="Acme Corporation" required autofocus>
+            </div>
+            <div class="form-group">
+                <label>Industry Template</label>
+                <p style="font-size:13px;color:var(--sub);margin:-4px 0 12px;">Pre-configures tone, prompts and starter FAQs for this industry.</p>
+                <input type="hidden" name="vertical" id="vertical-input" value="general">
+                <div class="vertical-grid">
+                    <div class="vertical-card selected" data-vertical="general" onclick="selectVertical(this)">
+                        <span class="vertical-icon">🌐</span><span class="vertical-label">General</span>
                     </div>
-                    <div class="vertical-preview" id="vertical-preview">
-                        <span id="preview-text">Blank slate — configure everything yourself.</span>
+                    <div class="vertical-card" data-vertical="real_estate" onclick="selectVertical(this)">
+                        <span class="vertical-icon">🏠</span><span class="vertical-label">Real Estate</span>
+                    </div>
+                    <div class="vertical-card" data-vertical="saas" onclick="selectVertical(this)">
+                        <span class="vertical-icon">💻</span><span class="vertical-label">SaaS</span>
+                    </div>
+                    <div class="vertical-card" data-vertical="ecommerce" onclick="selectVertical(this)">
+                        <span class="vertical-icon">🛒</span><span class="vertical-label">E-commerce</span>
+                    </div>
+                    <div class="vertical-card" data-vertical="healthcare" onclick="selectVertical(this)">
+                        <span class="vertical-icon">🏥</span><span class="vertical-label">Healthcare</span>
+                    </div>
+                    <div class="vertical-card" data-vertical="law_firm" onclick="selectVertical(this)">
+                        <span class="vertical-icon">⚖️</span><span class="vertical-label">Law Firm</span>
                     </div>
                 </div>
+                <div class="vertical-preview" id="vertical-preview">
+                    <span id="preview-text">Friendly, professional assistant. Suitable for any business type.</span>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Create Client</button>
+        </form>
+    </div>
+</div>
 
-                <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Create Client</button>
-            </form>
+<!-- DELETE CONFIRM MODAL -->
+<div class="delete-modal" id="delete-modal">
+    <div class="delete-modal-content">
+        <div class="delete-icon">🗑️</div>
+        <h2>Delete Chatbot?</h2>
+        <p>You're about to permanently delete:</p>
+        <div class="delete-client-name" id="delete-client-name">—</div>
+        <p style="font-size:13px;">This will remove all FAQs, leads, and conversation history. <strong>This cannot be undone.</strong></p>
+        <div class="delete-modal-actions" style="margin-top:24px;">
+            <button class="btn btn-cancel" style="flex:1;justify-content:center;" onclick="closeDeleteModal()">Cancel</button>
+            <button class="btn btn-danger" id="confirm-delete-btn" style="flex:1;justify-content:center;" onclick="executeDelete()">Yes, Delete</button>
         </div>
     </div>
+</div>
 
-    <style>
-        .vertical-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:12px; }
-        .vertical-card { background:rgba(15,23,42,0.5); border:1.5px solid rgba(99,102,241,0.15); border-radius:12px; padding:14px 10px; text-align:center; cursor:pointer; transition:all 0.2s; display:flex; flex-direction:column; align-items:center; gap:6px; }
-        .vertical-card:hover { border-color:rgba(99,102,241,0.5); background:rgba(99,102,241,0.08); }
-        .vertical-card.selected { border-color:#6366f1; background:rgba(99,102,241,0.15); box-shadow:0 0 0 3px rgba(99,102,241,0.2); }
-        .vertical-icon { font-size:22px; }
-        .vertical-label { font-size:12px; font-weight:600; color:#cbd5e1; }
-        .vertical-preview { background:rgba(6,182,212,0.07); border:1px solid rgba(6,182,212,0.2); border-radius:8px; padding:10px 14px; font-size:12px; color:#67e8f9; line-height:1.5; min-height:36px; }
-    </style>
-
-    <!-- DELETE CONFIRM MODAL -->
-    <div class="delete-modal" id="delete-modal">
-        <div class="delete-modal-content">
-            <div class="delete-icon">🗑️</div>
-            <h2>Delete Chatbot?</h2>
-            <p>You're about to permanently delete:</p>
-            <div class="delete-client-name" id="delete-client-name">—</div>
-            <p style="font-size:13px;">This will remove all FAQs, leads, and conversation history. <strong>This cannot be undone.</strong></p>
-            <div class="delete-modal-actions" style="margin-top:24px;">
-                <button class="btn btn-secondary btn-cancel" onclick="closeDeleteModal()">Cancel</button>
-                <button class="btn btn-danger" id="confirm-delete-btn" onclick="executeDelete()">Yes, Delete</button>
-            </div>
+<!-- EMBED CODE MODAL -->
+<div id="embedModal" class="embed-modal">
+    <div class="embed-modal-content">
+        <h2>📋 Embed Code</h2>
+        <p>Copy this code and paste it into your website just before the closing <code>&lt;/body&gt;</code> tag.</p>
+        <div class="embed-textarea-wrapper">
+            <textarea id="embedCodeText" readonly></textarea>
+            <div class="embed-lang-tag">HTML</div>
+        </div>
+        <div class="embed-actions">
+            <button onclick="copyEmbedCode()" class="btn btn-primary" style="flex:1;justify-content:center;">✅ Copy to Clipboard</button>
+            <button onclick="closeEmbedModal()" class="btn btn-secondary" style="justify-content:center;">Close</button>
+        </div>
+        <div class="embed-tip">
+            💡 <strong>Tip:</strong> The chatbot appears in the bottom-right corner. Customize colors and messages in Theme settings.
         </div>
     </div>
+</div>
 
-    <!-- EMBED CODE MODAL -->
-    <div id="embedModal" class="embed-modal">
-        <div class="embed-modal-content">
-            <h2>📋 Embed Code</h2>
-            <p>Copy this code and paste it into your website, just before the closing <code>&lt;/body&gt;</code> tag.</p>
-            <div class="embed-textarea-wrapper">
-                <textarea id="embedCodeText" readonly></textarea>
-                <div class="embed-lang-tag">HTML</div>
-            </div>
-            <div class="embed-actions">
-                <button onclick="copyEmbedCode()" class="btn btn-primary" style="flex:1; justify-content:center;">✅ Copy to Clipboard</button>
-                <button onclick="closeEmbedModal()" class="btn btn-secondary" style="justify-content:center;">Close</button>
-            </div>
-            <div class="embed-tip">
-                💡 <strong>Tip:</strong> The chatbot will appear in the bottom-right corner of your website. Customize colors and messages in the Theme settings.
-            </div>
-        </div>
-    </div>
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
 
-    <!-- TOAST -->
-    <div class="toast" id="toast"></div>
-
-    <script>
-        // ── New Client Modal ──────────────────────────────────────────
-        const VERTICAL_PREVIEWS = {
-            general:     'Friendly, professional assistant. Suitable for any business type.',
-            real_estate: 'Warm, consultative tone. Lead fields: budget, location, bedrooms. Focused on booking property viewings.',
-            saas:        'Helpful, technical tone. Lead fields: company size, use case. Routes users to trial signup or support tickets.',
-            ecommerce:   'Fast, friendly tone. Lead fields: order number, product. Handles returns, shipping and product questions.',
-            healthcare:  'Calm, professional tone. Lead fields: symptoms, insurance. Books appointments and handles clinic FAQs.',
-            law_firm:    'Formal, precise tone. Lead fields: case type, urgency. Intake form for new client consultations.'
-        };
-
-        function selectVertical(card) {
-            document.querySelectorAll('.vertical-card').forEach(c => c.classList.remove('selected'));
-            card.classList.add('selected');
-            const v = card.getAttribute('data-vertical');
-            document.getElementById('vertical-input').value = v;
-            document.getElementById('preview-text').textContent = VERTICAL_PREVIEWS[v] || '';
-        }
-
-        function openNewClientModal() {
-            document.getElementById('new-client-modal').style.display = 'flex';
-        }
-        function closeModal() {
-            document.getElementById('new-client-modal').style.display = 'none';
-        }
-
-        // ── Embed Code Modal ──────────────────────────────────────────
-        function showEmbedCode(clientId) {
-            const baseUrl = window.location.origin;
-            const embedCode = `<!-- Lumvi Chatbot Widget -->
-<script>
-    (function() {
-        var s = document.createElement('script');
-        s.src = '${baseUrl}/static/widget.js';
-        s.setAttribute('data-client-id', '${clientId}');
-        document.body.appendChild(s);
-    })();
-<\/script>`;
-            document.getElementById('embedCodeText').value = embedCode;
-            document.getElementById('embedModal').style.display = 'flex';
-        }
-        function closeEmbedModal() {
-            document.getElementById('embedModal').style.display = 'none';
-        }
-        function copyEmbedCode() {
-            const textarea = document.getElementById('embedCodeText');
-            textarea.select();
-            textarea.setSelectionRange(0, 99999);
-            try {
-                document.execCommand('copy');
-                showToast('✅ Embed code copied!', 'success');
-            } catch (err) {
-                alert('Failed to copy. Please select and copy manually.');
-            }
-        }
-
-        // ── Delete Modal ──────────────────────────────────────────────
-        let pendingDeleteId = null;
-
-        function confirmDelete(clientId, clientName) {
-            pendingDeleteId = clientId;
-            document.getElementById('delete-client-name').textContent = clientName;
-            document.getElementById('delete-modal').style.display = 'flex';
-        }
-
-        function closeDeleteModal() {
-            pendingDeleteId = null;
-            document.getElementById('delete-modal').style.display = 'none';
-        }
-
-        async function executeDelete() {
-            if (!pendingDeleteId) return;
-
-            const btn = document.getElementById('confirm-delete-btn');
-            btn.textContent = 'Deleting…';
-            btn.disabled = true;
-
-            try {
-                const res = await fetch(`/api/clients/${pendingDeleteId}/delete`, {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                const data = await res.json();
-
-                if (data.success) {
-                    // Remove row from table without reloading
-                    const row = document.getElementById(`row-${pendingDeleteId}`);
-                    if (row) {
-                        row.style.transition = 'opacity 0.3s';
-                        row.style.opacity = '0';
-                        setTimeout(() => row.remove(), 300);
-                    }
-                    closeDeleteModal();
-                    showToast('✅ Chatbot deleted successfully', 'success');
-
-                    // Update badge count in sidebar
-                    const badge = document.querySelector('.nav-badge');
-                    if (badge) {
-                        const current = parseInt(badge.textContent) || 0;
-                        if (current - 1 <= 0) badge.remove();
-                        else badge.textContent = current - 1;
-                    }
-                } else {
-                    showToast('❌ ' + (data.error || 'Delete failed'), 'error');
-                    btn.textContent = 'Yes, Delete';
-                    btn.disabled = false;
-                }
-            } catch (err) {
-                showToast('❌ Network error. Please try again.', 'error');
-                btn.textContent = 'Yes, Delete';
-                btn.disabled = false;
-            }
-        }
-
-        // ── Toast ─────────────────────────────────────────────────────
-        function showToast(message, type = 'success') {
-            const toast = document.getElementById('toast');
-            toast.textContent = message;
-            toast.className = `toast ${type} show`;
-            setTimeout(() => { toast.className = 'toast'; }, 3500);
-        }
-
-        // ── Close on backdrop click / Escape ─────────────────────────
-        document.addEventListener('click', function(e) {
-            if (e.target === document.getElementById('embedModal')) closeEmbedModal();
-            if (e.target === document.getElementById('new-client-modal')) closeModal();
-            if (e.target === document.getElementById('delete-modal')) closeDeleteModal();
-        });
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') { closeEmbedModal(); closeModal(); closeDeleteModal(); }
-        });
-    </script>
+<!-- SUBSCRIPTION EXPIRY POPUP -->
 {% if sub_status in ('grace', 'expired') and not user.is_admin %}
-<!-- Subscription Expiry Popup -->
-<div id="subExpiryModal" style="display:flex;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;background:rgba(10,15,28,0.85);backdrop-filter:blur(6px);">
-    <div style="background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:40px;max-width:480px;width:90%;text-align:center;box-shadow:0 25px 70px rgba(0,0,0,0.5);position:relative;">
-        <div style="font-size:48px;margin-bottom:16px;">⚠️</div>
-
+<div id="subExpiryModal" style="display:flex;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;background:rgba(28,25,23,0.8);backdrop-filter:blur(6px);padding:20px;">
+    <div style="background:var(--white);border:1px solid var(--border);border-radius:20px;padding:40px;max-width:480px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.2);">
+        <div style="font-size:44px;margin-bottom:16px;">⚠️</div>
         {% if sub_status == 'grace' %}
-        <h2 style="font-size:22px;font-weight:800;color:#f8fafc;margin-bottom:12px;">Your subscription has expired</h2>
-        <p style="color:#94a3b8;font-size:14px;line-height:1.7;margin-bottom:8px;">
-            Your plan expired but you're in a <strong style="color:#fbbf24;">3-day grace period</strong>.
-            Your chatbots are still running — but renew before the grace period ends or your account will automatically downgrade to the Free plan.
-        </p>
+        <h2 style="font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--dark);margin-bottom:12px;">Your subscription has expired</h2>
+        <p style="color:var(--mid);font-size:14px;line-height:1.7;margin-bottom:8px;">You're in a <strong style="color:var(--warning);">3-day grace period</strong>. Your chatbots are still running — renew before the grace period ends or your account downgrades to Free.</p>
         {% if sub_grace_ends_at %}
-        <div style="background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:10px;padding:12px;margin:16px 0;color:#fbbf24;font-size:13px;font-weight:600;">
-            Grace period ends: {{ sub_grace_ends_at.strftime('%B %d, %Y at %H:%M UTC') if sub_grace_ends_at else 'Soon' }}
+        <div style="background:var(--warning-lt);border:1px solid rgba(217,119,6,0.3);border-radius:10px;padding:12px;margin:16px 0;color:var(--warning);font-size:13px;font-weight:600;">
+            Grace period ends: {{ sub_grace_ends_at.strftime('%B %d, %Y') if sub_grace_ends_at else 'Soon' }}
         </div>
         {% endif %}
         {% else %}
-        <h2 style="font-size:22px;font-weight:800;color:#f8fafc;margin-bottom:12px;">Subscription expired</h2>
-        <p style="color:#94a3b8;font-size:14px;line-height:1.7;margin-bottom:16px;">
-            Your subscription has expired and your account has been downgraded to the <strong style="color:#f8fafc;">Free plan</strong>.
-            Upgrade now to restore your chatbots and features.
-        </p>
+        <h2 style="font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--dark);margin-bottom:12px;">Subscription expired</h2>
+        <p style="color:var(--mid);font-size:14px;line-height:1.7;margin-bottom:16px;">Your account has been downgraded to the Free plan. Upgrade to restore all features.</p>
         {% endif %}
-
         <div style="display:flex;gap:12px;justify-content:center;margin-top:20px;">
-            <a href="/upgrade" style="display:inline-block;padding:13px 28px;background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;box-shadow:0 4px 16px rgba(99,102,241,0.4);">
-                Renew Subscription →
-            </a>
-            <button onclick="document.getElementById('subExpiryModal').style.display='none'" style="padding:13px 20px;background:transparent;color:#94a3b8;border:1px solid rgba(255,255,255,0.1);border-radius:10px;font-weight:600;font-size:14px;cursor:pointer;">
-                Dismiss
-            </button>
+            <a href="/upgrade" style="display:inline-block;padding:13px 28px;background:var(--gold);color:#fff;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;box-shadow:0 4px 16px rgba(184,146,74,0.4);">Renew Subscription →</a>
+            <button onclick="document.getElementById('subExpiryModal').style.display='none'" style="padding:13px 20px;background:transparent;color:var(--sub);border:1px solid var(--border);border-radius:10px;font-weight:600;font-size:14px;cursor:pointer;">Dismiss</button>
         </div>
     </div>
 </div>
 {% endif %}
 
+<script>
+    // ── Sidebar mobile ────────────────────────────────────────────
+    function openSidebar() {
+        document.getElementById('sidebar').classList.add('open');
+        document.getElementById('sidebarOverlay').classList.add('open');
+    }
+    function closeSidebar() {
+        document.getElementById('sidebar').classList.remove('open');
+        document.getElementById('sidebarOverlay').classList.remove('open');
+    }
+
+    // ── Vertical selector ─────────────────────────────────────────
+    const VERTICAL_PREVIEWS = {
+        general:     'Friendly, professional assistant. Suitable for any business type.',
+        real_estate: 'Warm, consultative tone. Focused on booking property viewings and lead qualification.',
+        saas:        'Helpful, technical tone. Handles onboarding, billing and support tickets.',
+        ecommerce:   'Fast, friendly tone. Handles returns, shipping and product questions.',
+        healthcare:  'Calm, professional tone. Books appointments and handles clinic FAQs.',
+        law_firm:    'Formal, precise tone. Intake form for new client consultations.'
+    };
+
+    function selectVertical(card) {
+        document.querySelectorAll('.vertical-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        const v = card.getAttribute('data-vertical');
+        document.getElementById('vertical-input').value = v;
+        document.getElementById('preview-text').textContent = VERTICAL_PREVIEWS[v] || '';
+    }
+
+    function openNewClientModal() { document.getElementById('new-client-modal').style.display = 'flex'; }
+    function closeModal() { document.getElementById('new-client-modal').style.display = 'none'; }
+
+    // ── Embed Code ────────────────────────────────────────────────
+    function showEmbedCode(clientId) {
+        const baseUrl = window.location.origin;
+        const code = `<!-- Lumvi Chatbot Widget -->\n<script>\n    (function() {\n        var s = document.createElement('script');\n        s.src = '${baseUrl}/static/widget.js';\n        s.setAttribute('data-client-id', '${clientId}');\n        document.body.appendChild(s);\n    })();\n<\/script>`;
+        document.getElementById('embedCodeText').value = code;
+        document.getElementById('embedModal').style.display = 'flex';
+    }
+    function closeEmbedModal() { document.getElementById('embedModal').style.display = 'none'; }
+    function copyEmbedCode() {
+        const t = document.getElementById('embedCodeText');
+        t.select(); t.setSelectionRange(0, 99999);
+        try { document.execCommand('copy'); showToast('✅ Embed code copied!', 'success'); }
+        catch { alert('Please select and copy manually.'); }
+    }
+
+    // ── Delete ────────────────────────────────────────────────────
+    let pendingDeleteId = null;
+    function confirmDelete(clientId, clientName) {
+        pendingDeleteId = clientId;
+        document.getElementById('delete-client-name').textContent = clientName;
+        document.getElementById('delete-modal').style.display = 'flex';
+    }
+    function closeDeleteModal() {
+        pendingDeleteId = null;
+        document.getElementById('delete-modal').style.display = 'none';
+    }
+    async function executeDelete() {
+        if (!pendingDeleteId) return;
+        const btn = document.getElementById('confirm-delete-btn');
+        btn.textContent = 'Deleting…'; btn.disabled = true;
+        try {
+            const res = await fetch(`/api/clients/${pendingDeleteId}/delete`, { method: 'DELETE', headers: {'Content-Type':'application/json'} });
+            const data = await res.json();
+            if (data.success) {
+                const row = document.getElementById(`row-${pendingDeleteId}`);
+                if (row) { row.style.transition = 'opacity 0.3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); }
+                closeDeleteModal();
+                showToast('✅ Chatbot deleted', 'success');
+                const badge = document.querySelector('.nav-badge');
+                if (badge) { const c = parseInt(badge.textContent)||0; if (c-1<=0) badge.remove(); else badge.textContent = c-1; }
+            } else { showToast('❌ '+(data.error||'Delete failed'), 'error'); btn.textContent = 'Yes, Delete'; btn.disabled = false; }
+        } catch { showToast('❌ Network error', 'error'); btn.textContent = 'Yes, Delete'; btn.disabled = false; }
+    }
+
+    // ── Toast ─────────────────────────────────────────────────────
+    function showToast(msg, type='success') {
+        const t = document.getElementById('toast');
+        t.textContent = msg; t.className = `toast ${type} show`;
+        setTimeout(() => { t.className = 'toast'; }, 3500);
+    }
+
+    // ── Close on backdrop / Escape ────────────────────────────────
+    document.addEventListener('click', function(e) {
+        if (e.target === document.getElementById('embedModal')) closeEmbedModal();
+        if (e.target === document.getElementById('new-client-modal')) closeModal();
+        if (e.target === document.getElementById('delete-modal')) closeDeleteModal();
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { closeEmbedModal(); closeModal(); closeDeleteModal(); closeSidebar(); }
+    });
+</script>
 </body>
 </html>
