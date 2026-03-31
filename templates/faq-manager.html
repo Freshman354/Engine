@@ -1,925 +1,1076 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FAQ Manager - Chatbot Admin</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <title>FAQ Manager — Lumvi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        /* ── THEME VARIABLES ── */
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --info: #0ea5e9;
-        }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        /* DARK THEME (default) */
-        [data-theme="dark"] {
-            --bg: #0f172a;
-            --bg-secondary: #1e293b;
-            --card-bg: rgba(30, 41, 59, 0.7);
-            --card-solid: #1e293b;
-            --border: rgba(255, 255, 255, 0.08);
-            --border-hover: rgba(99, 102, 241, 0.6);
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --text-body: #cbd5e1;
-            --input-bg: rgba(255, 255, 255, 0.06);
-            --input-border: rgba(255, 255, 255, 0.12);
-            --tag-bg: rgba(99, 102, 241, 0.2);
-            --tag-color: #a78bfa;
-            --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-            --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.4);
-            --plan-bar-bg: rgba(30, 41, 59, 0.8);
-            --success-bg: rgba(16, 185, 129, 0.15);
-            --success-color: #6ee7b7;
-            --error-bg: rgba(239, 68, 68, 0.15);
-            --error-color: #fca5a5;
-            --format-blue-bg: rgba(59, 130, 246, 0.1);
-            --format-blue-border: #3b82f6;
-            --format-yellow-bg: rgba(245, 158, 11, 0.1);
-            --format-yellow-border: #f59e0b;
-            --drop-bg: rgba(255, 255, 255, 0.03);
-            --drop-hover-bg: rgba(99, 102, 241, 0.1);
-            --tip-bg: rgba(245, 158, 11, 0.1);
-            --tip-color: #fcd34d;
-        }
+:root {
+    --cream:   #F7F4EF;
+    --panel:   #EDEAE3;
+    --cream2:  #F0EBE1;
+    --gold:    #B8924A;
+    --gold-lt: rgba(184,146,74,0.10);
+    --gold-dk: #9A7A3A;
+    --dark:    #1C1917;
+    --mid:     #57534E;
+    --sub:     #A8A29E;
+    --border:  #E7E2DA;
+    --white:   #FFFFFF;
+    --success: #16A34A;
+    --success-lt: #F0FDF4;
+    --danger:  #EF4444;
+    --danger-lt: #FEF2F2;
+    --warning: #D97706;
+    --warning-lt: #FFFBEB;
+}
 
-        /* LIGHT THEME */
-        [data-theme="light"] {
-            --bg: #f9fafb;
-            --bg-secondary: #ffffff;
-            --card-bg: #ffffff;
-            --card-solid: #ffffff;
-            --border: #e5e7eb;
-            --border-hover: #667eea;
-            --text-main: #1f2937;
-            --text-muted: #6b7280;
-            --text-body: #374151;
-            --input-bg: #ffffff;
-            --input-border: #d1d5db;
-            --tag-bg: #e0e7ff;
-            --tag-color: #4338ca;
-            --shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
-            --shadow-glow: 0 4px 15px rgba(102, 126, 234, 0.2);
-            --plan-bar-bg: #fef3c7;
-            --success-bg: #d1fae5;
-            --success-color: #065f46;
-            --error-bg: #fee2e2;
-            --error-color: #991b1b;
-            --format-blue-bg: #eff6ff;
-            --format-blue-border: #3b82f6;
-            --format-yellow-bg: #fef3c7;
-            --format-yellow-border: #f59e0b;
-            --drop-bg: #f9fafb;
-            --drop-hover-bg: #f5f3ff;
-            --tip-bg: #fef3c7;
-            --tip-color: #92400e;
-        }
+body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--cream);
+    color: var(--dark);
+    min-height: 100vh;
+}
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+/* ── TOPBAR ── */
+.topbar {
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
 
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg);
-            color: var(--text-main);
-            min-height: 100vh;
-            transition: background 0.3s, color 0.3s;
-        }
+.topbar-left { display: flex; align-items: center; gap: 16px; }
 
-        /* ── HEADER ── */
-        .header {
-            background: var(--card-bg);
-            backdrop-filter: blur(12px);
-            border-bottom: 1px solid var(--border);
-            padding: 24px 40px;
-            box-shadow: var(--shadow);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            flex-wrap: wrap;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--sub);
+    text-decoration: none;
+    padding: 6px 10px;
+    border-radius: 7px;
+    transition: all 0.2s;
+    border: 1px solid transparent;
+}
+.back-link:hover { color: var(--dark); background: var(--cream); border-color: var(--border); }
 
-        .header-left h1 { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
-        .header-left p { color: var(--text-muted); font-size: 14px; margin-top: 2px; }
+.topbar-divider { width: 1px; height: 20px; background: var(--border); }
 
-        .header-right { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.topbar-title {
+    font-family: 'Fraunces', serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--dark);
+}
 
-        .plan-status-bar {
-            background: var(--plan-bar-bg);
-            border: 1px solid var(--border);
-            padding: 10px 16px;
-            border-radius: 10px;
-            font-size: 13px;
-            color: var(--text-body);
-        }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
 
-        .plan-status-bar strong { color: var(--text-main); }
-        .limit-warning { color: #f87171; font-weight: 700; margin-left: 4px; }
+.plan-badge {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--mid);
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 4px 12px;
+}
 
-        /* ── THEME TOGGLE ── */
-        .theme-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
-        .theme-toggle-label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
-        .toggle-switch { position: relative; width: 48px; height: 26px; }
-        .toggle-switch input { opacity: 0; width: 0; height: 0; }
-        .toggle-track {
-            position: absolute; inset: 0;
-            background: rgba(99, 102, 241, 0.3);
-            border: 1px solid rgba(99, 102, 241, 0.4);
-            border-radius: 999px; transition: all 0.3s; cursor: pointer;
-        }
-        .toggle-switch input:checked + .toggle-track {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            border-color: var(--primary);
-        }
-        .toggle-thumb {
-            position: absolute; top: 3px; left: 3px;
-            width: 18px; height: 18px; border-radius: 50%; background: white;
-            transition: transform 0.3s; pointer-events: none;
-            display: flex; align-items: center; justify-content: center; font-size: 10px;
-        }
-        .toggle-switch input:checked ~ .toggle-thumb { transform: translateX(22px); }
+.plan-badge strong { color: var(--dark); }
 
-        /* ── CONTAINER ── */
-        .container { max-width: 1400px; margin: 0 auto; padding: 36px 40px; }
+.faq-counter {
+    font-size: 12px;
+    color: var(--sub);
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: var(--gold-lt);
+    border: 1px solid rgba(184,146,74,0.2);
+    font-weight: 500;
+}
 
-        /* ── CONTROLS ── */
-        .controls {
-            background: var(--card-bg);
-            backdrop-filter: blur(12px);
-            border: 1px solid var(--border);
-            padding: 20px 24px;
-            border-radius: 16px;
-            margin-bottom: 24px;
-            box-shadow: var(--shadow);
-            display: flex;
-            gap: 16px;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-        }
+.limit-warning {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--warning);
+    background: var(--warning-lt);
+    border: 1px solid rgba(217,119,6,0.2);
+    border-radius: 20px;
+    padding: 4px 10px;
+    display: none;
+}
 
-        .controls-left { display: flex; gap: 12px; align-items: center; flex: 1; }
-        .controls-left label { font-weight: 600; color: var(--text-muted); font-size: 14px; }
+/* ── MAIN LAYOUT ── */
+.page-wrap { max-width: 1080px; margin: 0 auto; padding: 28px 24px; }
 
-        .search-wrap {
-            display: flex; align-items: center;
-            background: var(--input-bg);
-            border: 1px solid var(--input-border);
-            border-radius: 10px; padding: 0 12px;
-            gap: 8px; flex: 1; max-width: 420px;
-            transition: border-color 0.2s;
-        }
-        .search-wrap:focus-within { border-color: var(--primary); }
-        .search-icon { font-size: 14px; opacity: 0.5; flex-shrink: 0; }
-        .search-wrap input {
-            flex: 1; padding: 10px 0;
-            background: transparent; border: none;
-            font-size: 14px; color: var(--text-main);
-            font-family: 'Inter', sans-serif; outline: none;
-        }
-        .search-wrap input::placeholder { color: var(--text-muted); }
-        .search-clear {
-            background: none; border: none; cursor: pointer;
-            color: var(--text-muted); font-size: 14px; padding: 2px 4px;
-            border-radius: 4px; flex-shrink: 0;
-        }
-        .search-clear:hover { color: var(--text-main); }
-        .search-results-count {
-            font-size: 12px; color: var(--text-muted);
-            margin-bottom: 12px; padding: 0 4px;
-        }
-        .controls-right { display: flex; gap: 10px; flex-wrap: wrap; }
+/* ── CONTROLS BAR ── */
+.controls {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 20px;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
 
-        /* ── BUTTONS ── */
-        .btn {
-            padding: 10px 18px; border-radius: 10px; font-weight: 600;
-            cursor: pointer; transition: all 0.2s; border: none; font-size: 13px;
-            font-family: 'Inter', sans-serif; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
-        }
-        .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; box-shadow: 0 3px 12px rgba(99, 102, 241, 0.35); }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(99, 102, 241, 0.5); }
-        .btn-success { background: linear-gradient(135deg, #10b981, #059669); color: white; box-shadow: 0 3px 12px rgba(16, 185, 129, 0.3); }
-        .btn-success:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(16, 185, 129, 0.45); }
-        .btn-upload { background: linear-gradient(135deg, #0ea5e9, #0284c7); color: white; box-shadow: 0 3px 12px rgba(14, 165, 233, 0.3); }
-        .btn-upload:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(14, 165, 233, 0.45); }
-        .btn-cancel { background: var(--input-bg); color: var(--text-muted); border: 1px solid var(--border); }
-        .btn-cancel:hover { background: var(--border); color: var(--text-main); }
-        .btn-danger { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; box-shadow: 0 3px 12px rgba(239, 68, 68, 0.3); }
-        .btn-danger:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(239, 68, 68, 0.45); }
-        .btn-pdf { background: linear-gradient(135deg, #f59e0b, #d97706); color: white; box-shadow: 0 3px 12px rgba(245, 158, 11, 0.3); }
-        .btn-pdf:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(245, 158, 11, 0.45); }
+.search-wrap {
+    display: flex;
+    align-items: center;
+    background: var(--cream);
+    border: 1.5px solid var(--border);
+    border-radius: 9px;
+    padding: 0 12px;
+    flex: 1;
+    min-width: 200px;
+    transition: border-color 0.2s;
+}
+.search-wrap:focus-within { border-color: var(--gold); background: var(--white); }
 
-        /* ── ALERTS ── */
-        .alert { padding: 14px 18px; border-radius: 10px; margin-bottom: 20px; display: none; font-weight: 600; font-size: 14px; }
-        .alert-success { background: var(--success-bg); color: var(--success-color); border: 1px solid rgba(16, 185, 129, 0.3); }
-        .alert-error { background: var(--error-bg); color: var(--error-color); border: 1px solid rgba(239, 68, 68, 0.3); }
+.search-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    color: var(--sub);
+    margin-right: 8px;
+}
 
-        /* ── FAQ LIST ── */
-        .faq-list {
-            background: var(--card-bg); backdrop-filter: blur(12px);
-            border: 1px solid var(--border); border-radius: 20px;
-            padding: 28px; box-shadow: var(--shadow); margin-bottom: 24px;
-        }
+.search-wrap input {
+    flex: 1;
+    padding: 10px 0;
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    color: var(--dark);
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+}
+.search-wrap input::placeholder { color: var(--sub); }
 
-        /* ── FAQ ITEM ── */
-        .faq-item {
-            padding: 20px 22px; border: 1px solid var(--border);
-            border-radius: 14px; margin-bottom: 14px; transition: all 0.25s; background: var(--bg-secondary);
-        }
-        .faq-item:hover { border-color: var(--border-hover); box-shadow: var(--shadow-glow); transform: translateY(-2px); }
-        .faq-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; gap: 12px; }
-        .faq-question { font-size: 15px; font-weight: 700; color: var(--text-main); flex: 1; line-height: 1.4; }
-        .faq-actions { display: flex; gap: 8px; flex-shrink: 0; }
-        .btn-small {
-            padding: 7px 13px; font-size: 12px; border-radius: 8px; cursor: pointer; border: none;
-            font-weight: 600; font-family: 'Inter', sans-serif; transition: all 0.2s;
-            display: inline-flex; align-items: center; gap: 4px;
-        }
-        .btn-edit { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.25); }
-        .btn-edit:hover { background: rgba(59, 130, 246, 0.3); }
-        .btn-delete { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.25); }
-        .btn-delete:hover { background: rgba(239, 68, 68, 0.3); }
-        .faq-answer { color: var(--text-muted); margin-bottom: 14px; line-height: 1.6; font-size: 14px; }
-        .faq-triggers { display: flex; flex-wrap: wrap; gap: 8px; }
-        .trigger-tag { background: var(--tag-bg); color: var(--tag-color); padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.search-clear {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--sub);
+    font-size: 13px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    line-height: 1;
+    flex-shrink: 0;
+}
+.search-clear:hover { color: var(--dark); }
 
-        /* ── EMPTY STATE ── */
-        .empty-state { text-align: center; padding: 70px 20px; color: var(--text-muted); }
-        .empty-state-icon { font-size: 60px; margin-bottom: 16px; }
-        .empty-state p { font-size: 16px; }
+.controls-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
-        /* ── MODALS ── */
-        .modal {
-            display: none; position: fixed; top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px);
-            z-index: 1000; align-items: center; justify-content: center;
-        }
-        .modal-content {
-            background: var(--card-solid); border: 1px solid var(--border);
-            border-radius: 24px; padding: 36px; max-width: 600px; width: 90%;
-            max-height: 90vh; overflow-y: auto;
-            box-shadow: 0 25px 70px rgba(0,0,0,0.5); animation: slideUp 0.35s ease;
-        }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
-        .modal-header h2 { font-size: 22px; font-weight: 800; color: var(--text-main); }
-        .modal-close {
-            background: var(--input-bg); border: 1px solid var(--border); font-size: 20px;
-            cursor: pointer; color: var(--text-muted); width: 36px; height: 36px;
-            border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;
-        }
-        .modal-close:hover { color: var(--text-main); background: var(--border); }
-        .form-group { margin-bottom: 20px; }
-        .form-group label { display: block; font-weight: 600; margin-bottom: 8px; color: var(--text-body); font-size: 14px; }
-        .form-group input, .form-group textarea {
-            width: 100%; padding: 12px 16px; background: var(--input-bg);
-            border: 1px solid var(--input-border); border-radius: 10px; font-size: 14px;
-            font-family: 'Inter', sans-serif; color: var(--text-main); transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); }
-        .form-group input::placeholder, .form-group textarea::placeholder { color: var(--text-muted); }
-        .form-group textarea { resize: vertical; min-height: 100px; }
-        .hint { font-size: 12px; color: var(--text-muted); margin-top: 5px; }
-        .modal-actions { display: flex; gap: 12px; margin-top: 28px; }
+/* ── BUTTONS ── */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 16px;
+    border-radius: 9px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    white-space: nowrap;
+    text-decoration: none;
+}
 
-        /* ── DELETE ALL CONFIRM MODAL ── */
-        .confirm-modal-content {
-            background: var(--card-solid); border: 1px solid rgba(239,68,68,0.3);
-            border-radius: 24px; padding: 40px 36px; max-width: 440px; width: 90%;
-            box-shadow: 0 25px 70px rgba(0,0,0,0.5); text-align: center; animation: slideUp 0.35s ease;
-        }
-        .confirm-icon { font-size: 52px; margin-bottom: 16px; }
-        .confirm-modal-content h2 { font-size: 22px; font-weight: 800; color: var(--text-main); margin-bottom: 12px; }
-        .confirm-modal-content p { color: var(--text-muted); font-size: 14px; line-height: 1.6; margin-bottom: 8px; }
-        .confirm-warning { color: #f87171; font-size: 13px; font-weight: 600; margin-bottom: 28px; }
-        .confirm-actions { display: flex; gap: 12px; justify-content: center; }
+.btn-primary { background: var(--gold); color: #fff; box-shadow: 0 2px 8px rgba(184,146,74,0.3); }
+.btn-primary:hover { background: var(--gold-dk); transform: translateY(-1px); }
+.btn-outline { background: var(--white); color: var(--mid); border: 1px solid var(--border); }
+.btn-outline:hover { border-color: var(--gold); color: var(--gold-dk); background: var(--gold-lt); }
+.btn-danger-outline { background: var(--white); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
+.btn-danger-outline:hover { background: var(--danger-lt); border-color: var(--danger); }
+.btn-danger-solid { background: var(--danger); color: #fff; }
+.btn-danger-solid:hover { background: #dc2626; }
+.btn-ghost { background: transparent; color: var(--mid); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--cream); }
+.btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 7px; }
 
-        /* ── UPLOAD MODAL ── */
-        .format-box { padding: 14px 18px; border-radius: 10px; margin-bottom: 14px; font-size: 13px; line-height: 1.7; }
-        .format-box.blue { background: var(--format-blue-bg); border-left: 3px solid var(--format-blue-border); }
-        .format-box.yellow { background: var(--format-yellow-bg); border-left: 3px solid var(--format-yellow-border); }
-        .format-box strong { display: block; margin-bottom: 6px; color: var(--text-main); font-size: 14px; }
-        .format-box ul { margin-left: 18px; color: var(--text-body); }
-        .format-box code { background: rgba(128,128,128,0.15); padding: 1px 6px; border-radius: 4px; font-family: monospace; font-size: 12px; color: var(--tag-color); }
-        .upload-dropzone { border: 2px dashed var(--input-border); border-radius: 14px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.3s; margin: 16px 0; background: var(--drop-bg); }
-        .upload-dropzone:hover, .upload-dropzone.dragover { border-color: var(--primary); background: var(--drop-hover-bg); }
-        .upload-dropzone .drop-icon { font-size: 44px; margin-bottom: 12px; }
-        .upload-dropzone p { color: var(--text-muted); font-size: 14px; margin-bottom: 4px; }
-        .upload-dropzone .file-types { color: var(--text-muted); font-size: 12px; opacity: 0.7; }
-        .upload-dropzone .selected-name { color: var(--primary); font-weight: 700; display: none; }
-        .progress-area { display: none; margin-top: 16px; }
-        .progress-bar-bg { background: var(--border); border-radius: 20px; height: 8px; overflow: hidden; }
-        .progress-bar-fill { background: linear-gradient(90deg, var(--primary), #a78bfa); height: 100%; width: 0%; transition: width 0.4s ease; border-radius: 20px; }
-        .progress-status { text-align: center; font-size: 13px; color: var(--text-muted); margin-top: 10px; font-weight: 500; }
-        .download-template-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--primary); font-weight: 600; cursor: pointer; padding: 4px 0; margin-bottom: 4px; }
-        .download-template-link:hover { text-decoration: underline; }
-        .embed-tip { margin-top: 18px; padding: 14px 16px; background: var(--tip-bg); border-left: 3px solid var(--warning); border-radius: 8px; font-size: 13px; color: var(--tip-color); line-height: 1.6; }
+/* ── SEARCH COUNT ── */
+.search-count {
+    font-size: 12px;
+    color: var(--sub);
+    margin-bottom: 12px;
+    padding: 0 2px;
+}
 
-        @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+/* ── FAQ LIST ── */
+.faq-list { display: flex; flex-direction: column; gap: 1px; }
 
-        @media (max-width: 768px) {
-            .header { padding: 18px 20px; }
-            .container { padding: 24px 16px; }
-            .controls { flex-direction: column; align-items: stretch; }
-            .controls-right { justify-content: stretch; }
-            .controls-right .btn { flex: 1; justify-content: center; }
-        }
+.faq-item {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    padding: 18px 20px;
+    transition: background 0.15s;
+    position: relative;
+}
+
+.faq-item:first-child { border-radius: 14px 14px 0 0; }
+.faq-item:last-child { border-radius: 0 0 14px 14px; border-bottom: 1px solid var(--border); }
+.faq-item:first-child:last-child { border-radius: 14px; }
+.faq-item + .faq-item { border-top: none; }
+.faq-item:hover { background: #FDFCFA; }
+
+.faq-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.faq-body { flex: 1; min-width: 0; }
+
+.faq-question {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--dark);
+    margin-bottom: 6px;
+    line-height: 1.45;
+}
+
+.faq-answer {
+    font-size: 13px;
+    color: var(--mid);
+    font-weight: 300;
+    line-height: 1.6;
+    margin-bottom: 10px;
+}
+
+.faq-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.keyword-tag {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--gold-dk);
+    background: var(--gold-lt);
+    border: 1px solid rgba(184,146,74,0.18);
+    border-radius: 5px;
+    padding: 2px 8px;
+    font-family: 'DM Mono', monospace;
+}
+
+.faq-item-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    align-items: flex-start;
+}
+
+/* ── EMPTY STATE ── */
+.empty-wrap {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 64px 24px;
+    text-align: center;
+}
+
+.empty-wrap h3 {
+    font-family: 'Fraunces', serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--dark);
+    margin-bottom: 8px;
+}
+
+.empty-wrap p { font-size: 14px; color: var(--sub); font-weight: 300; line-height: 1.6; margin-bottom: 20px; }
+
+.empty-icon-box {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    background: var(--gold-lt);
+    border: 1px solid rgba(184,146,74,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 18px;
+}
+
+.empty-icon-box svg { width: 24px; height: 24px; color: var(--gold); }
+
+/* ── MODALS ── */
+.modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(28,25,23,0.55);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.modal-box {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 32px;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.12);
+    animation: slideUp 0.22s ease;
+}
+
+.modal-box.sm { max-width: 420px; text-align: center; }
+.modal-box.lg { max-width: 600px; }
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+}
+
+.modal-header h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--dark);
+}
+
+.modal-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--cream);
+    border: 1px solid var(--border);
+    color: var(--mid);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    line-height: 1;
+}
+.modal-close:hover { background: var(--panel); color: var(--dark); }
+
+.form-group { margin-bottom: 18px; }
+
+.form-group label {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--mid);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 7px;
+}
+
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 11px 14px;
+    background: var(--cream);
+    border: 1.5px solid var(--border);
+    border-radius: 9px;
+    font-size: 14px;
+    color: var(--dark);
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder { color: var(--sub); }
+
+.form-group input:focus,
+.form-group textarea:focus {
+    border-color: var(--gold);
+    background: var(--white);
+    box-shadow: 0 0 0 3px var(--gold-lt);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 100px;
+    line-height: 1.6;
+}
+
+.form-hint {
+    font-size: 11px;
+    color: var(--sub);
+    margin-top: 5px;
+    font-weight: 300;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+
+/* ── DELETE CONFIRM ── */
+.confirm-icon-box {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: var(--danger-lt);
+    border: 1px solid rgba(239,68,68,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+}
+.confirm-icon-box svg { width: 22px; height: 22px; color: var(--danger); }
+.modal-box.sm h2 { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+.modal-box.sm p { font-size: 14px; color: var(--mid); line-height: 1.6; margin-bottom: 6px; }
+.confirm-count { display: inline-block; font-weight: 700; color: var(--danger); background: var(--danger-lt); padding: 4px 12px; border-radius: 7px; font-size: 14px; margin: 10px 0 18px; }
+.confirm-actions { display: flex; gap: 10px; justify-content: center; margin-top: 4px; }
+
+/* ── UPLOAD MODAL ── */
+.format-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.format-card {
+    background: var(--cream);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 12px;
+    color: var(--mid);
+    line-height: 1.7;
+}
+.format-card strong { display: block; color: var(--dark); font-size: 13px; margin-bottom: 6px; }
+.format-card code { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--gold-dk); background: var(--gold-lt); padding: 1px 5px; border-radius: 3px; }
+
+.template-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--gold-dk);
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 14px;
+    text-decoration: none;
+}
+.template-link:hover { text-decoration: underline; }
+.template-link svg { width: 14px; height: 14px; }
+
+.drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--cream);
+    margin-bottom: 16px;
+}
+.drop-zone:hover, .drop-zone.dragover { border-color: var(--gold); background: var(--gold-lt); }
+.drop-zone-icon { margin: 0 auto 10px; width: 36px; height: 36px; color: var(--sub); }
+.drop-zone p { font-size: 14px; color: var(--mid); font-weight: 500; margin-bottom: 4px; }
+.drop-zone .file-types { font-size: 12px; color: var(--sub); font-weight: 300; }
+.selected-file { font-size: 13px; color: var(--gold-dk); font-weight: 600; margin-top: 8px; }
+
+.progress-wrap { margin-bottom: 16px; display: none; }
+.progress-track { background: var(--border); border-radius: 20px; height: 6px; overflow: hidden; margin-bottom: 8px; }
+.progress-bar { background: var(--gold); height: 100%; width: 0%; transition: width 0.4s; border-radius: 20px; }
+.progress-label { font-size: 12px; color: var(--sub); text-align: center; }
+
+.upload-tip {
+    font-size: 12px;
+    color: var(--mid);
+    background: var(--warning-lt);
+    border-left: 3px solid var(--warning);
+    border-radius: 8px;
+    padding: 12px 14px;
+    line-height: 1.6;
+    margin-bottom: 16px;
+}
+.upload-tip strong { color: var(--warning); }
+
+/* ── TOAST ── */
+#toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    padding: 13px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    display: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    max-width: 320px;
+}
+
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 768px) {
+    .topbar { padding: 0 16px; }
+    .topbar-title { display: none; }
+    .topbar-divider { display: none; }
+    .page-wrap { padding: 16px; }
+    .controls { padding: 12px 14px; gap: 10px; }
+    .controls-actions { width: 100%; justify-content: space-between; }
+    .controls-actions .btn { flex: 1; justify-content: center; }
+    .faq-item { padding: 14px 16px; }
+    .faq-item-actions { flex-direction: column; gap: 4px; }
+    .format-row { grid-template-columns: 1fr; }
+    .modal-box { padding: 24px; }
+}
+
+@media (max-width: 480px) {
+    .topbar-right .plan-badge { display: none; }
+    .faq-row { flex-direction: column; gap: 12px; }
+    .faq-item-actions { flex-direction: row; }
+}
     </style>
 </head>
 <body>
 
-    <!-- HEADER -->
-    <div class="header">
-        <div class="header-left">
-            <h1>📝 FAQ Manager</h1>
-            <p>Add, edit, and manage your chatbot's FAQs</p>
+<!-- TOPBAR -->
+<div class="topbar">
+    <div class="topbar-left">
+        <a href="/dashboard" class="back-link">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            Dashboard
+        </a>
+        <div class="topbar-divider"></div>
+        <span class="topbar-title">FAQ Manager</span>
+    </div>
+    <div class="topbar-right">
+        <span class="plan-badge">Plan: <strong id="user-plan">Loading</strong></span>
+        <span class="faq-counter"><span id="faq-count">0</span> / <span id="faq-limit">999</span> FAQs</span>
+        <span class="limit-warning" id="limit-warning">Limit Reached</span>
+    </div>
+</div>
+
+<!-- MAIN -->
+<div class="page-wrap">
+
+    <!-- CONTROLS -->
+    <div class="controls">
+        <div class="search-wrap">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="faq-search" placeholder="Search questions, answers or keywords…" oninput="filterFAQs()" autocomplete="off">
+            <button class="search-clear" id="search-clear" onclick="clearSearch()" style="display:none;">✕</button>
         </div>
-        <div class="header-right">
-            <div class="plan-status-bar">
-                <strong>Plan:</strong> <span id="user-plan">Loading...</span> &nbsp;·&nbsp;
-                <strong>FAQs:</strong> <span id="faq-count">0</span> / <span id="faq-limit">0</span>
-                <span id="limit-warning" class="limit-warning" style="display:none;">⚠️ Limit Reached</span>
-            </div>
-            <label class="theme-toggle" title="Toggle light/dark theme">
-                <span class="theme-toggle-label" id="theme-label">🌙 Dark</span>
-                <div class="toggle-switch">
-                    <input type="checkbox" id="theme-switch" onchange="toggleTheme(this)">
-                    <div class="toggle-track"></div>
-                    <div class="toggle-thumb" id="toggle-icon">🌙</div>
-                </div>
-            </label>
+        <div class="controls-actions">
+            <button class="btn btn-outline" onclick="exportPDF()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Export
+            </button>
+            <button class="btn btn-outline" onclick="showUploadModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+                Upload
+            </button>
+            <button class="btn btn-danger-outline" onclick="showDeleteAllModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                Delete All
+            </button>
+            <button class="btn btn-primary" onclick="openAddModal()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add FAQ
+            </button>
         </div>
     </div>
 
-    <div class="container">
+    <div class="search-count" id="search-results-count" style="display:none;"></div>
 
-        <!-- CONTROLS -->
-        <div class="controls">
-            <div class="controls-left">
-                <div class="search-wrap">
-                    <span class="search-icon">🔍</span>
-                    <input type="text" id="faq-search" placeholder="Search questions, answers or keywords..." oninput="filterFAQs()" autocomplete="off">
-                    <button class="search-clear" id="search-clear" onclick="clearSearch()" style="display:none;">✕</button>
-                </div>
+    <!-- FAQ LIST -->
+    <div class="faq-list" id="faq-list">
+        <div class="empty-wrap">
+            <div class="empty-icon-box">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             </div>
-            <div class="controls-right">
-                <button class="btn btn-pdf" onclick="exportPDF()">📄 Export PDF</button>
-                <button class="btn btn-danger" onclick="showDeleteAllModal()">🗑️ Delete All</button>
-                <button class="btn btn-upload" onclick="showUploadModal()">📤 Upload FAQs</button>
-                <button class="btn btn-success" onclick="openAddModal()">+ Add New FAQ</button>
-            </div>
-        </div>
-
-        <div id="toast" style="position:fixed;bottom:28px;right:28px;z-index:9999;padding:14px 22px;border-radius:12px;font-size:14px;font-weight:700;display:none;box-shadow:0 8px 24px rgba(0,0,0,0.3);max-width:320px;"></div>
-        <div class="search-results-count" id="search-results-count" style="display:none;"></div>
-
-        <div class="faq-list" id="faq-list">
-            <div class="empty-state">
-                <div class="empty-state-icon">⏳</div>
-                <p>Loading FAQs...</p>
-            </div>
-        </div>
-
-    </div>
-
-    <!-- ADD / EDIT MODAL -->
-    <div class="modal" id="faq-modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 id="modal-title">Add New FAQ</h2>
-                <button class="modal-close" onclick="closeModal()">×</button>
-            </div>
-            <form id="faq-form">
-                <input type="hidden" id="faq-id">
-                <div class="form-group">
-                    <label>Question</label>
-                    <input type="text" id="faq-question" placeholder="What are your business hours?" required>
-                    <div class="hint">The question your customers will ask</div>
-                </div>
-                <div class="form-group">
-                    <label>Answer</label>
-                    <textarea id="faq-answer" placeholder="We're open Monday to Friday, 9 AM - 6 PM EST." required></textarea>
-                    <div class="hint">The response the chatbot will give</div>
-                </div>
-                <div class="form-group">
-                    <label>Trigger Keywords</label>
-                    <input type="text" id="faq-triggers" placeholder="hours, time, open, available" required>
-                    <div class="hint">Keywords that trigger this answer (comma-separated)</div>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancel</button>
-                    <button type="submit" class="btn btn-success">Save FAQ</button>
-                </div>
-            </form>
+            <h3>Loading FAQs…</h3>
+            <p>Please wait while we fetch your knowledge base.</p>
         </div>
     </div>
 
-    <!-- DELETE ALL CONFIRM MODAL -->
-    <div class="modal" id="delete-all-modal">
-        <div class="confirm-modal-content">
-            <div class="confirm-icon">🗑️</div>
-            <h2>Delete All FAQs?</h2>
-            <p>You are about to permanently delete <strong id="delete-all-count">all</strong> FAQs for this client.</p>
-            <p class="confirm-warning">⚠️ This cannot be undone.</p>
-            <div class="confirm-actions">
-                <button class="btn btn-cancel" onclick="closeDeleteAllModal()">Cancel</button>
-                <button class="btn btn-danger" onclick="confirmDeleteAll()" id="confirm-delete-btn">Yes, Delete All</button>
-            </div>
-        </div>
-    </div>
+</div>
 
-    <!-- UPLOAD MODAL -->
-    <div class="modal" id="upload-modal">
-        <div class="modal-content" style="max-width: 560px;">
-            <div class="modal-header">
-                <h2>📤 Upload FAQs</h2>
-                <button class="modal-close" onclick="closeUploadModal()">×</button>
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- ADD / EDIT MODAL -->
+<div class="modal" id="faq-modal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h2 id="modal-title">Add FAQ</h2>
+            <button class="modal-close" onclick="closeModal()">×</button>
+        </div>
+        <form id="faq-form">
+            <input type="hidden" id="faq-id">
+            <div class="form-group">
+                <label>Question</label>
+                <input type="text" id="faq-question" placeholder="e.g. What are your business hours?" required>
+                <div class="form-hint">The question a visitor would ask the chatbot</div>
             </div>
-            <div class="format-box blue">
-                <strong>📋 CSV / Excel Format</strong>
-                <ul>
-                    <li>Column 1: <code>question</code> (required)</li>
-                    <li>Column 2: <code>answer</code> (required)</li>
-                    <li>Column 3: <code>category</code> (required)</li>
-                </ul>
+            <div class="form-group">
+                <label>Answer</label>
+                <textarea id="faq-answer" placeholder="e.g. We're open Monday to Friday, 9 AM – 6 PM EST." required></textarea>
+                <div class="form-hint">The response the chatbot will deliver</div>
             </div>
-            <div class="format-box yellow">
-                <strong>📄 PDF Format</strong>
-                <ul>
-                    <li>Use <code>Q:</code> or <code>Question:</code> before each question</li>
-                    <li>Use <code>A:</code> or <code>Answer:</code> before each answer</li>
-                    <li>Use <code>C:</code> or <code>category</code> before each category</li>
-                    <li>Or upload any document — AI will extract FAQs automatically!</li>
-                </ul>
-            </div>
-            <span class="download-template-link" onclick="downloadCSVTemplate()">⬇️ Download CSV Template</span>
-            <div class="upload-dropzone" id="drop-zone" onclick="document.getElementById('faq-file-input').click()">
-                <div class="drop-icon">📁</div>
-                <p>Click to upload or drag and drop</p>
-                <p class="selected-name" id="selected-file-name"></p>
-                <p class="file-types">CSV, Excel (.xlsx), or PDF — max 10MB</p>
-                <input type="file" id="faq-file-input" accept=".csv,.xlsx,.xls,.pdf" style="display: none;" onchange="handleFileSelect(event)">
-            </div>
-            <div class="progress-area" id="progress-area">
-                <div class="progress-bar-bg">
-                    <div class="progress-bar-fill" id="progress-fill"></div>
-                </div>
-                <p class="progress-status" id="progress-status">Processing...</p>
-            </div>
-            <div class="embed-tip">
-                💡 <strong>Tip:</strong> Download the CSV template to see the exact format needed. PDF uploads use AI extraction — Q: and A: labels give the best results.
+            <div class="form-group">
+                <label>Trigger Keywords</label>
+                <input type="text" id="faq-triggers" placeholder="hours, time, open, available, schedule">
+                <div class="form-hint">Comma-separated words that help the AI match this FAQ</div>
             </div>
             <div class="modal-actions">
-                <button class="btn btn-cancel" onclick="closeUploadModal()">Cancel</button>
-                <button class="btn btn-upload" id="upload-submit-btn" onclick="startUpload()" disabled>Upload FAQs</button>
+                <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save FAQ</button>
             </div>
+        </form>
+    </div>
+</div>
+
+<!-- DELETE ALL MODAL -->
+<div class="modal" id="delete-all-modal">
+    <div class="modal-box sm">
+        <div class="confirm-icon-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </div>
+        <h2>Delete All FAQs?</h2>
+        <p>You are about to permanently delete</p>
+        <div class="confirm-count"><span id="delete-all-count">all</span> FAQs</div>
+        <p style="font-size:13px;color:var(--danger);font-weight:500;">This action cannot be undone.</p>
+        <div class="confirm-actions">
+            <button class="btn btn-ghost" onclick="closeDeleteAllModal()">Cancel</button>
+            <button class="btn btn-danger-solid" onclick="confirmDeleteAll()" id="confirm-delete-btn">Delete All</button>
         </div>
     </div>
+</div>
 
-    <script>
-        // ── THEME TOGGLE ──
-        function toggleTheme(checkbox) {
-            const isLight = checkbox.checked;
-            document.documentElement.setAttribute('data-theme', isLight ? 'light' : 'dark');
-            document.getElementById('theme-label').textContent = isLight ? '☀️ Light' : '🌙 Dark';
-            document.getElementById('toggle-icon').textContent = isLight ? '☀️' : '🌙';
-            localStorage.setItem('faqManagerTheme', isLight ? 'light' : 'dark');
-        }
+<!-- UPLOAD MODAL -->
+<div class="modal" id="upload-modal">
+    <div class="modal-box lg">
+        <div class="modal-header">
+            <h2>Upload FAQs</h2>
+            <button class="modal-close" onclick="closeUploadModal()">×</button>
+        </div>
+        <div class="format-row">
+            <div class="format-card">
+                <strong>CSV / Excel</strong>
+                Column 1: <code>question</code><br>
+                Column 2: <code>answer</code><br>
+                Column 3: <code>category</code>
+            </div>
+            <div class="format-card">
+                <strong>PDF Document</strong>
+                Use <code>Q:</code> before each question<br>
+                Use <code>A:</code> before each answer<br>
+                Or upload any doc — AI extracts automatically
+            </div>
+        </div>
+        <span class="template-link" onclick="downloadCSVTemplate()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download CSV template
+        </span>
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('faq-file-input').click()">
+            <svg class="drop-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p>Click to select or drag and drop a file</p>
+            <div class="selected-file" id="selected-file-name" style="display:none;"></div>
+            <p class="file-types">CSV, Excel (.xlsx), or PDF — max 10 MB</p>
+            <input type="file" id="faq-file-input" accept=".csv,.xlsx,.xls,.pdf" style="display:none;" onchange="handleFileSelect(event)">
+        </div>
+        <div class="progress-wrap" id="progress-area">
+            <div class="progress-track"><div class="progress-bar" id="progress-fill"></div></div>
+            <p class="progress-label" id="progress-status">Processing…</p>
+        </div>
+        <div class="upload-tip"><strong>Tip:</strong> Download the CSV template to see the exact format. PDF uploads use AI extraction — Q: and A: labels give the best accuracy.</div>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeUploadModal()">Cancel</button>
+            <button class="btn btn-primary" id="upload-submit-btn" onclick="startUpload()" disabled>Upload</button>
+        </div>
+    </div>
+</div>
 
-        (function() {
-            const saved = localStorage.getItem('faqManagerTheme') || 'dark';
-            document.documentElement.setAttribute('data-theme', saved);
-            if (saved === 'light') {
-                const sw = document.getElementById('theme-switch');
-                if (sw) {
-                    sw.checked = true;
-                    document.getElementById('theme-label').textContent = '☀️ Light';
-                    document.getElementById('toggle-icon').textContent = '☀️';
-                }
-            }
-        })();
+<script>
+    // ── INIT ──────────────────────────────────────────────────────
+    const urlParams = new URLSearchParams(window.location.search);
+    const CLIENT_ID = urlParams.get('client_id');
 
-        // ── FAQ LOGIC ──
-        const urlParams = new URLSearchParams(window.location.search);
-        const CLIENT_ID = urlParams.get('client_id');
+    if (!CLIENT_ID) {
+        alert('No client ID provided.');
+        window.location.href = '/dashboard';
+    }
 
-        if (!CLIENT_ID) {
-            alert('Error: No client ID provided');
-            window.location.href = '/dashboard';
-        }
+    let currentFAQs = [];
+    let editingIndex = -1;
+    let faqLimit = 999;
+    let selectedFile = null;
 
-        let currentFAQs = [];
-        let editingIndex = -1;
-        let userPlan = 'free';
-        let faqLimit = 999;
-        let selectedFile = null;
+    window.onload = function() { loadFAQs(); };
 
-        window.onload = function() {
-            const clientId = urlParams.get('client_id') || 'demo';
-            loadFAQs();
-        };
-
-        async function loadFAQs() {
-            if (!CLIENT_ID) return;
-            try {
-                const response = await fetch(`/api/faqs?client_id=${CLIENT_ID}`);
-                const data = await response.json();
-                if (data.success) {
-                    currentFAQs = data.faqs || [];
-                    document.getElementById('faq-search').value = '';
-                    document.getElementById('search-clear').style.display = 'none';
-                    document.getElementById('search-results-count').style.display = 'none';
-                    renderFAQs();
-                    updateFaqCount();
-                } else { showError(); }
-            } catch (error) { showError(); }
-        }
-
-        function updateFaqCount() {
-            document.getElementById('faq-count').textContent = currentFAQs.length;
-            document.getElementById('faq-limit').textContent = faqLimit;
-            const w = document.getElementById('limit-warning');
-            w.style.display = currentFAQs.length >= faqLimit ? 'inline' : 'none';
-        }
-
-        function renderFAQs(faqs) {
-            // If called with a filtered list use it, otherwise use all
-            const list = faqs !== undefined ? faqs : currentFAQs;
-            const container = document.getElementById('faq-list');
-            if (list.length === 0) {
-                const q = document.getElementById('faq-search').value.trim();
-                container.innerHTML = q
-                    ? `<div class="empty-state"><div class="empty-state-icon">🔍</div><p>No FAQs match "<strong>${escapeHtml(q)}</strong>". Try a different keyword.</p></div>`
-                    : `<div class="empty-state"><div class="empty-state-icon">📝</div><p>No FAQs yet. Click <strong>Add New FAQ</strong> or <strong>Upload FAQs</strong> to get started!</p></div>`;
-                return;
-            }
-            container.innerHTML = list.map((faq, index) => {
-                // index into currentFAQs for edit/delete
-                const realIndex = faqs !== undefined ? currentFAQs.indexOf(faq) : index;
-                return `
-                <div class="faq-item">
-                    <div class="faq-header">
-                        <div class="faq-question">${escapeHtml(faq.question)}</div>
-                        <div class="faq-actions">
-                            <button class="btn-small btn-edit" onclick="editFAQ(${realIndex})">✏️ Edit</button>
-                            <button class="btn-small btn-delete" onclick="deleteFAQ(${realIndex})">🗑️ Delete</button>
-                        </div>
-                    </div>
-                    <div class="faq-answer">${escapeHtml(faq.answer)}</div>
-                    <div class="faq-triggers">
-                        ${(faq.triggers || []).map(t => `<span class="trigger-tag">${escapeHtml(t)}</span>`).join('')}
-                    </div>
-                </div>`;
-            }).join('');
-        }
-
-        function filterFAQs() {
-            const q = document.getElementById('faq-search').value.trim().toLowerCase();
-            const clearBtn = document.getElementById('search-clear');
-            const countEl = document.getElementById('search-results-count');
-            clearBtn.style.display = q ? 'block' : 'none';
-
-            if (!q) {
-                countEl.style.display = 'none';
+    // ── DATA ──────────────────────────────────────────────────────
+    async function loadFAQs() {
+        if (!CLIENT_ID) return;
+        try {
+            const res = await fetch(`/api/faqs?client_id=${CLIENT_ID}`);
+            const data = await res.json();
+            if (data.success) {
+                currentFAQs = data.faqs || [];
+                document.getElementById('faq-search').value = '';
+                document.getElementById('search-clear').style.display = 'none';
+                document.getElementById('search-results-count').style.display = 'none';
                 renderFAQs();
-                return;
-            }
-            const filtered = currentFAQs.filter(faq => {
-                const triggers = (faq.triggers || []).join(' ').toLowerCase();
-                return faq.question.toLowerCase().includes(q)
-                    || faq.answer.toLowerCase().includes(q)
-                    || triggers.includes(q);
+                updateFaqCount();
+            } else { showError(); }
+        } catch { showError(); }
+    }
+
+    function updateFaqCount() {
+        document.getElementById('faq-count').textContent = currentFAQs.length;
+        document.getElementById('faq-limit').textContent = faqLimit;
+        document.getElementById('limit-warning').style.display =
+            currentFAQs.length >= faqLimit ? 'inline' : 'none';
+    }
+
+    // ── RENDER ────────────────────────────────────────────────────
+    function renderFAQs(faqs) {
+        const list = faqs !== undefined ? faqs : currentFAQs;
+        const container = document.getElementById('faq-list');
+        if (list.length === 0) {
+            const q = document.getElementById('faq-search').value.trim();
+            container.innerHTML = q
+                ? `<div class="empty-wrap">
+                    <div class="empty-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+                    <h3>No results for "${escapeHtml(q)}"</h3>
+                    <p>Try a different keyword or clear the search.</p>
+                   </div>`
+                : `<div class="empty-wrap">
+                    <div class="empty-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
+                    <h3>No FAQs yet</h3>
+                    <p>Add your first FAQ manually or upload a CSV, Excel, or PDF file.</p>
+                    <button class="btn btn-primary" onclick="openAddModal()">Add First FAQ</button>
+                   </div>`;
+            return;
+        }
+        container.innerHTML = list.map((faq, i) => {
+            const realIndex = faqs !== undefined ? currentFAQs.indexOf(faq) : i;
+            const triggers = (faq.triggers || []).map(t => `<span class="keyword-tag">${escapeHtml(t)}</span>`).join('');
+            return `
+            <div class="faq-item">
+                <div class="faq-row">
+                    <div class="faq-body">
+                        <div class="faq-question">${escapeHtml(faq.question)}</div>
+                        <div class="faq-answer">${escapeHtml(faq.answer)}</div>
+                        ${triggers ? `<div class="faq-keywords">${triggers}</div>` : ''}
+                    </div>
+                    <div class="faq-item-actions">
+                        <button class="btn btn-outline btn-sm" onclick="editFAQ(${realIndex})">Edit</button>
+                        <button class="btn btn-danger-outline btn-sm" onclick="deleteFAQ(${realIndex})">Delete</button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // ── SEARCH ────────────────────────────────────────────────────
+    function filterFAQs() {
+        const q = document.getElementById('faq-search').value.trim().toLowerCase();
+        const clearBtn = document.getElementById('search-clear');
+        const countEl = document.getElementById('search-results-count');
+        clearBtn.style.display = q ? 'block' : 'none';
+        if (!q) { countEl.style.display = 'none'; renderFAQs(); return; }
+        const filtered = currentFAQs.filter(f => {
+            const kw = (f.triggers || []).join(' ').toLowerCase();
+            return f.question.toLowerCase().includes(q) || f.answer.toLowerCase().includes(q) || kw.includes(q);
+        });
+        countEl.style.display = 'block';
+        countEl.textContent = `${filtered.length} of ${currentFAQs.length} FAQs match "${q}"`;
+        renderFAQs(filtered);
+    }
+
+    function clearSearch() {
+        document.getElementById('faq-search').value = '';
+        document.getElementById('search-clear').style.display = 'none';
+        document.getElementById('search-results-count').style.display = 'none';
+        renderFAQs();
+    }
+
+    // ── ADD / EDIT ────────────────────────────────────────────────
+    function openAddModal() {
+        document.getElementById('modal-title').textContent = 'Add FAQ';
+        document.getElementById('faq-form').reset();
+        document.getElementById('faq-id').value = '';
+        editingIndex = -1;
+        document.getElementById('faq-modal').style.display = 'flex';
+        setTimeout(() => document.getElementById('faq-question').focus(), 100);
+    }
+
+    function editFAQ(index) {
+        const faq = currentFAQs[index];
+        document.getElementById('modal-title').textContent = 'Edit FAQ';
+        document.getElementById('faq-id').value = faq.id;
+        document.getElementById('faq-question').value = faq.question;
+        document.getElementById('faq-answer').value = faq.answer;
+        let triggers = faq.triggers || [];
+        if (typeof triggers === 'string') {
+            try { triggers = JSON.parse(triggers); }
+            catch { triggers = triggers.split(',').map(t => t.trim()).filter(Boolean); }
+        }
+        document.getElementById('faq-triggers').value = Array.isArray(triggers) ? triggers.join(', ') : '';
+        editingIndex = index;
+        document.getElementById('faq-modal').style.display = 'flex';
+        setTimeout(() => document.getElementById('faq-question').focus(), 100);
+    }
+
+    document.getElementById('faq-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const question = document.getElementById('faq-question').value.trim();
+        const answer   = document.getElementById('faq-answer').value.trim();
+        const triggers = document.getElementById('faq-triggers').value.split(',').map(t => t.trim()).filter(Boolean);
+        const newFAQ = {
+            id: editingIndex >= 0 ? currentFAQs[editingIndex].id : `faq_${Date.now()}`,
+            question, answer, triggers
+        };
+        const updated = editingIndex >= 0
+            ? currentFAQs.map((f, i) => i === editingIndex ? newFAQ : f)
+            : [...currentFAQs, newFAQ];
+        try {
+            const res = await fetch('/api/faqs', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ client_id: CLIENT_ID, faqs: updated })
             });
-            countEl.style.display = 'block';
-            countEl.textContent = `${filtered.length} of ${currentFAQs.length} FAQs match "${q}"`;
-            renderFAQs(filtered);
-        }
+            const data = await res.json();
+            if (data.success) {
+                currentFAQs = updated;
+                renderFAQs();
+                closeModal();
+                showSuccess(editingIndex >= 0 ? 'FAQ updated successfully.' : 'FAQ added successfully.');
+                updateFaqCount();
+            } else { showError(data.error); }
+        } catch { showError(); }
+    });
 
-        function clearSearch() {
-            document.getElementById('faq-search').value = '';
-            document.getElementById('search-clear').style.display = 'none';
-            document.getElementById('search-results-count').style.display = 'none';
-            renderFAQs();
-        }
+    async function deleteFAQ(index) {
+        if (!confirm('Remove this FAQ?')) return;
+        const updated = currentFAQs.filter((_, i) => i !== index);
+        try {
+            const res = await fetch('/api/faqs', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ client_id: CLIENT_ID, faqs: updated })
+            });
+            const data = await res.json();
+            if (data.success) { currentFAQs = updated; renderFAQs(); showSuccess('FAQ deleted.'); updateFaqCount(); }
+            else showError();
+        } catch { showError(); }
+    }
 
-        function openAddModal() {
-            document.getElementById('modal-title').textContent = 'Add New FAQ';
-            document.getElementById('faq-form').reset();
-            document.getElementById('faq-id').value = '';
-            editingIndex = -1;
-            document.getElementById('faq-modal').style.display = 'flex';
-        }
+    function closeModal() { document.getElementById('faq-modal').style.display = 'none'; }
 
-        function editFAQ(index) {
-            const faq = currentFAQs[index];
-            document.getElementById('modal-title').textContent = 'Edit FAQ';
-            document.getElementById('faq-id').value = faq.id;
-            document.getElementById('faq-question').value = faq.question;
-            document.getElementById('faq-answer').value = faq.answer;
-            // triggers can be a string (JSON) or array depending on DB format
-            let triggers = faq.triggers || [];
-            if (typeof triggers === 'string') {
-                try { triggers = JSON.parse(triggers); } catch(e) { triggers = triggers.split(',').map(t => t.trim()).filter(Boolean); }
+    // ── DELETE ALL ────────────────────────────────────────────────
+    function showDeleteAllModal() {
+        if (currentFAQs.length === 0) { showError('There are no FAQs to delete.'); return; }
+        document.getElementById('delete-all-count').textContent = currentFAQs.length;
+        document.getElementById('delete-all-modal').style.display = 'flex';
+    }
+    function closeDeleteAllModal() { document.getElementById('delete-all-modal').style.display = 'none'; }
+
+    async function confirmDeleteAll() {
+        const btn = document.getElementById('confirm-delete-btn');
+        btn.disabled = true; btn.textContent = 'Deleting…';
+        try {
+            const res = await fetch('/api/faqs/delete-all', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ client_id: CLIENT_ID })
+            });
+            const data = await res.json();
+            if (data.success) {
+                currentFAQs = [];
+                renderFAQs();
+                updateFaqCount();
+                closeDeleteAllModal();
+                showSuccess('All FAQs deleted.');
+            } else showError(data.error);
+        } catch { showError('Failed to delete FAQs.'); }
+        finally { btn.disabled = false; btn.textContent = 'Delete All'; }
+    }
+
+    // ── EXPORT PDF ────────────────────────────────────────────────
+    async function exportPDF() {
+        if (currentFAQs.length === 0) { showError('No FAQs to export.'); return; }
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const pageW = doc.internal.pageSize.getWidth();
+        const pageH = doc.internal.pageSize.getHeight();
+        const margin = 16;
+
+        doc.setFillColor(247, 244, 239);
+        doc.rect(0, 0, pageW, 28, 'F');
+        doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+        doc.setTextColor(28, 25, 23);
+        doc.text('Lumvi — FAQ Export', margin, 14);
+        doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+        doc.setTextColor(168, 162, 158);
+        doc.text(`Generated: ${new Date().toLocaleDateString()} · ${currentFAQs.length} FAQs · Client: ${CLIENT_ID}`, pageW - margin, 14, { align: 'right' });
+        doc.setDrawColor(231, 226, 218);
+        doc.line(margin, 28, pageW - margin, 28);
+
+        let y = 36;
+        currentFAQs.forEach((faq, i) => {
+            const qLines = doc.splitTextToSize(faq.question, pageW - margin * 2 - 16);
+            const aLines = doc.splitTextToSize(faq.answer, pageW - margin * 2 - 16);
+            const blockH = 14 + (qLines.length * 5.5) + (aLines.length * 5) + 10;
+            if (y + blockH > pageH - 20) { doc.addPage(); y = 20; }
+            doc.setFillColor(247, 244, 239);
+            doc.roundedRect(margin, y, pageW - margin * 2, blockH, 3, 3, 'F');
+            doc.setFillColor(184, 146, 74);
+            doc.roundedRect(margin, y, 4, blockH, 2, 2, 'F');
+            doc.setFontSize(7); doc.setFont('helvetica', 'normal');
+            doc.setTextColor(168, 162, 158);
+            doc.text(`${i + 1}`, margin + 10, y + 6);
+            doc.setTextColor(28, 25, 23); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+            doc.text(qLines, margin + 16, y + 9);
+            const aY = y + 9 + qLines.length * 5.5 + 2;
+            doc.setTextColor(87, 83, 78); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+            doc.text(aLines, margin + 16, aY);
+            if (faq.triggers && faq.triggers.length > 0) {
+                const tY = aY + aLines.length * 5 + 2;
+                doc.setTextColor(154, 122, 58); doc.setFontSize(7.5); doc.setFont('helvetica', 'italic');
+                doc.text('Keywords: ' + faq.triggers.slice(0, 8).join(', '), margin + 16, tY);
             }
-            document.getElementById('faq-triggers').value = Array.isArray(triggers) ? triggers.join(', ') : '';
-            editingIndex = index;
-            document.getElementById('faq-modal').style.display = 'flex';
-        }
-
-        async function deleteFAQ(index) {
-            if (!confirm('Are you sure you want to delete this FAQ?')) return;
-            const updatedFAQs = currentFAQs.filter((_, i) => i !== index);
-            try {
-                const response = await fetch('/api/faqs', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ client_id: CLIENT_ID, faqs: updatedFAQs })
-                });
-                const data = await response.json();
-                if (data.success) { currentFAQs = updatedFAQs; renderFAQs(); showSuccess(); updateFaqCount(); }
-                else { showError(); }
-            } catch (e) { showError(); }
-        }
-
-        function closeModal() { document.getElementById('faq-modal').style.display = 'none'; }
-
-        document.getElementById('faq-form').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const question = document.getElementById('faq-question').value.trim();
-            const answer = document.getElementById('faq-answer').value.trim();
-            const triggers = document.getElementById('faq-triggers').value.split(',').map(t => t.trim()).filter(Boolean);
-            const newFAQ = {
-                id: editingIndex >= 0 ? currentFAQs[editingIndex].id : `faq_${Date.now()}`,
-                question, answer, triggers
-            };
-            const updatedFAQs = editingIndex >= 0
-                ? currentFAQs.map((f, i) => i === editingIndex ? newFAQ : f)
-                : [...currentFAQs, newFAQ];
-            try {
-                const response = await fetch('/api/faqs', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ client_id: CLIENT_ID, faqs: updatedFAQs })
-                });
-                const data = await response.json();
-                if (data.success) { currentFAQs = updatedFAQs; renderFAQs(); closeModal(); showSuccess(); updateFaqCount(); }
-                else { showError(data.error); }
-            } catch (e) { showError(); }
+            y += blockH + 5;
         });
 
-        // ── DELETE ALL ──
-        function showDeleteAllModal() {
-            if (currentFAQs.length === 0) { showError('No FAQs to delete.'); return; }
-            document.getElementById('delete-all-count').textContent = currentFAQs.length;
-            document.getElementById('delete-all-modal').style.display = 'flex';
-        }
+        doc.setFontSize(8); doc.setTextColor(168, 162, 158); doc.setFont('helvetica', 'normal');
+        doc.text('Generated by Lumvi · lumvi.net', pageW / 2, pageH - 8, { align: 'center' });
+        doc.save(`faqs-${CLIENT_ID}-${Date.now()}.pdf`);
+        showSuccess(`Exported ${currentFAQs.length} FAQs.`);
+    }
 
-        function closeDeleteAllModal() {
-            document.getElementById('delete-all-modal').style.display = 'none';
-        }
+    // ── UPLOAD ────────────────────────────────────────────────────
+    function showUploadModal() { document.getElementById('upload-modal').style.display = 'flex'; resetUploadModal(); }
+    function closeUploadModal() { document.getElementById('upload-modal').style.display = 'none'; resetUploadModal(); }
 
-        async function confirmDeleteAll() {
-            const btn = document.getElementById('confirm-delete-btn');
-            btn.disabled = true;
-            btn.textContent = 'Deleting...';
-            try {
-                const response = await fetch('/api/faqs/delete-all', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ client_id: CLIENT_ID })
-                });
-                const data = await response.json();
-                if (data.success) {
-                    currentFAQs = [];
-                    renderFAQs();
-                    updateFaqCount();
-                    closeDeleteAllModal();
-                    showSuccess('All FAQs deleted successfully.');
-                } else { showError(data.error); }
-            } catch (e) { showError('Failed to delete FAQs. Please try again.'); }
-            finally { btn.disabled = false; btn.textContent = 'Yes, Delete All'; }
-        }
+    function resetUploadModal() {
+        selectedFile = null;
+        document.getElementById('faq-file-input').value = '';
+        const nameEl = document.getElementById('selected-file-name');
+        nameEl.style.display = 'none'; nameEl.textContent = '';
+        document.getElementById('progress-area').style.display = 'none';
+        document.getElementById('progress-fill').style.width = '0%';
+        document.getElementById('progress-status').textContent = 'Processing…';
+        document.getElementById('progress-status').style.color = '';
+        document.getElementById('upload-submit-btn').disabled = true;
+    }
 
-        // ── EXPORT PDF ──
-        function exportPDF() {
-            if (currentFAQs.length === 0) { showError('No FAQs to export.'); return; }
+    function handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        if (file.size > 10 * 1024 * 1024) { showError('File too large. Maximum size is 10 MB.'); return; }
+        selectedFile = file;
+        const nameEl = document.getElementById('selected-file-name');
+        nameEl.textContent = file.name; nameEl.style.display = 'block';
+        document.getElementById('upload-submit-btn').disabled = false;
+    }
 
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-            const pageW = doc.internal.pageSize.getWidth();
-            const pageH = doc.internal.pageSize.getHeight();
-            const margin = 18;
-            const contentW = pageW - margin * 2;
-            let y = margin;
-
-            // Header bar
-            doc.setFillColor(99, 102, 241);
-            doc.rect(0, 0, pageW, 22, 'F');
-            doc.setTextColor(255, 255, 255);
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.text('FAQ Export', margin, 14);
-            doc.setFontSize(9);
-            doc.setFont('helvetica', 'normal');
-            doc.text(`Generated: ${new Date().toLocaleDateString()} · ${currentFAQs.length} FAQs · Client: ${CLIENT_ID}`, pageW - margin, 14, { align: 'right' });
-
-            y = 32;
-
-            currentFAQs.forEach((faq, index) => {
-                // Estimate height needed
-                const qLines = doc.splitTextToSize(`Q: ${faq.question}`, contentW - 8);
-                const aLines = doc.splitTextToSize(`A: ${faq.answer}`, contentW - 8);
-                const blockH = 8 + (qLines.length * 5.5) + (aLines.length * 5) + 14;
-
-                // New page if needed
-                if (y + blockH > pageH - margin) {
-                    doc.addPage();
-                    y = margin;
-                }
-
-                // Card background
-                doc.setFillColor(245, 247, 250);
-                doc.roundedRect(margin, y, contentW, blockH, 3, 3, 'F');
-
-                // Index badge
-                doc.setFillColor(99, 102, 241);
-                doc.circle(margin + 7, y + 7, 5, 'F');
-                doc.setTextColor(255, 255, 255);
-                doc.setFontSize(8);
-                doc.setFont('helvetica', 'bold');
-                doc.text(String(index + 1), margin + 7, y + 9.5, { align: 'center' });
-
-                // Question
-                doc.setTextColor(30, 41, 59);
-                doc.setFontSize(10);
-                doc.setFont('helvetica', 'bold');
-                doc.text(qLines, margin + 16, y + 9);
-
-                // Answer
-                const aY = y + 9 + (qLines.length * 5.5) + 2;
-                doc.setTextColor(100, 116, 139);
-                doc.setFontSize(9);
-                doc.setFont('helvetica', 'normal');
-                doc.text(aLines, margin + 16, aY);
-
-                // Triggers
-                if (faq.triggers && faq.triggers.length > 0) {
-                    const tY = aY + (aLines.length * 5) + 2;
-                    doc.setTextColor(139, 92, 246);
-                    doc.setFontSize(7.5);
-                    doc.setFont('helvetica', 'italic');
-                    doc.text('Keywords: ' + faq.triggers.slice(0, 8).join(', '), margin + 16, tY);
-                }
-
-                y += blockH + 5;
-            });
-
-            // Footer on last page
-            doc.setFontSize(8);
-            doc.setTextColor(148, 163, 184);
-            doc.setFont('helvetica', 'normal');
-            doc.text('Generated by Lumvi · lumvi.net', pageW / 2, pageH - 8, { align: 'center' });
-
-            doc.save(`faqs-${CLIENT_ID}-${Date.now()}.pdf`);
-            showSuccess(`Exported ${currentFAQs.length} FAQs as PDF.`);
-        }
-
-        // ── HELPERS ──
-        function showToast(msg, type) {
-            const toast = document.getElementById('toast');
-            toast.textContent = msg;
-            if (type === 'success') {
-                toast.style.background = '#064e3b';
-                toast.style.color = '#6ee7b7';
-                toast.style.border = '1px solid #059669';
+    async function startUpload() {
+        if (!selectedFile) return;
+        document.getElementById('progress-area').style.display = 'block';
+        document.getElementById('progress-fill').style.width = '30%';
+        document.getElementById('progress-status').textContent = 'Uploading…';
+        document.getElementById('upload-submit-btn').disabled = true;
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('client_id', CLIENT_ID);
+        try {
+            document.getElementById('progress-fill').style.width = '60%';
+            document.getElementById('progress-status').textContent = 'Processing FAQs…';
+            const res = await fetch('/api/faq/upload', { method: 'POST', body: formData });
+            document.getElementById('progress-fill').style.width = '100%';
+            const data = await res.json();
+            if (data.success) {
+                document.getElementById('progress-status').textContent = data.message;
+                document.getElementById('progress-status').style.color = 'var(--success)';
+                setTimeout(() => { closeUploadModal(); loadFAQs(); showSuccess(data.message); }, 1200);
             } else {
-                toast.style.background = '#450a0a';
-                toast.style.color = '#fca5a5';
-                toast.style.border = '1px solid #dc2626';
-            }
-            toast.style.display = 'block';
-            clearTimeout(toast._timer);
-            toast._timer = setTimeout(() => { toast.style.display = 'none'; }, 3500);
-        }
-
-        function showSuccess(msg) {
-            showToast('✔️ ' + (msg || 'Changes saved successfully!'), 'success');
-        }
-
-        function showError(msg) {
-            showToast('❌ ' + (msg || 'Error saving changes. Please try again.'), 'error');
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // ── UPLOAD FUNCTIONS ──
-        function showUploadModal() { document.getElementById('upload-modal').style.display = 'flex'; resetUploadModal(); }
-        function closeUploadModal() { document.getElementById('upload-modal').style.display = 'none'; resetUploadModal(); }
-
-        function resetUploadModal() {
-            selectedFile = null;
-            document.getElementById('faq-file-input').value = '';
-            const nameEl = document.getElementById('selected-file-name');
-            nameEl.style.display = 'none'; nameEl.textContent = '';
-            document.getElementById('progress-area').style.display = 'none';
-            document.getElementById('progress-fill').style.width = '0%';
-            document.getElementById('progress-status').textContent = 'Processing...';
-            document.getElementById('progress-status').style.color = '';
-            document.getElementById('upload-submit-btn').disabled = true;
-        }
-
-        function handleFileSelect(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            if (file.size > 10 * 1024 * 1024) { showError('File too large! Maximum size is 10MB.'); return; }
-            selectedFile = file;
-            const nameEl = document.getElementById('selected-file-name');
-            nameEl.textContent = '📎 ' + file.name; nameEl.style.display = 'block';
-            document.getElementById('upload-submit-btn').disabled = false;
-        }
-
-        async function startUpload() {
-            if (!selectedFile) return;
-            document.getElementById('progress-area').style.display = 'block';
-            document.getElementById('progress-fill').style.width = '30%';
-            document.getElementById('progress-status').textContent = 'Uploading file...';
-            document.getElementById('upload-submit-btn').disabled = true;
-            const formData = new FormData();
-            formData.append('file', selectedFile);
-            formData.append('client_id', CLIENT_ID);
-            try {
-                document.getElementById('progress-fill').style.width = '60%';
-                document.getElementById('progress-status').textContent = 'Processing FAQs...';
-                const response = await fetch('/api/faq/upload', { method: 'POST', body: formData });
-                document.getElementById('progress-fill').style.width = '100%';
-                const data = await response.json();
-                if (data.success) {
-                    document.getElementById('progress-status').textContent = '✅ ' + data.message;
-                    document.getElementById('progress-status').style.color = '#34d399';
-                    setTimeout(() => { closeUploadModal(); loadFAQs(); showSuccess(data.message); }, 1500);
-                } else {
-                    document.getElementById('progress-status').textContent = '❌ ' + data.error;
-                    document.getElementById('progress-status').style.color = '#f87171';
-                    document.getElementById('upload-submit-btn').disabled = false;
-                }
-            } catch (e) {
-                document.getElementById('progress-status').textContent = '❌ Upload failed. Please try again.';
-                document.getElementById('progress-status').style.color = '#f87171';
+                document.getElementById('progress-status').textContent = data.error;
+                document.getElementById('progress-status').style.color = 'var(--danger)';
                 document.getElementById('upload-submit-btn').disabled = false;
             }
+        } catch {
+            document.getElementById('progress-status').textContent = 'Upload failed. Please try again.';
+            document.getElementById('progress-status').style.color = 'var(--danger)';
+            document.getElementById('upload-submit-btn').disabled = false;
         }
+    }
 
-        // Drag & drop
-        const dropZone = document.getElementById('drop-zone');
-        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
-        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault(); dropZone.classList.remove('dragover');
-            const file = e.dataTransfer.files[0];
-            if (file) {
-                const dt = new DataTransfer(); dt.items.add(file);
-                document.getElementById('faq-file-input').files = dt.files;
-                handleFileSelect({ target: { files: [file] } });
-            }
-        });
-
-        // Close on backdrop / Escape
-        document.addEventListener('click', function(e) {
-            if (e.target === document.getElementById('faq-modal')) closeModal();
-            if (e.target === document.getElementById('upload-modal')) closeUploadModal();
-            if (e.target === document.getElementById('delete-all-modal')) closeDeleteAllModal();
-        });
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') { closeModal(); closeUploadModal(); closeDeleteAllModal(); }
-        });
-
-        function downloadCSVTemplate() {
-            const csv = `question,answer,category
-What are your business hours?,"We're open Monday-Friday 9 AM - 6 PM EST. Saturday 10 AM - 4 PM. Closed Sundays.",General
-How much does it cost?,"Starter: $49/mo | Pro: $99/mo | Agency: $299/mo. All plans include a 14-day free trial!",Pricing
-Do you offer refunds?,"Yes! We offer a 7-day money-back guarantee no questions asked.",Policies
-Can I get a demo?,"Absolutely! Visit lumvi.net/demo to schedule a live demo.",Sales
-How do I get started?,"Simply sign up at lumvi.net and follow the setup wizard.",Getting Started`;
-            const blob = new Blob([csv], { type: 'text/csv' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = 'faq-template.csv'; a.click();
-            URL.revokeObjectURL(url);
+    const dropZone = document.getElementById('drop-zone');
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault(); dropZone.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) {
+            const dt = new DataTransfer(); dt.items.add(file);
+            document.getElementById('faq-file-input').files = dt.files;
+            handleFileSelect({ target: { files: [file] } });
         }
-    </script>
+    });
+
+    function downloadCSVTemplate() {
+        const csv = `question,answer,category\nWhat are your business hours?,"We're open Monday–Friday 9 AM – 6 PM EST. Saturday 10 AM – 4 PM. Closed Sundays.",General\nHow much does it cost?,"Starter: $49/mo | Pro: $99/mo | Agency: $299/mo.",Pricing\nDo you offer refunds?,"Yes. We offer a 7-day money-back guarantee.",Policies`;
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'lumvi-faq-template.csv'; a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // ── TOAST ─────────────────────────────────────────────────────
+    function showToast(msg, type) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.style.background = type === 'success' ? '#064e3b' : '#450a0a';
+        t.style.color      = type === 'success' ? '#6ee7b7' : '#fca5a5';
+        t.style.border     = type === 'success' ? '1px solid #059669' : '1px solid #dc2626';
+        t.style.display    = 'block';
+        clearTimeout(t._timer);
+        t._timer = setTimeout(() => { t.style.display = 'none'; }, 3500);
+    }
+    function showSuccess(msg) { showToast(msg || 'Changes saved.', 'success'); }
+    function showError(msg)   { showToast(msg || 'An error occurred. Please try again.', 'error'); }
+
+    function escapeHtml(text) {
+        const d = document.createElement('div');
+        d.textContent = text;
+        return d.innerHTML;
+    }
+
+    // ── CLOSE ON BACKDROP / ESC ───────────────────────────────────
+    document.addEventListener('click', function(e) {
+        if (e.target === document.getElementById('faq-modal'))        closeModal();
+        if (e.target === document.getElementById('upload-modal'))     closeUploadModal();
+        if (e.target === document.getElementById('delete-all-modal')) closeDeleteAllModal();
+    });
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { closeModal(); closeUploadModal(); closeDeleteAllModal(); }
+    });
+</script>
 </body>
 </html>
