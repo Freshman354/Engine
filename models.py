@@ -236,6 +236,21 @@ def migrate_subscription_expiry():
     print("✅ Subscription expiry migration complete")
 
 
+def set_trial_expiry(user_id, days=7):
+    """Set a free trial expiry. Called on signup for paid plans. Default: 7 days."""
+    conn, cursor = get_db()
+    cursor.execute(
+        '''UPDATE users
+           SET subscription_expires_at = NOW() + INTERVAL %s,
+               grace_period_ends_at    = NOW() + INTERVAL %s
+           WHERE id = %s''',
+        (f'{days} days', f'{days + 3} days', user_id)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
 def set_subscription_expiry(user_id):
     """Set subscription_expires_at to 30 days from now and grace to 33 days."""
     conn, cursor = get_db()
@@ -252,23 +267,59 @@ def set_subscription_expiry(user_id):
 
 
 def downgrade_expired_users():
-    """Downgrade non-admin users whose grace period has ended to free plan."""
+    """
+    Downgrade all non-admin paid users whose grace period has ended.
+    Returns count of users downgraded.
+    Called by the APScheduler every 24 hours.
+    """
+    conn, cursor = get_db()
+    try:
+        # Fetch who will be downgraded so we can log them
+        cursor.execute(
+            '''SELECT id, email, plan_type FROM users
+               WHERE plan_type NOT IN ('free', 'enterprise')
+                 AND is_admin IS NOT TRUE
+                 AND grace_period_ends_at IS NOT NULL
+                 AND grace_period_ends_at < NOW()'''
+        )
+        to_downgrade = cursor.fetchall()
+
+        if to_downgrade:
+            cursor.execute(
+                '''UPDATE users
+                   SET plan_type               = 'free',
+                       subscription_expires_at = NULL,
+                       grace_period_ends_at    = NULL
+                   WHERE plan_type NOT IN ('free', 'enterprise')
+                     AND is_admin IS NOT TRUE
+                     AND grace_period_ends_at IS NOT NULL
+                     AND grace_period_ends_at < NOW()'''
+            )
+            conn.commit()
+
+        return [dict(u) for u in to_downgrade]
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def downgrade_single_user(user_id):
+    """Immediately downgrade one user to free plan."""
     conn, cursor = get_db()
     cursor.execute(
         '''UPDATE users
-           SET plan_type = 'free',
+           SET plan_type               = 'free',
                subscription_expires_at = NULL,
                grace_period_ends_at    = NULL
-           WHERE plan_type NOT IN ('free', 'enterprise')
-             AND is_admin IS NOT TRUE
-             AND grace_period_ends_at IS NOT NULL
-             AND grace_period_ends_at < NOW()'''
+           WHERE id = %s AND is_admin IS NOT TRUE''',
+        (user_id,)
     )
-    count = cursor.rowcount
     conn.commit()
     cursor.close()
     conn.close()
-    return count
 
 
 # =====================================================================

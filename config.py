@@ -30,9 +30,9 @@ class Config:
             'customization': False
         },
         'starter': {
-            'clients': 5,
+            'clients': 3,
             'faqs_per_client': 999999,
-            'messages_per_day': 999999,
+            'messages_per_day': 2000,
             'analytics': True,
             'customization': False
         },
@@ -46,7 +46,7 @@ class Config:
         'enterprise': {
             'clients': 999999,
             'faqs_per_client': 999999,
-            'messages_per_day': 999999,
+            'messages_per_day': 9999999,
             'analytics': True,
             'customization': True
         }

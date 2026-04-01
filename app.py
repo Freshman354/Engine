@@ -163,6 +163,78 @@ configure({
     "client_secret": os.getenv('PAYPAL_CLIENT_SECRET')
 })
 
+# =====================================================================
+# SUBSCRIPTION ENFORCEMENT SCHEDULER
+# Runs every 24 hours to downgrade users whose trial/subscription
+# grace period has ended. Uses APScheduler (in-process, no extra
+# services needed on Render).
+# =====================================================================
+def enforce_subscriptions():
+    """
+    Called every 24 hours. Downgrades any user whose grace period
+    has ended. Also handles mid-trial cancellations.
+    """
+    try:
+        from datetime import datetime as _dt
+        now = _dt.utcnow()
+        print(f"[Scheduler] enforce_subscriptions running at {now.isoformat()}")
+
+        downgraded = models.downgrade_expired_users()
+
+        if downgraded:
+            for u in downgraded:
+                print(f"[Scheduler] Downgraded user {u['id']} ({u.get('email')}) "
+                      f"from {u.get('plan_type')} → free")
+            print(f"[Scheduler] Total downgraded: {len(downgraded)}")
+        else:
+            print("[Scheduler] No users to downgrade.")
+
+    except Exception as e:
+        print(f"[Scheduler] Error in enforce_subscriptions: {e}")
+
+
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler  # type: ignore
+    from apscheduler.triggers.interval import IntervalTrigger           # type: ignore
+
+    _scheduler = BackgroundScheduler(daemon=True)
+    _scheduler.add_job(
+        func=enforce_subscriptions,
+        trigger=IntervalTrigger(hours=24),
+        id='enforce_subscriptions',
+        name='Daily subscription enforcement',
+        replace_existing=True,
+        misfire_grace_time=3600
+    )
+    _scheduler.start()
+    print("✅ Subscription scheduler started (APScheduler) — runs every 24 hours.")
+
+    # Run once on startup to catch any missed downgrades
+    import threading as _threading
+    _threading.Timer(10.0, enforce_subscriptions).start()
+
+except ImportError:
+    # APScheduler not installed — fall back to a simple threading loop.
+    # This still enforces subscriptions every 24 hours without any extra packages.
+    import threading as _threading
+
+    def _schedule_loop():
+        import time
+        time.sleep(15)                  # short delay so app finishes starting up
+        enforce_subscriptions()         # run once on startup
+        while True:
+            time.sleep(24 * 60 * 60)   # sleep 24 hours
+            enforce_subscriptions()
+
+    _t = _threading.Thread(target=_schedule_loop, daemon=True, name='subscription-enforcer')
+    _t.start()
+    print("✅ Subscription enforcer started (threading fallback) — runs every 24 hours.")
+    print("   Install APScheduler for more robust scheduling: pip install APScheduler")
+
+except Exception as _e:
+    print(f"⚠️ Scheduler failed to start: {_e}")
+
+
 USE_AI = Config.USE_AI
 
 # =====================================================================
@@ -716,8 +788,14 @@ def get_subscription_status(user):
     """
     Returns a dict with subscription info for a user.
     status: 'active' | 'expired' | 'grace' | 'free'
+    Admins are always treated as active — they can never be downgraded.
     """
     from datetime import datetime
+
+    # Admins are exempt from all subscription enforcement
+    if user.get('is_admin'):
+        return {'status': 'active', 'expires_at': None, 'grace_ends_at': None}
+
     plan = user.get('plan_type', 'free')
 
     # Free and enterprise plans don't expire
@@ -828,7 +906,7 @@ def chat():
                     {
                         "id": "demo_2",
                         "question": "What are your prices?",
-                        "answer": "Starter: $49/mo | Pro: $99/mo | Agency: $299/mo. All plans include a 14-day free trial! 💰",
+                        "answer": "Starter: $49/mo | Pro: $99/mo | Agency: $299/mo. All plans include a 7-day free trial! 💰",
                         "triggers": ["price", "pricing", "cost", "fee", "payment", "charge", "afford", "subscription"]
                     },
                     {
@@ -1024,11 +1102,21 @@ def signup():
     plan_param    = request.args.get('plan', '').lower()  # from sales page buttons
 
     if request.method == 'POST':
-        email            = request.form.get('email')
-        password         = request.form.get('password')
-        confirm_password = request.form.get('confirm_password')
-        plan_type        = 'free'
-        plan_from_form   = request.form.get('plan_param', '').lower()
+        email            = request.form.get('email', '').strip().lower()
+        password         = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        # Read the plan the user selected — from hidden field or plan_select radio
+        plan_from_form = (
+            request.form.get('plan_param') or
+            request.form.get('plan_select') or
+            request.args.get('plan') or
+            'free'
+        ).lower().strip()
+
+        # Validate plan value
+        valid_plans = ('free', 'solo', 'starter', 'pro', 'agency', 'enterprise')
+        if plan_from_form not in valid_plans:
+            plan_from_form = 'free'
 
         if password != confirm_password:
             return render_template('signup.html', error='Passwords do not match',
@@ -1038,11 +1126,19 @@ def signup():
             return render_template('signup.html', error='Password must be at least 6 characters',
                                    referral_code=referral_code, plan_param=plan_from_form)
 
-        user_id = models.create_user(email, password, plan_type)
+        # All new paid accounts start on a 7-day free trial (stored as the chosen plan)
+        # Free plan stays free — no trial needed
+        initial_plan = plan_from_form if plan_from_form != 'free' else 'free'
+
+        user_id = models.create_user(email, password, initial_plan)
 
         if user_id is None:
-            return render_template('signup.html', error='Email already exists',
+            return render_template('signup.html', error='An account with that email already exists',
                                    referral_code=referral_code, plan_param=plan_from_form)
+
+        # Set 7-day free trial expiry for paid plans
+        if initial_plan != 'free':
+            models.set_trial_expiry(user_id, days=7)
 
         if referral_code:
             affiliate = models.get_affiliate_by_code(referral_code)
@@ -1053,12 +1149,14 @@ def signup():
         user_data = models.get_user_by_id(user_id)
         user = User(user_data)
         login_user(user)
-        models.track_event('signup', user_id=user_id, metadata={'email': email, 'plan': 'free'})
+        models.track_event('signup', user_id=user_id, metadata={'email': email, 'plan': initial_plan})
         send_welcome_email(email)
 
-        # If they came from a pricing button, send them straight to upgrade
-        if plan_from_form in ('starter', 'pro', 'agency'):
-            return redirect(url_for('upgrade_page') + f'?plan={plan_from_form}')
+        app.logger.info(f'New signup: {email} | plan: {initial_plan}')
+
+        # Paid plan signups go straight to upgrade/payment page
+        if initial_plan in ('solo', 'starter', 'pro', 'agency', 'enterprise'):
+            return redirect(url_for('upgrade_page') + f'?plan={initial_plan}')
         return redirect(url_for('dashboard'))
 
     return render_template('signup.html', referral_code=referral_code, plan_param=plan_param)
@@ -1219,6 +1317,15 @@ def dashboard():
 
     # Always re-fetch user from DB so plan badge is never stale after an upgrade
     fresh_user = models.get_user_by_id(current_user.id)
+
+    # ── Active enforcement: downgrade if grace period ended ──────────
+    if fresh_user and not fresh_user.get('is_admin'):
+        sub = get_subscription_status(fresh_user)
+        if sub['status'] == 'expired':
+            models.downgrade_single_user(fresh_user['id'])
+            fresh_user = models.get_user_by_id(fresh_user['id'])  # re-fetch after downgrade
+            app.logger.info(f"[Dashboard] Auto-downgraded user {fresh_user['id']} to free.")
+
     plan_type = fresh_user['plan_type'] if fresh_user else current_user.plan_type
     plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
     client_limit = plan_limits['clients']
@@ -1954,6 +2061,29 @@ def manage_faqs():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': 'Failed to manage FAQs'}), 500
+
+
+@app.route('/api/faqs/delete-all', methods=['POST'])
+@login_required
+def delete_all_faqs():
+    """Delete all FAQs for a client — called by the FAQ Manager Delete All button."""
+    try:
+        data = request.get_json()
+        client_id = data.get('client_id') if data else None
+
+        if not client_id:
+            return jsonify({'success': False, 'error': 'Client ID required'}), 400
+
+        if not models.verify_client_ownership(current_user.id, client_id):
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+        models.delete_all_faqs(client_id)
+        app.logger.info(f'All FAQs deleted for client {client_id} by user {current_user.id}')
+        return jsonify({'success': True, 'message': 'All FAQs deleted successfully'})
+
+    except Exception as e:
+        app.logger.error(f'Error deleting all FAQs: {e}')
+        return jsonify({'success': False, 'error': 'Failed to delete FAQs'}), 500
 
 
 @app.route('/api/faq/upload', methods=['POST'])
@@ -3121,6 +3251,24 @@ def manage_client_users_page():
             min_plan='Pro'), 403
     client = models.get_client_by_id(client_id)
     return render_template('manage_client_users.html', client=client, client_id=client_id)
+
+
+@app.route('/api/admin/enforce-subscriptions', methods=['POST'])
+@login_required
+def admin_enforce_subscriptions():
+    """Admin-only endpoint to manually trigger subscription enforcement."""
+    user = models.get_user_by_id(current_user.id)
+    if not user or not user.get('is_admin'):
+        return jsonify({'success': False, 'error': 'Admin only'}), 403
+    try:
+        downgraded = models.downgrade_expired_users()
+        return jsonify({
+            'success': True,
+            'downgraded_count': len(downgraded),
+            'downgraded_users': [{'id': u['id'], 'email': u.get('email'), 'plan': u.get('plan_type')} for u in downgraded]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/terms')

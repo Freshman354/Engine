@@ -13,3 +13,4 @@ PyPDF2
 flask-limiter
 google-generativeai
 flask-mail
+APScheduler
