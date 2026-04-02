@@ -9,48 +9,27 @@
     <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
-    --cream:#F7F4EF; --cream2:#F0EBE1; --panel:#EDEAE3;
-    --gold:#B8924A; --gold-lt:rgba(184,146,74,0.12); --gold-dk:#9A7A3A;
-    --dark:#1C1917; --mid:#57534E; --sub:#A8A29E; --border:#E7E2DA;
-    --white:#FFFFFF;
-    --success:#16A34A; --success-lt:#F0FDF4;
-    --danger:#EF4444; --danger-lt:#FEF2F2;
-    --warning:#D97706; --warning-lt:#FFFBEB;
+    --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
+    --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
+    --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#FFFFFF;
+    --success:#16A34A;--success-lt:#F0FDF4;
+    --danger:#EF4444;--danger-lt:#FEF2F2;
+    --warning:#D97706;--warning-lt:#FFFBEB;
     --sidebar-w:224px;
 }
 body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;display:flex;}
-
-/* ── SIDEBAR ── */
-.sidebar{
-    width:var(--sidebar-w);background:var(--white);
-    border-right:1px solid var(--border);
-    display:flex;flex-direction:column;
-    position:fixed;top:0;left:0;height:100vh;z-index:50;
-    transition:transform 0.3s ease;
-}
-.sidebar-logo{
-    padding:20px 18px;border-bottom:1px solid var(--border);
-    display:flex;align-items:center;gap:10px;
-}
+.sidebar{width:var(--sidebar-w);background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:50;transition:transform 0.3s ease;}
+.sidebar-logo{padding:20px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
 .logo-img{width:34px;height:34px;border-radius:9px;object-fit:cover;flex-shrink:0;}
 .logo-text{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
 .sidebar-nav{flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
 .nav-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--sub);padding:10px 10px 4px;margin-top:6px;}
-.nav-item{
-    display:flex;align-items:center;gap:10px;
-    padding:9px 12px;border-radius:9px;
-    text-decoration:none;color:var(--mid);
-    font-size:13.5px;font-weight:500;
-    transition:all 0.15s;cursor:pointer;
-}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;text-decoration:none;color:var(--mid);font-size:13.5px;font-weight:500;transition:all 0.15s;cursor:pointer;}
 .nav-item:hover{background:var(--cream);color:var(--dark);}
 .nav-item.active{background:var(--gold-lt);color:var(--gold-dk);font-weight:600;}
 .nav-item svg{width:16px;height:16px;flex-shrink:0;opacity:0.65;}
 .nav-item.active svg{opacity:1;}
-.nav-badge{
-    margin-left:auto;background:var(--gold);color:#fff;
-    font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;
-}
+.nav-badge{margin-left:auto;background:var(--gold);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;}
 .sidebar-footer{padding:14px 12px;border-top:1px solid var(--border);}
 .user-profile{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;cursor:pointer;transition:background 0.15s;}
 .user-profile:hover{background:var(--cream);}
@@ -58,17 +37,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .user-info{flex:1;min-width:0;}
 .user-name{font-size:13px;font-weight:600;color:var(--dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .user-plan{font-size:11px;color:var(--sub);text-transform:capitalize;}
-
-/* ── MAIN ── */
 .main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh;}
-
-/* ── TOPBAR ── */
-.topbar{
-    background:var(--white);border-bottom:1px solid var(--border);
-    padding:0 28px;height:60px;
-    display:flex;align-items:center;justify-content:space-between;
-    position:sticky;top:0;z-index:40;
-}
+.topbar{background:var(--white);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40;}
 .topbar-left{display:flex;align-items:center;gap:12px;}
 .hamburger{display:none;background:none;border:none;cursor:pointer;padding:6px;border-radius:8px;color:var(--mid);}
 .hamburger:hover{background:var(--cream);}
@@ -77,79 +47,54 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .plan-chip{padding:4px 12px;background:var(--gold-lt);color:var(--gold-dk);border-radius:20px;font-size:12px;font-weight:600;text-transform:capitalize;border:1px solid rgba(184,146,74,0.2);}
 .btn-logout{padding:7px 14px;background:transparent;color:var(--sub);border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;transition:all 0.15s;font-family:'DM Sans',sans-serif;}
 .btn-logout:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-lt);}
-
-/* ── PAGE CONTENT ── */
-.page-content{padding:28px 28px;}
-.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:14px;}
-.page-header h1{font-family:'Fraunces',serif;font-size:24px;font-weight:700;letter-spacing:-0.3px;margin-bottom:2px;}
-.page-header p{font-size:13px;color:var(--sub);}
-.page-header-actions{display:flex;gap:10px;flex-wrap:wrap;}
-
-/* ── BUTTONS ── */
-.btn{
-    padding:9px 18px;border-radius:9px;font-weight:600;
-    cursor:pointer;text-decoration:none;
-    display:inline-flex;align-items:center;gap:6px;
-    font-size:13.5px;transition:all 0.2s;
-    border:none;font-family:'DM Sans',sans-serif;
-}
+.page-content{padding:28px;}
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:14px;}
+.page-header-left h1{font-family:'Fraunces',serif;font-size:24px;font-weight:700;letter-spacing:-0.3px;margin-bottom:2px;}
+.page-header-left p{font-size:13px;color:var(--sub);}
+.page-header-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.btn{padding:9px 16px;border-radius:9px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:13px;transition:all 0.2s;border:none;font-family:'DM Sans',sans-serif;white-space:nowrap;}
+.btn svg{width:14px;height:14px;flex-shrink:0;}
 .btn-primary{background:var(--gold);color:#fff;box-shadow:0 2px 8px rgba(184,146,74,0.3);}
-.btn-primary:hover{background:var(--gold-dk);transform:translateY(-1px);box-shadow:0 4px 14px rgba(184,146,74,0.4);}
+.btn-primary:hover{background:var(--gold-dk);transform:translateY(-1px);}
 .btn-secondary{background:var(--white);color:var(--dark);border:1px solid var(--border);}
-.btn-secondary:hover{background:var(--cream);border-color:#ccc;}
-.btn-upgrade{background:linear-gradient(135deg,var(--warning),#b45309);color:#fff;box-shadow:0 2px 8px rgba(217,119,6,0.3);}
-.btn-upgrade:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(217,119,6,0.4);}
+.btn-secondary:hover{background:var(--cream);}
+.btn-upgrade{background:linear-gradient(135deg,var(--warning),#b45309);color:#fff;}
+.btn-upgrade:hover{transform:translateY(-1px);}
 .btn-affiliate{background:var(--success-lt);color:var(--success);border:1px solid #bbf7d0;}
 .btn-affiliate:hover{background:#dcfce7;}
-.btn-danger{background:var(--danger);color:#fff;}
+.btn-danger{background:var(--danger);color:#fff;flex:1;justify-content:center;}
 .btn-danger:hover{background:#dc2626;}
-.btn-cancel{background:var(--white);color:var(--mid);border:1px solid var(--border);}
-
-/* ── STATS ── */
+.btn-cancel{background:var(--white);color:var(--mid);border:1px solid var(--border);flex:1;justify-content:center;}
 .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px;}
 .stat-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px 22px;transition:all 0.2s;}
 .stat-card:hover{box-shadow:0 4px 20px rgba(0,0,0,0.06);border-color:rgba(184,146,74,0.2);}
-.stat-label{font-size:12px;color:var(--sub);font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
-.stat-icon{width:20px;height:20px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:11px;}
+.stat-label{font-size:12px;color:var(--sub);font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.stat-icon-box{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.stat-icon-box svg{width:12px;height:12px;}
+.stat-value-row{display:flex;align-items:baseline;gap:6px;}
 .stat-value{font-size:26px;font-weight:700;letter-spacing:-0.5px;color:var(--dark);font-family:'Fraunces',serif;}
-.stat-trend{font-size:12px;font-weight:600;display:flex;align-items:center;gap:2px;margin-left:8px;}
+.stat-trend{font-size:12px;font-weight:600;}
 .stat-trend.up{color:var(--success);}
 .stat-trend.neutral{color:var(--sub);}
 .stat-sub{font-size:11px;color:var(--sub);margin-top:4px;}
-
-/* ── SECTION ── */
 .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
 .section-title{font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--dark);}
-
-/* ── TABLE ── */
 .clients-table-wrap{background:var(--white);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
 .clients-table{width:100%;border-collapse:collapse;}
 .clients-table thead tr{background:var(--cream);border-bottom:1px solid var(--border);}
 .clients-table th{padding:11px 20px;text-align:left;font-size:11px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:0.06em;}
 .clients-table td{padding:14px 20px;font-size:13.5px;border-bottom:1px solid var(--border);vertical-align:middle;}
 .clients-table tbody tr:last-child td{border-bottom:none;}
-.clients-table tbody tr:hover{background:var(--cream);}
+.clients-table tbody tr:hover{background:#FDFCFA;}
 .client-cell{display:flex;align-items:center;gap:12px;}
-.client-avatar-sm{
-    width:36px;height:36px;border-radius:10px;
-    background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);
-    display:flex;align-items:center;justify-content:center;
-    font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:var(--gold-dk);flex-shrink:0;
-}
+.client-avatar-sm{width:36px;height:36px;border-radius:10px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:var(--gold-dk);flex-shrink:0;}
 .client-cell-name{font-weight:600;color:var(--dark);font-size:14px;}
-.client-cell-id{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;}
-.status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;}
+.status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
 .status-badge.active{background:var(--success-lt);color:var(--success);}
-.status-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;}
-
-/* ── ACTION BUTTONS ── */
+.status-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;}
 .table-actions{display:flex;gap:5px;flex-wrap:wrap;}
-.btn-xs{
-    padding:5px 10px;font-size:11.5px;border-radius:7px;border:none;
-    cursor:pointer;font-weight:600;text-decoration:none;
-    display:inline-flex;align-items:center;gap:3px;
-    transition:all 0.15s;font-family:'DM Sans',sans-serif;
-}
+.btn-xs{padding:5px 10px;font-size:11.5px;border-radius:7px;border:none;cursor:pointer;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:all 0.15s;font-family:'DM Sans',sans-serif;white-space:nowrap;}
+.btn-xs svg{width:11px;height:11px;flex-shrink:0;}
 .btn-xs-manage{background:var(--gold-lt);color:var(--gold-dk);}
 .btn-xs-manage:hover{background:rgba(184,146,74,0.2);}
 .btn-xs-analytics{background:var(--success-lt);color:var(--success);}
@@ -158,79 +103,65 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .btn-xs-theme:hover{background:#fef3c7;}
 .btn-xs-embed{background:#fdf2f8;color:#9d174d;}
 .btn-xs-embed:hover{background:#fce7f3;}
+.btn-xs-logins{background:rgba(184,146,74,0.1);color:var(--gold-dk);}
+.btn-xs-logins:hover{background:rgba(184,146,74,0.2);}
 .btn-xs-locked{background:var(--panel);color:var(--sub);cursor:not-allowed;}
 .btn-xs-delete{background:var(--danger-lt);color:var(--danger);}
 .btn-xs-delete:hover{background:#fecaca;}
-
-/* ── EMPTY STATE ── */
 .empty-state{text-align:center;padding:60px 20px;}
-.empty-icon{width:64px;height:64px;background:var(--gold-lt);border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px;}
+.empty-icon-box{width:60px;height:60px;background:var(--gold-lt);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+.empty-icon-box svg{width:26px;height:26px;color:var(--gold);}
 .empty-state h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:6px;}
-.empty-state p{color:var(--sub);font-size:14px;margin-bottom:20px;}
-
-/* ── MODALS ── */
-.modal,.delete-modal,.embed-modal{
-    display:none;position:fixed;inset:0;
-    background:rgba(28,25,23,0.5);backdrop-filter:blur(4px);
-    z-index:1000;align-items:center;justify-content:center;padding:20px;
-}
-.modal-content,.embed-modal-content{
-    background:var(--white);border:1px solid var(--border);
-    border-radius:20px;padding:32px;max-width:460px;width:100%;
-    box-shadow:0 20px 60px rgba(0,0,0,0.1);
-    animation:slideUp 0.25s ease;
-}
-.delete-modal-content{
-    background:var(--white);border:1px solid var(--border);
-    border-radius:20px;padding:32px;max-width:420px;width:100%;
-    box-shadow:0 20px 60px rgba(0,0,0,0.12);
-    animation:slideUp 0.25s ease;text-align:center;
-}
-.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;}
+.empty-state p{color:var(--sub);font-size:14px;margin-bottom:20px;font-weight:300;}
+/* Mobile client cards */
+.client-cards-mobile{display:none;padding:12px;}
+.client-card{background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;}
+.client-card:last-child{margin-bottom:0;}
+.client-card-top{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+.client-card-name{font-weight:600;color:var(--dark);font-size:14px;}
+.client-card-id{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;margin-top:2px;}
+.client-card-actions{display:flex;gap:6px;flex-wrap:wrap;}
+/* Modals */
+.modal,.delete-modal,.embed-modal{display:none;position:fixed;inset:0;background:rgba(28,25,23,0.5);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center;padding:16px;}
+.modal-content,.embed-modal-content{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:28px;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.1);animation:slideUp 0.25s ease;max-height:90vh;overflow-y:auto;}
+.delete-modal-content{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:28px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.12);animation:slideUp 0.25s ease;text-align:center;}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;}
 .modal-header h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;}
-.modal-close{background:var(--cream);border:1px solid var(--border);font-size:18px;cursor:pointer;color:var(--mid);width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
+.modal-close{background:var(--cream);border:1px solid var(--border);font-size:18px;cursor:pointer;color:var(--mid);width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;line-height:1;}
 .modal-close:hover{background:var(--panel);color:var(--dark);}
 .form-group{margin-bottom:18px;}
-.form-group label{display:block;font-size:12px;font-weight:600;color:var(--mid);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;}
-.form-group input,.form-group select{width:100%;padding:11px 14px;background:var(--cream);border:1.5px solid var(--border);border-radius:9px;font-size:14px;color:var(--dark);font-family:'DM Sans',sans-serif;transition:all 0.2s;outline:none;}
-.form-group input:focus,.form-group select:focus{border-color:var(--gold);background:var(--white);box-shadow:0 0 0 3px var(--gold-lt);}
-.delete-icon{width:56px;height:56px;border-radius:16px;background:var(--danger-lt);display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 16px;}
+.form-group label{display:block;font-size:11px;font-weight:600;color:var(--mid);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;}
+.form-group input{width:100%;padding:11px 14px;background:var(--cream);border:1.5px solid var(--border);border-radius:9px;font-size:14px;color:var(--dark);font-family:'DM Sans',sans-serif;transition:all 0.2s;outline:none;}
+.form-group input:focus{border-color:var(--gold);background:var(--white);box-shadow:0 0 0 3px var(--gold-lt);}
+.delete-icon-box{width:52px;height:52px;border-radius:14px;background:var(--danger-lt);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+.delete-icon-box svg{width:22px;height:22px;color:var(--danger);}
 .delete-modal-content h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:8px;}
 .delete-modal-content p{color:var(--sub);font-size:14px;line-height:1.6;margin-bottom:6px;}
-.delete-client-name{font-weight:700;color:var(--danger);background:var(--danger-lt);padding:6px 14px;border-radius:8px;display:inline-block;margin:10px 0 20px;font-size:14px;}
-.delete-modal-actions{display:flex;gap:10px;margin-top:8px;}
-.embed-modal-content{max-width:640px;}
+.delete-client-name{font-weight:700;color:var(--danger);background:var(--danger-lt);padding:5px 12px;border-radius:7px;display:inline-block;margin:8px 0 16px;font-size:14px;}
+.delete-modal-actions{display:flex;gap:10px;margin-top:4px;}
+.embed-modal-content{max-width:600px;}
 .embed-modal-content h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:6px;}
-.embed-modal-content>p{color:var(--sub);font-size:13px;margin-bottom:18px;line-height:1.6;}
-.embed-modal-content>p code{background:var(--cream);padding:1px 7px;border-radius:4px;color:var(--gold-dk);font-family:'DM Mono',monospace;font-size:12px;}
+.embed-modal-content>p{color:var(--sub);font-size:13px;margin-bottom:16px;line-height:1.6;}
+.embed-modal-content>p code{background:var(--cream);padding:1px 6px;border-radius:4px;color:var(--gold-dk);font-family:'DM Mono',monospace;font-size:12px;}
 .embed-textarea-wrapper{position:relative;}
-#embedCodeText{width:100%;height:190px;padding:16px;background:#1C1917;border:1px solid #3D3530;border-radius:12px;font-family:'DM Mono',monospace;font-size:12.5px;color:#D4C4A8;resize:none;line-height:1.7;outline:none;}
+#embedCodeText{width:100%;height:175px;padding:14px;background:#1C1917;border:1px solid #3D3530;border-radius:12px;font-family:'DM Mono',monospace;font-size:12px;color:#D4C4A8;resize:none;line-height:1.7;outline:none;}
 .embed-lang-tag{position:absolute;top:10px;right:10px;background:var(--gold);color:#fff;padding:2px 9px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:0.5px;}
-.embed-actions{margin-top:16px;display:flex;gap:10px;}
-.embed-tip{margin-top:16px;padding:12px 16px;background:var(--warning-lt);border-left:3px solid var(--warning);border-radius:8px;font-size:12.5px;color:#92400e;line-height:1.6;}
-
-/* ── VERTICAL CARDS ── */
-.vertical-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
-.vertical-card{background:var(--cream);border:1.5px solid var(--border);border-radius:12px;padding:14px 10px;text-align:center;cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;align-items:center;gap:6px;}
+.embed-actions{margin-top:14px;display:flex;gap:10px;}
+.embed-tip{margin-top:14px;padding:12px 14px;background:var(--warning-lt);border-left:3px solid var(--warning);border-radius:8px;font-size:12px;color:#92400e;line-height:1.6;}
+.vertical-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
+.vertical-card{background:var(--cream);border:1.5px solid var(--border);border-radius:10px;padding:12px 8px;text-align:center;cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;align-items:center;gap:5px;}
 .vertical-card:hover{border-color:rgba(184,146,74,0.4);background:var(--gold-lt);}
-.vertical-card.selected{border-color:var(--gold);background:var(--gold-lt);box-shadow:0 0 0 3px rgba(184,146,74,0.15);}
-.vertical-icon{font-size:22px;}
-.vertical-label{font-size:12px;font-weight:600;color:var(--mid);}
+.vertical-card.selected{border-color:var(--gold);background:var(--gold-lt);box-shadow:0 0 0 3px rgba(184,146,74,0.12);}
+.vertical-icon{font-size:20px;}
+.vertical-label{font-size:11px;font-weight:600;color:var(--mid);}
 .vertical-card.selected .vertical-label{color:var(--gold-dk);}
-.vertical-preview{background:rgba(184,146,74,0.06);border:1px solid rgba(184,146,74,0.2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--mid);line-height:1.5;min-height:36px;}
-
-/* ── TOAST ── */
-.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;color:#fff;z-index:9999;opacity:0;transform:translateY(10px);transition:all 0.3s;pointer-events:none;}
+.vertical-preview{background:rgba(184,146,74,0.06);border:1px solid rgba(184,146,74,0.2);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--mid);line-height:1.5;min-height:36px;}
+.toast{position:fixed;bottom:20px;right:20px;padding:12px 18px;border-radius:10px;font-size:14px;font-weight:600;color:#fff;z-index:9999;opacity:0;transform:translateY(10px);transition:all 0.3s;pointer-events:none;max-width:300px;}
 .toast.show{opacity:1;transform:translateY(0);}
 .toast.success{background:var(--success);}
 .toast.error{background:var(--danger);}
-
-/* ── MOBILE OVERLAY ── */
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(28,25,23,0.5);z-index:49;}
-
 @keyframes slideUp{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
-
-/* ── RESPONSIVE ── */
 @media(max-width:1100px){.stats-row{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:768px){
     .sidebar{transform:translateX(-100%);}
@@ -239,24 +170,28 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
     .main{margin-left:0;}
     .topbar{padding:0 16px;}
     .hamburger{display:flex;}
-    .page-content{padding:20px 16px;}
-    .stats-row{grid-template-columns:repeat(2,1fr);gap:12px;}
-    .page-header{flex-direction:column;align-items:flex-start;}
-    .clients-table th:nth-child(2),.clients-table td:nth-child(2){display:none;}
+    .page-content{padding:16px;}
+    .stats-row{grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px;}
+    .stat-card{padding:16px;}
+    .stat-value{font-size:22px;}
+    .page-header{margin-bottom:20px;}
+    .clients-table{display:none;}
+    .client-cards-mobile{display:block;}
+    .section-header{flex-direction:column;align-items:flex-start;gap:10px;}
+    .section-header .btn{width:100%;justify-content:center;}
+    .page-header-actions{width:100%;}
+    .page-header-actions .btn{flex:1;justify-content:center;}
+    .plan-chip{display:none;}
 }
 @media(max-width:480px){
     .stats-row{grid-template-columns:1fr 1fr;}
-    .table-actions{gap:4px;}
-    .btn-xs{padding:4px 8px;font-size:11px;}
+    .modal-content,.embed-modal-content,.delete-modal-content{padding:20px;}
+    .vertical-grid{grid-template-columns:repeat(2,1fr);}
 }
     </style>
 </head>
 <body>
-
-<!-- SIDEBAR OVERLAY -->
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
-
-<!-- SIDEBAR -->
 <aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
         <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi" class="logo-img">
@@ -274,7 +209,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
             Sales Page
         </a>
         <a href="/affiliate-dashboard" class="nav-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
             Affiliate
         </a>
         {% if plan_type in ('agency', 'enterprise') or user.is_admin %}
@@ -307,14 +242,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         </div>
     </div>
 </aside>
-
-<!-- MAIN -->
 <div class="main">
-
-    <!-- TOPBAR -->
     <div class="topbar">
         <div class="topbar-left">
-            <button class="hamburger" onclick="openSidebar()" aria-label="Menu">
+            <button class="hamburger" onclick="openSidebar()" aria-label="Open menu">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
             <span class="topbar-title">Dashboard</span>
@@ -324,343 +255,218 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
             <a href="/logout" class="btn-logout">Logout</a>
         </div>
     </div>
-
     <div class="page-content">
-
-        <!-- PAGE HEADER -->
         <div class="page-header">
-            <div>
+            <div class="page-header-left">
                 <h1>Overview</h1>
                 <p>Manage your chatbot clients and monitor activity</p>
             </div>
             <div class="page-header-actions">
-                <a href="/affiliate-dashboard" class="btn btn-affiliate">💰 Affiliate</a>
-                <a href="/sales" class="btn btn-secondary">🌐 Sales Page</a>
+                <a href="/affiliate-dashboard" class="btn btn-affiliate">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Affiliate
+                </a>
+                <a href="/sales" class="btn btn-secondary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Sales Page
+                </a>
                 {% if limit_reached %}
-                    <a href="/upgrade" class="btn btn-upgrade">🚀 Upgrade</a>
+                    <a href="/upgrade" class="btn btn-upgrade">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>Upgrade
+                    </a>
                 {% else %}
-                    <button class="btn btn-primary" onclick="openNewClientModal()">+ New Client</button>
+                    <button class="btn btn-primary" onclick="openNewClientModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Client
+                    </button>
                 {% endif %}
             </div>
         </div>
-
-        <!-- STATS -->
         <div class="stats-row">
             <div class="stat-card">
-                <div class="stat-label"><div class="stat-icon" style="background:var(--gold-lt);">🏢</div>Total Clients</div>
-                <div style="display:flex;align-items:baseline;">
-                    <span class="stat-value">{{ client_count or clients|length }}</span>
+                <div class="stat-label">
+                    <div class="stat-icon-box" style="background:var(--gold-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="#B8924A" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                    Total Clients
                 </div>
-                <div class="stat-sub">
-                    {% if slots_display == 'Unlimited' %}Unlimited plan
-                    {% else %}of {{ slots_display }} allowed{% endif %}
-                </div>
+                <div class="stat-value-row"><span class="stat-value">{{ client_count or clients|length }}</span></div>
+                <div class="stat-sub">{% if slots_display == 'Unlimited' %}Unlimited plan{% else %}of {{ slots_display }} allowed{% endif %}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label"><div class="stat-icon" style="background:var(--success-lt);">📊</div>Active Bots</div>
-                <div style="display:flex;align-items:baseline;">
-                    <span class="stat-value">{{ clients|length }}</span>
-                    <span class="stat-trend up">↑ Live</span>
+                <div class="stat-label">
+                    <div class="stat-icon-box" style="background:var(--success-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                    Active Bots
                 </div>
+                <div class="stat-value-row"><span class="stat-value">{{ clients|length }}</span><span class="stat-trend up">Live</span></div>
                 <div class="stat-sub">All clients running</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label"><div class="stat-icon" style="background:var(--warning-lt);">⭐</div>Current Plan</div>
-                <div style="display:flex;align-items:baseline;">
-                    <span class="stat-value" style="font-size:20px;text-transform:capitalize;">{{ plan_type or user.plan_type }}</span>
+                <div class="stat-label">
+                    <div class="stat-icon-box" style="background:var(--warning-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
+                    Current Plan
                 </div>
+                <div class="stat-value-row"><span class="stat-value" style="font-size:20px;text-transform:capitalize;">{{ plan_type or user.plan_type }}</span></div>
                 <div class="stat-sub"><a href="/upgrade" style="color:var(--gold);text-decoration:none;font-weight:600;">Upgrade →</a></div>
             </div>
             <div class="stat-card">
-                <div class="stat-label"><div class="stat-icon" style="background:#fdf2f8;">💬</div>Slots Used</div>
-                <div style="display:flex;align-items:baseline;">
-                    <span class="stat-value">{{ client_count or clients|length }}</span>
-                    <span class="stat-trend neutral">/ {{ slots_display or '∞' }}</span>
+                <div class="stat-label">
+                    <div class="stat-icon-box" style="background:#fdf2f8;"><svg viewBox="0 0 24 24" fill="none" stroke="#9d174d" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+                    Slots Used
                 </div>
-                <div class="stat-sub">
-                    {% if limit_reached %}
-                        <span style="color:var(--warning);font-weight:600;">⚠️ Limit reached</span>
-                    {% else %}Slots available{% endif %}
-                </div>
+                <div class="stat-value-row"><span class="stat-value">{{ client_count or clients|length }}</span><span class="stat-trend neutral">/ {{ slots_display or '∞' }}</span></div>
+                <div class="stat-sub">{% if limit_reached %}<span style="color:var(--warning);font-weight:600;">Limit reached</span>{% else %}Slots available{% endif %}</div>
             </div>
         </div>
-
-        <!-- CLIENTS TABLE -->
         <div class="section-header">
             <span class="section-title">Your Clients</span>
             {% if not limit_reached %}
-            <button class="btn btn-primary" onclick="openNewClientModal()">+ Add Client</button>
+            <button class="btn btn-primary" onclick="openNewClientModal()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Client
+            </button>
             {% endif %}
         </div>
-
         {% if clients %}
         <div class="clients-table-wrap">
             <table class="clients-table">
-                <thead>
-                    <tr>
-                        <th>Client</th>
-                        <th>Client ID</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Client</th><th>Client ID</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
                     {% for client in clients %}
                     <tr id="row-{{ client.client_id }}">
-                        <td>
-                            <div class="client-cell">
-                                <div class="client-avatar-sm">{{ client.company_name[0]|upper }}</div>
-                                <div>
-                                    <div class="client-cell-name">{{ client.company_name }}</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td>
-                            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--sub);background:var(--cream);padding:3px 8px;border-radius:5px;">{{ client.client_id }}</span>
-                        </td>
+                        <td><div class="client-cell"><div class="client-avatar-sm">{{ client.company_name[0]|upper }}</div><div class="client-cell-name">{{ client.company_name }}</div></div></td>
+                        <td><span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--sub);background:var(--cream);padding:3px 8px;border-radius:5px;">{{ client.client_id }}</span></td>
                         <td><span class="status-badge active">Active</span></td>
                         <td>
                             <div class="table-actions">
-                                <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">📝 FAQs</a>
-                                <a href="/help-center?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">📚 Help</a>
-                                {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}
-                                <a href="/manage-client-users?client_id={{ client.client_id }}" class="btn-xs" style="background:rgba(184,146,74,0.1);color:var(--gold-dk);">👤 Logins</a>
-                                {% endif %}
-                                <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed">📋 Embed</button>
-                                {% if plan_limits.analytics %}
-                                    <a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics">📊 Analytics</a>
-                                {% else %}
-                                    <button class="btn-xs btn-xs-locked" disabled title="Analytics on Pro and above">📊 🔒</button>
-                                {% endif %}
-                                {% if plan_limits.customization %}
-                                    <a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme">🎨 Theme</a>
-                                {% else %}
-                                    <button class="btn-xs btn-xs-locked" disabled title="Customization on Solo and above">🎨 🔒</button>
-                                {% endif %}
-                                <button class="btn-xs btn-xs-delete"
-                                    data-client-id="{{ client.client_id }}"
-                                    data-client-name="{{ client.company_name }}"
-                                    onclick="confirmDelete(this.dataset.clientId, this.dataset.clientName)">🗑️</button>
+                                <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>FAQs</a>
+                                <a href="/help-center?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Help</a>
+                                {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<a href="/manage-client-users?client_id={{ client.client_id }}" class="btn-xs btn-xs-logins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Logins</a>{% endif %}
+                                <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Embed</button>
+                                {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Analytics</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Analytics</button>{% endif %}
+                                {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>Theme</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Theme</button>{% endif %}
+                                <button class="btn-xs btn-xs-delete" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="confirmDelete(this.dataset.clientId, this.dataset.clientName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
                             </div>
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
+            <div class="client-cards-mobile">
+                {% for client in clients %}
+                <div class="client-card" id="card-{{ client.client_id }}">
+                    <div class="client-card-top">
+                        <div class="client-avatar-sm">{{ client.company_name[0]|upper }}</div>
+                        <div><div class="client-card-name">{{ client.company_name }}</div><div class="client-card-id">{{ client.client_id }}</div></div>
+                        <span class="status-badge active" style="margin-left:auto;">Active</span>
+                    </div>
+                    <div class="client-card-actions">
+                        <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">FAQs</a>
+                        <a href="/help-center?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">Help</a>
+                        {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<a href="/manage-client-users?client_id={{ client.client_id }}" class="btn-xs btn-xs-logins">Logins</a>{% endif %}
+                        <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed">Embed</button>
+                        {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics">Analytics</a>{% endif %}
+                        {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme">Theme</a>{% endif %}
+                        <button class="btn-xs btn-xs-delete" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="confirmDelete(this.dataset.clientId, this.dataset.clientName)">Delete</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
         </div>
         {% else %}
         <div class="clients-table-wrap">
             <div class="empty-state">
-                <div class="empty-icon"></div>
+                <div class="empty-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
                 <h2>No Clients Yet</h2>
                 <p>Create your first chatbot client to get started</p>
-                <button class="btn btn-primary" onclick="openNewClientModal()">+ Create First Client</button>
+                <button class="btn btn-primary" onclick="openNewClientModal()">Create First Client</button>
             </div>
         </div>
         {% endif %}
-
     </div>
 </div>
-
 <!-- NEW CLIENT MODAL -->
 <div class="modal" id="new-client-modal">
-    <div class="modal-content" style="max-width:620px;width:95%;">
-        <div class="modal-header">
-            <h2>Create New Client</h2>
-            <button class="modal-close" onclick="closeModal()">×</button>
-        </div>
+    <div class="modal-content" style="max-width:560px;width:100%;">
+        <div class="modal-header"><h2>Create New Client</h2><button class="modal-close" onclick="closeModal()">×</button></div>
         <form method="POST" action="/create-client">
-            <div class="form-group">
-                <label>Company Name</label>
-                <input type="text" name="company_name" placeholder="Acme Corporation" required autofocus>
-            </div>
+            <div class="form-group"><label>Company Name</label><input type="text" name="company_name" placeholder="Acme Corporation" required autofocus></div>
             <div class="form-group">
                 <label>Industry Template</label>
-                <p style="font-size:13px;color:var(--sub);margin:-4px 0 12px;">Pre-configures tone, prompts and starter FAQs for this industry.</p>
+                <p style="font-size:13px;color:var(--sub);margin:-4px 0 12px;font-weight:300;">Pre-configures tone, prompts and FAQs for this industry.</p>
                 <input type="hidden" name="vertical" id="vertical-input" value="general">
                 <div class="vertical-grid">
-                    <div class="vertical-card selected" data-vertical="general" onclick="selectVertical(this)">
-                        <span class="vertical-icon">🌐</span><span class="vertical-label">General</span>
-                    </div>
-                    <div class="vertical-card" data-vertical="real_estate" onclick="selectVertical(this)">
-                        <span class="vertical-icon">🏠</span><span class="vertical-label">Real Estate</span>
-                    </div>
-                    <div class="vertical-card" data-vertical="saas" onclick="selectVertical(this)">
-                        <span class="vertical-icon">💻</span><span class="vertical-label">SaaS</span>
-                    </div>
-                    <div class="vertical-card" data-vertical="ecommerce" onclick="selectVertical(this)">
-                        <span class="vertical-icon">🛒</span><span class="vertical-label">E-commerce</span>
-                    </div>
-                    <div class="vertical-card" data-vertical="healthcare" onclick="selectVertical(this)">
-                        <span class="vertical-icon">🏥</span><span class="vertical-label">Healthcare</span>
-                    </div>
-                    <div class="vertical-card" data-vertical="law_firm" onclick="selectVertical(this)">
-                        <span class="vertical-icon">⚖️</span><span class="vertical-label">Law Firm</span>
-                    </div>
+                    <div class="vertical-card selected" data-vertical="general" onclick="selectVertical(this)"><span class="vertical-icon">🌐</span><span class="vertical-label">General</span></div>
+                    <div class="vertical-card" data-vertical="real_estate" onclick="selectVertical(this)"><span class="vertical-icon">🏠</span><span class="vertical-label">Real Estate</span></div>
+                    <div class="vertical-card" data-vertical="saas" onclick="selectVertical(this)"><span class="vertical-icon">💻</span><span class="vertical-label">SaaS</span></div>
+                    <div class="vertical-card" data-vertical="ecommerce" onclick="selectVertical(this)"><span class="vertical-icon">🛒</span><span class="vertical-label">E-commerce</span></div>
+                    <div class="vertical-card" data-vertical="healthcare" onclick="selectVertical(this)"><span class="vertical-icon">🏥</span><span class="vertical-label">Healthcare</span></div>
+                    <div class="vertical-card" data-vertical="law_firm" onclick="selectVertical(this)"><span class="vertical-icon">⚖️</span><span class="vertical-label">Law Firm</span></div>
                 </div>
-                <div class="vertical-preview" id="vertical-preview">
-                    <span id="preview-text">Friendly, professional assistant. Suitable for any business type.</span>
-                </div>
+                <div class="vertical-preview" id="vertical-preview"><span id="preview-text">Friendly, professional assistant. Suitable for any business type.</span></div>
             </div>
             <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Create Client</button>
         </form>
     </div>
 </div>
-
-<!-- DELETE CONFIRM MODAL -->
+<!-- DELETE MODAL -->
 <div class="delete-modal" id="delete-modal">
     <div class="delete-modal-content">
-        <div class="delete-icon">🗑️</div>
+        <div class="delete-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></div>
         <h2>Delete Chatbot?</h2>
-        <p>You're about to permanently delete:</p>
+        <p>You are about to permanently delete:</p>
         <div class="delete-client-name" id="delete-client-name">—</div>
-        <p style="font-size:13px;">This will remove all FAQs, leads, and conversation history. <strong>This cannot be undone.</strong></p>
-        <div class="delete-modal-actions" style="margin-top:24px;">
-            <button class="btn btn-cancel" style="flex:1;justify-content:center;" onclick="closeDeleteModal()">Cancel</button>
-            <button class="btn btn-danger" id="confirm-delete-btn" style="flex:1;justify-content:center;" onclick="executeDelete()">Yes, Delete</button>
+        <p style="font-size:13px;">All FAQs, leads and history will be removed. <strong>This cannot be undone.</strong></p>
+        <div class="delete-modal-actions" style="margin-top:20px;">
+            <button class="btn btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+            <button class="btn btn-danger" id="confirm-delete-btn" onclick="executeDelete()">Delete</button>
         </div>
     </div>
 </div>
-
-<!-- EMBED CODE MODAL -->
+<!-- EMBED MODAL -->
 <div id="embedModal" class="embed-modal">
     <div class="embed-modal-content">
-        <h2>📋 Embed Code</h2>
-        <p>Copy this code and paste it into your website just before the closing <code>&lt;/body&gt;</code> tag.</p>
-        <div class="embed-textarea-wrapper">
-            <textarea id="embedCodeText" readonly></textarea>
-            <div class="embed-lang-tag">HTML</div>
-        </div>
+        <h2>Embed Code</h2>
+        <p>Paste this just before the closing <code>&lt;/body&gt;</code> tag on your website.</p>
+        <div class="embed-textarea-wrapper"><textarea id="embedCodeText" readonly></textarea><div class="embed-lang-tag">HTML</div></div>
         <div class="embed-actions">
-            <button onclick="copyEmbedCode()" class="btn btn-primary" style="flex:1;justify-content:center;">✅ Copy to Clipboard</button>
+            <button onclick="copyEmbedCode()" class="btn btn-primary" style="flex:1;justify-content:center;">Copy to Clipboard</button>
             <button onclick="closeEmbedModal()" class="btn btn-secondary" style="justify-content:center;">Close</button>
         </div>
-        <div class="embed-tip">
-            💡 <strong>Tip:</strong> The chatbot appears in the bottom-right corner. Customize colors and messages in Theme settings.
-        </div>
+        <div class="embed-tip"><strong>Tip:</strong> The chatbot appears in the bottom-right corner. Customise colors in Theme settings.</div>
     </div>
 </div>
-
-<!-- TOAST -->
 <div class="toast" id="toast"></div>
-
-<!-- SUBSCRIPTION EXPIRY POPUP -->
 {% if sub_status in ('grace', 'expired') and not user.is_admin %}
 <div id="subExpiryModal" style="display:flex;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;background:rgba(28,25,23,0.8);backdrop-filter:blur(6px);padding:20px;">
-    <div style="background:var(--white);border:1px solid var(--border);border-radius:20px;padding:40px;max-width:480px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.2);">
-        <div style="font-size:44px;margin-bottom:16px;">⚠️</div>
+    <div style="background:var(--white);border:1px solid var(--border);border-radius:20px;padding:36px 32px;max-width:440px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.18);">
+        <div style="width:52px;height:52px;border-radius:14px;background:var(--warning-lt);border:1px solid rgba(217,119,6,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
         {% if sub_status == 'grace' %}
-        <h2 style="font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--dark);margin-bottom:12px;">Your subscription has expired</h2>
-        <p style="color:var(--mid);font-size:14px;line-height:1.7;margin-bottom:8px;">You're in a <strong style="color:var(--warning);">3-day grace period</strong>. Your chatbots are still running — renew before the grace period ends or your account downgrades to Free.</p>
-        {% if sub_grace_ends_at %}
-        <div style="background:var(--warning-lt);border:1px solid rgba(217,119,6,0.3);border-radius:10px;padding:12px;margin:16px 0;color:var(--warning);font-size:13px;font-weight:600;">
-            Grace period ends: {{ sub_grace_ends_at.strftime('%B %d, %Y') if sub_grace_ends_at else 'Soon' }}
-        </div>
-        {% endif %}
+        <h2 style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--dark);margin-bottom:10px;">Subscription expired</h2>
+        <p style="color:var(--mid);font-size:14px;line-height:1.7;margin-bottom:8px;">You are in a <strong style="color:var(--warning);">3-day grace period</strong>. Your chatbots are still running — renew before the grace period ends.</p>
+        {% if sub_grace_ends_at %}<div style="background:var(--warning-lt);border:1px solid rgba(217,119,6,0.25);border-radius:9px;padding:10px 14px;margin:14px 0;color:var(--warning);font-size:13px;font-weight:600;">Grace period ends: {{ sub_grace_ends_at.strftime('%B %d, %Y') if sub_grace_ends_at else 'Soon' }}</div>{% endif %}
         {% else %}
-        <h2 style="font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--dark);margin-bottom:12px;">Subscription expired</h2>
-        <p style="color:var(--mid);font-size:14px;line-height:1.7;margin-bottom:16px;">Your account has been downgraded to the Free plan. Upgrade to restore all features.</p>
+        <h2 style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--dark);margin-bottom:10px;">Subscription expired</h2>
+        <p style="color:var(--mid);font-size:14px;line-height:1.7;margin-bottom:14px;">Your account has been downgraded to the Free plan. Upgrade to restore all features.</p>
         {% endif %}
-        <div style="display:flex;gap:12px;justify-content:center;margin-top:20px;">
-            <a href="/upgrade" style="display:inline-block;padding:13px 28px;background:var(--gold);color:#fff;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;box-shadow:0 4px 16px rgba(184,146,74,0.4);">Renew Subscription →</a>
-            <button onclick="document.getElementById('subExpiryModal').style.display='none'" style="padding:13px 20px;background:transparent;color:var(--sub);border:1px solid var(--border);border-radius:10px;font-weight:600;font-size:14px;cursor:pointer;">Dismiss</button>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap;">
+            <a href="/upgrade" style="padding:12px 24px;background:var(--gold);color:#fff;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;box-shadow:0 4px 16px rgba(184,146,74,0.4);">Renew Subscription</a>
+            <button onclick="document.getElementById('subExpiryModal').style.display='none'" style="padding:12px 18px;background:transparent;color:var(--sub);border:1px solid var(--border);border-radius:10px;font-weight:600;font-size:14px;cursor:pointer;font-family:'DM Sans',sans-serif;">Dismiss</button>
         </div>
     </div>
 </div>
 {% endif %}
-
 <script>
-    // ── Sidebar mobile ────────────────────────────────────────────
-    function openSidebar() {
-        document.getElementById('sidebar').classList.add('open');
-        document.getElementById('sidebarOverlay').classList.add('open');
-    }
-    function closeSidebar() {
-        document.getElementById('sidebar').classList.remove('open');
-        document.getElementById('sidebarOverlay').classList.remove('open');
-    }
-
-    // ── Vertical selector ─────────────────────────────────────────
-    const VERTICAL_PREVIEWS = {
-        general:     'Friendly, professional assistant. Suitable for any business type.',
-        real_estate: 'Warm, consultative tone. Focused on booking property viewings and lead qualification.',
-        saas:        'Helpful, technical tone. Handles onboarding, billing and support tickets.',
-        ecommerce:   'Fast, friendly tone. Handles returns, shipping and product questions.',
-        healthcare:  'Calm, professional tone. Books appointments and handles clinic FAQs.',
-        law_firm:    'Formal, precise tone. Intake form for new client consultations.'
-    };
-
-    function selectVertical(card) {
-        document.querySelectorAll('.vertical-card').forEach(c => c.classList.remove('selected'));
-        card.classList.add('selected');
-        const v = card.getAttribute('data-vertical');
-        document.getElementById('vertical-input').value = v;
-        document.getElementById('preview-text').textContent = VERTICAL_PREVIEWS[v] || '';
-    }
-
-    function openNewClientModal() { document.getElementById('new-client-modal').style.display = 'flex'; }
-    function closeModal() { document.getElementById('new-client-modal').style.display = 'none'; }
-
-    // ── Embed Code ────────────────────────────────────────────────
-    function showEmbedCode(clientId) {
-        const baseUrl = window.location.origin;
-        const code = `<!-- Lumvi Chatbot Widget -->\n<script>\n    (function() {\n        var s = document.createElement('script');\n        s.src = '${baseUrl}/static/widget.js';\n        s.setAttribute('data-client-id', '${clientId}');\n        document.body.appendChild(s);\n    })();\n<\/script>`;
-        document.getElementById('embedCodeText').value = code;
-        document.getElementById('embedModal').style.display = 'flex';
-    }
-    function closeEmbedModal() { document.getElementById('embedModal').style.display = 'none'; }
-    function copyEmbedCode() {
-        const t = document.getElementById('embedCodeText');
-        t.select(); t.setSelectionRange(0, 99999);
-        try { document.execCommand('copy'); showToast('✅ Embed code copied!', 'success'); }
-        catch { alert('Please select and copy manually.'); }
-    }
-
-    // ── Delete ────────────────────────────────────────────────────
-    let pendingDeleteId = null;
-    function confirmDelete(clientId, clientName) {
-        pendingDeleteId = clientId;
-        document.getElementById('delete-client-name').textContent = clientName;
-        document.getElementById('delete-modal').style.display = 'flex';
-    }
-    function closeDeleteModal() {
-        pendingDeleteId = null;
-        document.getElementById('delete-modal').style.display = 'none';
-    }
-    async function executeDelete() {
-        if (!pendingDeleteId) return;
-        const btn = document.getElementById('confirm-delete-btn');
-        btn.textContent = 'Deleting…'; btn.disabled = true;
-        try {
-            const res = await fetch(`/api/clients/${pendingDeleteId}/delete`, { method: 'DELETE', headers: {'Content-Type':'application/json'} });
-            const data = await res.json();
-            if (data.success) {
-                const row = document.getElementById(`row-${pendingDeleteId}`);
-                if (row) { row.style.transition = 'opacity 0.3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); }
-                closeDeleteModal();
-                showToast('✅ Chatbot deleted', 'success');
-                const badge = document.querySelector('.nav-badge');
-                if (badge) { const c = parseInt(badge.textContent)||0; if (c-1<=0) badge.remove(); else badge.textContent = c-1; }
-            } else { showToast('❌ '+(data.error||'Delete failed'), 'error'); btn.textContent = 'Yes, Delete'; btn.disabled = false; }
-        } catch { showToast('❌ Network error', 'error'); btn.textContent = 'Yes, Delete'; btn.disabled = false; }
-    }
-
-    // ── Toast ─────────────────────────────────────────────────────
-    function showToast(msg, type='success') {
-        const t = document.getElementById('toast');
-        t.textContent = msg; t.className = `toast ${type} show`;
-        setTimeout(() => { t.className = 'toast'; }, 3500);
-    }
-
-    // ── Close on backdrop / Escape ────────────────────────────────
-    document.addEventListener('click', function(e) {
-        if (e.target === document.getElementById('embedModal')) closeEmbedModal();
-        if (e.target === document.getElementById('new-client-modal')) closeModal();
-        if (e.target === document.getElementById('delete-modal')) closeDeleteModal();
-    });
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') { closeEmbedModal(); closeModal(); closeDeleteModal(); closeSidebar(); }
-    });
+    function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sidebarOverlay').classList.add('open');}
+    function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('open');}
+    const VERTICAL_PREVIEWS={general:'Friendly, professional assistant. Suitable for any business type.',real_estate:'Warm, consultative tone. Focused on booking property viewings and lead qualification.',saas:'Helpful, technical tone. Handles onboarding, billing and support tickets.',ecommerce:'Fast, friendly tone. Handles returns, shipping and product questions.',healthcare:'Calm, professional tone. Books appointments and handles clinic FAQs.',law_firm:'Formal, precise tone. Intake form for new client consultations.'};
+    function selectVertical(card){document.querySelectorAll('.vertical-card').forEach(c=>c.classList.remove('selected'));card.classList.add('selected');const v=card.getAttribute('data-vertical');document.getElementById('vertical-input').value=v;document.getElementById('preview-text').textContent=VERTICAL_PREVIEWS[v]||'';}
+    function openNewClientModal(){document.getElementById('new-client-modal').style.display='flex';}
+    function closeModal(){document.getElementById('new-client-modal').style.display='none';}
+    function showEmbedCode(clientId){const baseUrl=window.location.origin;const code=`<!-- Lumvi Chatbot Widget -->\n<script>\n    (function() {\n        var s = document.createElement('script');\n        s.src = '${baseUrl}/static/widget.js';\n        s.setAttribute('data-client-id', '${clientId}');\n        document.body.appendChild(s);\n    })();\n<\/script>`;document.getElementById('embedCodeText').value=code;document.getElementById('embedModal').style.display='flex';}
+    function closeEmbedModal(){document.getElementById('embedModal').style.display='none';}
+    function copyEmbedCode(){const t=document.getElementById('embedCodeText');t.select();t.setSelectionRange(0,99999);try{document.execCommand('copy');showToast('Embed code copied','success');}catch{alert('Please select and copy manually.');}}
+    let pendingDeleteId=null;
+    function confirmDelete(clientId,clientName){pendingDeleteId=clientId;document.getElementById('delete-client-name').textContent=clientName;document.getElementById('delete-modal').style.display='flex';}
+    function closeDeleteModal(){pendingDeleteId=null;document.getElementById('delete-modal').style.display='none';}
+    async function executeDelete(){if(!pendingDeleteId)return;const btn=document.getElementById('confirm-delete-btn');btn.textContent='Deleting…';btn.disabled=true;try{const res=await fetch(`/api/clients/${pendingDeleteId}/delete`,{method:'DELETE',headers:{'Content-Type':'application/json'}});const data=await res.json();if(data.success){['row-','card-'].forEach(p=>{const el=document.getElementById(p+pendingDeleteId);if(el){el.style.transition='opacity 0.3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);}});closeDeleteModal();showToast('Chatbot deleted','success');const badge=document.querySelector('.nav-badge');if(badge){const c=parseInt(badge.textContent)||0;if(c-1<=0)badge.remove();else badge.textContent=c-1;}}else{showToast(data.error||'Delete failed','error');btn.textContent='Delete';btn.disabled=false;}}catch{showToast('Network error','error');btn.textContent='Delete';btn.disabled=false;}}
+    function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} show`;setTimeout(()=>{t.className='toast';},3500);}
+    document.addEventListener('click',function(e){if(e.target===document.getElementById('embedModal'))closeEmbedModal();if(e.target===document.getElementById('new-client-modal'))closeModal();if(e.target===document.getElementById('delete-modal'))closeDeleteModal();});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeEmbedModal();closeModal();closeDeleteModal();closeSidebar();}});
 </script>
 </body>
 </html>
