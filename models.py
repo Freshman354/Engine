@@ -236,6 +236,92 @@ def migrate_subscription_expiry():
     print("✅ Subscription expiry migration complete")
 
 
+def migrate_to_recurring_subscriptions():
+    """
+    One-time migration: add recurring billing columns to users table.
+    Safe to call on every startup — uses ADD COLUMN IF NOT EXISTS.
+    """
+    conn, cursor = get_db()
+    try:
+        migrations = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_id TEXT",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS billing_provider TEXT DEFAULT 'manual'",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS billing_cycle TEXT DEFAULT 'monthly'",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_annual BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS cancel_at_period_end BOOLEAN DEFAULT FALSE",
+        ]
+        for sql in migrations:
+            cursor.execute(sql)
+        conn.commit()
+        print("✅ Recurring subscription columns ready.")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️ migrate_to_recurring_subscriptions: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def update_user_subscription(user_id, plan_type, billing_provider='flutterwave',
+                              subscription_id=None, is_annual=False):
+    """
+    Upgrade a user to a paid plan and set recurring subscription fields.
+    Called after a successful payment callback.
+    """
+    cycle = 'annual' if is_annual else 'monthly'
+    days  = 365 if is_annual else 30
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            '''UPDATE users
+               SET plan_type            = %s,
+                   billing_provider     = %s,
+                   subscription_id      = %s,
+                   billing_cycle        = %s,
+                   is_annual            = %s,
+                   cancel_at_period_end = FALSE,
+                   upgraded_at          = CURRENT_TIMESTAMP,
+                   subscription_expires_at = NOW() + INTERVAL %s,
+                   grace_period_ends_at    = NOW() + INTERVAL %s
+               WHERE id = %s''',
+            (plan_type, billing_provider, subscription_id, cycle,
+             is_annual, f'{days} days', f'{days + 3} days', user_id)
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def cancel_user_subscription(user_id):
+    """
+    Mark a subscription to cancel at period end.
+    The user keeps access until subscription_expires_at, then the
+    scheduler downgrades them automatically.
+    Returns True on success.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            '''UPDATE users
+               SET cancel_at_period_end = TRUE
+               WHERE id = %s AND is_admin IS NOT TRUE''',
+            (user_id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        conn.rollback()
+        cursor.close()
+        conn.close()
+        return False
+
+
 def set_trial_expiry(user_id, days=7):
     """Set a free trial expiry. Called on signup for paid plans. Default: 7 days."""
     conn, cursor = get_db()

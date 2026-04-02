@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cancel Subscription — Lumvi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+        :root{--cream:#F7F4EF;--gold:#B8924A;--gold-dk:#9A7A3A;--dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#FFFFFF;--danger:#EF4444;--danger-lt:#FEF2F2;}
+        body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+        .card{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:48px 40px;max-width:500px;width:100%;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,0.08);}
+        .icon-box{width:64px;height:64px;border-radius:18px;background:var(--danger-lt);border:1px solid rgba(239,68,68,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;}
+        .icon-box svg{width:28px;height:28px;color:var(--danger);}
+        h1{font-family:'Fraunces',serif;font-size:24px;font-weight:700;color:var(--dark);margin-bottom:12px;}
+        .sub-text{font-size:14px;color:var(--mid);font-weight:300;line-height:1.7;margin-bottom:24px;}
+        .info-box{background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:28px;text-align:left;}
+        .info-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);}
+        .info-row:last-child{border-bottom:none;}
+        .info-label{color:var(--sub);}
+        .info-value{font-weight:600;color:var(--dark);text-transform:capitalize;}
+        .warning-box{background:#FFF7ED;border:1px solid rgba(217,119,6,0.25);border-radius:10px;padding:14px 16px;margin-bottom:28px;font-size:13px;color:#92400e;line-height:1.6;text-align:left;}
+        .warning-box strong{color:#b45309;}
+        .btn-row{display:flex;gap:12px;flex-direction:column;}
+        .btn{display:block;width:100%;padding:13px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;border:none;text-decoration:none;text-align:center;transition:all 0.2s;}
+        .btn-danger{background:var(--danger);color:#fff;}
+        .btn-danger:hover{background:#dc2626;transform:translateY(-1px);}
+        .btn-outline{background:transparent;color:var(--mid);border:1.5px solid var(--border);}
+        .btn-outline:hover{border-color:var(--gold);color:var(--gold-dk);}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+        </div>
+
+        <h1>Cancel Subscription?</h1>
+        <p class="sub-text">You are about to cancel your Lumvi subscription. Please review what happens before confirming.</p>
+
+        <div class="info-box">
+            <div class="info-row">
+                <span class="info-label">Current plan</span>
+                <span class="info-value">{{ user.plan_type if user else '—' }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Status</span>
+                <span class="info-value">{{ sub_status.get('status', '—') }}</span>
+            </div>
+            {% if sub_status.get('expires_at') %}
+            <div class="info-row">
+                <span class="info-label">Access until</span>
+                <span class="info-value">{{ sub_status['expires_at'].strftime('%B %d, %Y') if sub_status.get('expires_at') else '—' }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="warning-box">
+            <strong>What happens when you cancel:</strong><br>
+            You will keep full access to your plan until your current billing period ends. After that, your account automatically downgrades to the Free plan and your chatbots will be limited to the Free tier.
+        </div>
+
+        <div class="btn-row">
+            <form method="POST" action="/subscription/cancel">
+                <button type="submit" class="btn btn-danger">Yes, Cancel My Subscription</button>
+            </form>
+            <a href="/dashboard" class="btn btn-outline">Keep My Subscription</a>
+        </div>
+    </div>
+</body>
+</html>

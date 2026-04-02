@@ -348,6 +348,8 @@ try:
         models.migrate_faqs_table()
     if hasattr(models, 'migrate_subscription_expiry'):
         models.migrate_subscription_expiry()
+    if hasattr(models, 'migrate_to_recurring_subscriptions'):
+        models.migrate_to_recurring_subscriptions()
     print("✅ Database initialized/migrated successfully!")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
@@ -906,7 +908,7 @@ def chat():
                     {
                         "id": "demo_2",
                         "question": "What are your prices?",
-                        "answer": "Starter: $49/mo | Pro: $99/mo | Agency: $299/mo. All plans include a 7-day free trial! 💰",
+                        "answer": "Starter: $49/mo | Pro: $99/mo | Agency: $299/mo. All plans include a 14-day free trial! 💰",
                         "triggers": ["price", "pricing", "cost", "fee", "payment", "charge", "afford", "subscription"]
                     },
                     {
@@ -1126,7 +1128,7 @@ def signup():
             return render_template('signup.html', error='Password must be at least 6 characters',
                                    referral_code=referral_code, plan_param=plan_from_form)
 
-        # All new paid accounts start on a 7-day free trial (stored as the chosen plan)
+        # All new paid accounts start on a 14-day free trial (stored as the chosen plan)
         # Free plan stays free — no trial needed
         initial_plan = plan_from_form if plan_from_form != 'free' else 'free'
 
@@ -1136,9 +1138,9 @@ def signup():
             return render_template('signup.html', error='An account with that email already exists',
                                    referral_code=referral_code, plan_param=plan_from_form)
 
-        # Set 7-day free trial expiry for paid plans
+        # Set 14-day free trial expiry for paid plans
         if initial_plan != 'free':
-            models.set_trial_expiry(user_id, days=7)
+            models.set_trial_expiry(user_id, days=14)
 
         if referral_code:
             affiliate = models.get_affiliate_by_code(referral_code)
@@ -2407,10 +2409,10 @@ def paypal_success():
 # =====================================================================
 
 PLAN_PRICES_FLW = {
-    'solo':    19.00,
-    'starter': 49.00,
-    'pro':     99.00,
-    'agency':  299.00
+    'solo':    {'monthly': 19.00,  'annual': 190.00},
+    'starter': {'monthly': 49.00,  'annual': 490.00},
+    'pro':     {'monthly': 99.00,  'annual': 990.00},
+    'agency':  {'monthly': 299.00, 'annual': 2990.00}
 }
 
 @app.route('/payment/flutterwave/callback')
@@ -2418,26 +2420,26 @@ PLAN_PRICES_FLW = {
 def flutterwave_callback():
     """
     Flutterwave redirects here after payment.
-    URL params: status, tx_ref, transaction_id
-    tx_ref format: lumvi_{plan}_{user_id}_{timestamp}
+    tx_ref format: lumvi_{plan}_{cycle}_{user_id}_{timestamp}
+    cycle = 'monthly' | 'annual'
     """
     status         = request.args.get('status', '')
     tx_ref         = request.args.get('tx_ref', '')
     transaction_id = request.args.get('transaction_id', '')
 
     if status != 'successful':
-        flash("❌ Payment was not completed. Please try again.", 'error')
+        flash("Payment was not completed. Please try again.", 'error')
         return redirect(url_for('upgrade_page'))
 
     if not transaction_id:
-        flash("❌ Invalid payment reference. Contact support@lumvi.net.", 'error')
+        flash("Invalid payment reference. Contact support@lumvi.net.", 'error')
         return redirect(url_for('upgrade_page'))
 
     # Verify with Flutterwave API
     flw_secret = os.environ.get('FLW_SECRET_KEY', '')
     if not flw_secret:
         app.logger.error("FLW_SECRET_KEY not set")
-        flash("❌ Payment configuration error. Contact support@lumvi.net.", 'error')
+        flash("Payment configuration error. Contact support@lumvi.net.", 'error')
         return redirect(url_for('upgrade_page'))
 
     try:
@@ -2448,60 +2450,68 @@ def flutterwave_callback():
         flw_data = resp.json()
     except Exception as e:
         app.logger.error(f"Flutterwave verify error: {e}")
-        flash("❌ Could not verify payment. Contact support@lumvi.net.", 'error')
+        flash("Could not verify payment. Contact support@lumvi.net.", 'error')
         return redirect(url_for('upgrade_page'))
 
     if flw_data.get('status') != 'success':
-        flash("❌ Payment verification failed. Contact support@lumvi.net.", 'error')
+        flash("Payment verification failed. Contact support@lumvi.net.", 'error')
         return redirect(url_for('upgrade_page'))
 
     txn = flw_data.get('data', {})
     if txn.get('status') != 'successful':
-        flash("❌ Payment not successful. Please try again.", 'error')
+        flash("Payment not successful. Please try again.", 'error')
         return redirect(url_for('upgrade_page'))
 
-    # Extract plan from tx_ref
-    plan = None
+    # Parse tx_ref: lumvi_{plan}_{cycle}_{user_id}_{timestamp}
+    plan  = None
+    cycle = 'monthly'
     try:
         parts = tx_ref.split('_')
-        if len(parts) >= 2:
-            plan = parts[1].lower()
+        plan  = parts[1].lower() if len(parts) > 1 else None
+        # cycle is optional — old format was lumvi_{plan}_{user_id}_{ts}
+        if len(parts) > 2 and parts[2] in ('monthly', 'annual'):
+            cycle = parts[2].lower()
     except Exception:
         pass
 
     if plan not in PLAN_PRICES_FLW:
         app.logger.error(f"Flutterwave: unknown plan in tx_ref '{tx_ref}'")
-        flash("❌ Could not determine plan. Contact support@lumvi.net.", 'error')
+        flash("Could not determine plan. Contact support@lumvi.net.", 'error')
         return redirect(url_for('upgrade_page'))
 
+    is_annual    = (cycle == 'annual')
+    expected_amt = PLAN_PRICES_FLW[plan]['annual'] if is_annual else PLAN_PRICES_FLW[plan]['monthly']
     paid_amount  = float(txn.get('amount', 0))
     paid_currency = txn.get('currency', 'USD')
 
-    # Amount check (USD only — NGN skipped since exchange rate varies)
-    if paid_currency == 'USD' and paid_amount < PLAN_PRICES_FLW[plan]:
-        app.logger.error(f"Flutterwave amount mismatch: expected {PLAN_PRICES_FLW[plan]}, got {paid_amount}")
-        flash("❌ Payment amount mismatch. Contact support@lumvi.net.", 'error')
+    # Amount check (USD only)
+    if paid_currency == 'USD' and paid_amount < expected_amt:
+        app.logger.error(f"Flutterwave amount mismatch: expected {expected_amt}, got {paid_amount}")
+        flash("Payment amount mismatch. Contact support@lumvi.net.", 'error')
         return redirect(url_for('upgrade_page'))
 
-    # Upgrade the user
-    conn, cursor = models.get_db()
-    cursor.execute(
-        'UPDATE users SET plan_type = %s, upgraded_at = CURRENT_TIMESTAMP WHERE id = %s',
-        (plan, current_user.id)
+    # Upgrade user with recurring subscription fields
+    models.update_user_subscription(
+        user_id=current_user.id,
+        plan_type=plan,
+        billing_provider='flutterwave',
+        subscription_id=str(transaction_id),
+        is_annual=is_annual
     )
-    conn.commit()
-    cursor.close()
-    conn.close()
 
-    models.record_payment(current_user.id, paid_amount, plan,
-                          provider='flutterwave', reference=str(transaction_id))
-    models.set_subscription_expiry(current_user.id)
+    models.record_payment(
+        current_user.id, paid_amount, plan,
+        provider='flutterwave',
+        reference=str(transaction_id),
+        notes=f"{'Annual' if is_annual else 'Monthly'} — {cycle}"
+    )
+
     models.track_event('plan_upgrade', user_id=current_user.id,
                        metadata={'plan': plan, 'provider': 'flutterwave',
-                                 'amount': paid_amount, 'tx_ref': tx_ref})
+                                 'cycle': cycle, 'amount': paid_amount, 'tx_ref': tx_ref})
 
-    app.logger.info(f"Flutterwave upgrade OK: user={current_user.id} plan={plan} txn={transaction_id}")
-    flash(f"✅ Payment successful! You've been upgraded to the {plan.capitalize()} plan.", 'success')
+    app.logger.info(f"Flutterwave upgrade OK: user={current_user.id} plan={plan} cycle={cycle} txn={transaction_id}")
+    flash(f"Payment successful! You are now on the {plan.capitalize()} plan ({cycle} billing).", 'success')
     return redirect(url_for('dashboard'))
 
 
@@ -2535,11 +2545,17 @@ def flutterwave_webhook():
     if txn_status != 'successful':
         return jsonify({'status': 'not successful'}), 200
 
-    # Extract plan + user_id from tx_ref
+    # Extract plan + cycle + user_id from tx_ref
+    # Format: lumvi_{plan}_{cycle}_{user_id}_{ts} OR legacy lumvi_{plan}_{user_id}_{ts}
     try:
         parts   = tx_ref.split('_')
         plan    = parts[1].lower() if len(parts) >= 2 else None
-        user_id = int(parts[2])    if len(parts) >= 3 else None
+        if len(parts) > 2 and parts[2] in ('monthly', 'annual'):
+            cycle   = parts[2].lower()
+            user_id = int(parts[3]) if len(parts) >= 4 else None
+        else:
+            cycle   = 'monthly'
+            user_id = int(parts[2]) if len(parts) >= 3 else None
     except (IndexError, ValueError):
         app.logger.error(f"Flutterwave webhook: bad tx_ref '{tx_ref}'")
         return jsonify({'status': 'bad tx_ref'}), 200
@@ -2558,24 +2574,58 @@ def flutterwave_webhook():
     if already_processed:
         return jsonify({'status': 'already processed'}), 200
 
-    # Upgrade user
-    conn, cursor = models.get_db()
-    cursor.execute(
-        'UPDATE users SET plan_type = %s, upgraded_at = CURRENT_TIMESTAMP WHERE id = %s',
-        (plan, user_id)
+    # Upgrade user with recurring fields
+    is_annual = (cycle == 'annual')
+    models.update_user_subscription(
+        user_id=user_id,
+        plan_type=plan,
+        billing_provider='flutterwave',
+        subscription_id=txn_id,
+        is_annual=is_annual
     )
-    conn.commit()
-    cursor.close()
-    conn.close()
 
-    models.record_payment(user_id, amount, plan, provider='flutterwave', reference=txn_id)
-    models.set_subscription_expiry(user_id)
+    models.record_payment(user_id, amount, plan, provider='flutterwave',
+                          reference=txn_id,
+                          notes=f"{'Annual' if is_annual else 'Monthly'} webhook")
     models.track_event('plan_upgrade', user_id=user_id,
                        metadata={'plan': plan, 'provider': 'flutterwave_webhook',
-                                 'amount': amount, 'tx_ref': tx_ref})
+                                 'cycle': cycle, 'amount': amount, 'tx_ref': tx_ref})
 
-    app.logger.info(f"Flutterwave webhook upgrade OK: user={user_id} plan={plan} txn={txn_id}")
+    app.logger.info(f"Flutterwave webhook upgrade OK: user={user_id} plan={plan} cycle={cycle} txn={txn_id}")
     return jsonify({'status': 'ok'}), 200
+
+
+@app.route('/subscription/cancel', methods=['GET', 'POST'])
+@login_required
+def cancel_subscription():
+    """Allow users to cancel their subscription at the end of the current period."""
+    if request.method == 'POST':
+        success = models.cancel_user_subscription(current_user.id)
+
+        if success:
+            # Optionally notify Flutterwave to stop future charges
+            user = models.get_user_by_id(current_user.id)
+            if user and user.get('subscription_id') and user.get('billing_provider') == 'flutterwave':
+                try:
+                    flw_secret = os.environ.get('FLW_SECRET_KEY')
+                    if flw_secret:
+                        cancel_url = f"https://api.flutterwave.com/v3/subscriptions/{user['subscription_id']}/cancel"
+                        headers = {"Authorization": f"Bearer {flw_secret}"}
+                        requests.put(cancel_url, headers=headers, timeout=10)
+                except Exception as _e:
+                    app.logger.warning(f"Flutterwave cancel API call failed: {_e}")
+
+            models.track_event('subscription_cancelled', user_id=current_user.id)
+            flash("Your subscription has been cancelled. You will retain access until the end of your current billing period.", 'success')
+        else:
+            flash("Could not cancel subscription. Please contact support@lumvi.net.", 'error')
+
+        return redirect(url_for('dashboard'))
+
+    # GET — show confirmation page
+    user    = models.get_user_by_id(current_user.id)
+    sub_info = get_subscription_status(user) if user else {'status': 'free'}
+    return render_template('cancel_subscription.html', user=user, sub_status=sub_info)
 
 
 @app.route('/api/webhook/lead', methods=['POST'])
