@@ -1408,5 +1408,33 @@ def update_client_user_password(client_user_id, new_password):
     conn.close()
 
 
+def get_recent_conversations(client_id: str, limit: int = 15) -> list:
+    """
+    Return the last `limit` conversation turns for a client,
+    oldest → newest, as a list of {role, content} dicts
+    ready to pass directly to generate_human_like_response.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''SELECT user_message, bot_response
+               FROM conversations
+               WHERE client_id = %s
+               ORDER BY timestamp DESC
+               LIMIT %s''',
+            (client_id, limit)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for row in reversed(rows):   # oldest first
+            result.append({'role': 'user',      'content': row['user_message']})
+            result.append({'role': 'assistant', 'content': row['bot_response']})
+        return result
+    except Exception:
+        return []
+
+
 if __name__ == '__main__':
     init_db()

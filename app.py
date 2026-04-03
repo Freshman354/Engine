@@ -974,15 +974,19 @@ def chat():
         # Step 2: AI smart matching (primary — most accurate at scale)
         if ai_helper and ai_helper.enabled:
             try:
+                # Load conversation history for memory context (last 15 turns)
+                convo_history = models.get_recent_conversations(client_id, limit=15)
+
                 ai_faq, ai_confidence = ai_helper.find_best_faq(message, faqs_list)
-                if ai_faq and ai_confidence > 0.5:
-                    # Shape response with vertical persona if available
-                    if vertical_system_prompt:
-                        response_text = ai_helper.generate_vertical_response(
-                            message, ai_faq, vertical_system_prompt
-                        )
-                    else:
-                        response_text = ai_faq.get('answer')
+
+                if ai_faq and ai_confidence > 0.45:
+                    # Generate human-like response using FAQ + conversation history
+                    response_text = ai_helper.generate_human_like_response(
+                        user_message=message,
+                        faq=ai_faq,
+                        vertical=vertical,
+                        conversation_history=convo_history
+                    )
                     log_conversation(client_id, message, response_text, matched=True, method='ai_smart')
                     return jsonify({
                         'success': True,
@@ -990,19 +994,23 @@ def chat():
                         'confidence': ai_confidence,
                         'method': 'ai_smart'
                     })
-                # No FAQ match — use vertical persona to generate contextual response
-                elif faqs_list and vertical_system_prompt:
+
+                # No strong FAQ match — use vertical fallback
+                elif faqs_list:
                     response_text = ai_helper.generate_vertical_fallback(
-                        message, faqs_list, vertical_system_prompt
+                        user_message=message,
+                        faqs=faqs_list,
+                        vertical=vertical
                     )
                     if response_text:
-                        log_conversation(client_id, message, response_text, matched=True, method='ai_vertical')
+                        log_conversation(client_id, message, response_text, matched=False, method='ai_vertical')
                         return jsonify({
                             'success': True,
                             'response': response_text,
-                            'confidence': 0.6,
+                            'confidence': 0.0,
                             'method': 'ai_vertical'
                         })
+
             except Exception as ai_error:
                 app.logger.error(f"AI smart matching error: {ai_error}")
 

@@ -1,273 +1,279 @@
 """
-AI Helper - Intelligent FAQ matching and response generation using Gemini
+AI Helper - Intelligent FAQ matching and response generation using Gemini.
+Enhanced for natural, human-like conversations with 15-message memory.
 """
 
 import google.generativeai as genai
 import json
 from typing import List, Dict, Tuple, Optional
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
+# ── Simple intent keywords — checked before AI to save tokens ────────
+_SIMPLE_INTENTS = {
+    'greeting':  ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'howdy'],
+    'gratitude': ['thanks', 'thank you', 'cheers', 'appreciate it', 'much appreciated', 'thx'],
+    'goodbye':   ['bye', 'goodbye', 'see you', 'take care', 'cya', 'see ya', 'later'],
+}
+
 
 class AIHelper:
-    """AI-powered chatbot intelligence using Google Gemini"""
+    """AI-powered chatbot with human-like responses and extended conversation memory."""
 
     def __init__(self, api_key: str, model_name: str = 'gemini-2.0-flash'):
-        self.api_key = api_key
+        self.api_key   = api_key
         self.model_name = model_name
-        self.enabled = bool(api_key and api_key != '')
+        self.enabled   = bool(api_key and api_key.strip())
+
+        # Personality tones per vertical
+        self.personalities = {
+            'general':     "warm, friendly, and helpful — like a knowledgeable colleague",
+            'real_estate': "enthusiastic, reassuring, and professional — make buying/renting feel exciting",
+            'saas':        "patient, clear, and solution-oriented — great at explaining features",
+            'ecommerce':   "fast, friendly, and shopper-focused — keep it quick and helpful",
+            'healthcare':  "calm, empathetic, and professional — never give medical advice",
+            'law_firm':    "formal, precise, trustworthy, and cautious — excellent at intake",
+        }
 
         if self.enabled:
             try:
                 genai.configure(api_key=api_key)
                 self.model = genai.GenerativeModel(model_name)
-
-                # Test it works
-                test_response = self.model.generate_content("Say 'OK'")
-                logger.info(f"AI Helper initialized with {model_name}")
-                logger.debug(f"Gemini test response: {test_response.text[:50]}")
-
+                # No startup test call — saves tokens and startup latency
+                logger.info(f"✅ AI Helper initialized with {model_name} — 15-message memory enabled")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini: {e}")
                 self.enabled = False
         else:
-            logger.warning("AI Helper disabled - no API key provided")
+            logger.warning("AI Helper disabled — no GEMINI_API_KEY provided")
+
+    # ── PUBLIC API ────────────────────────────────────────────────────
 
     def find_best_faq(self, user_message: str, faqs: List[Dict]) -> Tuple[Optional[Dict], float]:
-        """Find the most relevant FAQ using AI understanding"""
+        """Find the best matching FAQ using Gemini semantic understanding."""
         if not self.enabled or not faqs:
             return None, 0.0
 
         try:
             faq_context = self._format_faqs_for_ai(faqs)
 
-            prompt = f"""You are a FAQ matching expert. Analyze the user's question and find the most relevant FAQ.
+            prompt = f"""You are an expert at matching user questions to FAQs.
 
-User Question: "{user_message}"
+User question: "{user_message}"
 
 Available FAQs:
 {faq_context}
 
-Task:
-1. Identify which FAQ best answers the user's question
-2. Return ONLY a JSON object with this format:
-{{"faq_id": "the_id_of_best_matching_faq", "confidence": 0.95, "reason": "brief explanation"}}
+Return ONLY valid JSON in this exact format:
+{{
+  "faq_id": "exact_id_of_best_match_or_null",
+  "confidence": 0.92,
+  "reason": "short explanation"
+}}
 
-If no FAQ is relevant (confidence < 0.5), return:
-{{"faq_id": null, "confidence": 0.0, "reason": "no relevant FAQ found"}}
-
-Return ONLY the JSON, no other text."""
+If no FAQ is relevant enough (confidence < 0.45), set faq_id to null and confidence to 0.0."""
 
             response = self.model.generate_content(prompt)
-            result = self._parse_json_response(response.text)
+            result   = self._parse_json_response(response.text)
 
             if result and result.get('faq_id'):
-                faq = next((f for f in faqs if f.get('id') == result['faq_id']), None)
+                faq        = next((f for f in faqs if str(f.get('id')) == str(result['faq_id'])), None)
                 confidence = float(result.get('confidence', 0.0))
-                logger.info(f"AI matched FAQ: {result['faq_id']} (confidence: {confidence})")
-                return faq, confidence
+                if faq and confidence > 0.45:
+                    logger.info(f"AI matched FAQ {result['faq_id']} | confidence: {confidence:.2f}")
+                    return faq, confidence
 
             return None, 0.0
 
         except Exception as e:
-            logger.error(f"AI matching error: {e}")
+            logger.error(f"find_best_faq error: {e}")
             return None, 0.0
 
-    def generate_vertical_response(self, user_message: str, faq: Dict, system_prompt: str) -> str:
-        """Generate a response shaped by the vertical system prompt."""
-        if not self.enabled:
-            return faq.get('answer', '')
+    def generate_human_like_response(self, user_message: str, faq: Dict,
+                                     vertical: str = 'general',
+                                     conversation_history: List[Dict] = None) -> str:
+        """
+        Generate a natural, human-like response grounded in the matched FAQ.
+        Uses up to 15 messages of conversation history for context.
+        """
+        if not self.enabled or not faq:
+            return faq.get('answer', "I'm not sure about that. Would you like me to connect you with the team?") if faq else \
+                   "I'm not sure about that. Would you like me to connect you with the team?"
+
         try:
-            prompt = f"""{system_prompt}
+            personality = self.personalities.get(vertical, "warm and helpful")
+            history_str = self._format_conversation_history(conversation_history)
 
-A customer has asked: "{user_message}"
+            prompt = f"""You are a {personality} customer support assistant.
 
-The relevant FAQ answer is:
+Recent conversation (last 15 messages for context):
+{history_str}
+
+User just asked: "{user_message}"
+
+Relevant FAQ knowledge:
 Q: {faq.get('question')}
 A: {faq.get('answer')}
 
-Respond naturally in the tone and style defined above. Use the FAQ answer as your source of truth but phrase it conversationally. Keep it concise (2-3 sentences max). Return ONLY the response text."""
+Guidelines:
+- Speak naturally like a helpful human (use contractions: I'm, you're, it's, don't)
+- Be warm, concise, and engaging — 1 to 3 sentences maximum
+- Use the FAQ as your source of truth but rephrase it conversationally
+- Add a gentle follow-up question when it feels natural
+- Use emojis sparingly and only when they genuinely fit the tone
+
+Return ONLY the response text. No markdown, no quotes, no preamble."""
 
             response = self.model.generate_content(prompt)
-            result = response.text.strip()
-            return result if result and len(result) > 10 else faq.get('answer', '')
+            text     = response.text.strip()
+
+            if not text or len(text) < 15:
+                return self._make_conversational_fallback(faq.get('answer', ''))
+
+            return text
+
         except Exception as e:
-            logger.error(f"generate_vertical_response error: {e}")
-            return faq.get('answer', '')
+            logger.error(f"generate_human_like_response error: {e}")
+            return self._make_conversational_fallback(faq.get('answer', ''))
 
-    def generate_vertical_fallback(self, user_message: str, faqs: List[Dict], system_prompt: str) -> str:
-        """When no FAQ matches, use the vertical prompt to generate a helpful response."""
+    def generate_vertical_fallback(self, user_message: str, faqs: List[Dict],
+                                   vertical: str = 'general') -> str:
+        """
+        Helpful fallback when no strong FAQ match exists.
+        Keeps context by scanning the top FAQs and responding honestly.
+        """
         if not self.enabled:
-            return ''
+            return "I'm not entirely sure about that. Would you like me to connect you with the team?"
+
         try:
-            faq_context = self._format_faqs_for_ai(faqs)
-            prompt = f"""{system_prompt}
+            personality = self.personalities.get(vertical, "warm and helpful")
+            faq_context = self._format_faqs_for_ai(faqs[:12])
 
-A customer has asked: "{user_message}"
+            prompt = f"""You are a {personality} assistant.
 
-Available knowledge base:
+User asked: "{user_message}"
+
+Knowledge base context:
 {faq_context}
 
-The question does not exactly match any FAQ. Use your knowledge base context and the persona above to give a helpful, on-brand response. If you truly cannot answer, say so politely and offer to connect them with the team. Keep it to 2-3 sentences. Return ONLY the response text."""
+The question doesn't perfectly match any FAQ. Give a helpful, honest, and natural 2-sentence response.
+If you can't answer accurately, politely offer to connect them with the team.
+Sound friendly and human — not robotic.
+
+Return ONLY the response text."""
 
             response = self.model.generate_content(prompt)
-            result = response.text.strip()
-            return result if result and len(result) > 10 else ''
+            text     = response.text.strip()
+            return text if len(text) > 10 else \
+                   "I'm happy to help! Could you tell me a bit more about what you're looking for?"
+
         except Exception as e:
             logger.error(f"generate_vertical_fallback error: {e}")
-            return ''
-
-    def generate_smart_response(self, user_message: str, faq: Dict, context: Optional[List[Dict]] = None) -> str:
-        """Generate a natural, context-aware response"""
-        if not self.enabled:
-            return faq.get('answer', '')
-
-        try:
-            conversation_history = ""
-            if context:
-                conversation_history = "\n".join([
-                    f"{'User' if msg.get('role') == 'user' else 'Assistant'}: {msg.get('content')}"
-                    for msg in context[-3:]
-                ])
-
-            prompt = f"""You are a helpful, friendly customer support assistant. Generate a natural response to the user's question.
-
-{"Recent Conversation:\n" + conversation_history + "\n" if conversation_history else ""}
-User's Current Question: "{user_message}"
-
-FAQ Information:
-Question: {faq.get('question')}
-Answer: {faq.get('answer')}
-
-Task:
-Generate a natural, conversational response that:
-1. Answers the user's question using the FAQ information
-2. Matches the tone and style of the FAQ answer
-3. Feels personal and helpful
-4. Is concise (2-3 sentences max)
-5. Includes the emoji from the FAQ answer if present
-
-Return ONLY the response text, no explanations or meta-commentary."""
-
-            response = self.model.generate_content(prompt)
-            generated_text = response.text.strip()
-
-            if not generated_text or len(generated_text) < 10:
-                return faq.get('answer', '')
-
-            logger.info(f"AI generated response: {generated_text[:50]}...")
-            return generated_text
-
-        except Exception as e:
-            logger.error(f"AI response generation error: {e}")
-            return faq.get('answer', '')
+            return "I'm not sure I have the exact answer for that. Would you like me to connect you with the team?"
 
     def understand_intent(self, user_message: str, lead_triggers: List[str]) -> Dict:
-        """Understand user's intent"""
-        if not self.enabled:
-            message_lower = user_message.lower()
-            for trigger in lead_triggers:
-                if trigger.lower() in message_lower:
-                    return {'intent': 'lead_request', 'confidence': 0.8, 'action': 'collect_lead'}
-            return {'intent': 'question', 'confidence': 0.5, 'action': 'answer'}
+        """
+        Detect user intent. Uses keyword matching first (free, fast),
+        falls back to Gemini only for ambiguous lead detection.
+        """
+        lower = user_message.lower().strip()
 
-        try:
-            prompt = f"""Analyze the user's intent from this message: "{user_message}"
+        # Fast keyword check for simple intents — no API call needed
+        for intent, keywords in _SIMPLE_INTENTS.items():
+            if any(lower == k or lower.startswith(k) for k in keywords):
+                return {'intent': intent, 'confidence': 0.95}
 
-Possible intents:
-- question: User asking for information
-- lead_request: User wants to contact sales, get demo, pricing, or speak with human
-- complaint: User expressing dissatisfaction
-- greeting: User saying hi/hello
-- gratitude: User saying thanks
-- goodbye: User ending conversation
+        # Keyword check for configured lead triggers
+        for trigger in lead_triggers:
+            if trigger.lower() in lower:
+                return {'intent': 'lead_request', 'confidence': 0.85}
 
-Lead trigger words: {', '.join(lead_triggers)}
+        # Only call Gemini if the message is ambiguous and might be a lead request
+        if self.enabled and len(user_message) > 8:
+            try:
+                prompt = f"""Classify this user message: "{user_message}"
 
-Return ONLY JSON:
-{{"intent": "intent_name", "confidence": 0.95, "action": "suggested_action"}}
-
-Actions can be: answer, collect_lead, escalate, acknowledge"""
-
-            response = self.model.generate_content(prompt)
-            result = self._parse_json_response(response.text)
-
-            if result:
-                logger.info(f"Intent detected: {result.get('intent')} ({result.get('confidence')})")
-                return result
-
-            return {'intent': 'question', 'confidence': 0.5, 'action': 'answer'}
-
-        except Exception as e:
-            logger.error(f"Intent understanding error: {e}")
-            return {'intent': 'question', 'confidence': 0.5, 'action': 'answer'}
-
-    def should_escalate(self, user_message: str, conversation_length: int) -> bool:
-        """Determine if conversation should be escalated to human"""
-        if not self.enabled:
-            escalation_words = ['manager', 'supervisor', 'complaint', 'angry', 'frustrated']
-            return any(word in user_message.lower() for word in escalation_words) or conversation_length > 10
-
-        try:
-            prompt = f"""Should this conversation be escalated to a human agent?
-
-User message: "{user_message}"
-Conversation length: {conversation_length} messages
-
-Escalate if:
-- User explicitly requests human contact
-- User expresses strong frustration/anger
-- Conversation is going in circles (length > 8)
-- User has complex/custom requirements
-- User mentions legal/compliance issues
+Lead triggers to watch for: {', '.join(lead_triggers)}
 
 Return ONLY JSON:
-{{"should_escalate": true, "reason": "brief explanation"}}"""
+{{"intent": "question|lead_request|greeting|gratitude|complaint|goodbye", "confidence": 0.9}}"""
 
-            response = self.model.generate_content(prompt)
-            result = self._parse_json_response(response.text)
+                response = self.model.generate_content(prompt)
+                result   = self._parse_json_response(response.text)
+                if result:
+                    return result
+            except Exception:
+                pass
 
-            if result:
-                should_escalate = result.get('should_escalate', False)
-                logger.info(f"Escalation check: {should_escalate} - {result.get('reason')}")
-                return should_escalate
+        return {'intent': 'question', 'confidence': 0.6}
 
-            return False
+    # ── PRIVATE HELPERS ───────────────────────────────────────────────
 
-        except Exception as e:
-            logger.error(f"Escalation check error: {e}")
-            return False
+    def _format_conversation_history(self, history: List[Dict]) -> str:
+        """Format last 15 messages for context."""
+        if not history:
+            return "(No previous messages)"
+
+        recent    = history[-15:]
+        formatted = []
+        for msg in recent:
+            role    = "User" if msg.get('role') == 'user' else "Assistant"
+            content = msg.get('content', '').strip()
+            if content:
+                formatted.append(f"{role}: {content}")
+
+        return "\n".join(formatted) if formatted else "(No previous messages)"
 
     def _format_faqs_for_ai(self, faqs: List[Dict]) -> str:
-        """Format FAQs for AI context"""
+        """Format FAQs cleanly for AI context, truncating long answers safely."""
         formatted = []
-        for faq in faqs[:20]:
-            formatted.append(f"ID: {faq.get('id')}\nQ: {faq.get('question')}\nA: {faq.get('answer', '')[:100]}...")
+        for faq in faqs:
+            answer = faq.get('answer', '')
+            # Only truncate if actually over 200 chars
+            truncated = (answer[:200] + '…') if len(answer) > 200 else answer
+            formatted.append(f"ID: {faq.get('id')}\nQ: {faq.get('question')}\nA: {truncated}")
         return "\n\n".join(formatted)
 
+    def _make_conversational_fallback(self, answer: str) -> str:
+        """Lightly humanise a raw FAQ answer when AI generation fails."""
+        if not answer:
+            return "I'm not sure about that one. Would you like me to connect you with the team?"
+
+        text = (answer
+                .replace(" I am ",   " I'm ")
+                .replace(" You are ", " You're ")
+                .replace(" it is ",  " it's ")
+                .replace(" do not ", " don't ")
+                .replace(" cannot ", " can't "))
+        return text
+
     def _parse_json_response(self, text: str) -> Optional[Dict]:
-        """Parse JSON from AI response, handling markdown code blocks"""
+        """Robust JSON parser — handles markdown code fences and stray text."""
+        text = text.strip()
+        if text.startswith('```'):
+            text = re.sub(r'^```(?:json)?\s*|\s*```$', '', text, flags=re.DOTALL).strip()
+
         try:
-            text = text.strip()
-            if text.startswith('```'):
-                lines = text.split('\n')
-                text = '\n'.join(lines[1:-1]) if len(lines) > 2 else text
-                if text.startswith('json'):
-                    text = text[4:]
-            text = text.strip()
             return json.loads(text)
-        except Exception as e:
-            logger.error(f"JSON parsing error: {e}\nText: {text}")
-            return None
+        except Exception:
+            match = re.search(r'\{.*\}', text, re.DOTALL)
+            if match:
+                try:
+                    return json.loads(match.group(0))
+                except Exception:
+                    pass
+        return None
 
 
-# Singleton instance
-_ai_helper = None
+# ── Singleton ─────────────────────────────────────────────────────────
+
+_ai_helper: Optional['AIHelper'] = None
 
 
-def get_ai_helper(api_key: str, model_name: str = 'gemini-2.0-flash'):
-    """Get or create AI helper singleton"""
+def get_ai_helper(api_key: str, model_name: str = 'gemini-2.0-flash') -> AIHelper:
+    """Get or create the AI helper singleton."""
     global _ai_helper
     if _ai_helper is None:
         _ai_helper = AIHelper(api_key, model_name)
