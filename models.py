@@ -1408,6 +1408,335 @@ def update_client_user_password(client_user_id, new_password):
     conn.close()
 
 
+def migrate_conversation_features():
+    """
+    Add conversation_summaries, faq_embeddings, and knowledge_base tables.
+    Safe to call every startup (IF NOT EXISTS).
+    """
+    conn, cursor = get_db()
+    try:
+        # Conversation summaries
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS conversation_summaries (
+                id           SERIAL PRIMARY KEY,
+                client_id    TEXT NOT NULL,
+                summary      TEXT NOT NULL,
+                message_count INTEGER DEFAULT 6,
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        # Legacy FAQ embeddings (kept for backwards compatibility)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS faq_embeddings (
+                id         SERIAL PRIMARY KEY,
+                client_id  TEXT NOT NULL,
+                faq_id     TEXT NOT NULL,
+                question   TEXT NOT NULL,
+                embedding  TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(client_id, faq_id)
+            )
+        ''')
+
+        # Knowledge base (replaces flat FAQ store for RAG)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS knowledge_base (
+                id          SERIAL PRIMARY KEY,
+                client_id   TEXT NOT NULL,
+                chunk_id    TEXT NOT NULL UNIQUE,
+                title       TEXT,
+                content     TEXT NOT NULL,
+                type        TEXT DEFAULT 'faq',
+                category    TEXT DEFAULT 'General',
+                tags        TEXT DEFAULT '[]',
+                embedding   TEXT,
+                metadata    TEXT DEFAULT '{}',
+                quality_score REAL DEFAULT 0.0,
+                version     INTEGER DEFAULT 1,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_kb_client ON knowledge_base(client_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_kb_type ON knowledge_base(client_id, type)"
+        )
+
+        conn.commit()
+        print("✅ Conversation feature + knowledge_base tables ready.")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️ migrate_conversation_features: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_conversation_message_count(client_id: str) -> int:
+    """Count total conversation turns for a client (used to trigger summarisation)."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "SELECT COUNT(*) AS cnt FROM conversations WHERE client_id = %s",
+            (client_id,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def save_conversation_summary(client_id: str, summary: str, message_count: int) -> None:
+    """Persist a Gemini-generated conversation summary."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''INSERT INTO conversation_summaries (client_id, summary, message_count)
+               VALUES (%s, %s, %s)''',
+            (client_id, summary, message_count)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        pass  # Non-critical — never break chat over a summary failure
+
+
+def get_latest_conversation_summary(client_id: str) -> str:
+    """Return the most recent summary string, or empty string if none."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''SELECT summary FROM conversation_summaries
+               WHERE client_id = %s
+               ORDER BY created_at DESC LIMIT 1''',
+            (client_id,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return row['summary'] if row else ''
+    except Exception:
+        return ''
+
+
+def store_faq_embedding(client_id: str, faq_id: str, question: str, embedding: list) -> None:
+    """Upsert a vector embedding for a single FAQ question."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''INSERT INTO faq_embeddings (client_id, faq_id, question, embedding)
+               VALUES (%s, %s, %s, %s)
+               ON CONFLICT (client_id, faq_id)
+               DO UPDATE SET question = EXCLUDED.question, embedding = EXCLUDED.embedding,
+                             created_at = CURRENT_TIMESTAMP''',
+            (client_id, faq_id, question, json.dumps(embedding))
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        pass
+
+
+def get_faq_embeddings(client_id: str) -> list:
+    """Return all stored embeddings for a client as list of dicts."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "SELECT faq_id, question, embedding FROM faq_embeddings WHERE client_id = %s",
+            (client_id,)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [
+            {
+                'faq_id':    r['faq_id'],
+                'question':  r['question'],
+                'embedding': json.loads(r['embedding'])
+            }
+            for r in rows
+        ]
+    except Exception:
+        return []
+
+
+def save_knowledge_chunks(client_id: str, chunks: list) -> int:
+    """
+    Upsert a list of knowledge chunks for a client.
+    Each chunk: {chunk_id, title, content, type, category, tags, embedding, metadata, quality_score}
+    Returns count of saved chunks.
+    """
+    if not chunks:
+        return 0
+    conn, cursor = get_db()
+    saved = 0
+    try:
+        for chunk in chunks:
+            cursor.execute(
+                '''INSERT INTO knowledge_base
+                   (client_id, chunk_id, title, content, type, category, tags, embedding, metadata, quality_score)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (chunk_id)
+                   DO UPDATE SET
+                     title         = EXCLUDED.title,
+                     content       = EXCLUDED.content,
+                     type          = EXCLUDED.type,
+                     category      = EXCLUDED.category,
+                     tags          = EXCLUDED.tags,
+                     embedding     = EXCLUDED.embedding,
+                     metadata      = EXCLUDED.metadata,
+                     quality_score = EXCLUDED.quality_score,
+                     version       = knowledge_base.version + 1,
+                     updated_at    = CURRENT_TIMESTAMP''',
+                (
+                    client_id,
+                    chunk['chunk_id'],
+                    chunk.get('title', ''),
+                    chunk['content'],
+                    chunk.get('type', 'faq'),
+                    chunk.get('category', 'General'),
+                    json.dumps(chunk.get('tags', [])),
+                    json.dumps(chunk['embedding']) if chunk.get('embedding') else None,
+                    json.dumps(chunk.get('metadata', {})),
+                    float(chunk.get('quality_score', 0.0))
+                )
+            )
+            saved += 1
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"save_knowledge_chunks error: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+    return saved
+
+
+def get_knowledge_chunks(client_id: str, chunk_type: str = None, limit: int = 500) -> list:
+    """Return knowledge chunks for a client, optionally filtered by type."""
+    conn, cursor = get_db()
+    try:
+        if chunk_type:
+            cursor.execute(
+                '''SELECT * FROM knowledge_base
+                   WHERE client_id = %s AND type = %s
+                   ORDER BY quality_score DESC, created_at DESC
+                   LIMIT %s''',
+                (client_id, chunk_type, limit)
+            )
+        else:
+            cursor.execute(
+                '''SELECT * FROM knowledge_base
+                   WHERE client_id = %s
+                   ORDER BY quality_score DESC, created_at DESC
+                   LIMIT %s''',
+                (client_id, limit)
+            )
+        rows = [dict(r) for r in cursor.fetchall()]
+        for r in rows:
+            for field in ('tags', 'metadata'):
+                if r.get(field) and isinstance(r[field], str):
+                    try:
+                        r[field] = json.loads(r[field])
+                    except Exception:
+                        r[field] = []
+            if r.get('embedding') and isinstance(r['embedding'], str):
+                try:
+                    r['embedding'] = json.loads(r['embedding'])
+                except Exception:
+                    r['embedding'] = None
+        return rows
+    except Exception as e:
+        print(f"get_knowledge_chunks error: {e}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_relevant_knowledge(client_id: str, query_embedding: list, limit: int = 5) -> list:
+    """
+    Return top-N knowledge chunks ordered by cosine similarity to query_embedding.
+    Falls back to recency order if no embeddings are stored.
+    """
+    chunks = get_knowledge_chunks(client_id)
+    if not chunks:
+        return []
+
+    # Chunks with embeddings → rank by cosine similarity
+    scored = []
+    for chunk in chunks:
+        emb = chunk.get('embedding')
+        if emb and query_embedding:
+            try:
+                dot   = sum(a * b for a, b in zip(query_embedding, emb))
+                mag_q = sum(a * a for a in query_embedding) ** 0.5
+                mag_e = sum(b * b for b in emb) ** 0.5
+                sim   = dot / (mag_q * mag_e) if mag_q and mag_e else 0.0
+            except Exception:
+                sim = 0.0
+            scored.append((chunk, sim))
+        else:
+            scored.append((chunk, 0.0))
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [c for c, _ in scored[:limit]]
+
+
+def store_embedding(client_id: str, chunk_id: str, embedding: list) -> None:
+    """Update the embedding for a single knowledge chunk."""
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            '''UPDATE knowledge_base SET embedding = %s, updated_at = CURRENT_TIMESTAMP
+               WHERE client_id = %s AND chunk_id = %s''',
+            (json.dumps(embedding), client_id, chunk_id)
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_embeddings_for_client(client_id: str) -> list:
+    """Return all chunk_id + embedding pairs for a client (for batch re-indexing)."""
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            "SELECT chunk_id, embedding FROM knowledge_base WHERE client_id = %s AND embedding IS NOT NULL",
+            (client_id,)
+        )
+        rows = cursor.fetchall()
+        return [{'chunk_id': r['chunk_id'], 'embedding': json.loads(r['embedding'])} for r in rows]
+    except Exception:
+        return []
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def delete_knowledge_chunks(client_id: str) -> None:
+    """Delete all knowledge chunks for a client."""
+    conn, cursor = get_db()
+    try:
+        cursor.execute("DELETE FROM knowledge_base WHERE client_id = %s", (client_id,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def get_recent_conversations(client_id: str, limit: int = 15) -> list:
     """
     Return the last `limit` conversation turns for a client,
@@ -1432,6 +1761,208 @@ def get_recent_conversations(client_id: str, limit: int = 15) -> list:
             result.append({'role': 'user',      'content': row['user_message']})
             result.append({'role': 'assistant', 'content': row['bot_response']})
         return result
+    except Exception:
+        return []
+
+
+# =====================================================================
+# KNOWLEDGE BASE — Phase 2 RAG
+# =====================================================================
+
+def migrate_knowledge_base():
+    """
+    Create the knowledge_base table if it doesn't exist.
+    Safe to call every startup.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS knowledge_base (
+                id          SERIAL PRIMARY KEY,
+                client_id   TEXT NOT NULL,
+                kb_id       TEXT NOT NULL UNIQUE,
+                title       TEXT NOT NULL,
+                content     TEXT NOT NULL,
+                type        TEXT DEFAULT 'faq',        -- faq | article | policy
+                category    TEXT DEFAULT 'General',
+                tags        TEXT DEFAULT '[]',          -- JSON array
+                embedding   TEXT,                       -- JSON float list
+                metadata    TEXT DEFAULT '{}',          -- JSON
+                quality     REAL DEFAULT 0.8,
+                version     INTEGER DEFAULT 1,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_kb_client ON knowledge_base (client_id)"
+        )
+        conn.commit()
+        print("✅ knowledge_base table ready.")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_knowledge_base: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def save_knowledge_chunks(client_id: str, chunks: list) -> int:
+    """
+    Upsert a list of knowledge chunks for a client.
+    Each chunk must have: kb_id, title, content, type, category, tags,
+                          embedding, metadata, quality.
+    Returns count of successfully saved chunks.
+    """
+    if not chunks:
+        return 0
+
+    conn, cursor = get_db()
+    saved = 0
+    try:
+        for chunk in chunks:
+            cursor.execute(
+                '''INSERT INTO knowledge_base
+                   (client_id, kb_id, title, content, type, category, tags,
+                    embedding, metadata, quality)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (kb_id)
+                   DO UPDATE SET
+                     title     = EXCLUDED.title,
+                     content   = EXCLUDED.content,
+                     type      = EXCLUDED.type,
+                     category  = EXCLUDED.category,
+                     tags      = EXCLUDED.tags,
+                     embedding = EXCLUDED.embedding,
+                     metadata  = EXCLUDED.metadata,
+                     quality   = EXCLUDED.quality,
+                     version   = knowledge_base.version + 1,
+                     updated_at = CURRENT_TIMESTAMP''',
+                (
+                    client_id,
+                    chunk['kb_id'],
+                    chunk.get('title', ''),
+                    chunk.get('content', ''),
+                    chunk.get('type', 'faq'),
+                    chunk.get('category', 'General'),
+                    json.dumps(chunk.get('tags', [])),
+                    json.dumps(chunk.get('embedding', [])) if chunk.get('embedding') else None,
+                    json.dumps(chunk.get('metadata', {})),
+                    float(chunk.get('quality', 0.8)),
+                )
+            )
+            saved += 1
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[save_knowledge_chunks] error: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+    return saved
+
+
+def get_relevant_knowledge(client_id: str, limit: int = 5) -> list:
+    """
+    Return all knowledge chunks with embeddings for a client,
+    ordered by quality descending. The AI layer does cosine ranking.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''SELECT kb_id, title, content, type, category, tags, embedding, metadata, quality
+               FROM knowledge_base
+               WHERE client_id = %s AND embedding IS NOT NULL
+               ORDER BY quality DESC, updated_at DESC
+               LIMIT %s''',
+            (client_id, min(limit * 5, 100))   # over-fetch, AI does final ranking
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for r in rows:
+            result.append({
+                'kb_id':     r['kb_id'],
+                'title':     r['title'],
+                'content':   r['content'],
+                'type':      r['type'],
+                'category':  r['category'],
+                'tags':      json.loads(r['tags'] or '[]'),
+                'embedding': json.loads(r['embedding']) if r['embedding'] else [],
+                'metadata':  json.loads(r['metadata'] or '{}'),
+                'quality':   float(r['quality']),
+            })
+        return result
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_relevant_knowledge] error: {e}")
+        return []
+
+
+def get_knowledge_chunks_raw(client_id: str) -> list:
+    """Return all chunks for a client (no embedding filter) — for admin/export."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''SELECT kb_id, title, content, type, category, tags, quality, version, created_at
+               FROM knowledge_base WHERE client_id = %s ORDER BY created_at DESC''',
+            (client_id,)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for r in rows:
+            row = dict(r)
+            if row.get('created_at'):
+                row['created_at'] = row['created_at'].isoformat()
+            result.append(row)
+        return result
+    except Exception:
+        return []
+
+
+def delete_knowledge_base(client_id: str) -> None:
+    """Delete all knowledge base chunks for a client."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute("DELETE FROM knowledge_base WHERE client_id = %s", (client_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+
+
+def store_embedding(client_id: str, kb_id: str, embedding: list) -> None:
+    """Update the embedding for an existing knowledge chunk."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "UPDATE knowledge_base SET embedding = %s WHERE client_id = %s AND kb_id = %s",
+            (json.dumps(embedding), client_id, kb_id)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+
+
+def get_embeddings_for_client(client_id: str) -> list:
+    """Return list of {kb_id, embedding} dicts for cosine ranking."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "SELECT kb_id, embedding FROM knowledge_base WHERE client_id = %s AND embedding IS NOT NULL",
+            (client_id,)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [{'kb_id': r['kb_id'], 'embedding': json.loads(r['embedding'])} for r in rows]
     except Exception:
         return []
 

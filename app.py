@@ -350,6 +350,10 @@ try:
         models.migrate_subscription_expiry()
     if hasattr(models, 'migrate_to_recurring_subscriptions'):
         models.migrate_to_recurring_subscriptions()
+    if hasattr(models, 'migrate_conversation_features'):
+        models.migrate_conversation_features()
+    if hasattr(models, 'migrate_knowledge_base'):
+        models.migrate_knowledge_base()
     print("✅ Database initialized/migrated successfully!")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
@@ -473,8 +477,8 @@ def compute_tag_weights(faqs_list):
     return tag_weights
 
 
-def find_best_match(user_query, faqs_list, confidence_threshold=0.35):
-    """Keyword matcher — used only when AI is disabled. Threshold raised to reduce false positives."""
+def find_best_match(user_query, faqs_list, confidence_threshold=0.68):
+    """Keyword matcher — used only when AI is disabled. Threshold raised to 0.68 to reduce false positives."""
     if not user_query or not faqs_list:
         return None, 0.0
 
@@ -948,7 +952,7 @@ def chat():
                             'success': True,
                             'response': (
                                 "You've reached today's message limit. "
-                                "Upgrade your plan for unlimited messages, or try again tomorrow. 🚀"
+                                "Upgrade your plan for unlimited messages, or try again tomorrow."
                             ),
                             'limit_reached': True,
                             'method': 'limit_enforced'
@@ -958,66 +962,102 @@ def chat():
         vertical = config.get('vertical', 'general')
         vertical_system_prompt = config.get('bot_settings', {}).get('system_prompt') or VERTICAL_PROMPTS.get(vertical)
 
-        # Step 1: Lead detection
-        for trigger in lead_triggers:
-            if trigger.lower() in message_lower:
-                response_text = "I'd be happy to connect you with our team! What's the best email to reach you?"
-                log_conversation(client_id, message, response_text, matched=True, method='lead_trigger')
-                return jsonify({
-                    'success': True,
-                    'response': response_text,
-                    'trigger_lead_collection': True,
-                    'method': 'instant',
-                    'contact_info': config.get('contact', {})
-                })
+        # ── Step 1: Intent + Lead Detection (vertical-aware, 3-tier) ──────
+        # detect_intent handles: simple keywords → keyword scoring → AI confirmation
+        intent_result = ai_helper.detect_intent(message, lead_triggers, vertical) \
+                        if (ai_helper and ai_helper.enabled) \
+                        else {'intent': 'question', 'is_lead': False, 'confidence': 0.0}
 
-        # Step 2: AI smart matching (primary — most accurate at scale)
-        if ai_helper and ai_helper.enabled:
-            try:
-                # Load conversation history for memory context (last 15 turns)
-                convo_history = models.get_recent_conversations(client_id, limit=15)
+        if intent_result.get('is_lead') and intent_result.get('confidence', 0) >= 0.65:
+            app.logger.info(
+                f"[Lead] client={client_id} score={intent_result.get('score', 0):.1f} "
+                f"conf={intent_result.get('confidence', 0):.2f}"
+            )
+            response_text = "I'd be happy to connect you with our team! What's the best email to reach you?"
+            log_conversation(client_id, message, response_text, matched=True, method='lead_ai')
+            return jsonify({
+                'success': True,
+                'response': response_text,
+                'trigger_lead_collection': True,
+                'method': 'lead_ai',
+                'contact_info': config.get('contact', {})
+            })
 
-                ai_faq, ai_confidence = ai_helper.find_best_faq(message, faqs_list)
-
-                if ai_faq and ai_confidence > 0.45:
-                    # Generate human-like response using FAQ + conversation history
-                    response_text = ai_helper.generate_human_like_response(
-                        user_message=message,
-                        faq=ai_faq,
-                        vertical=vertical,
-                        conversation_history=convo_history
-                    )
-                    log_conversation(client_id, message, response_text, matched=True, method='ai_smart')
+        # Keyword-only lead check when AI is disabled
+        if not (ai_helper and ai_helper.enabled):
+            for trigger in lead_triggers:
+                if trigger.lower() in message_lower:
+                    response_text = "I'd be happy to connect you with our team! What's the best email to reach you?"
+                    log_conversation(client_id, message, response_text, matched=True, method='lead_trigger')
                     return jsonify({
                         'success': True,
                         'response': response_text,
-                        'confidence': ai_confidence,
-                        'method': 'ai_smart'
+                        'trigger_lead_collection': True,
+                        'method': 'lead_trigger',
+                        'contact_info': config.get('contact', {})
                     })
 
-                # No strong FAQ match — use vertical fallback
-                elif faqs_list:
-                    response_text = ai_helper.generate_vertical_fallback(
-                        user_message=message,
-                        faqs=faqs_list,
-                        vertical=vertical
+        # ── Step 2: Full RAG Pipeline ────────────────────────────────────
+        if ai_helper and ai_helper.enabled:
+            try:
+                # Load 15-message history + trigger summarisation checkpoint
+                convo_history = models.get_recent_conversations(client_id, limit=15)
+                ai_helper.maybe_summarise(client_id, convo_history)
+
+                app.logger.info(
+                    f"[Chat] client={client_id} faqs={len(faqs_list)} "
+                    f"history={len(convo_history)} vertical={vertical}"
+                )
+
+                # Full pipeline: embed search → rerank → RAG generate → guardrails → cache
+                result = ai_helper.generate_response(
+                    user_message=message,
+                    faqs=faqs_list,
+                    vertical=vertical,
+                    conversation_history=convo_history,
+                    client_id=client_id,
+                    lead_triggers=lead_triggers
+                )
+
+                response_text = result.get('response', '')
+                method        = result.get('method', 'rag_pipeline')
+                confidence    = result.get('confidence', 0.0)
+
+                # Catch any late lead detection from inside the pipeline
+                if result.get('is_lead'):
+                    log_conversation(client_id, message, response_text, matched=True, method='lead_pipeline')
+                    return jsonify({
+                        'success': True,
+                        'response': response_text,
+                        'trigger_lead_collection': True,
+                        'method': 'lead_pipeline',
+                        'contact_info': config.get('contact', {})
+                    })
+
+                if response_text:
+                    matched = confidence > 0.4
+                    log_conversation(client_id, message, response_text, matched=matched, method=method)
+                    app.logger.info(
+                        f"[AI Match] method={method} confidence={confidence:.2f} "
+                        f"response_len={len(response_text)}"
                     )
-                    if response_text:
-                        log_conversation(client_id, message, response_text, matched=False, method='ai_vertical')
-                        return jsonify({
-                            'success': True,
-                            'response': response_text,
-                            'confidence': 0.0,
-                            'method': 'ai_vertical'
-                        })
+                    return jsonify({
+                        'success': True,
+                        'response': response_text,
+                        'confidence': confidence,
+                        'method': method
+                    })
 
             except Exception as ai_error:
-                app.logger.error(f"AI smart matching error: {ai_error}")
+                app.logger.error(f"[RAG Pipeline] error: {ai_error}", exc_info=True)
 
-        # Step 3: Keyword matching fallback (used only if AI is disabled or failed)
+        # ── Step 3: Keyword fallback (threshold=0.68, AI disabled/failed only) ─
         best_faq, confidence = find_best_match(message, faqs_list)
         if best_faq:
-            app.logger.info(f"Keyword fallback match: '{best_faq.get('id')}' | score: {confidence}")
+            app.logger.info(
+                f"[Keyword Fallback] faq='{best_faq.get('id')}' "
+                f"score={confidence:.3f} threshold=0.68"
+            )
             response_text = best_faq.get('answer')
             log_conversation(client_id, message, response_text, matched=True, method='keyword_fallback')
             return jsonify({
@@ -2064,6 +2104,14 @@ def manage_faqs():
                 }), 403
 
             models.save_faqs(client_id, faqs_list)
+
+            # Re-index embeddings for semantic search (non-blocking)
+            if ai_helper and ai_helper.enabled:
+                try:
+                    ai_helper.index_faqs(faqs_list, client_id)
+                except Exception as _idx_err:
+                    app.logger.warning(f"[index_faqs] non-critical error: {_idx_err}")
+
             return jsonify({'success': True, 'message': 'FAQs updated successfully'})
 
     except Exception as e:
@@ -2099,9 +2147,16 @@ def delete_all_faqs():
 @app.route('/api/faq/upload', methods=['POST'])
 @login_required
 def upload_faqs():
+    """
+    Smart upload pipeline:
+      1. Parse file (CSV / Excel / PDF)
+      2. AI enrichment: tags, category, dedup, quality score
+      3. Chunk long content
+      4. Embed + store in knowledge_base
+      5. Also save to legacy faqs table for backward compat
+    """
     try:
         client_id = request.form.get('client_id')
-
         if not models.verify_client_ownership(current_user.id, client_id):
             return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
@@ -2109,55 +2164,91 @@ def upload_faqs():
             return jsonify({'success': False, 'error': 'No file uploaded'}), 400
 
         file = request.files['file']
-
-        if file.filename == '':
+        if not file.filename:
             return jsonify({'success': False, 'error': 'No file selected'}), 400
 
         filename = file.filename.lower()
 
+        # ── Parse raw items from file ─────────────────────────────────
         if filename.endswith('.csv'):
-            faqs = process_csv_upload(file)
-        elif filename.endswith('.pdf'):
-            faqs = process_pdf_upload(file)
+            raw_items = process_csv_upload(file)
         elif filename.endswith(('.xlsx', '.xls')):
-            faqs = process_excel_upload(file)
+            raw_items = process_excel_upload(file)
+        elif filename.endswith('.pdf'):
+            raw_items = process_pdf_upload(file)
         else:
-            return jsonify({'success': False, 'error': 'Unsupported file type. Please upload CSV, Excel, or PDF.'}), 400
+            return jsonify({'success': False, 'error': 'Unsupported file type. Upload CSV, Excel, or PDF.'}), 400
 
-        if not faqs:
-            return jsonify({'success': False, 'error': 'No FAQs found in file. Please check the format.'}), 400
+        if not raw_items:
+            return jsonify({'success': False, 'error': 'No content found in file. Check the format.'}), 400
 
+        app.logger.info(f"[Upload] client={client_id} raw_items={len(raw_items)} file={filename}")
+
+        # ── AI enrichment + chunking pipeline ────────────────────────
+        if ai_helper and ai_helper.enabled:
+            chunks = ai_helper.enrich_and_chunk(raw_items, client_id)
+        else:
+            # Build minimal chunks without AI enrichment
+            chunks = []
+            for item in raw_items:
+                if item.get('question') and item.get('answer'):
+                    chunks.append({
+                        'kb_id':     str(uuid.uuid4()),
+                        'title':     item['question'],
+                        'content':   item['answer'],
+                        'type':      'faq',
+                        'category':  item.get('category', 'General'),
+                        'tags':      item.get('triggers', []),
+                        'embedding': [],
+                        'metadata':  {'source': 'upload'},
+                        'quality':   0.75,
+                    })
+
+        if not chunks:
+            return jsonify({'success': False, 'error': 'No valid content to import after processing.'}), 400
+
+        # ── Save to knowledge_base (Phase 2 primary store) ───────────
+        kb_saved = models.save_knowledge_chunks(client_id, chunks)
+
+        # ── Also save to legacy faqs table (backward compat) ─────────
+        faq_saved = 0
         conn, cursor = models.get_db()
-        saved_count = 0
-        for faq in faqs:
-            try:
-                faq_id = str(uuid.uuid4())
-                cursor.execute(
-                    '''
-                    INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                    ''',
-                    (client_id, faq_id, faq['question'], faq['answer'],
-                     faq.get('category', 'General'), json.dumps(faq.get('triggers', [])))
-                )
-                saved_count += 1
-            except Exception as e:
-                app.logger.error(f'Error saving FAQ during upload: {e}')
-                continue
-        conn.commit()
-        cursor.close()
-        conn.close()
+        try:
+            for chunk in chunks:
+                if chunk.get('type') == 'faq' or True:   # save all types
+                    faq_id = str(uuid.uuid4())
+                    cursor.execute(
+                        '''INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers)
+                           VALUES (%s, %s, %s, %s, %s, %s)''',
+                        (
+                            client_id, faq_id,
+                            chunk['title'],
+                            chunk['content'],
+                            chunk.get('category', 'General'),
+                            json.dumps(chunk.get('tags', []))
+                        )
+                    )
+                    faq_saved += 1
+            conn.commit()
+        except Exception as _e:
+            app.logger.warning(f"[Upload] Legacy FAQ save error (non-critical): {_e}")
+            conn.rollback()
+        finally:
+            cursor.close()
+            conn.close()
 
+        app.logger.info(
+            f"[Upload] client={client_id} kb_saved={kb_saved} faq_saved={faq_saved}"
+        )
         return jsonify({
             'success': True,
-            'message': f'Successfully imported {saved_count} FAQs!',
-            'count': saved_count
+            'message': f'Successfully imported {kb_saved} knowledge chunks!',
+            'count': kb_saved,
+            'faq_count': faq_saved,
         })
 
     except Exception as e:
-        app.logger.error(f'Error uploading FAQs: {e}')
-        import traceback
-        traceback.print_exc()
+        app.logger.error(f"[Upload] Error: {e}", exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
