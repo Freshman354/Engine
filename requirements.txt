@@ -14,4 +14,3 @@ flask-limiter
 google-generativeai
 flask-mail
 APScheduler
-sentence-transformers

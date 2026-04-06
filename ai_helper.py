@@ -35,20 +35,10 @@ _GLOBAL_PRICING_KW = [
     'subscription', 'buy', 'quote', 'invoice', 'billing',
 ]
 
-# ── Sentence-transformers (optional, graceful degradation) ────────────
-_ST_AVAILABLE = False
-_st_model     = None
-
-try:
-    from sentence_transformers import SentenceTransformer
-    _st_model    = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-    _ST_AVAILABLE = True
-    logger.info("✅ sentence-transformers loaded — local embedding enabled")
-except ImportError:
-    logger.info("ℹ️  sentence-transformers not installed (pip install sentence-transformers to enable local embeddings)")
-except Exception as _e:
-    logger.warning(f"sentence-transformers load failed: {_e}")
-
+# ── Embedding via Gemini text-embedding-004 ───────────────────────────
+# Zero memory overhead — uses the same google-generativeai package already installed.
+# Free tier: 1,500 requests/min, 1M tokens/min — well within Lumvi's needs.
+# No sentence-transformers, no PyTorch, no RAM spike on startup.
 
 def _cosine(a: list, b: list) -> float:
     """Pure-Python cosine similarity — no numpy required."""
@@ -58,13 +48,23 @@ def _cosine(a: list, b: list) -> float:
     return dot / (mag_a * mag_b) if mag_a and mag_b else 0.0
 
 
-def _embed(text: str) -> list:
-    """Encode text with the local model. Returns [] if unavailable."""
-    if not _ST_AVAILABLE or not _st_model:
+def _embed(text: str, task: str = 'retrieval_document') -> list:
+    """
+    Embed text using Gemini text-embedding-004.
+    task: 'retrieval_document' for FAQs/chunks, 'retrieval_query' for user messages.
+    Returns [] on any failure — callers degrade gracefully.
+    """
+    if not text or not text.strip():
         return []
     try:
-        return _st_model.encode(text.strip()[:512]).tolist()
-    except Exception:
+        result = genai.embed_content(
+            model='models/text-embedding-004',
+            content=text.strip()[:2048],   # API hard limit
+            task_type=task,
+        )
+        return result['embedding']
+    except Exception as _e:
+        logger.debug(f"[_embed] API error: {_e}")
         return []
 
 
@@ -119,7 +119,7 @@ class AIHelper:
                 self.model = genai.GenerativeModel(model_name)
                 logger.info(
                     f"✅ AI Helper Phase 2 ready | model={model_name} | "
-                    f"local_embed={'ON' if _ST_AVAILABLE else 'OFF'}"
+                    f"embed=gemini-text-embedding-004 | cache=ON | rag=ON"
                 )
             except Exception as e:
                 logger.error(f"[AIHelper.__init__] Gemini init failed: {e}")
@@ -304,44 +304,46 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
     def _embedding_search(self, user_message: str, faqs: List[Dict],
                           client_id: str = None) -> Tuple[List[Dict], List[float]]:
         """
-        Retrieve top-5 candidates from knowledge_base OR faqs using cosine similarity.
-        Falls back to keyword-match ordering if embeddings unavailable.
-        Returns (candidates, scores) sorted descending by score.
+        Retrieve top-5 candidates using Gemini cosine similarity.
+        Search order: knowledge_base chunks → legacy FAQ embeddings → keyword overlap.
         """
+        if not self.enabled:
+            return [], []
+
+        # Embed the user query (retrieval_query task type for better accuracy)
+        query_vec = _embed(user_message, task='retrieval_query')
+
         # ── Try knowledge_base first (Phase 2 preferred source) ────────
-        if client_id and _ST_AVAILABLE:
+        if client_id and query_vec:
             try:
                 import models as _m
                 kb_chunks = _m.get_relevant_knowledge(client_id, limit=5)
                 if kb_chunks:
-                    query_vec = _embed(user_message)
-                    if query_vec:
-                        scored = []
-                        for chunk in kb_chunks:
-                            if chunk.get('embedding'):
-                                score = _cosine(query_vec, chunk['embedding'])
-                                if score > 0.38:
-                                    # Normalise to faq-like dict so the rest of the pipeline is uniform
-                                    scored.append(({
-                                        'id':       chunk['kb_id'],
-                                        'kb_id':    chunk['kb_id'],
-                                        'question': chunk['title'],
-                                        'answer':   chunk['content'],
-                                        'category': chunk['category'],
-                                        'type':     chunk.get('type', 'faq'),
-                                    }, score))
-                        scored.sort(key=lambda x: x[1], reverse=True)
-                        if scored:
-                            logger.debug(f"[KB Search] top_score={scored[0][1]:.3f} hits={len(scored)}")
-                            return [s[0] for s in scored[:5]], [s[1] for s in scored[:5]]
+                    scored = []
+                    for chunk in kb_chunks:
+                        if chunk.get('embedding'):
+                            score = _cosine(query_vec, chunk['embedding'])
+                            if score > 0.38:
+                                scored.append(({
+                                    'id':       chunk['kb_id'],
+                                    'kb_id':    chunk['kb_id'],
+                                    'question': chunk['title'],
+                                    'answer':   chunk['content'],
+                                    'category': chunk['category'],
+                                    'type':     chunk.get('type', 'faq'),
+                                }, score))
+                    scored.sort(key=lambda x: x[1], reverse=True)
+                    if scored:
+                        logger.debug(f"[KB Search] top_score={scored[0][1]:.3f} hits={len(scored)}")
+                        return [s[0] for s in scored[:5]], [s[1] for s in scored[:5]]
             except Exception as _e:
                 logger.warning(f"[_embedding_search] KB error: {_e}")
 
-        # ── Fall back to raw FAQs with local embeddings ─────────────────
+        # ── Fall back to legacy FAQ embeddings ──────────────────────────
         if not faqs:
             return [], []
 
-        if _ST_AVAILABLE and client_id:
+        if client_id and query_vec:
             try:
                 import models as _m
                 # Lazy-index any FAQs not yet embedded
@@ -349,13 +351,12 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
                 for faq in faqs:
                     fid = str(faq.get('id', ''))
                     if fid and fid not in stored and faq.get('question'):
-                        vec = _embed(faq['question'])
+                        vec = _embed(faq['question'], task='retrieval_document')
                         if vec:
                             _m.store_faq_embedding(client_id, fid, faq['question'], vec)
                             stored[fid] = vec
 
-                query_vec = _embed(user_message)
-                if query_vec and stored:
+                if stored:
                     faq_idx = {str(f.get('id', '')): f for f in faqs}
                     scored  = []
                     for fid, emb in stored.items():
@@ -364,12 +365,12 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
                             scored.append((faq_idx[fid], score))
                     scored.sort(key=lambda x: x[1], reverse=True)
                     if scored:
-                        logger.debug(f"[FAQ Embed Search] top={scored[0][1]:.3f} hits={len(scored)}")
+                        logger.debug(f"[FAQ Embed] top={scored[0][1]:.3f} hits={len(scored)}")
                         return [s[0] for s in scored[:5]], [s[1] for s in scored[:5]]
             except Exception as _e:
                 logger.warning(f"[_embedding_search] FAQ embed error: {_e}")
 
-        # ── Keyword overlap fallback ────────────────────────────────────
+        # ── Keyword overlap last resort ─────────────────────────────────
         q_words = set(user_message.lower().split())
         scored  = []
         for faq in faqs:
@@ -379,7 +380,7 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
                 scored.append((faq, overlap / max(len(q_words), 1)))
         scored.sort(key=lambda x: x[1], reverse=True)
         if scored:
-            logger.debug(f"[Keyword Fallback Search] hits={len(scored)}")
+            logger.debug(f"[Keyword Search] hits={len(scored)}")
             return [s[0] for s in scored[:5]], [s[1] for s in scored[:5]]
 
         return [], []
@@ -601,7 +602,7 @@ Return ONLY the summary."""
 
         # Load existing embeddings for dedup
         existing_embeddings: List[Dict] = []
-        if _ST_AVAILABLE and client_id:
+        if client_id and self.enabled:
             try:
                 import models as _m
                 existing_embeddings = _m.get_embeddings_for_client(client_id)
@@ -632,9 +633,9 @@ Return ONLY the summary."""
                     tags        = self._extract_tags(question)
                     ai_category = item.get('category', 'General')
 
-                # Embed
+                # Embed (document task type for stored content)
                 embed_text = f"{question} {chunk_text}"
-                embedding  = _embed(embed_text)
+                embedding  = _embed(embed_text, task='retrieval_document')
 
                 # Deduplication — skip if cosine > 0.92 with existing
                 if embedding and seen_embeddings:
@@ -744,8 +745,8 @@ category: one of General | Billing | Support | Product | Policy | Sales | Techni
         return None, 0.0
 
     def index_faqs(self, faqs: List[Dict], client_id: str) -> int:
-        """Pre-index FAQ embeddings (called after bulk upload)."""
-        if not _ST_AVAILABLE or not client_id:
+        """Pre-index FAQ embeddings via Gemini (called after bulk upload)."""
+        if not self.enabled or not client_id:
             return 0
         count = 0
         try:
@@ -753,7 +754,7 @@ category: one of General | Billing | Support | Product | Policy | Sales | Techni
             for faq in faqs:
                 fid = str(faq.get('id', ''))
                 if fid and faq.get('question'):
-                    vec = _embed(faq['question'])
+                    vec = _embed(faq['question'], task='retrieval_document')
                     if vec:
                         _m.store_faq_embedding(client_id, fid, faq['question'], vec)
                         count += 1
