@@ -248,50 +248,60 @@ def migrate_faqs_table():
 
 def migrate_faq_to_knowledge_base():
     """
-    One-time migration that:
-      1. Adds new columns to the faqs table (quality, embedding, tags, last_indexed, is_active)
-      2. Creates the knowledge_base table if it doesn't exist yet
-    Safe to call on every startup.
+    Idempotent migration that:
+      1. Adds RAG columns to the faqs table
+      2. Adds a UNIQUE constraint on faq_id (needed for ON CONFLICT upserts)
+      3. Creates the knowledge_base table
+
+    The UNIQUE constraint is wrapped in a SAVEPOINT so that if it already
+    exists, only that statement is rolled back — the rest of the migration
+    continues cleanly. Without a SAVEPOINT, a constraint-already-exists error
+    would abort the entire PostgreSQL transaction and block the CREATE TABLE
+    that follows.
     """
     conn, cursor = get_db()
     try:
-        # ── Extend faqs table ─────────────────────────────────────────
-        faq_cols = [
-            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS quality_score  REAL    DEFAULT 0.0",
-            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS embedding       TEXT",
-            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS tags            TEXT    DEFAULT '[]'",
-            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS last_indexed    TIMESTAMP",
-            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS is_active       BOOLEAN DEFAULT TRUE",
-        ]
-        for sql in faq_cols:
+        # ── 1. Add new columns to faqs ────────────────────────────────
+        for sql in [
+            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS quality_score REAL    DEFAULT 0.0",
+            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS embedding     TEXT",
+            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS tags          TEXT    DEFAULT '[]'",
+            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS last_indexed  TIMESTAMP",
+            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS is_active     BOOLEAN DEFAULT TRUE",
+        ]:
             cursor.execute(sql)
 
-        # ── Ensure faq_id has a unique constraint (needed for ON CONFLICT) ──
-        # Wrapped in its own try so it doesn't abort the whole migration
+        # ── 2. UNIQUE constraint on faq_id (safe via SAVEPOINT) ───────
+        # A plain try/except is NOT enough in PostgreSQL: if the ALTER fails,
+        # the transaction enters an aborted state and no further SQL can run
+        # until a rollback. SAVEPOINT lets us roll back just this one statement.
+        cursor.execute("SAVEPOINT sp_faq_unique")
         try:
             cursor.execute(
                 "ALTER TABLE faqs ADD CONSTRAINT faqs_faq_id_unique UNIQUE (faq_id)"
             )
+            cursor.execute("RELEASE SAVEPOINT sp_faq_unique")
         except Exception:
-            pass   # constraint already exists
+            cursor.execute("ROLLBACK TO SAVEPOINT sp_faq_unique")
+            # Constraint already exists — that's fine, continue
 
-        # ── knowledge_base table ──────────────────────────────────────
+        # ── 3. Create knowledge_base table ────────────────────────────
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS knowledge_base (
-                id           SERIAL PRIMARY KEY,
-                client_id    TEXT    NOT NULL,
-                kb_id        TEXT    NOT NULL UNIQUE,
-                title        TEXT    NOT NULL,
-                content      TEXT    NOT NULL,
-                type         TEXT    DEFAULT 'faq',
-                category     TEXT    DEFAULT 'General',
-                tags         TEXT    DEFAULT '[]',
-                embedding    TEXT,
-                metadata     TEXT    DEFAULT '{}',
+                id            SERIAL PRIMARY KEY,
+                client_id     TEXT   NOT NULL,
+                kb_id         TEXT   NOT NULL UNIQUE,
+                title         TEXT   NOT NULL,
+                content       TEXT   NOT NULL,
+                type          TEXT   DEFAULT 'faq',
+                category      TEXT   DEFAULT 'General',
+                tags          TEXT   DEFAULT '[]',
+                embedding     TEXT,
+                metadata      TEXT   DEFAULT '{}',
                 quality_score REAL   DEFAULT 0.8,
-                version      INTEGER DEFAULT 1,
-                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                version       INTEGER DEFAULT 1,
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
         cursor.execute(
@@ -370,20 +380,54 @@ def validate_and_enrich_faqs(raw_faqs: list, client_id: str) -> tuple:
       - answer must be >= 20 chars
       - duplicate questions (case-insensitive) are skipped after the first
 
-    Enrichment (applied to every valid item):
+    Enrichment (applied to every passing item):
       - auto-generates triggers if missing
-      - generates basic tags
+      - generates basic tags if missing
       - calculates quality_score
       - assigns a stable faq_id if not present
 
-    Returns:
-      (valid_faqs: list[dict], errors: list[dict])
+    The calls to _extract_keywords / _simple_extract_tags are wrapped in
+    try/except so that if either helper is ever unavailable (import error,
+    future refactor), enrichment degrades gracefully to a simple word split
+    rather than aborting the entire upload.
 
+    Returns: (valid_faqs: list[dict], errors: list[dict])
     Each error dict: {row: int, question: str, reason: str}
     """
+    # ── Inline fallbacks in case module-level helpers are not reachable ──
+    def _fallback_keywords(text: str, limit: int = 8) -> list:
+        import re as _re
+        stop = {'the','and','for','are','but','not','you','all','can','has','her',
+                'was','one','our','out','day','get','has','him','his','how','its',
+                'may','new','now','old','see','two','who','boy','did','its','let',
+                'put','say','she','too','use','way','what','when','with','have'}
+        words = _re.findall(r'\b[a-z]{3,}\b', text.lower())
+        seen, result = set(), []
+        for w in words:
+            if w not in stop and w not in seen:
+                seen.add(w); result.append(w)
+                if len(result) >= limit:
+                    break
+        return result
+
+    def _fallback_tags(text: str, limit: int = 5) -> list:
+        import re as _re
+        stop = {'the','and','for','are','but','not','you','all','can','has','her',
+                'was','one','our','out','day','get','has','him','his','how','its',
+                'may','new','now','old','see','two','who','boy','did','its','let',
+                'put','say','she','too','use','way','what','when','with','have'}
+        words = _re.findall(r'\b[a-z]{4,}\b', text.lower())
+        seen, result = set(), []
+        for w in sorted(set(words), key=lambda x: -len(x)):
+            if w not in stop and w not in seen:
+                seen.add(w); result.append(w)
+                if len(result) >= limit:
+                    break
+        return result
+
     valid  = []
     errors = []
-    seen_questions = set()   # for dedup
+    seen_questions: set = set()
 
     for row_num, raw in enumerate(raw_faqs, start=1):
         question = str(raw.get('question') or '').strip()
@@ -411,38 +455,52 @@ def validate_and_enrich_faqs(raw_faqs: list, client_id: str) -> tuple:
         faq_id   = str(raw.get('id') or raw.get('faq_id') or uuid.uuid4())
         category = str(raw.get('category') or 'General').strip() or 'General'
 
-        # Triggers
+        # Triggers — parse then auto-generate if empty
         triggers = raw.get('triggers', [])
         if isinstance(triggers, str):
             try:
                 triggers = json.loads(triggers)
             except Exception:
                 triggers = [t.strip() for t in triggers.split(',') if t.strip()]
+        if not isinstance(triggers, list):
+            triggers = []
         if not triggers:
-            triggers = _extract_keywords(question)
+            try:
+                triggers = _extract_keywords(question)
+            except Exception:
+                triggers = _fallback_keywords(question)
 
-        # Tags (distinct from triggers — shorter, noun-focused)
+        # Tags — parse then auto-generate if empty (noun-biased, shorter)
         tags = raw.get('tags', [])
         if isinstance(tags, str):
             try:
                 tags = json.loads(tags)
             except Exception:
-                tags = []
+                tags = [t.strip() for t in tags.split(',') if t.strip()]
+        if not isinstance(tags, list):
+            tags = []
         if not tags:
-            tags = _simple_extract_tags(question)
+            try:
+                tags = _simple_extract_tags(question)
+            except Exception:
+                tags = _fallback_tags(question)
 
-        quality = _quality_score(question, answer)
+        # Quality score
+        try:
+            quality = _quality_score(question, answer)
+        except Exception:
+            quality = 0.5
 
         valid.append({
-            'id':           faq_id,
-            'faq_id':       faq_id,
-            'question':     question,
-            'answer':       answer,
-            'category':     category,
-            'triggers':     triggers,
-            'tags':         tags,
+            'id':            faq_id,
+            'faq_id':        faq_id,
+            'question':      question,
+            'answer':        answer,
+            'category':      category,
+            'triggers':      triggers,
+            'tags':          tags,
             'quality_score': quality,
-            'embedding':    raw.get('embedding'),   # pass through if already set
+            'embedding':     raw.get('embedding'),  # pass through if already set
         })
 
     return valid, errors
@@ -890,43 +948,72 @@ def delete_client(client_id):
 def save_faqs(client_id: str, faqs: list) -> int:
     """
     Upsert FAQs for a client.
-    Uses INSERT ... ON CONFLICT so existing embeddings/quality scores
-    are preserved when the FAQ manager re-saves without re-uploading.
-    Returns count of saved rows.
+
+    ON CONFLICT behaviour (when faq_id already exists):
+      - question / answer / category / triggers / tags / quality_score → always updated
+      - embedding   → preserved via COALESCE (don't wipe a stored vector on re-save)
+      - last_indexed → preserved via COALESCE (don't reset the indexing timestamp)
+
+    triggers and tags are normalised to JSON strings regardless of whether
+    they arrive as Python lists, JSON strings, or comma-separated strings.
+
+    Returns count of rows saved.
     """
     if not faqs:
         return 0
+
     conn, cursor = get_db()
     saved = 0
     try:
         for faq in faqs:
-            faq_id   = str(faq.get('id') or faq.get('faq_id') or uuid.uuid4())
+            faq_id = str(faq.get('id') or faq.get('faq_id') or uuid.uuid4())
+
+            # ── Normalise triggers ────────────────────────────────────
             triggers = faq.get('triggers', [])
             if isinstance(triggers, str):
                 try:
                     triggers = json.loads(triggers)
                 except Exception:
                     triggers = [t.strip() for t in triggers.split(',') if t.strip()]
+            if not isinstance(triggers, list):
+                triggers = []
 
-            tags         = faq.get('tags', [])
-            quality      = float(faq.get('quality_score', 0.0))
-            embedding    = faq.get('embedding')   # already JSON string or None
-            embedding_js = json.dumps(embedding) if isinstance(embedding, list) else embedding
+            # ── Normalise tags (same pattern as triggers) ─────────────
+            tags = faq.get('tags', [])
+            if isinstance(tags, str):
+                try:
+                    tags = json.loads(tags)
+                except Exception:
+                    tags = [t.strip() for t in tags.split(',') if t.strip()]
+            if not isinstance(tags, list):
+                tags = []
+
+            # ── Normalise embedding ───────────────────────────────────
+            embedding = faq.get('embedding')
+            if isinstance(embedding, list):
+                embedding_js = json.dumps(embedding)
+            elif isinstance(embedding, str) and embedding.startswith('['):
+                embedding_js = embedding      # already a valid JSON string
+            else:
+                embedding_js = None           # no embedding — DB will keep existing
+
+            quality = float(faq.get('quality_score', 0.0))
 
             cursor.execute(
                 """INSERT INTO faqs
-                     (client_id, faq_id, question, answer, category, triggers,
-                      tags, quality_score, embedding, is_active)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                       (client_id, faq_id, question, answer, category,
+                        triggers, tags, quality_score, embedding, is_active)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT (faq_id) DO UPDATE SET
-                     question     = EXCLUDED.question,
-                     answer       = EXCLUDED.answer,
-                     category     = EXCLUDED.category,
-                     triggers     = EXCLUDED.triggers,
-                     tags         = EXCLUDED.tags,
-                     quality_score= EXCLUDED.quality_score,
-                     embedding    = COALESCE(EXCLUDED.embedding, faqs.embedding),
-                     is_active    = TRUE""",
+                       question      = EXCLUDED.question,
+                       answer        = EXCLUDED.answer,
+                       category      = EXCLUDED.category,
+                       triggers      = EXCLUDED.triggers,
+                       tags          = EXCLUDED.tags,
+                       quality_score = EXCLUDED.quality_score,
+                       embedding     = COALESCE(EXCLUDED.embedding,   faqs.embedding),
+                       last_indexed  = COALESCE(faqs.last_indexed, EXCLUDED.last_indexed),
+                       is_active     = TRUE""",
                 (
                     client_id, faq_id,
                     faq.get('question', '').strip(),
@@ -940,6 +1027,7 @@ def save_faqs(client_id: str, faqs: list) -> int:
                 )
             )
             saved += 1
+
         conn.commit()
         return saved
     except Exception as e:
