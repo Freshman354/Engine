@@ -199,6 +199,11 @@ def init_db():
     conn.close()
     print("✅ Database initialized successfully!")
 
+    # Run FAQ migrations immediately so fresh installs are fully ready
+    # without needing a separate startup call.
+    migrate_faqs_table()
+    migrate_faq_to_knowledge_base()
+
 
 def migrate_clients_table():
     """One-time schema migration for the clients table."""
@@ -214,14 +219,233 @@ def migrate_clients_table():
 
 
 def migrate_faqs_table():
-    """One-time schema migration for the faqs table."""
+    """
+    Idempotent migration for the faqs table.
+    Adds all columns needed for Phase 2 RAG.
+    Safe to call on every startup.
+    """
     conn, cursor = get_db()
-    print("🔧 Running faqs table migration...")
-    cursor.execute("ALTER TABLE faqs ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'General'")
-    conn.commit()
-    cursor.close()
-    conn.close()
-    print("✅ FAQs table migration complete")
+    migrations = [
+        "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS category      TEXT    DEFAULT 'General'",
+        "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS quality_score  REAL    DEFAULT 0.0",
+        "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS embedding      TEXT",
+        "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS tags           TEXT    DEFAULT '[]'",
+        "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS last_indexed   TIMESTAMP",
+        "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS is_active      BOOLEAN DEFAULT TRUE",
+    ]
+    try:
+        for sql in migrations:
+            cursor.execute(sql)
+        conn.commit()
+        print("✅ FAQs table migration complete")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_faqs_table: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def migrate_faq_to_knowledge_base():
+    """
+    One-time migration that:
+      1. Adds new columns to the faqs table (quality, embedding, tags, last_indexed, is_active)
+      2. Creates the knowledge_base table if it doesn't exist yet
+    Safe to call on every startup.
+    """
+    conn, cursor = get_db()
+    try:
+        # ── Extend faqs table ─────────────────────────────────────────
+        faq_cols = [
+            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS quality_score  REAL    DEFAULT 0.0",
+            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS embedding       TEXT",
+            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS tags            TEXT    DEFAULT '[]'",
+            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS last_indexed    TIMESTAMP",
+            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS is_active       BOOLEAN DEFAULT TRUE",
+        ]
+        for sql in faq_cols:
+            cursor.execute(sql)
+
+        # ── Ensure faq_id has a unique constraint (needed for ON CONFLICT) ──
+        # Wrapped in its own try so it doesn't abort the whole migration
+        try:
+            cursor.execute(
+                "ALTER TABLE faqs ADD CONSTRAINT faqs_faq_id_unique UNIQUE (faq_id)"
+            )
+        except Exception:
+            pass   # constraint already exists
+
+        # ── knowledge_base table ──────────────────────────────────────
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS knowledge_base (
+                id           SERIAL PRIMARY KEY,
+                client_id    TEXT    NOT NULL,
+                kb_id        TEXT    NOT NULL UNIQUE,
+                title        TEXT    NOT NULL,
+                content      TEXT    NOT NULL,
+                type         TEXT    DEFAULT 'faq',
+                category     TEXT    DEFAULT 'General',
+                tags         TEXT    DEFAULT '[]',
+                embedding    TEXT,
+                metadata     TEXT    DEFAULT '{}',
+                quality_score REAL   DEFAULT 0.8,
+                version      INTEGER DEFAULT 1,
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_kb_client ON knowledge_base (client_id)"
+        )
+
+        conn.commit()
+        print("✅ migrate_faq_to_knowledge_base complete")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_faq_to_knowledge_base: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# ── Keyword stop-words for tag/trigger extraction ──────────────────────
+_STOP_WORDS = {
+    'a','an','the','is','are','do','does','can','i','you','we','my','your',
+    'what','how','when','where','why','to','of','in','on','at','for','with',
+    'and','or','but','not','it','this','that','be','have','has','was','were',
+    'will','would','could','should','may','might','please','hi','hello','hey',
+}
+
+
+def _extract_keywords(text: str, limit: int = 8) -> list:
+    """Simple keyword extractor — used when ai_helper is unavailable."""
+    import re
+    words = re.findall(r"\b[a-z]{3,}\b", text.lower())
+    seen, result = set(), []
+    for w in words:
+        if w not in _STOP_WORDS and w not in seen:
+            seen.add(w)
+            result.append(w)
+            if len(result) >= limit:
+                break
+    return result
+
+
+def _simple_extract_tags(text: str, limit: int = 5) -> list:
+    """
+    Fallback tag generator — noun-biased, shorter list than _extract_keywords.
+    Prefers longer words (more likely to be meaningful nouns/concepts).
+    Called by validate_and_enrich_faqs when no tags are provided and
+    the AI helper is unavailable.
+    """
+    import re
+    words = re.findall(r"\b[a-z]{4,}\b", text.lower())   # min 4 chars → fewer stop-words
+    seen, result = set(), []
+    for w in sorted(set(words), key=lambda w: -len(w)):   # longer words first
+        if w not in _STOP_WORDS and w not in seen:
+            seen.add(w)
+            result.append(w)
+            if len(result) >= limit:
+                break
+    return result
+
+
+def _quality_score(question: str, answer: str) -> float:
+    """Heuristic quality score 0.0–1.0."""
+    score = 0.4
+    if len(question) >= 15:  score += 0.15
+    if len(answer)   >= 60:  score += 0.15
+    if len(answer)   >= 150: score += 0.10
+    if answer.rstrip().endswith(('.', '!', '?')): score += 0.10
+    if '?' in question:      score += 0.10
+    return round(min(score, 1.0), 2)
+
+
+def validate_and_enrich_faqs(raw_faqs: list, client_id: str) -> tuple:
+    """
+    Validate, deduplicate, and enrich a list of raw FAQ dicts.
+
+    Validation rules:
+      - question must be >= 10 chars
+      - answer must be >= 20 chars
+      - duplicate questions (case-insensitive) are skipped after the first
+
+    Enrichment (applied to every valid item):
+      - auto-generates triggers if missing
+      - generates basic tags
+      - calculates quality_score
+      - assigns a stable faq_id if not present
+
+    Returns:
+      (valid_faqs: list[dict], errors: list[dict])
+
+    Each error dict: {row: int, question: str, reason: str}
+    """
+    valid  = []
+    errors = []
+    seen_questions = set()   # for dedup
+
+    for row_num, raw in enumerate(raw_faqs, start=1):
+        question = str(raw.get('question') or '').strip()
+        answer   = str(raw.get('answer')   or '').strip()
+
+        # ── Validation ────────────────────────────────────────────────
+        if len(question) < 10:
+            errors.append({'row': row_num, 'question': question[:60],
+                           'reason': f"Question too short ({len(question)} chars, min 10)"})
+            continue
+
+        if len(answer) < 20:
+            errors.append({'row': row_num, 'question': question[:60],
+                           'reason': f"Answer too short ({len(answer)} chars, min 20)"})
+            continue
+
+        q_norm = question.lower().strip()
+        if q_norm in seen_questions:
+            errors.append({'row': row_num, 'question': question[:60],
+                           'reason': "Duplicate question (skipped)"})
+            continue
+        seen_questions.add(q_norm)
+
+        # ── Enrichment ────────────────────────────────────────────────
+        faq_id   = str(raw.get('id') or raw.get('faq_id') or uuid.uuid4())
+        category = str(raw.get('category') or 'General').strip() or 'General'
+
+        # Triggers
+        triggers = raw.get('triggers', [])
+        if isinstance(triggers, str):
+            try:
+                triggers = json.loads(triggers)
+            except Exception:
+                triggers = [t.strip() for t in triggers.split(',') if t.strip()]
+        if not triggers:
+            triggers = _extract_keywords(question)
+
+        # Tags (distinct from triggers — shorter, noun-focused)
+        tags = raw.get('tags', [])
+        if isinstance(tags, str):
+            try:
+                tags = json.loads(tags)
+            except Exception:
+                tags = []
+        if not tags:
+            tags = _simple_extract_tags(question)
+
+        quality = _quality_score(question, answer)
+
+        valid.append({
+            'id':           faq_id,
+            'faq_id':       faq_id,
+            'question':     question,
+            'answer':       answer,
+            'category':     category,
+            'triggers':     triggers,
+            'tags':         tags,
+            'quality_score': quality,
+            'embedding':    raw.get('embedding'),   # pass through if already set
+        })
+
+    return valid, errors
 
 
 def migrate_subscription_expiry():
@@ -663,32 +887,61 @@ def delete_client(client_id):
 # FAQ FUNCTIONS
 # =====================================================================
 
-def save_faqs(client_id, faqs):
-    """Save FAQs for a client (replaces all existing)"""
+def save_faqs(client_id: str, faqs: list) -> int:
+    """
+    Upsert FAQs for a client.
+    Uses INSERT ... ON CONFLICT so existing embeddings/quality scores
+    are preserved when the FAQ manager re-saves without re-uploading.
+    Returns count of saved rows.
+    """
+    if not faqs:
+        return 0
     conn, cursor = get_db()
+    saved = 0
     try:
-        cursor.execute('DELETE FROM faqs WHERE client_id = %s', (client_id,))
         for faq in faqs:
-            faq_id = faq.get('id') or faq.get('faq_id') or str(uuid.uuid4())
+            faq_id   = str(faq.get('id') or faq.get('faq_id') or uuid.uuid4())
             triggers = faq.get('triggers', [])
-            # Ensure triggers is a list
             if isinstance(triggers, str):
                 try:
                     triggers = json.loads(triggers)
                 except Exception:
                     triggers = [t.strip() for t in triggers.split(',') if t.strip()]
+
+            tags         = faq.get('tags', [])
+            quality      = float(faq.get('quality_score', 0.0))
+            embedding    = faq.get('embedding')   # already JSON string or None
+            embedding_js = json.dumps(embedding) if isinstance(embedding, list) else embedding
+
             cursor.execute(
-                'INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers) VALUES (%s, %s, %s, %s, %s, %s)',
+                """INSERT INTO faqs
+                     (client_id, faq_id, question, answer, category, triggers,
+                      tags, quality_score, embedding, is_active)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (faq_id) DO UPDATE SET
+                     question     = EXCLUDED.question,
+                     answer       = EXCLUDED.answer,
+                     category     = EXCLUDED.category,
+                     triggers     = EXCLUDED.triggers,
+                     tags         = EXCLUDED.tags,
+                     quality_score= EXCLUDED.quality_score,
+                     embedding    = COALESCE(EXCLUDED.embedding, faqs.embedding),
+                     is_active    = TRUE""",
                 (
-                    client_id,
-                    str(faq_id),
-                    faq.get('question', ''),
-                    faq.get('answer', ''),
+                    client_id, faq_id,
+                    faq.get('question', '').strip(),
+                    faq.get('answer', '').strip(),
                     faq.get('category', 'General'),
-                    json.dumps(triggers)
+                    json.dumps(triggers),
+                    json.dumps(tags),
+                    quality,
+                    embedding_js,
+                    True,
                 )
             )
+            saved += 1
         conn.commit()
+        return saved
     except Exception as e:
         conn.rollback()
         raise e
@@ -697,29 +950,65 @@ def save_faqs(client_id, faqs):
         conn.close()
 
 
-def get_faqs(client_id):
-    """Get all FAQs for a client"""
+def get_faqs(client_id: str, active_only: bool = True) -> list:
+    """
+    Return all FAQs for a client, including quality_score and tags
+    so the AI helper can use them directly without extra queries.
+    """
     conn, cursor = get_db()
-    cursor.execute('SELECT * FROM faqs WHERE client_id = %s', (client_id,))
-    faqs = cursor.fetchall()
-    cursor.close()
-    conn.close()
+    try:
+        where = "client_id = %s AND is_active = TRUE" if active_only else "client_id = %s"
+        cursor.execute(
+            f"SELECT * FROM faqs WHERE {where} ORDER BY quality_score DESC, created_at DESC",
+            (client_id,)
+        )
+        rows = cursor.fetchall()
+    finally:
+        cursor.close()
+        conn.close()
+
     result = []
-    for faq in faqs:
-        triggers = faq.get('triggers', '[]') or '[]'
-        if isinstance(triggers, list):
-            parsed_triggers = triggers
+    for faq in rows:
+        # Parse triggers
+        triggers_raw = faq.get('triggers', '[]') or '[]'
+        if isinstance(triggers_raw, list):
+            triggers = triggers_raw
         else:
             try:
-                parsed_triggers = json.loads(triggers)
+                triggers = json.loads(triggers_raw)
             except Exception:
-                parsed_triggers = [t.strip() for t in triggers.split(',') if t.strip()]
+                triggers = [t.strip() for t in triggers_raw.split(',') if t.strip()]
+
+        # Parse tags
+        tags_raw = faq.get('tags', '[]') or '[]'
+        try:
+            tags = json.loads(tags_raw) if isinstance(tags_raw, str) else tags_raw
+        except Exception:
+            tags = []
+
+        # Parse embedding (stored as JSON string)
+        embedding_raw = faq.get('embedding')
+        if embedding_raw and isinstance(embedding_raw, str):
+            try:
+                embedding_parsed = json.loads(embedding_raw)
+            except Exception:
+                embedding_parsed = []
+        elif isinstance(embedding_raw, list):
+            embedding_parsed = embedding_raw
+        else:
+            embedding_parsed = []
+
         result.append({
-            'id': faq.get('faq_id') or str(faq.get('id', '')),
-            'question': faq.get('question', ''),
-            'answer': faq.get('answer', ''),
-            'category': faq.get('category', 'General'),
-            'triggers': parsed_triggers
+            'id':            faq.get('faq_id') or str(faq.get('id', '')),
+            'faq_id':        faq.get('faq_id') or str(faq.get('id', '')),
+            'question':      faq.get('question', ''),
+            'answer':        faq.get('answer', ''),
+            'category':      faq.get('category', 'General'),
+            'triggers':      triggers,
+            'tags':          tags,
+            'quality_score': float(faq.get('quality_score') or 0.0),
+            'embedding':     embedding_parsed,   # inline for AI helper — avoids second query
+            'last_indexed':  faq.get('last_indexed'),
         })
     return result
 
@@ -1526,22 +1815,41 @@ def get_latest_conversation_summary(client_id: str) -> str:
 
 
 def store_faq_embedding(client_id: str, faq_id: str, question: str, embedding: list) -> None:
-    """Upsert a vector embedding for a single FAQ question."""
+    """
+    Store an embedding in two places:
+      1. faq_embeddings table  — for fast bulk retrieval by the AI helper
+      2. faqs.embedding column — so get_faqs() can return embeddings inline
+    Both are JSON-encoded float lists.
+    """
+    if not embedding:
+        return
+    emb_json = json.dumps(embedding)
     try:
         conn, cursor = get_db()
+        # Primary store: faq_embeddings table
         cursor.execute(
-            '''INSERT INTO faq_embeddings (client_id, faq_id, question, embedding)
+            """INSERT INTO faq_embeddings (client_id, faq_id, question, embedding)
                VALUES (%s, %s, %s, %s)
                ON CONFLICT (client_id, faq_id)
-               DO UPDATE SET question = EXCLUDED.question, embedding = EXCLUDED.embedding,
-                             created_at = CURRENT_TIMESTAMP''',
-            (client_id, faq_id, question, json.dumps(embedding))
+               DO UPDATE SET question    = EXCLUDED.question,
+                             embedding   = EXCLUDED.embedding,
+                             created_at  = CURRENT_TIMESTAMP""",
+            (client_id, faq_id, question, emb_json)
+        )
+        # Mirror on faqs table so single-query lookups work
+        cursor.execute(
+            """UPDATE faqs
+               SET embedding    = %s,
+                   last_indexed = CURRENT_TIMESTAMP
+               WHERE client_id = %s AND faq_id = %s""",
+            (emb_json, client_id, faq_id)
         )
         conn.commit()
         cursor.close()
         conn.close()
     except Exception as e:
-        pass
+        import logging
+        logging.getLogger(__name__).debug(f"[store_faq_embedding] {e}")
 
 
 def get_faq_embeddings(client_id: str) -> list:
