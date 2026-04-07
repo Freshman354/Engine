@@ -346,6 +346,8 @@ try:
         pass  # column may not have a constraint — that's fine
     if hasattr(models, 'migrate_faqs_table'):
         models.migrate_faqs_table()
+    if hasattr(models, 'migrate_faq_to_knowledge_base'):
+        models.migrate_faq_to_knowledge_base()
     if hasattr(models, 'migrate_subscription_expiry'):
         models.migrate_subscription_expiry()
     if hasattr(models, 'migrate_to_recurring_subscriptions'):
@@ -952,7 +954,7 @@ def chat():
                             'success': True,
                             'response': (
                                 "You've reached today's message limit. "
-                                "Upgrade your plan for unlimited messages, or try again tomorrow."
+                                "Upgrade your plan for unlimited messages, or try again tomorrow. 🚀"
                             ),
                             'limit_reached': True,
                             'method': 'limit_enforced'
@@ -2184,25 +2186,39 @@ def upload_faqs():
 
         app.logger.info(f"[Upload] client={client_id} raw_items={len(raw_items)} file={filename}")
 
+        # ── Validate + enrich (dedup, quality score, triggers, tags) ─
+        valid_faqs, errors = models.validate_and_enrich_faqs(raw_items, client_id)
+
+        if errors:
+            app.logger.info(
+                f"[Upload] client={client_id} skipped={len(errors)} errors: "
+                + "; ".join(f"row {e['row']}: {e['reason']}" for e in errors[:5])
+            )
+
+        if not valid_faqs:
+            return jsonify({
+                'success': False,
+                'error': 'No valid content to import after validation.',
+                'validation_errors': errors[:10],
+            }), 400
+
         # ── AI enrichment + chunking pipeline ────────────────────────
         if ai_helper and ai_helper.enabled:
-            chunks = ai_helper.enrich_and_chunk(raw_items, client_id)
+            chunks = ai_helper.enrich_and_chunk(valid_faqs, client_id)
         else:
-            # Build minimal chunks without AI enrichment
             chunks = []
-            for item in raw_items:
-                if item.get('question') and item.get('answer'):
-                    chunks.append({
-                        'kb_id':     str(uuid.uuid4()),
-                        'title':     item['question'],
-                        'content':   item['answer'],
-                        'type':      'faq',
-                        'category':  item.get('category', 'General'),
-                        'tags':      item.get('triggers', []),
-                        'embedding': [],
-                        'metadata':  {'source': 'upload'},
-                        'quality':   0.75,
-                    })
+            for item in valid_faqs:
+                chunks.append({
+                    'kb_id':      str(uuid.uuid4()),
+                    'title':      item['question'],
+                    'content':    item['answer'],
+                    'type':       'faq',
+                    'category':   item.get('category', 'General'),
+                    'tags':       item.get('tags', []),
+                    'embedding':  [],
+                    'metadata':   {'source': 'upload'},
+                    'quality':    item.get('quality_score', 0.75),
+                })
 
         if not chunks:
             return jsonify({'success': False, 'error': 'No valid content to import after processing.'}), 400
@@ -2240,12 +2256,16 @@ def upload_faqs():
         app.logger.info(
             f"[Upload] client={client_id} kb_saved={kb_saved} faq_saved={faq_saved}"
         )
-        return jsonify({
-            'success': True,
-            'message': f'Successfully imported {kb_saved} knowledge chunks!',
-            'count': kb_saved,
+        response = {
+            'success':   True,
+            'message':   f'Imported {kb_saved} knowledge chunks successfully.',
+            'count':     kb_saved,
             'faq_count': faq_saved,
-        })
+        }
+        if errors:
+            response['skipped']           = len(errors)
+            response['validation_errors'] = errors[:10]  # cap at 10 for the UI
+        return jsonify(response)
 
     except Exception as e:
         app.logger.error(f"[Upload] Error: {e}", exc_info=True)
@@ -3222,11 +3242,127 @@ def client_portal():
 </html>'''
 
 # =====================================================================
-# LEGAL PAGES
+# AGENCY CLIENTS DASHBOARD  (/agency/clients)
 # =====================================================================
 
+@app.route('/agency/clients')
+@login_required
+def agency_clients():
+    """
+    Full-featured agency client dashboard.
+    Accessible to pro, agency, enterprise, and admin users.
+    Shows enriched stats, usage bars, and per-client actions.
+    """
+    fresh_user = models.get_user_by_id(current_user.id)
+    plan_type  = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    is_admin   = bool((fresh_user or {}).get('is_admin', False))
+
+    allowed_plans = {'pro', 'agency', 'enterprise'}
+    if plan_type not in allowed_plans and not is_admin:
+        return render_template('agency_clients_upgrade.html',
+                               user=current_user,
+                               plan_type=plan_type), 403
+
+    # ── Fetch raw clients ──────────────────────────────────────────────
+    clients    = models.get_user_clients(current_user.id)
+    client_ids = [c['client_id'] for c in clients]
+
+    # ── Bulk stats (one set of queries, not N×4) ───────────────────────
+    stats = models.get_clients_enriched_stats(client_ids)
+
+    # ── Plan limits for usage bars ─────────────────────────────────────
+    plan_limits   = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+    daily_limit   = plan_limits['messages_per_day']
+    client_limit  = plan_limits['clients']
+    slots_display = 'Unlimited' if client_limit >= 999999 else str(client_limit)
+    daily_display = 'Unlimited' if daily_limit  >= 999999 else str(daily_limit)
+
+    # ── Enrich each client dict ────────────────────────────────────────
+    enriched = []
+    for client in clients:
+        cid = client['client_id']
+        s   = stats.get(cid, {})
+
+        # Parse branding
+        branding = {}
+        bs_raw   = client.get('branding_settings') or '{}'
+        try:
+            branding = json.loads(bs_raw) if isinstance(bs_raw, str) else bs_raw
+        except Exception:
+            branding = {}
+
+        branding_inner   = branding.get('branding', {})
+        branding_removed = bool(
+            branding_inner.get('remove_branding')
+            or client.get('remove_branding')
+        )
+        primary_color = branding_inner.get('primary_color') or client.get('widget_color') or '#B8924A'
+
+        # Usage bar percentage + status class
+        daily_msgs = s.get('daily_msgs', 0)
+        if daily_limit >= 999999:
+            usage_pct   = 0
+            usage_class = 'success'
+        else:
+            usage_pct   = min(round(daily_msgs / daily_limit * 100), 100)
+            usage_class = 'danger' if usage_pct >= 90 else ('warning' if usage_pct >= 70 else 'success')
+
+        # Last active — human-friendly
+        last_active = s.get('last_active')
+        if last_active:
+            delta = datetime.utcnow() - last_active.replace(tzinfo=None)
+            if delta.days == 0:
+                last_active_str = 'Today'
+            elif delta.days == 1:
+                last_active_str = 'Yesterday'
+            elif delta.days < 7:
+                last_active_str = f'{delta.days}d ago'
+            elif delta.days < 30:
+                last_active_str = f'{delta.days // 7}w ago'
+            else:
+                last_active_str = last_active.strftime('%b %d')
+        else:
+            last_active_str = 'No activity'
+
+        enriched.append({
+            **client,
+            'cid':               cid,
+            'name':              client.get('company_name', 'Unnamed'),
+            'vertical':          branding.get('vertical', 'general').replace('_', ' ').title(),
+            'faqs_count':        s.get('faqs_count', 0),
+            'leads_count':       s.get('leads_count', 0),
+            'conversations':     s.get('conversations', 0),
+            'daily_msgs':        daily_msgs,
+            'daily_limit':       daily_display,
+            'usage_pct':         usage_pct,
+            'usage_class':       usage_class,
+            'branding_removed':  branding_removed,
+            'primary_color':     primary_color,
+            'last_active_str':   last_active_str,
+            'near_limit':        (not daily_limit >= 999999) and usage_pct >= 80,
+        })
+
+    # Totals for summary cards
+    total_leads  = sum(c['leads_count']    for c in enriched)
+    total_convos = sum(c['conversations']  for c in enriched)
+    total_faqs   = sum(c['faqs_count']     for c in enriched)
+
+    return render_template(
+        'agency_clients.html',
+        user          = current_user,
+        plan_type     = plan_type,
+        plan_limits   = plan_limits,
+        clients       = enriched,
+        total_leads   = total_leads,
+        total_convos  = total_convos,
+        total_faqs    = total_faqs,
+        slots_display = slots_display,
+        daily_display = daily_display,
+        client_count  = len(enriched),
+    )
+
 # =====================================================================
-# CLIENT PORTAL — CLIENT-FACING LOGINS (Pro / Agency / Enterprise)
+# LEGAL PAGES
 # =====================================================================
 
 @app.route('/client-login', methods=['GET', 'POST'])

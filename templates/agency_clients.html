@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Clients — Lumvi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
+  --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
+  --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#fff;
+  --success:#16A34A;--success-lt:#F0FDF4;
+  --warning:#D97706;--warning-lt:#FFFBEB;
+  --danger:#EF4444;--danger-lt:#FEF2F2;
+  --sidebar-w:224px;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--white);border-bottom:1px solid var(--border);
+  padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:50;}
+.topbar-brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.topbar-brand img{width:32px;height:32px;border-radius:8px;object-fit:cover;}
+.topbar-brand span{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.plan-chip{padding:4px 12px;background:var(--gold-lt);color:var(--gold-dk);border-radius:20px;
+  font-size:12px;font-weight:600;text-transform:capitalize;border:1px solid rgba(184,146,74,0.2);}
+.btn-link{padding:7px 14px;color:var(--sub);border:1px solid var(--border);border-radius:8px;
+  font-size:13px;font-weight:500;text-decoration:none;transition:all 0.15s;}
+.btn-link:hover{color:var(--dark);border-color:#ccc;}
+
+/* ── PAGE ── */
+.page{max-width:1280px;margin:0 auto;padding:32px 28px;}
+@media(max-width:768px){.page{padding:20px 16px;}}
+
+/* ── PAGE HEADER ── */
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;
+  flex-wrap:wrap;gap:14px;margin-bottom:28px;}
+.page-header h1{font-family:'Fraunces',serif;font-size:26px;font-weight:700;
+  letter-spacing:-0.3px;margin-bottom:4px;}
+.page-header p{font-size:13px;color:var(--sub);}
+.btn-primary{padding:10px 20px;background:var(--gold);color:#fff;border-radius:9px;
+  border:none;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:600;
+  text-decoration:none;display:inline-flex;align-items:center;gap:6px;
+  box-shadow:0 2px 8px rgba(184,146,74,0.3);transition:all 0.2s;cursor:pointer;}
+.btn-primary:hover{background:var(--gold-dk);transform:translateY(-1px);}
+.btn-primary svg{width:14px;height:14px;}
+
+/* ── SUMMARY CARDS ── */
+.summary-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px;}
+@media(max-width:900px){.summary-row{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:480px){.summary-row{grid-template-columns:1fr 1fr;}}
+.summary-card{background:var(--white);border:1px solid var(--border);border-radius:14px;
+  padding:18px 22px;transition:box-shadow 0.2s;}
+.summary-card:hover{box-shadow:0 4px 20px rgba(0,0,0,0.06);}
+.summary-label{font-size:11.5px;color:var(--sub);font-weight:500;
+  text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;
+  display:flex;align-items:center;gap:6px;}
+.summary-label svg{width:14px;height:14px;opacity:0.7;}
+.summary-value{font-family:'Fraunces',serif;font-size:28px;font-weight:700;
+  letter-spacing:-0.5px;color:var(--dark);}
+.summary-sub{font-size:11px;color:var(--sub);margin-top:4px;}
+
+/* ── TOOLBAR ── */
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:20px;}
+.search-box{flex:1;min-width:200px;max-width:340px;position:relative;}
+.search-box svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);
+  width:15px;height:15px;color:var(--sub);}
+.search-box input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--border);
+  border-radius:9px;font-size:13.5px;font-family:'DM Sans',sans-serif;
+  background:var(--white);color:var(--dark);outline:none;transition:border-color 0.2s;}
+.search-box input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-lt);}
+.filter-select{padding:9px 14px;border:1px solid var(--border);border-radius:9px;
+  font-size:13px;font-family:'DM Sans',sans-serif;background:var(--white);
+  color:var(--dark);outline:none;cursor:pointer;}
+.filter-select:focus{border-color:var(--gold);}
+.toolbar-right{margin-left:auto;font-size:12.5px;color:var(--sub);}
+#clientCount{font-weight:600;color:var(--dark);}
+
+/* ── TABLE WRAPPER ── */
+.table-wrap{background:var(--white);border:1px solid var(--border);
+  border-radius:16px;overflow:hidden;}
+.clients-table{width:100%;border-collapse:collapse;}
+.clients-table thead tr{background:var(--cream);border-bottom:1px solid var(--border);}
+.clients-table th{padding:11px 16px;text-align:left;font-size:11px;font-weight:600;
+  color:var(--sub);text-transform:uppercase;letter-spacing:0.06em;
+  white-space:nowrap;cursor:pointer;user-select:none;}
+.clients-table th:hover{color:var(--gold-dk);}
+.clients-table th .sort-icon{display:inline-block;margin-left:3px;opacity:0.4;font-size:9px;}
+.clients-table th.sorted .sort-icon{opacity:1;color:var(--gold);}
+.clients-table td{padding:13px 16px;font-size:13.5px;border-bottom:1px solid var(--border);
+  vertical-align:middle;}
+.clients-table tbody tr:last-child td{border-bottom:none;}
+.clients-table tbody tr{transition:background 0.12s;}
+.clients-table tbody tr:hover{background:#FDFCFA;}
+.clients-table tbody tr.hidden-row{display:none;}
+
+/* Client cell */
+.client-cell{display:flex;align-items:center;gap:10px;}
+.client-avatar{width:36px;height:36px;border-radius:10px;
+  background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif;font-size:15px;font-weight:700;
+  color:var(--gold-dk);flex-shrink:0;}
+.client-name{font-weight:600;color:var(--dark);font-size:14px;}
+.client-id{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;margin-top:2px;}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;
+  border-radius:20px;font-size:11.5px;font-weight:600;}
+.badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;}
+.badge-active{background:var(--success-lt);color:var(--success);}
+.badge-branding-off{background:var(--gold-lt);color:var(--gold-dk);}
+.badge-branding-on{background:var(--cream2);color:var(--mid);}
+
+/* Stat pills */
+.stat-pill{display:inline-flex;align-items:center;gap:5px;
+  font-size:13px;font-weight:600;color:var(--dark);}
+.stat-pill-sub{font-size:11px;color:var(--sub);font-weight:400;margin-left:2px;}
+
+/* Usage bar */
+.usage-wrap{min-width:100px;}
+.usage-bar-bg{height:6px;background:var(--cream2);border-radius:3px;
+  overflow:hidden;margin-bottom:4px;}
+.usage-bar-fill{height:100%;border-radius:3px;transition:width 0.3s;}
+.usage-bar-fill.success{background:var(--success);}
+.usage-bar-fill.warning{background:var(--warning);}
+.usage-bar-fill.danger{background:var(--danger);}
+.usage-text{font-size:11px;color:var(--sub);display:flex;justify-content:space-between;}
+.usage-unlimited{font-size:12px;color:var(--sub);font-style:italic;}
+
+/* Action buttons */
+.actions{display:flex;gap:5px;flex-wrap:nowrap;}
+.btn-xs{padding:5px 10px;font-size:11.5px;border-radius:7px;border:none;
+  cursor:pointer;font-weight:600;text-decoration:none;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:3px;transition:all 0.15s;
+  font-family:'DM Sans',sans-serif;}
+.btn-xs svg{width:11px;height:11px;}
+.btn-xs-edit{background:var(--gold-lt);color:var(--gold-dk);}
+.btn-xs-edit:hover{background:rgba(184,146,74,0.2);}
+.btn-xs-analytics{background:var(--success-lt);color:var(--success);}
+.btn-xs-analytics:hover{background:#dcfce7;}
+.btn-xs-faqs{background:#fdf2f8;color:#9d174d;}
+.btn-xs-faqs:hover{background:#fce7f3;}
+.btn-xs-view{background:var(--cream2);color:var(--mid);}
+.btn-xs-view:hover{background:var(--panel);color:var(--dark);}
+.btn-xs-delete{background:var(--danger-lt);color:var(--danger);}
+.btn-xs-delete:hover{background:#fecaca;}
+
+/* Warning badge */
+.warn-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;
+  background:var(--warning-lt);color:var(--warning);border-radius:6px;
+  font-size:10px;font-weight:700;margin-left:4px;}
+
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:72px 24px;}
+.empty-icon{width:64px;height:64px;background:var(--gold-lt);border-radius:18px;
+  display:flex;align-items:center;justify-content:center;margin:0 auto 18px;}
+.empty-icon svg{width:28px;height:28px;color:var(--gold);}
+.empty-state h2{font-family:'Fraunces',serif;font-size:20px;font-weight:700;margin-bottom:8px;}
+.empty-state p{color:var(--sub);font-size:14px;margin-bottom:22px;font-weight:300;}
+
+/* ── DELETE MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(28,25,23,0.5);
+  backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center;padding:16px;}
+.modal-box{background:var(--white);border:1px solid var(--border);border-radius:20px;
+  padding:32px;max-width:400px;width:100%;text-align:center;
+  box-shadow:0 20px 60px rgba(0,0,0,0.12);animation:slideUp 0.25s ease;}
+.modal-box .del-icon{width:52px;height:52px;border-radius:14px;background:var(--danger-lt);
+  display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+.modal-box .del-icon svg{width:22px;height:22px;color:var(--danger);}
+.modal-box h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:8px;}
+.modal-box p{color:var(--sub);font-size:14px;line-height:1.6;margin-bottom:4px;}
+.del-name{font-weight:700;color:var(--danger);background:var(--danger-lt);
+  padding:5px 12px;border-radius:7px;display:inline-block;margin:8px 0 18px;font-size:14px;}
+.modal-actions{display:flex;gap:10px;margin-top:4px;}
+.btn-cancel{flex:1;padding:12px;background:transparent;color:var(--mid);
+  border:1.5px solid var(--border);border-radius:9px;font-weight:600;
+  font-size:14px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;}
+.btn-cancel:hover{border-color:var(--gold);color:var(--gold-dk);}
+.btn-delete{flex:1;padding:12px;background:var(--danger);color:#fff;border:none;
+  border-radius:9px;font-weight:600;font-size:14px;cursor:pointer;
+  font-family:'DM Sans',sans-serif;transition:background 0.15s;}
+.btn-delete:hover{background:#dc2626;}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:20px;right:20px;padding:12px 18px;border-radius:10px;
+  font-size:14px;font-weight:600;color:#fff;z-index:9999;opacity:0;
+  transform:translateY(10px);transition:all 0.3s;pointer-events:none;max-width:300px;}
+.toast.show{opacity:1;transform:translateY(0);}
+.toast.success{background:var(--success);}
+.toast.error{background:var(--danger);}
+
+/* Mobile: hide some table columns */
+@media(max-width:1100px){
+  .col-conversations,.col-faqs{display:none;}
+}
+@media(max-width:800px){
+  .col-vertical,.col-branding,.col-last{display:none;}
+  .actions{flex-wrap:wrap;}
+}
+@media(max-width:600px){
+  .topbar{padding:0 16px;}
+  .col-leads{display:none;}
+}
+
+/* ── MOBILE CARDS ── */
+.client-cards{display:none;}
+@media(max-width:640px){
+  .table-wrap{display:none;}
+  .client-cards{display:flex;flex-direction:column;gap:12px;}
+}
+.client-card-m{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:16px;}
+.client-card-m-header{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.client-card-m-name{font-weight:600;color:var(--dark);font-size:14px;}
+.client-card-m-id{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;margin-top:2px;}
+.client-card-m-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;}
+.stat-mini{background:var(--cream);border-radius:8px;padding:8px 10px;text-align:center;}
+.stat-mini-val{font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--dark);}
+.stat-mini-label{font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:0.05em;}
+.client-card-m-actions{display:flex;gap:6px;flex-wrap:wrap;}
+
+@keyframes slideUp{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <a href="/dashboard" class="topbar-brand">
+    <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi">
+    <span>Lumvi</span>
+  </a>
+  <div class="topbar-right">
+    <span class="plan-chip">{{ plan_type }}</span>
+    <a href="/dashboard" class="btn-link">Dashboard</a>
+    <a href="/logout"    class="btn-link">Logout</a>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- PAGE HEADER -->
+  <div class="page-header">
+    <div>
+      <h1>My Clients</h1>
+      <p>{{ client_count }} client{{ 's' if client_count != 1 else '' }} · {{ slots_display }} slot{{ '' if slots_display == 'Unlimited' else 's' }} total</p>
+    </div>
+    <a href="/dashboard" class="btn-primary" onclick="openNewClientModal(); return false;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Client
+    </a>
+  </div>
+
+  <!-- SUMMARY CARDS -->
+  <div class="summary-row">
+    <div class="summary-card">
+      <div class="summary-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Total Clients
+      </div>
+      <div class="summary-value">{{ client_count }}</div>
+      <div class="summary-sub">of {{ slots_display }} allowed</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Total Leads
+      </div>
+      <div class="summary-value">{{ total_leads }}</div>
+      <div class="summary-sub">across all clients</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Conversations
+      </div>
+      <div class="summary-value">{{ total_convos }}</div>
+      <div class="summary-sub">total messages handled</div>
+    </div>
+    <div class="summary-card">
+      <div class="summary-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        FAQs Trained
+      </div>
+      <div class="summary-value">{{ total_faqs }}</div>
+      <div class="summary-sub">knowledge entries</div>
+    </div>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" id="searchInput" placeholder="Search by company name…" oninput="filterTable()">
+    </div>
+    <select class="filter-select" id="filterActivity" onchange="filterTable()">
+      <option value="">All activity</option>
+      <option value="today">Active today</option>
+      <option value="week">Active this week</option>
+      <option value="never">No activity</option>
+    </select>
+    <select class="filter-select" id="filterBranding" onchange="filterTable()">
+      <option value="">All branding</option>
+      <option value="removed">Branding removed</option>
+      <option value="visible">Branding visible</option>
+    </select>
+    <div class="toolbar-right">Showing <span id="clientCount">{{ client_count }}</span> client{{ 's' if client_count != 1 else '' }}</div>
+  </div>
+
+  {% if clients %}
+
+  <!-- DESKTOP TABLE -->
+  <div class="table-wrap">
+    <table class="clients-table" id="clientsTable">
+      <thead>
+        <tr>
+          <th onclick="sortTable(0)">Company <span class="sort-icon">↕</span></th>
+          <th class="col-vertical">Industry</th>
+          <th class="col-faqs" onclick="sortTable(2)">FAQs <span class="sort-icon">↕</span></th>
+          <th onclick="sortTable(3)">Leads <span class="sort-icon">↕</span></th>
+          <th class="col-conversations" onclick="sortTable(4)">Convos <span class="sort-icon">↕</span></th>
+          <th>Daily Usage</th>
+          <th class="col-branding">Branding</th>
+          <th class="col-last">Last Active</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for client in clients %}
+        <tr id="row-{{ client.cid }}"
+            data-name="{{ client.name | lower }}"
+            data-activity="{{ 'today' if client.last_active_str == 'Today' else ('week' if 'ago' in client.last_active_str and 'd ago' in client.last_active_str and client.last_active_str[0]|int < 8 else ('never' if client.last_active_str == 'No activity' else 'old')) }}"
+            data-branding="{{ 'removed' if client.branding_removed else 'visible' }}">
+
+          <!-- Company -->
+          <td>
+            <div class="client-cell">
+              <div class="client-avatar" style="border-color:{{ client.primary_color }}20;background:{{ client.primary_color }}15;color:{{ client.primary_color }};">
+                {{ client.name[0]|upper }}
+              </div>
+              <div>
+                <div class="client-name">
+                  {{ client.name }}
+                  {% if client.near_limit %}
+                  <span class="warn-badge">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                    Near limit
+                  </span>
+                  {% endif %}
+                </div>
+                <div class="client-id">{{ client.cid }}</div>
+              </div>
+            </div>
+          </td>
+
+          <!-- Industry -->
+          <td class="col-vertical" style="color:var(--mid);font-size:13px;">{{ client.vertical }}</td>
+
+          <!-- FAQs -->
+          <td class="col-faqs">
+            <span class="stat-pill">{{ client.faqs_count }}</span>
+          </td>
+
+          <!-- Leads -->
+          <td>
+            <span class="stat-pill" style="color:var(--success);">{{ client.leads_count }}</span>
+          </td>
+
+          <!-- Conversations -->
+          <td class="col-conversations">
+            <span class="stat-pill">{{ client.conversations }}</span>
+          </td>
+
+          <!-- Daily usage bar -->
+          <td>
+            {% if client.daily_limit == 'Unlimited' %}
+              <span class="usage-unlimited">Unlimited</span>
+            {% else %}
+              <div class="usage-wrap">
+                <div class="usage-bar-bg">
+                  <div class="usage-bar-fill {{ client.usage_class }}" style="width:{{ client.usage_pct }}%;"></div>
+                </div>
+                <div class="usage-text">
+                  <span>{{ client.daily_msgs }}</span>
+                  <span>{{ client.daily_limit }}</span>
+                </div>
+              </div>
+            {% endif %}
+          </td>
+
+          <!-- Branding -->
+          <td class="col-branding">
+            {% if client.branding_removed %}
+              <span class="badge badge-branding-off">Removed</span>
+            {% else %}
+              <span class="badge badge-branding-on">Visible</span>
+            {% endif %}
+          </td>
+
+          <!-- Last active -->
+          <td class="col-last" style="color:var(--sub);font-size:13px;">
+            {{ client.last_active_str }}
+          </td>
+
+          <!-- Actions -->
+          <td>
+            <div class="actions">
+              <a href="/faq-manager?client_id={{ client.cid }}" class="btn-xs btn-xs-faqs" title="Manage FAQs">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                FAQs
+              </a>
+              {% if plan_limits.customization %}
+              <a href="/customize?client_id={{ client.cid }}" class="btn-xs btn-xs-edit" title="Edit branding">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                Brand
+              </a>
+              {% endif %}
+              {% if plan_limits.analytics %}
+              <a href="/analytics?client_id={{ client.cid }}" class="btn-xs btn-xs-analytics" title="View analytics">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                Stats
+              </a>
+              {% endif %}
+              <button class="btn-xs btn-xs-delete"
+                data-id="{{ client.cid }}"
+                data-name="{{ client.name }}"
+                onclick="confirmDelete(this.dataset.id, this.dataset.name)"
+                title="Delete client">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <!-- No results state (shown by JS when search finds nothing) -->
+    <div id="noResults" style="display:none;text-align:center;padding:48px 20px;color:var(--sub);">
+      No clients match your search.
+    </div>
+  </div>
+
+  <!-- MOBILE CARDS -->
+  <div class="client-cards">
+    {% for client in clients %}
+    <div class="client-card-m" id="card-{{ client.cid }}">
+      <div class="client-card-m-header">
+        <div class="client-avatar" style="border-color:{{ client.primary_color }}20;background:{{ client.primary_color }}15;color:{{ client.primary_color }};">
+          {{ client.name[0]|upper }}
+        </div>
+        <div>
+          <div class="client-card-m-name">{{ client.name }}</div>
+          <div class="client-card-m-id">{{ client.cid }}</div>
+        </div>
+        {% if client.branding_removed %}
+        <span class="badge badge-branding-off" style="margin-left:auto;">Removed</span>
+        {% endif %}
+      </div>
+      <div class="client-card-m-stats">
+        <div class="stat-mini">
+          <div class="stat-mini-val">{{ client.faqs_count }}</div>
+          <div class="stat-mini-label">FAQs</div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-val" style="color:var(--success);">{{ client.leads_count }}</div>
+          <div class="stat-mini-label">Leads</div>
+        </div>
+        <div class="stat-mini">
+          <div class="stat-mini-val">{{ client.conversations }}</div>
+          <div class="stat-mini-label">Convos</div>
+        </div>
+      </div>
+      <div class="client-card-m-actions">
+        <a href="/faq-manager?client_id={{ client.cid }}" class="btn-xs btn-xs-faqs">FAQs</a>
+        {% if plan_limits.customization %}<a href="/customize?client_id={{ client.cid }}" class="btn-xs btn-xs-edit">Brand</a>{% endif %}
+        {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.cid }}" class="btn-xs btn-xs-analytics">Stats</a>{% endif %}
+        <button class="btn-xs btn-xs-delete" data-id="{{ client.cid }}" data-name="{{ client.name }}" onclick="confirmDelete(this.dataset.id, this.dataset.name)">Delete</button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+
+  <!-- EMPTY STATE -->
+  <div class="table-wrap">
+    <div class="empty-state">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+      </div>
+      <h2>No clients yet</h2>
+      <p>Create your first chatbot client to start building your agency business.</p>
+      <a href="/dashboard" class="btn-primary" style="display:inline-flex;margin:0 auto;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Create First Client
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+</div><!-- /page -->
+
+<!-- DELETE MODAL -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal-box">
+    <div class="del-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      </svg>
+    </div>
+    <h2>Delete Client?</h2>
+    <p>You are about to permanently delete:</p>
+    <div class="del-name" id="deleteClientName">—</div>
+    <p style="font-size:13px;">All FAQs, leads and conversations will be removed. <strong>This cannot be undone.</strong></p>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+      <button class="btn-delete" id="confirmDeleteBtn" onclick="executeDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── Delete modal ──────────────────────────────────────────────────────
+let _pendingDelete = null;
+
+function confirmDelete(clientId, clientName) {
+  _pendingDelete = clientId;
+  document.getElementById('deleteClientName').textContent = clientName;
+  document.getElementById('deleteModal').style.display = 'flex';
+}
+
+function closeDeleteModal() {
+  _pendingDelete = null;
+  document.getElementById('deleteModal').style.display = 'none';
+}
+
+async function executeDelete() {
+  if (!_pendingDelete) return;
+  const btn = document.getElementById('confirmDeleteBtn');
+  btn.textContent = 'Deleting…'; btn.disabled = true;
+
+  try {
+    const res  = await fetch(`/api/clients/${_pendingDelete}/delete`, {
+      method: 'DELETE', headers: {'Content-Type': 'application/json'}
+    });
+    const data = await res.json();
+    if (data.success) {
+      ['row-', 'card-'].forEach(pfx => {
+        const el = document.getElementById(pfx + _pendingDelete);
+        if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; setTimeout(() => el.remove(), 300); }
+      });
+      closeDeleteModal();
+      showToast('Client deleted', 'success');
+      // Update count
+      const count = document.querySelectorAll('#clientsTable tbody tr:not([style*="display: none"])').length;
+      document.getElementById('clientCount').textContent = Math.max(0, count - 1);
+    } else {
+      showToast(data.error || 'Delete failed', 'error');
+      btn.textContent = 'Delete'; btn.disabled = false;
+    }
+  } catch {
+    showToast('Network error', 'error');
+    btn.textContent = 'Delete'; btn.disabled = false;
+  }
+}
+
+// ── Search + filter ───────────────────────────────────────────────────
+function filterTable() {
+  const q        = document.getElementById('searchInput').value.toLowerCase().trim();
+  const activity = document.getElementById('filterActivity').value;
+  const branding = document.getElementById('filterBranding').value;
+  const rows     = document.querySelectorAll('#clientsTable tbody tr[id^="row-"]');
+  let   visible  = 0;
+
+  rows.forEach(row => {
+    const name     = row.dataset.name    || '';
+    const act      = row.dataset.activity || '';
+    const brand    = row.dataset.branding || '';
+    const matchQ   = !q        || name.includes(q);
+    const matchAct = !activity || act === activity;
+    const matchBr  = !branding || brand === branding;
+    const show     = matchQ && matchAct && matchBr;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+
+  document.getElementById('clientCount').textContent = visible;
+  document.getElementById('noResults').style.display  = visible === 0 ? 'block' : 'none';
+}
+
+// ── Column sort ────────────────────────────────────────────────────────
+let _sortCol = -1, _sortAsc = true;
+
+function sortTable(col) {
+  const tbody = document.querySelector('#clientsTable tbody');
+  const rows  = Array.from(tbody.querySelectorAll('tr[id^="row-"]'));
+  _sortAsc    = (_sortCol === col) ? !_sortAsc : true;
+  _sortCol    = col;
+
+  rows.sort((a, b) => {
+    const aVal = a.cells[col]?.textContent.trim() || '';
+    const bVal = b.cells[col]?.textContent.trim() || '';
+    const aNum = parseFloat(aVal); const bNum = parseFloat(bVal);
+    const cmp  = (!isNaN(aNum) && !isNaN(bNum))
+                 ? aNum - bNum
+                 : aVal.localeCompare(bVal);
+    return _sortAsc ? cmp : -cmp;
+  });
+
+  rows.forEach(r => tbody.appendChild(r));
+
+  // Update sort icon styling
+  document.querySelectorAll('.clients-table th').forEach((th, i) => {
+    th.classList.toggle('sorted', i === col);
+    const icon = th.querySelector('.sort-icon');
+    if (icon) icon.textContent = (i === col) ? (_sortAsc ? '↑' : '↓') : '↕';
+  });
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────
+function showToast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `toast ${type} show`;
+  setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+
+// ── Keyboard / backdrop close ─────────────────────────────────────────
+document.getElementById('deleteModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('deleteModal')) closeDeleteModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeDeleteModal();
+});
+</script>
+</body>
+</html>

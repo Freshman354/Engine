@@ -204,6 +204,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
             Dashboard
             {% if clients %}<span class="nav-badge">{{ clients|length }}</span>{% endif %}
         </a>
+        {% if plan_type in ('pro', 'agency', 'enterprise') or user.is_admin %}
+        <a href="/agency/clients" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                <circle cx="9" cy="7" r="4"/>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+            My Clients
+        </a>
+        {% endif %}
         <a href="/sales" class="nav-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
             Sales Page
@@ -212,7 +223,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
             Affiliate
         </a>
-        {% if plan_type in ('agency', 'enterprise') or user.is_admin %}
+        {% if plan_type in ('pro', 'agency', 'enterprise') or user.is_admin %}
         <a href="/client-portal" class="nav-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             Client Portal

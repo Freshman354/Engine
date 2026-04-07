@@ -1868,6 +1868,96 @@ def get_conversation_message_count(client_id: str) -> int:
         return 0
 
 
+def get_clients_enriched_stats(client_ids: list) -> dict:
+    """
+    Fetch stats for multiple clients in bulk — one query per metric
+    instead of N×4 individual queries. Used by /agency/clients.
+
+    Returns dict keyed by client_id:
+    {
+        'faqs_count':    int,
+        'leads_count':   int,
+        'conversations': int,
+        'daily_msgs':    int,
+        'last_active':   datetime | None,
+    }
+    """
+    if not client_ids:
+        return {}
+
+    # Build a default result so every client_id is always present
+    result = {
+        cid: {
+            'faqs_count':    0,
+            'leads_count':   0,
+            'conversations': 0,
+            'daily_msgs':    0,
+            'last_active':   None,
+        }
+        for cid in client_ids
+    }
+
+    try:
+        conn, cursor = get_db()
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+
+        # ── FAQs per client ───────────────────────────────────────────
+        cursor.execute(
+            """SELECT client_id, COUNT(*) AS cnt
+               FROM faqs
+               WHERE client_id = ANY(%s) AND is_active = TRUE
+               GROUP BY client_id""",
+            (client_ids,)
+        )
+        for row in cursor.fetchall():
+            result[row['client_id']]['faqs_count'] = int(row['cnt'])
+
+        # ── Leads per client ──────────────────────────────────────────
+        cursor.execute(
+            """SELECT client_id, COUNT(*) AS cnt
+               FROM leads
+               WHERE client_id = ANY(%s)
+               GROUP BY client_id""",
+            (client_ids,)
+        )
+        for row in cursor.fetchall():
+            result[row['client_id']]['leads_count'] = int(row['cnt'])
+
+        # ── Total conversations + last active ─────────────────────────
+        cursor.execute(
+            """SELECT client_id,
+                      COUNT(*) AS cnt,
+                      MAX(timestamp) AS last_ts
+               FROM conversations
+               WHERE client_id = ANY(%s)
+               GROUP BY client_id""",
+            (client_ids,)
+        )
+        for row in cursor.fetchall():
+            result[row['client_id']]['conversations'] = int(row['cnt'])
+            result[row['client_id']]['last_active']   = row['last_ts']
+
+        # ── Daily messages (today only) ───────────────────────────────
+        cursor.execute(
+            """SELECT client_id, COUNT(*) AS cnt
+               FROM conversations
+               WHERE client_id = ANY(%s)
+                 AND DATE(timestamp) = %s
+               GROUP BY client_id""",
+            (client_ids, today)
+        )
+        for row in cursor.fetchall():
+            result[row['client_id']]['daily_msgs'] = int(row['cnt'])
+
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_clients_enriched_stats] {e}")
+
+    return result
+
+
 def save_conversation_summary(client_id: str, summary: str, message_count: int) -> None:
     """Persist a Gemini-generated conversation summary."""
     try:
