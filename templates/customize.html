@@ -1,872 +1,697 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Theme Customization - Chatbot Admin</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f9fafb;
-            min-height: 100vh;
-        }
-        
-        .header {
-            background: white;
-            border-bottom: 1px solid #e5e7eb;
-            padding: 20px 40px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-        
-        .header h1 {
-            font-size: 24px;
-            color: #1f2937;
-        }
-        
-        .header p {
-            color: #6b7280;
-            margin-top: 4px;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 40px;
-            display: grid;
-            grid-template-columns: 1fr 400px;
-            gap: 32px;
-        }
-        
-        .form-section {
-            background: white;
-            border-radius: 12px;
-            padding: 32px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-        
-        .section-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #1f2937;
-            margin-bottom: 24px;
-            padding-bottom: 12px;
-            border-bottom: 2px solid #e5e7eb;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .form-group {
-            margin-bottom: 24px;
-        }
-        
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #374151;
-            font-size: 14px;
-        }
-        
-        .form-group input,
-        .form-group textarea {
-            width: 100%;
-            padding: 12px 16px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 14px;
-            font-family: inherit;
-            transition: border-color 0.2s;
-        }
-        
-        .form-group input:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Theme Customization — Lumvi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
+  --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
+  --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#fff;
+  --success:#16A34A;--success-lt:#F0FDF4;
+  --warning:#D97706;--warning-lt:#FFFBEB;
+  --danger:#EF4444;--danger-lt:#FEF2F2;
+  --form-w:560px;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;}
 
-        .form-group input:disabled {
-            background: #f9fafb;
-            color: #9ca3af;
-            cursor: not-allowed;
-        }
-        
-        .form-group textarea {
-            resize: vertical;
-            min-height: 80px;
-        }
-        
-        .color-input-group {
-            display: grid;
-            grid-template-columns: 1fr 60px;
-            gap: 12px;
-            align-items: center;
-        }
-        
-        .color-preview {
-            width: 60px;
-            height: 45px;
-            border-radius: 8px;
-            border: 2px solid #d1d5db;
-            cursor: pointer;
-        }
-        
-        .hint {
-            font-size: 12px;
-            color: #6b7280;
-            margin-top: 4px;
-        }
+/* TOPBAR */
+.topbar{background:var(--white);border-bottom:1px solid var(--border);padding:0 28px;height:60px;
+  display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.topbar-brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.topbar-brand img{width:32px;height:32px;border-radius:8px;object-fit:cover;}
+.topbar-brand span{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.plan-badge{padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;border:1px solid;}
+.plan-free{background:#f1f5f9;color:#64748b;border-color:#e2e8f0;}
+.plan-starter{background:#fdf4ff;color:#9333ea;border-color:#e9d5ff;}
+.plan-solo,.plan-pro,.plan-agency,.plan-enterprise{background:var(--gold-lt);color:var(--gold-dk);border-color:rgba(184,146,74,0.3);}
+.btn-link{padding:7px 14px;color:var(--sub);border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:500;text-decoration:none;transition:all 0.15s;}
+.btn-link:hover{color:var(--dark);}
 
-        /* White-Label Checkbox Styles */
-        .checkbox-container {
-            display: flex;
-            align-items: center;
-            padding: 16px;
-            background: #f9fafb;
-            border-radius: 8px;
-            border: 2px solid #e5e7eb;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
+/* LAYOUT */
+.page-wrap{display:grid;grid-template-columns:var(--form-w) 1fr;min-height:calc(100vh - 60px);}
+@media(max-width:1100px){.page-wrap{grid-template-columns:1fr;}}
 
-        .checkbox-container:hover {
-            border-color: #667eea;
-            background: #f3f4f6;
-        }
+/* FORM SIDE */
+.form-side{padding:28px;max-width:var(--form-w);}
+.form-header{margin-bottom:24px;}
+.form-header h1{font-family:'Fraunces',serif;font-size:22px;font-weight:700;letter-spacing:-0.3px;margin-bottom:4px;}
+.form-header p{font-size:13px;color:var(--sub);}
+.client-chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;background:var(--cream2);border-radius:6px;font-size:11px;font-family:'DM Mono',monospace;color:var(--mid);margin-top:6px;}
 
-        .checkbox-container input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-            margin-right: 12px;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
+/* CARDS */
+.card{background:var(--white);border:1px solid var(--border);border-radius:16px;margin-bottom:14px;overflow:hidden;}
+.card-header{display:flex;align-items:center;gap:10px;padding:15px 18px;border-bottom:1px solid transparent;cursor:pointer;user-select:none;transition:border-color 0.2s;}
+.card-header.open{border-bottom-color:var(--border);}
+.card-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.card-icon svg{width:15px;height:15px;}
+.card-text{flex:1;}
+.card-text h2{font-size:13.5px;font-weight:700;color:var(--dark);}
+.card-text p{font-size:12px;color:var(--sub);margin-top:1px;}
+.chevron{width:16px;height:16px;color:var(--sub);transition:transform 0.2s;flex-shrink:0;}
+.card-header.open .chevron{transform:rotate(180deg);}
+.card-body{padding:18px;display:none;}
+.card-body.open{display:block;}
 
-        .checkbox-label {
-            font-size: 15px;
-            color: #1f2937;
-            font-weight: 500;
-        }
+/* FIELDS */
+.field{margin-bottom:16px;}
+.field:last-child{margin-bottom:0;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+label{display:block;font-size:11px;font-weight:600;color:var(--mid);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.07em;}
+.label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;}
+.label-row label{margin-bottom:0;}
+.hint{font-size:11px;color:var(--sub);margin-top:4px;line-height:1.5;}
+input[type=text],input[type=url],input[type=email],textarea,select{
+  width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;
+  font-size:13.5px;font-family:'DM Sans',sans-serif;color:var(--dark);
+  background:var(--cream);outline:none;transition:all 0.2s;}
+input[type=text]:focus,input[type=url]:focus,input[type=email]:focus,textarea:focus{
+  border-color:var(--gold);background:var(--white);box-shadow:0 0 0 3px var(--gold-lt);}
+textarea{resize:vertical;min-height:72px;line-height:1.5;}
+.color-row{display:flex;align-items:center;gap:8px;}
+.color-row input[type=text]{flex:1;font-family:'DM Mono',monospace;font-size:13px;}
+input[type=color]{width:42px;height:42px;padding:2px;border:1.5px solid var(--border);border-radius:9px;cursor:pointer;background:var(--cream);}
+input[type=color]::-webkit-color-swatch-wrapper{padding:2px;}
+input[type=color]::-webkit-color-swatch{border-radius:6px;border:none;}
 
-        .checkbox-label.grayed {
-            color: #9ca3af;
-        }
+/* UPLOAD ZONE */
+.upload-zone{border:1.5px dashed var(--border);border-radius:10px;padding:18px;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--cream);}
+.upload-zone:hover,.upload-zone.has-file{border-color:var(--gold);background:var(--gold-lt);}
+.upload-zone input{display:none;}
+.upload-zone-icon{width:20px;height:20px;color:var(--sub);margin-bottom:6px;}
+.upload-zone p{font-size:12px;color:var(--sub);}
+.upload-fname{font-size:12px;color:var(--gold-dk);font-weight:600;margin-top:3px;}
+.logo-prev{width:44px;height:44px;border-radius:9px;object-fit:contain;display:none;margin:0 auto 6px;}
 
-        .checkbox-container.disabled {
-            cursor: not-allowed;
-            opacity: 0.6;
-        }
+/* QUICK REPLIES */
+.qr-list{display:flex;flex-direction:column;gap:7px;margin-bottom:10px;}
+.qr-item{display:flex;align-items:center;gap:7px;}
+.qr-item input{flex:1;}
+.btn-rm{width:28px;height:28px;border:none;background:var(--danger-lt);color:var(--danger);border-radius:7px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background 0.15s;}
+.btn-rm:hover{background:#fecaca;}
+.btn-rm svg{width:11px;height:11px;}
+.btn-add{display:flex;align-items:center;gap:5px;padding:7px 13px;background:var(--cream2);border:1.5px dashed var(--border);border-radius:9px;font-size:13px;font-weight:600;color:var(--mid);cursor:pointer;transition:all 0.15s;font-family:'DM Sans',sans-serif;}
+.btn-add:hover{border-color:var(--gold);color:var(--gold-dk);background:var(--gold-lt);}
+.btn-add svg{width:12px;height:12px;}
 
-        .checkbox-container.disabled:hover {
-            border-color: #e5e7eb;
-            background: #f9fafb;
-        }
+/* TOGGLE */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:12px 13px;background:var(--cream);border-radius:9px;}
+.toggle-lbl{font-size:13.5px;font-weight:500;color:var(--dark);}
+.toggle-desc{font-size:11.5px;color:var(--sub);margin-top:1px;}
+.toggle{position:relative;width:42px;height:23px;flex-shrink:0;}
+.toggle input{opacity:0;width:0;height:0;}
+.tslider{position:absolute;inset:0;background:#D1D5DB;border-radius:12px;cursor:pointer;transition:background 0.2s;}
+.tslider::before{content:'';position:absolute;width:17px;height:17px;background:#fff;border-radius:50%;top:3px;left:3px;transition:transform 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2);}
+.toggle input:checked ~ .tslider{background:var(--gold);}
+.toggle input:checked ~ .tslider::before{transform:translateX(19px);}
+.toggle input:disabled ~ .tslider{opacity:0.45;cursor:not-allowed;}
 
-        .help-text {
-            display: block;
-            margin-top: 8px;
-            font-size: 13px;
-            padding: 8px 12px;
-            border-radius: 6px;
-        }
+/* LOCKED */
+.locked-wrap{position:relative;}
+.lock-over{position:absolute;inset:0;background:rgba(247,244,239,0.88);border-radius:9px;display:flex;align-items:center;justify-content:center;z-index:2;}
+.lock-chip{display:flex;align-items:center;gap:5px;padding:5px 11px;background:var(--white);border:1px solid var(--border);border-radius:20px;font-size:11.5px;font-weight:600;color:var(--mid);}
+.lock-chip svg{width:11px;height:11px;color:var(--warning);}
+.upgrade-box{padding:13px 15px;background:var(--warning-lt);border:1px solid rgba(217,119,6,0.2);border-radius:10px;display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;}
+.upgrade-box svg{width:16px;height:16px;color:var(--warning);flex-shrink:0;margin-top:1px;}
+.upgrade-box p{font-size:12.5px;color:#92400e;flex:1;line-height:1.55;}
+.upgrade-box a{color:var(--gold-dk);font-weight:700;text-decoration:none;}
 
-        .help-text.success {
-            background: #d1fae5;
-            color: #065f46;
-        }
+/* WEBHOOK */
+.wh-row{display:flex;gap:8px;align-items:flex-end;}
+.wh-row .field{flex:1;margin-bottom:0;}
+.btn-test{padding:9px 15px;background:var(--white);border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;color:var(--mid);cursor:pointer;transition:all 0.15s;white-space:nowrap;flex-shrink:0;}
+.btn-test:hover{border-color:var(--gold);color:var(--gold-dk);}
+.wh-status{margin-top:5px;font-size:11.5px;font-weight:600;display:none;}
+.wh-ok{color:var(--success);display:block;}
+.wh-fail{color:var(--danger);display:block;}
 
-        .help-text.warning {
-            background: #fef3c7;
-            color: #92400e;
-        }
+/* SAVE BAR */
+.save-bar{background:var(--white);border-top:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;position:sticky;bottom:0;z-index:40;}
+.save-info{font-size:12.5px;color:var(--sub);}
+.save-actions{display:flex;gap:8px;}
+.btn-cancel{padding:9px 18px;background:var(--white);border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;font-weight:600;font-family:'DM Sans',sans-serif;color:var(--mid);cursor:pointer;text-decoration:none;transition:all 0.15s;display:inline-flex;align-items:center;gap:5px;}
+.btn-cancel:hover{border-color:var(--gold);color:var(--gold-dk);}
+.btn-save{padding:9px 22px;background:var(--gold);border:none;border-radius:9px;font-size:13.5px;font-weight:700;font-family:'DM Sans',sans-serif;color:#fff;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(184,146,74,0.3);transition:all 0.2s;}
+.btn-save:hover{background:var(--gold-dk);}
+.btn-save:disabled{opacity:0.6;cursor:not-allowed;}
+.btn-save svg{width:13px;height:13px;}
+.spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
 
-        .upgrade-link {
-            display: inline-block;
-            margin-top: 12px;
-            padding: 8px 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-decoration: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            transition: transform 0.2s;
-        }
+/* PREVIEW SIDE */
+.preview-side{background:var(--panel);border-left:1px solid var(--border);padding:28px;
+  display:flex;flex-direction:column;align-items:center;
+  position:sticky;top:60px;height:calc(100vh - 60px);overflow-y:auto;}
+@media(max-width:1100px){.preview-side{display:none;}}
+.preview-lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--sub);margin-bottom:18px;display:flex;align-items:center;gap:8px;width:340px;}
+.preview-lbl::before,.preview-lbl::after{content:'';flex:1;height:1px;background:var(--border);}
 
-        .upgrade-link:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-        }
+/* PREVIEW TABS */
+.prev-tabs{display:flex;background:var(--cream2);border-radius:9px;padding:3px;gap:2px;margin-bottom:16px;width:340px;}
+.prev-tab{flex:1;padding:6px 8px;border-radius:7px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--sub);background:transparent;transition:all 0.15s;}
+.prev-tab.active{background:var(--white);color:var(--dark);box-shadow:0 1px 4px rgba(0,0,0,0.08);}
 
-        .plan-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            background: #10b981;
-            color: white;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-        }
+/* WIDGET PREVIEW */
+.widget{width:340px;background:var(--white);border-radius:18px;overflow:hidden;
+  box-shadow:0 20px 60px rgba(28,25,23,0.14),0 0 0 1px var(--border);}
+.w-header{padding:13px 15px;display:flex;align-items:center;gap:10px;color:#fff;}
+.w-av{width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,0.2);
+  display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;overflow:hidden;}
+.w-av img{width:100%;height:100%;object-fit:cover;}
+.w-info{flex:1;}
+.w-name{font-size:14px;font-weight:700;}
+.w-status{font-size:11px;opacity:0.8;display:flex;align-items:center;gap:3px;margin-top:2px;}
+.w-status::before{content:'';width:6px;height:6px;border-radius:50%;background:#4ade80;}
+.w-close{opacity:0.7;}
+.w-close svg{width:15px;height:15px;}
+.w-body{padding:13px;background:var(--cream);min-height:230px;display:flex;flex-direction:column;gap:9px;}
+.bbl-bot{background:var(--white);border-radius:12px 12px 12px 4px;padding:9px 12px;
+  font-size:12.5px;line-height:1.5;color:var(--dark);box-shadow:0 1px 4px rgba(0,0,0,0.06);max-width:86%;align-self:flex-start;}
+.bbl-user{border-radius:12px 12px 4px 12px;padding:9px 12px;font-size:12.5px;line-height:1.5;color:#fff;max-width:86%;align-self:flex-end;}
+.qr-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px;}
+.qr-chip{padding:4px 10px;border-radius:20px;font-size:11.5px;font-weight:600;cursor:pointer;border:1.5px solid;}
+.w-input-row{padding:10px 13px;border-top:1px solid var(--border);display:flex;gap:7px;align-items:center;background:var(--white);}
+.w-input{flex:1;border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;
+  font-size:12px;color:var(--sub);font-family:'DM Sans',sans-serif;background:var(--cream);outline:none;}
+.w-send{width:30px;height:30px;border-radius:8px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;}
+.w-send svg{width:12px;height:12px;}
+.w-footer{padding:6px 13px;text-align:center;border-top:1px solid var(--border);}
+.w-footer a{font-size:10px;color:var(--sub);text-decoration:none;font-weight:500;}
+.w-footer a span{color:var(--gold);font-weight:700;}
 
-        /* ── Webhook / Integrations ── */
-        .webhook-row {
-            display: flex;
-            gap: 10px;
-            align-items: flex-start;
-        }
-        .webhook-row input { flex: 1; }
-        .btn-test {
-            padding: 12px 16px;
-            background: #f3f4f6;
-            color: #374151;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            white-space: nowrap;
-            transition: all 0.2s;
-            flex-shrink: 0;
-        }
-        .btn-test:hover { background: #e5e7eb; border-color: #9ca3af; }
-        .btn-test:disabled { opacity: 0.4; cursor: not-allowed; }
-        .webhook-status {
-            font-size: 13px;
-            margin-top: 6px;
-            padding: 8px 12px;
-            border-radius: 6px;
-            display: none;
-        }
-        .webhook-status.ok  { background: #d1fae5; color: #065f46; display: block; }
-        .webhook-status.err { background: #fee2e2; color: #991b1b; display: block; }
-        
-        .preview-panel {
-            position: sticky;
-            top: 20px;
-            height: fit-content;
-        }
-        
-        .preview-section {
-            background: white;
-            border-radius: 12px;
-            padding: 32px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-        
-        .preview-frame {
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 20px;
-            background: #f9fafb;
-            min-height: 400px;
-        }
-        
-        .preview-widget {
-            background: white;
-            border-radius: 12px;
-            padding: 20px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
-        
-        .preview-header {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 16px;
-            border-radius: 8px;
-            margin-bottom: 16px;
-        }
-        
-        .preview-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-        }
-        
-        .preview-name {
-            color: white;
-            font-weight: 600;
-        }
-        
-        .preview-message {
-            background: #f3f4f6;
-            padding: 12px 16px;
-            border-radius: 12px;
-            font-size: 14px;
-            line-height: 1.5;
-            color: #374151;
-        }
+/* EMBED */
+.embed-box{width:340px;background:#1C1917;border-radius:12px;padding:16px;font-family:'DM Mono',monospace;font-size:12px;color:#D4C4A8;line-height:1.7;}
+.embed-copy{width:100%;margin-top:10px;padding:9px;background:var(--white);border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;color:var(--mid);cursor:pointer;transition:all 0.15s;}
+.embed-copy:hover{border-color:var(--gold);color:var(--gold-dk);}
 
-        .preview-branding {
-            margin-top: 16px;
-            padding-top: 12px;
-            border-top: 1px solid #e5e7eb;
-            text-align: center;
-            font-size: 11px;
-            color: #9ca3af;
-        }
+/* SIMULATE */
+.btn-simulate{width:340px;margin-top:10px;display:flex;align-items:center;justify-content:center;gap:6px;padding:8px;background:var(--cream2);border:1.5px dashed var(--border);border-radius:10px;font-size:12.5px;font-weight:600;color:var(--mid);cursor:pointer;transition:all 0.15s;font-family:'DM Sans',sans-serif;}
+.btn-simulate:hover{border-color:var(--gold);color:var(--gold-dk);}
+.btn-simulate svg{width:12px;height:12px;}
 
-        .preview-branding a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
-        }
-
-        .preview-branding.hidden {
-            display: none;
-        }
-        
-        .button-group {
-            display: flex;
-            gap: 12px;
-            margin-top: 32px;
-            padding-top: 32px;
-            border-top: 2px solid #e5e7eb;
-        }
-        
-        .btn {
-            padding: 14px 28px;
-            border-radius: 8px;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            border: none;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            flex: 1;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
-        }
-        
-        .btn-secondary {
-            background: white;
-            color: #374151;
-            border: 2px solid #d1d5db;
-        }
-        
-        .btn-secondary:hover {
-            border-color: #667eea;
-            color: #667eea;
-        }
-        
-        .success-message {
-            background: #d1fae5;
-            color: #065f46;
-            padding: 16px;
-            border-radius: 8px;
-            margin-bottom: 24px;
-            display: none;
-            font-weight: 600;
-        }
-        
-        .error-message {
-            background: #fee2e2;
-            color: #991b1b;
-            padding: 16px;
-            border-radius: 8px;
-            margin-bottom: 24px;
-            display: none;
-            font-weight: 600;
-        }
-        
-        @media (max-width: 1200px) {
-            .container {
-                grid-template-columns: 1fr;
-            }
-            
-            .preview-panel {
-                position: relative;
-                top: 0;
-            }
-        }
-    </style>
+/* TOAST */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);
+  padding:11px 18px;border-radius:10px;font-size:13.5px;font-weight:600;color:#fff;
+  z-index:9999;opacity:0;transition:all 0.3s;pointer-events:none;white-space:nowrap;
+  display:flex;align-items:center;gap:7px;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.success{background:var(--success);}
+.toast.error{background:var(--danger);}
+.toast svg{width:14px;height:14px;flex-shrink:0;}
+hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
+</style>
 </head>
 <body>
-    <div class="header">
-        <h1>🎨 Theme Customization</h1>
-        <p>Customize your chatbot's appearance and branding</p>
+
+<div class="topbar">
+  <a href="/dashboard" class="topbar-brand">
+    <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi">
+    <span>Lumvi</span>
+  </a>
+  <div class="topbar-right">
+    <span class="plan-badge plan-{{ plan_type }}">{{ plan_type }}</span>
+    <a href="/faq-manager?client_id={{ client_id }}" class="btn-link">FAQs</a>
+    <a href="/dashboard" class="btn-link">Dashboard</a>
+  </div>
+</div>
+
+<div class="page-wrap">
+<div class="form-side">
+
+  <div class="form-header">
+    <h1>Theme Customization</h1>
+    <p>Design your chatbot experience and configure integrations.</p>
+    <div class="client-chip">{{ client.company_name if client else client_id }} &nbsp;·&nbsp; {{ client_id }}</div>
+  </div>
+
+  <!-- 1. BRANDING -->
+  <div class="card">
+    <div class="card-header open" onclick="tc(this)">
+      <div class="card-icon" style="background:var(--gold-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg></div>
+      <div class="card-text"><h2>Branding</h2><p>Company name, logo and colour</p></div>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
     </div>
-    
-    <div class="container">
-        <div class="form-section">
-            <div class="success-message" id="success-message">
-                ✅ Changes saved successfully!
-            </div>
-            
-            <div class="error-message" id="error-message">
-                ❌ Error saving changes. Please try again.
-            </div>
-            
-            <div class="section-title">Branding</div>
-            
-            <div class="form-group">
-                <label>Client ID</label>
-                <input type="text" id="client-id" placeholder="Loading..." value="" readonly>
-                <div class="hint">Unique identifier for this client</div>
-            </div>
-            
-            <div class="form-group">
-                <label>Company Name</label>
-                <input type="text" id="company-name" placeholder="Demo Company">
-            </div>
-            
-            <div class="form-group">
-                <label>Logo URL</label>
-                <input type="url" id="logo-url" placeholder="https://example.com/logo.png">
-                <div class="hint">Direct link to your logo image</div>
-            </div>
-            
-            <div class="form-group">
-                <label>Primary Color</label>
-                <div class="color-input-group">
-                    <input type="text" id="primary-color" placeholder="#667eea">
-                    <input type="color" id="primary-color-picker" class="color-preview">
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label>Secondary Color</label>
-                <div class="color-input-group">
-                    <input type="text" id="secondary-color" placeholder="#764ba2">
-                    <input type="color" id="secondary-color-picker" class="color-preview">
-                </div>
-            </div>
-            
-            <div class="section-title">Bot Settings</div>
-            
-            <div class="form-group">
-                <label>Bot Name</label>
-                <input type="text" id="bot-name" placeholder="Support Assistant">
-            </div>
-            
-            <div class="form-group">
-                <label>Welcome Message</label>
-                <textarea id="welcome-message" placeholder="Hi! How can I help you today?"></textarea>
-            </div>
-
-            <div class="form-group">
-                <label>Quick Reply Buttons <span style="font-size:11px;color:#94a3b8;font-weight:400;">(shown when chat opens — max 3)</span></label>
-                <div id="quick-replies-editor" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;">
-                    <input type="text" class="quick-reply-input" placeholder="e.g. What are your business hours?" maxlength="60">
-                    <input type="text" class="quick-reply-input" placeholder="e.g. Can I get a demo?" maxlength="60">
-                    <input type="text" class="quick-reply-input" placeholder="e.g. Contact us" maxlength="60">
-                </div>
-                <div class="hint">These buttons appear at the start of the chat to help visitors ask common questions quickly.</div>
-            </div>
-            
-            <!-- White-Label Branding Section -->
-            <div class="section-title">
-                White-Label Options
-                <span class="plan-badge" id="plan-badge" style="display: none;"></span>
-            </div>
-            
-            <div class="form-group" id="branding-group">
-                <label class="checkbox-container" id="branding-container">
-                    <input type="checkbox" 
-                           name="remove_branding" 
-                           id="remove-branding"
-                           onchange="updateBrandingPreview()">
-                    <span class="checkbox-label">Remove "Powered by FAQ Chatbot" branding</span>
-                </label>
-                <div class="help-text" id="branding-help-text"></div>
-                <a href="/upgrade" class="upgrade-link" id="upgrade-link" style="display: none;">Upgrade to Agency Plan →</a>
-            </div>
-
-            <!-- ═══════════════════════════════════════════════════════════
-                 INTEGRATIONS — Zapier / Make webhooks (Pro+ only)
-            ════════════════════════════════════════════════════════════ -->
-            <div class="section-title">
-                Integrations
-                <span class="plan-badge" id="integrations-badge" style="display:none; background:#6366f1;">PRO+</span>
-            </div>
-
-            <div class="form-group">
-                <label for="webhook-url">Zapier / Make Webhook URL</label>
-                <div class="webhook-row">
-                    <input type="url"
-                           id="webhook-url"
-                           placeholder="https://hooks.zapier.com/hooks/catch/..."
-                           disabled>
-                    <button class="btn-test"
-                            id="btn-test-webhook"
-                            onclick="testWebhook()"
-                            disabled>🧪 Test</button>
-                </div>
-                <div class="webhook-status" id="webhook-status"></div>
-                <div class="hint">Every time a lead is captured, Lumvi will POST the lead data to this URL.</div>
-                <div class="help-text" id="webhook-help-text"></div>
-                <a href="/upgrade" class="upgrade-link" id="upgrade-link-webhook" style="display:none;">
-                    Upgrade to Pro to unlock Zapier / Make →
-                </a>
-            </div>
-            <!-- ═══════════════════════════════════════════════════════════ -->
-
-            <div class="section-title">Contact Information</div>
-            
-            <div class="form-group">
-                <label>Email</label>
-                <input type="email" id="contact-email" placeholder="support@example.com">
-            </div>
-            
-            <div class="form-group">
-                <label>Phone</label>
-                <input type="tel" id="contact-phone" placeholder="+1-555-0100">
-            </div>
-            
-            <div class="form-group">
-                <label>Business Hours</label>
-                <input type="text" id="business-hours" placeholder="Mon-Fri, 9 AM - 6 PM EST">
-            </div>
-            
-            <div class="button-group">
-                <button class="btn btn-primary" onclick="saveChanges()">💾 Save Changes</button>
-                <button class="btn btn-secondary" onclick="loadConfig()">🔄 Reset</button>
-            </div>
+    <div class="card-body open">
+      <div class="field-row">
+        <div class="field">
+          <label>Company Name</label>
+          <input type="text" id="company_name" placeholder="Acme Corp"
+            value="{{ branding.get('branding', {}).get('company_name', client.company_name if client else '') }}"
+            oninput="up()">
         </div>
-        
-        <div class="preview-panel">
-            <div class="preview-section">
-                <div class="section-title">Live Preview</div>
-                
-                <div class="preview-frame">
-                    <div class="preview-widget">
-                        <div class="preview-header" id="preview-header">
-                            <div class="preview-avatar" id="preview-avatar">DC</div>
-                            <div class="preview-name" id="preview-name">Demo Assistant</div>
-                        </div>
-                        
-                        <div class="preview-message" id="preview-message">
-                            Hi! How can I help you today?
-                        </div>
-
-                        <div class="preview-branding" id="preview-branding">
-                            Powered by <a href="#" onclick="return false;">FAQ Chatbot</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="field">
+          <label>Tagline</label>
+          <input type="text" id="tagline" placeholder="We're here to help"
+            value="{{ branding.get('branding', {}).get('tagline', '') }}"
+            oninput="up()">
         </div>
+      </div>
+      <div class="field">
+        <label>Brand Colour</label>
+        <div class="color-row">
+          <input type="color" id="cpick" value="{{ branding.get('branding', {}).get('primary_color', '#B8924A') }}" oninput="syncC(this.value)">
+          <input type="text" id="primary_color" placeholder="#B8924A"
+            value="{{ branding.get('branding', {}).get('primary_color', '#B8924A') }}"
+            oninput="syncCT(this.value)">
+        </div>
+        <p class="hint">Applied to the chat header, send button and quick-reply chips.</p>
+      </div>
+      <div class="field">
+        <label>Company Logo</label>
+        <div class="upload-zone" id="logoZone" onclick="document.getElementById('logoFile').click()">
+          <input type="file" id="logoFile" accept="image/*" onchange="handleLogo(event)">
+          <img id="logoPrev" class="logo-prev" src="" alt="">
+          <svg class="upload-zone-icon" id="logoIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <p>Click to upload PNG / JPG / SVG &nbsp;·&nbsp; max 2 MB</p>
+          <p class="upload-fname" id="logoFname"></p>
+        </div>
+      </div>
     </div>
-    
-    <script>
-        let currentConfig = {};
-        let userPlanType = 'free';
-        
-        window.onload = function() {
-            // Set client-id from URL param first
-            const urlParams = new URLSearchParams(window.location.search);
-            const clientIdFromUrl = urlParams.get('client_id');
-            if (clientIdFromUrl) {
-                document.getElementById('client-id').value = clientIdFromUrl;
-            }
-            loadUserInfo();
-            loadConfig();
-            attachEventListeners();
-            updateBrandingPreview();
-        };
+  </div>
 
-        async function loadUserInfo() {
-            try {
-                const response = await fetch('/api/user/info');
-                const data = await response.json();
-                if (data.success) {
-                    userPlanType = data.plan_type || 'free';
-                }
-            } catch (error) {
-                console.log('Could not load user info, using default');
-            }
-            // Always configure controls after fetch resolves (success or catch)
-            configureBrandingControls();
-            configureWebhookControls();
-        }
+  <!-- 2. BOT APPEARANCE -->
+  <div class="card">
+    <div class="card-header open" onclick="tc(this)">
+      <div class="card-icon" style="background:#eff6ff;"><svg viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+      <div class="card-text"><h2>Bot Appearance</h2><p>Name, avatar and messages</p></div>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    </div>
+    <div class="card-body open">
+      <div class="field-row">
+        <div class="field">
+          <label>Bot Name</label>
+          <input type="text" id="bot_name" placeholder="Assistant"
+            value="{{ branding.get('bot_settings', {}).get('bot_name', '') }}" oninput="up()">
+        </div>
+        <div class="field">
+          <label>Bot Emoji</label>
+          <input type="text" id="bot_avatar" placeholder="🤖"
+            value="{{ branding.get('bot_settings', {}).get('bot_avatar', '🤖') }}"
+            oninput="up()" style="font-size:17px;">
+        </div>
+      </div>
+      <div class="field">
+        <div class="label-row">
+          <label>Welcome Message</label>
+          <span id="wc" style="font-size:11px;color:var(--sub);">0 / 200</span>
+        </div>
+        <textarea id="welcome_message" maxlength="200"
+          placeholder="Hi! I'm here to help. What can I do for you today?"
+          oninput="up(); wcc(this)" rows="3">{{ branding.get('bot_settings', {}).get('welcome_message', '') }}</textarea>
+      </div>
+      <div class="field">
+        <label>Fallback Message</label>
+        <textarea id="fallback_message" rows="2"
+          placeholder="I'm not sure about that. Would you like to speak with the team?">{{ branding.get('bot_settings', {}).get('fallback_message', '') }}</textarea>
+        <p class="hint">Shown when the bot has no matching answer.</p>
+      </div>
+    </div>
+  </div>
 
-        function configureBrandingControls() {
-            const checkbox    = document.getElementById('remove-branding');
-            const container   = document.getElementById('branding-container');
-            const helpText    = document.getElementById('branding-help-text');
-            const upgradeLink = document.getElementById('upgrade-link');
-            const planBadge   = document.getElementById('plan-badge');
+  <!-- 3. QUICK REPLIES -->
+  <div class="card">
+    <div class="card-header open" onclick="tc(this)">
+      <div class="card-icon" style="background:var(--success-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      <div class="card-text"><h2>Quick Replies</h2><p>Suggested buttons in the chat</p></div>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    </div>
+    <div class="card-body open">
+      <div class="qr-list" id="qrList"></div>
+      <button class="btn-add" type="button" onclick="addQR()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Quick Reply
+      </button>
+      <p class="hint" style="margin-top:7px;">Max 5 · shown as tappable chips when the chat opens.</p>
+    </div>
+  </div>
 
-            if (userPlanType === 'agency' || userPlanType === 'enterprise') {
-                checkbox.disabled = false;
-                container.classList.remove('disabled');
-                helpText.className   = 'help-text success';
-                helpText.textContent = '✅ White-label is available on your ' + userPlanType + ' plan';
-                upgradeLink.style.display = 'none';
-                planBadge.textContent     = userPlanType.toUpperCase();
-                planBadge.style.display   = 'inline-block';
-            } else {
-                checkbox.disabled = true;
-                container.classList.add('disabled');
-                container.querySelector('.checkbox-label').classList.add('grayed');
-                helpText.className   = 'help-text warning';
-                helpText.textContent = '🔒 Upgrade to Agency plan ($299/mo) to remove branding and fully white-label your chatbot';
-                upgradeLink.style.display = 'inline-block';
-            }
-        }
+  <!-- 4. WHITE-LABEL -->
+  <div class="card">
+    <div class="card-header open" onclick="tc(this)">
+      <div class="card-icon" style="background:var(--warning-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
+      <div class="card-text"><h2>White-Label</h2><p>Remove Lumvi branding</p></div>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    </div>
+    <div class="card-body open">
+      {% if has_white_label %}
+      <div class="toggle-row">
+        <div>
+          <div class="toggle-lbl">Remove "Powered by Lumvi" footer</div>
+          <div class="toggle-desc">Your brand only — Lumvi is completely invisible to your clients.</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="remove_branding"
+            {% if branding.get('branding', {}).get('remove_branding') %}checked{% endif %}
+            onchange="up()">
+          <span class="tslider"></span>
+        </label>
+      </div>
+      {% else %}
+      <div class="upgrade-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <p>White-label requires the <strong>Agency plan ($299/mo)</strong>. <a href="/upgrade">Upgrade to remove all Lumvi branding →</a></p>
+      </div>
+      <div class="toggle-row" style="opacity:0.5;pointer-events:none;">
+        <div>
+          <div class="toggle-lbl">Remove "Powered by Lumvi" footer</div>
+          <div class="toggle-desc">Agency plan required.</div>
+        </div>
+        <label class="toggle"><input type="checkbox" disabled><span class="tslider"></span></label>
+      </div>
+      {% endif %}
+    </div>
+  </div>
 
-        // ── NEW: configure webhook field based on plan ───────────────────
-        function configureWebhookControls() {
-            const input      = document.getElementById('webhook-url');
-            const testBtn    = document.getElementById('btn-test-webhook');
-            const helpText   = document.getElementById('webhook-help-text');
-            const upgradeBtn = document.getElementById('upgrade-link-webhook');
-            const badge      = document.getElementById('integrations-badge');
-            const canWebhook = ['pro', 'agency', 'enterprise'].includes(userPlanType);
+  <!-- 5. INTEGRATIONS -->
+  <div class="card">
+    <div class="card-header open" onclick="tc(this)">
+      <div class="card-icon" style="background:#fdf2f8;"><svg viewBox="0 0 24 24" fill="none" stroke="#9d174d" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
+      <div class="card-text"><h2>Integrations</h2><p>Webhooks, Zapier &amp; Make</p></div>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    </div>
+    <div class="card-body open">
+      {% if has_webhooks %}
+      <div class="field">
+        <label>Webhook URL</label>
+        <div class="wh-row">
+          <div class="field">
+            <input type="url" id="webhook_url" placeholder="https://hooks.zapier.com/…"
+              value="{{ branding.get('integrations', {}).get('webhook_url', '') }}">
+          </div>
+          <button class="btn-test" type="button" onclick="testWH()" id="whTestBtn">Test</button>
+        </div>
+        <p id="whStatus" class="wh-status"></p>
+        <p class="hint">Fired when a lead is captured. Works with Zapier, Make and any REST endpoint.</p>
+      </div>
+      <hr class="div">
+      <div class="field">
+        <label>Zapier / Make Trigger URL</label>
+        <input type="url" id="zapier_url" placeholder="https://hooks.zapier.com/…"
+          value="{{ branding.get('integrations', {}).get('zapier_url', '') }}">
+        <p class="hint">For Zapier "Catch Hook" and Make "Custom Webhook" triggers.</p>
+      </div>
+      {% else %}
+      <div class="upgrade-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <p>Webhooks and Zapier require the <strong>Pro plan ($99/mo)</strong>. <a href="/upgrade">Upgrade to connect your CRM →</a></p>
+      </div>
+      <div class="locked-wrap">
+        <div class="field"><label>Webhook URL</label><input type="url" disabled placeholder="https://hooks.zapier.com/…"></div>
+        <div class="lock-over"><div class="lock-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Pro required</div></div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
 
-            if (canWebhook) {
-                input.disabled   = false;
-                testBtn.disabled = false;
-                helpText.className   = 'help-text success';
-                helpText.textContent = '✅ Zapier / Make webhooks are active on your ' + userPlanType + ' plan';
-                upgradeBtn.style.display = 'none';
-                badge.style.display      = 'inline-block';
-            } else {
-                input.disabled   = true;
-                testBtn.disabled = true;
-                helpText.className   = 'help-text warning';
-                helpText.textContent = '🔒 Webhook integrations are available on Pro ($99/mo) and above';
-                upgradeBtn.style.display = 'inline-block';
-                badge.style.display      = 'none';
-            }
-        }
-        
-        function attachEventListeners() {
-            document.getElementById('company-name').addEventListener('input', updatePreview);
-            document.getElementById('primary-color').addEventListener('input', updatePreview);
-            document.getElementById('secondary-color').addEventListener('input', updatePreview);
-            document.getElementById('bot-name').addEventListener('input', updatePreview);
-            document.getElementById('welcome-message').addEventListener('input', updatePreview);
-            
-            document.getElementById('primary-color-picker').addEventListener('input', function(e) {
-                document.getElementById('primary-color').value = e.target.value;
-                updatePreview();
-            });
-            
-            document.getElementById('secondary-color-picker').addEventListener('input', function(e) {
-                document.getElementById('secondary-color').value = e.target.value;
-                updatePreview();
-            });
-            
-            document.getElementById('primary-color').addEventListener('input', function(e) {
-                if (/^#[0-9A-F]{6}$/i.test(e.target.value)) {
-                    document.getElementById('primary-color-picker').value = e.target.value;
-                }
-            });
-            
-            document.getElementById('secondary-color').addEventListener('input', function(e) {
-                if (/^#[0-9A-F]{6}$/i.test(e.target.value)) {
-                    document.getElementById('secondary-color-picker').value = e.target.value;
-                }
-            });
-        }
+  <!-- 6. CONTACT INFO -->
+  <div class="card">
+    <div class="card-header open" onclick="tc(this)">
+      <div class="card-icon" style="background:var(--cream2);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--mid)" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.36 2 2 0 0 1 3.57 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.54a16 16 0 0 0 5.55 5.55l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg></div>
+      <div class="card-text"><h2>Contact Info</h2><p>Shown when visitors ask for help</p></div>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    </div>
+    <div class="card-body open">
+      <div class="field-row">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="contact_email" placeholder="hello@company.com"
+            value="{{ branding.get('contact', {}).get('email', '') }}">
+        </div>
+        <div class="field">
+          <label>Phone</label>
+          <input type="text" id="contact_phone" placeholder="+1 555 000 0000"
+            value="{{ branding.get('contact', {}).get('phone', '') }}">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Business Hours</label>
+          <input type="text" id="business_hours" placeholder="Mon–Fri 9am–5pm"
+            value="{{ branding.get('contact', {}).get('hours', '') }}">
+        </div>
+        <div class="field">
+          <label>Website</label>
+          <input type="url" id="contact_website" placeholder="https://company.com"
+            value="{{ branding.get('contact', {}).get('website', '') }}">
+        </div>
+      </div>
+    </div>
+  </div>
 
-        function updateBrandingPreview() {
-            const removeBrandingCheckbox = document.getElementById('remove-branding');
-            const previewBranding = document.getElementById('preview-branding');
-            
-            if (removeBrandingCheckbox && removeBrandingCheckbox.checked) {
-                previewBranding.classList.add('hidden');
-            } else {
-                previewBranding.classList.remove('hidden');
-            }
-        }
-        
-        async function loadConfig() {
-            const clientId = document.getElementById('client-id').value || 'demo';
-            
-            try {
-                const response = await fetch(`/api/config?client_id=${clientId}`);
-                const data = await response.json();
-                
-                if (data.success) {
-                    currentConfig = data.config;
-                    populateForm(currentConfig);
-                    updatePreview();
-                    updateBrandingPreview();
-                }
-            } catch (error) {
-                console.error('Error loading config:', error);
-            }
-        }
-        
-        function populateForm(config) {
-            document.getElementById('company-name').value    = config.branding?.company_name !== 'Lumvi' ? (config.branding?.company_name || '') : '';
-            document.getElementById('logo-url').value        = config.branding?.logo_url        || '';
-            document.getElementById('primary-color').value   = config.branding?.primary_color   || '#667eea';
-            document.getElementById('secondary-color').value = config.branding?.secondary_color || '#764ba2';
-            document.getElementById('bot-name').value        = config.bot_settings?.bot_name    || '';
-            document.getElementById('welcome-message').value = config.bot_settings?.welcome_message || '';
+  <div style="height:74px;"></div>
 
-            // Load quick replies
-            const qr = config.bot_settings?.quick_replies || [];
-            const inputs = document.querySelectorAll('.quick-reply-input');
-            inputs.forEach((input, i) => { input.value = qr[i] || ''; });
-            document.getElementById('contact-email').value   = config.contact?.email            || '';
-            document.getElementById('contact-phone').value   = config.contact?.phone            || '';
-            document.getElementById('business-hours').value  = config.contact?.business_hours   || '';
-            
-            // Sync color pickers
-            document.getElementById('primary-color-picker').value  = config.branding?.primary_color   || '#667eea';
-            document.getElementById('secondary-color-picker').value = config.branding?.secondary_color || '#764ba2';
+  <!-- SAVE BAR -->
+  <div class="save-bar">
+    <span class="save-info" id="saveInfo">Changes take effect immediately on save.</span>
+    <div class="save-actions">
+      <a href="/dashboard" class="btn-cancel">Cancel</a>
+      <button class="btn-save" id="saveBtn" onclick="save()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        Save Changes
+      </button>
+    </div>
+  </div>
 
-            // ── Webhook: only populate if field is enabled for this plan ──
-            const webhookInput = document.getElementById('webhook-url');
-            if (!webhookInput.disabled) {
-                webhookInput.value = config.integrations?.webhook_url || '';
-            }
-        }
-        
-        function updatePreview() {
-            const botName      = document.getElementById('bot-name').value        || 'Support Assistant';
-            const welcomeMsg   = document.getElementById('welcome-message').value || 'Hi! How can I help you today?';
-            const primaryColor = document.getElementById('primary-color').value   || '#667eea';
-            const companyName  = document.getElementById('company-name').value    || 'Demo Company';
-            
-            document.getElementById('preview-name').textContent    = botName;
-            document.getElementById('preview-message').textContent = welcomeMsg;
-            document.getElementById('preview-header').style.background = primaryColor;
-            
-            const initials = companyName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-            document.getElementById('preview-avatar').textContent = initials;
-        }
-        
-        async function saveChanges() {
-            const clientId = document.getElementById('client-id').value.trim();
-            if (!clientId) {
-                showError('No client ID found. Please go back to dashboard and try again.');
-                return;
-            }
-            const removeBranding = document.getElementById('remove-branding')?.checked || false;
+</div><!-- /form-side -->
 
-            // Only include webhook_url if the field is enabled (pro/agency/enterprise)
-            const webhookInput = document.getElementById('webhook-url');
-            const webhookUrl   = webhookInput.disabled ? '' : webhookInput.value.trim();
-            
-            const updatedConfig = {
-                client_id:       clientId,
-                remove_branding: removeBranding,
-                branding: {
-                    company_name:    document.getElementById('company-name').value,
-                    logo_url:        document.getElementById('logo-url').value,
-                    primary_color:   document.getElementById('primary-color').value,
-                    secondary_color: document.getElementById('secondary-color').value,
-                    bot_avatar:      currentConfig.branding?.bot_avatar || ''
-                },
-                contact: {
-                    email:          document.getElementById('contact-email').value,
-                    phone:          document.getElementById('contact-phone').value,
-                    whatsapp:       currentConfig.contact?.whatsapp || '',
-                    business_hours: document.getElementById('business-hours').value
-                },
-                bot_settings: {
-                    bot_name:         document.getElementById('bot-name').value,
-                    welcome_message:  document.getElementById('welcome-message').value,
-                    quick_replies:    [...document.querySelectorAll('.quick-reply-input')]
-                                        .map(i => i.value.trim())
-                                        .filter(v => v.length > 0),
-                    tone:             currentConfig.bot_settings?.tone || 'friendly',
-                    fallback_message: currentConfig.bot_settings?.fallback_message || '',
-                    lead_triggers:    currentConfig.bot_settings?.lead_triggers || []
-                },
-                // ── integrations block ──────────────────────────────────
-                // Backend (save_customization) will strip webhook_url for
-                // free/starter regardless of what arrives here, so it is
-                // safe to always send the field.
-                integrations: {
-                    webhook_url: webhookUrl
-                }
-            };
-            
-            try {
-                const response = await fetch('/api/admin/customize', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(updatedConfig)
-                });
-                
-                const data = await response.json();
-                data.success ? showSuccess() : showError(data.error);
-            } catch (error) {
-                console.error('Error saving:', error);
-                showError();
-            }
-        }
+<!-- PREVIEW SIDE -->
+<div class="preview-side">
+  <div class="preview-lbl">Live Preview</div>
 
-        // ── NEW: test webhook by sending a ping via the backend ──────────
-        async function testWebhook() {
-            const url    = document.getElementById('webhook-url').value.trim();
-            const status = document.getElementById('webhook-status');
-            const btn    = document.getElementById('btn-test-webhook');
+  <div class="prev-tabs">
+    <button class="prev-tab active" onclick="ptab('chat',this)">Chat Widget</button>
+    <button class="prev-tab" onclick="ptab('embed',this)">Embed Code</button>
+  </div>
 
-            if (!url) {
-                status.className   = 'webhook-status err';
-                status.textContent = '⚠️ Enter a webhook URL first.';
-                return;
-            }
+  <div id="pChat">
+    <div class="widget">
+      <div class="w-header" id="pH" style="background:#B8924A;">
+        <div class="w-av" id="pAv">🤖</div>
+        <div class="w-info">
+          <div class="w-name" id="pName">Assistant</div>
+          <div class="w-status">Online now</div>
+        </div>
+        <div class="w-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+      </div>
+      <div class="w-body">
+        <div class="bbl-bot" id="pWelcome">Hi! I'm here to help. What can I do for you today?</div>
+        <div class="qr-chips" id="pChips"></div>
+        <div class="bbl-user" id="pUsr" style="display:none;background:#B8924A;">What are your hours?</div>
+        <div class="bbl-bot" id="pRep" style="display:none;">We're open Monday to Friday, 9am–6pm EST.</div>
+      </div>
+      <div class="w-input-row">
+        <input class="w-input" placeholder="Type a message…" readonly>
+        <button class="w-send" id="pSend" style="background:#B8924A;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+      <div class="w-footer" id="pFoot"><a href="#">Powered by <span>Lumvi</span></a></div>
+    </div>
+    <button class="btn-simulate" onclick="simConvo()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Simulate conversation
+    </button>
+  </div>
 
-            btn.disabled    = true;
-            btn.textContent = '⏳ Sending...';
-            status.className   = 'webhook-status';
-            status.textContent = '';
+  <div id="pEmbed" style="display:none;">
+    <div class="embed-box" id="embedBlock"></div>
+    <button class="embed-copy" onclick="copyEmbed()">Copy Embed Code</button>
+  </div>
+</div>
+</div><!-- /page-wrap -->
 
-            try {
-                const res  = await fetch('/api/admin/test-webhook', {
-                    method:  'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body:    JSON.stringify({ webhook_url: url })
-                });
-                const data = await res.json();
+<div class="toast" id="toast"></div>
 
-                if (data.success) {
-                    status.className   = 'webhook-status ok';
-                    status.textContent = '✅ Test ping sent! Check Zapier / Make / webhook.site to confirm it arrived.';
-                } else {
-                    status.className   = 'webhook-status err';
-                    status.textContent = '❌ ' + (data.error || 'Webhook test failed.');
-                }
-            } catch (e) {
-                status.className   = 'webhook-status err';
-                status.textContent = '❌ Network error — could not reach the test endpoint.';
-            }
+<script>
+const CID  = {{ client_id | tojson }};
+const HWH  = {{ 'true' if has_webhooks else 'false' }};
+const HWL  = {{ 'true' if has_white_label else 'false' }};
+const SQR  = {{ (branding.get('bot_settings', {}).get('quick_replies') or []) | tojson }};
+let   _logo = null, _sim = false;
 
-            btn.disabled    = false;
-            btn.textContent = '🧪 Test';
-        }
-        
-        function showSuccess(msg) {
-            const el = document.getElementById('success-message');
-            el.textContent   = '✅ ' + (msg || 'Changes saved successfully!');
-            el.style.display = 'block';
-            setTimeout(() => { el.style.display = 'none'; }, 3000);
-        }
-        
-        function showError(msg) {
-            const el = document.getElementById('error-message');
-            el.textContent   = '❌ ' + (msg || 'Error saving changes. Please try again.');
-            el.style.display = 'block';
-            setTimeout(() => { el.style.display = 'none'; }, 4000);
-        }
-    </script>
+// Card toggle
+function tc(h) {
+  h.classList.toggle('open');
+  h.nextElementSibling.classList.toggle('open');
+}
+
+// Char count
+function wcc(el) { document.getElementById('wc').textContent = el.value.length + ' / 200'; }
+const wmEl = document.getElementById('welcome_message');
+if (wmEl) wcc(wmEl);
+
+// Colour sync
+function syncC(v) { document.getElementById('primary_color').value = v; up(); }
+function syncCT(v) { if (/^#[0-9A-Fa-f]{6}$/.test(v)) { document.getElementById('cpick').value = v; up(); } }
+
+// Logo
+function handleLogo(e) {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (f.size > 2097152) { toast('Logo must be under 2 MB', 'error'); return; }
+  const r = new FileReader();
+  r.onload = ev => {
+    _logo = ev.target.result;
+    const p = document.getElementById('logoPrev');
+    p.src = _logo; p.style.display = 'block';
+    document.getElementById('logoIcon').style.display = 'none';
+    document.getElementById('logoFname').textContent = f.name;
+    document.getElementById('logoZone').classList.add('has-file');
+    up();
+  };
+  r.readAsDataURL(f);
+}
+
+// Quick replies
+function addQR(v = '') {
+  const l = document.getElementById('qrList');
+  if (l.children.length >= 5) { toast('Maximum 5 quick replies', 'error'); return; }
+  const d = document.createElement('div'); d.className = 'qr-item';
+  d.innerHTML = `<input type="text" placeholder="e.g. What are your hours?" class="qri" value="${esc(v)}" oninput="up()">
+    <button class="btn-rm" type="button" onclick="this.parentElement.remove(); up();">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>`;
+  l.appendChild(d); d.querySelector('input').focus(); up();
+}
+SQR.forEach(r => addQR(r));
+function getQR() { return [...document.querySelectorAll('.qri')].map(i => i.value.trim()).filter(Boolean); }
+
+// Live preview
+function up() {
+  const color = document.getElementById('primary_color').value || '#B8924A';
+  const name  = document.getElementById('bot_name').value     || 'Assistant';
+  const emo   = document.getElementById('bot_avatar').value   || '🤖';
+  const wm    = document.getElementById('welcome_message').value || 'Hi! How can I help?';
+  const noFt  = HWL && document.getElementById('remove_branding')?.checked;
+  const qrs   = getQR();
+
+  document.getElementById('pH').style.background = color;
+  document.getElementById('pSend').style.background = color;
+  document.getElementById('pName').textContent = name;
+  document.getElementById('pWelcome').textContent = wm;
+  document.getElementById('pUsr').style.background = color;
+
+  const av = document.getElementById('pAv');
+  av.innerHTML = _logo ? `<img src="${_logo}" alt="">` : emo;
+
+  document.getElementById('pChips').innerHTML = qrs.map(r =>
+    `<span class="qr-chip" style="background:${color}18;color:${color};border-color:${color}44;">${esc(r)}</span>`
+  ).join('');
+
+  document.getElementById('pFoot').style.display = noFt ? 'none' : '';
+
+  // Embed
+  document.getElementById('embedBlock').innerHTML =
+    `<span style="color:#6B7280;">/* Paste before &lt;/body&gt; */</span>\n\n` +
+    `<span style="color:#60A5FA;">&lt;script&gt;</span>\n` +
+    `(function(){\n  var s=document.createElement('script');\n  s.src='${location.origin}/static/widget.js';\n  s.setAttribute('data-client-id','${CID}');\n  document.body.appendChild(s);\n})();\n` +
+    `<span style="color:#60A5FA;">&lt;/script&gt;</span>`;
+}
+
+function simConvo() {
+  _sim = !_sim;
+  document.getElementById('pUsr').style.display = _sim ? 'block' : 'none';
+  document.getElementById('pRep').style.display  = _sim ? 'block' : 'none';
+}
+
+// Preview tabs
+function ptab(t, btn) {
+  document.querySelectorAll('.prev-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('pChat').style.display  = t === 'chat'  ? '' : 'none';
+  document.getElementById('pEmbed').style.display = t === 'embed' ? '' : 'none';
+}
+
+// Webhook test
+async function testWH() {
+  const url = (document.getElementById('webhook_url')?.value || '').trim();
+  const st  = document.getElementById('whStatus');
+  const btn = document.getElementById('whTestBtn');
+  if (!url) { st.textContent = 'Enter a URL first.'; st.className = 'wh-status wh-fail'; return; }
+  btn.textContent = 'Testing…'; btn.disabled = true; st.style.display = 'none';
+  try {
+    const r = await fetch('/api/admin/test-webhook', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({webhook_url: url, client_id: CID})
+    });
+    const d = await r.json();
+    st.textContent = d.success ? '✓ ' + d.message : '✗ ' + (d.error || 'Failed');
+    st.className   = 'wh-status ' + (d.success ? 'wh-ok' : 'wh-fail');
+  } catch { st.textContent = '✗ Network error'; st.className = 'wh-status wh-fail'; }
+  finally  { btn.textContent = 'Test'; btn.disabled = false; }
+}
+
+// Save
+async function save() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Saving…';
+  const payload = {
+    client_id: CID,
+    branding: {
+      company_name:  document.getElementById('company_name').value.trim(),
+      tagline:       document.getElementById('tagline').value.trim(),
+      primary_color: document.getElementById('primary_color').value.trim() || '#B8924A',
+      ...((_logo) ? {logo: _logo} : {}),
+    },
+    bot_settings: {
+      bot_name:         document.getElementById('bot_name').value.trim(),
+      bot_avatar:       document.getElementById('bot_avatar').value.trim(),
+      welcome_message:  document.getElementById('welcome_message').value.trim(),
+      fallback_message: document.getElementById('fallback_message').value.trim(),
+      quick_replies:    getQR(),
+    },
+    contact: {
+      email:   document.getElementById('contact_email').value.trim(),
+      phone:   document.getElementById('contact_phone').value.trim(),
+      hours:   document.getElementById('business_hours').value.trim(),
+      website: document.getElementById('contact_website').value.trim(),
+    },
+    integrations: HWH ? {
+      webhook_url: document.getElementById('webhook_url')?.value.trim() || '',
+      zapier_url:  document.getElementById('zapier_url')?.value.trim()  || '',
+    } : {},
+    remove_branding: HWL && (document.getElementById('remove_branding')?.checked || false),
+  };
+  try {
+    const r = await fetch('/api/admin/customize', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (d.success) {
+      toast('Settings saved', 'success');
+      document.getElementById('saveInfo').textContent = 'Saved at ' + new Date().toLocaleTimeString();
+    } else toast(d.error || 'Save failed', 'error');
+  } catch { toast('Network error — please retry', 'error'); }
+  finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Save Changes';
+  }
+}
+
+function copyEmbed() {
+  const c = `<script>\n(function(){var s=document.createElement('script');s.src='${location.origin}/static/widget.js';s.setAttribute('data-client-id','${CID}');document.body.appendChild(s);})();\n<\/script>`;
+  navigator.clipboard.writeText(c).then(() => toast('Embed code copied', 'success'));
+}
+
+function toast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  const ic = type === 'success'
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  t.innerHTML = ic + msg; t.className = `toast ${type} show`;
+  setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+up();
+</script>
 </body>
 </html>

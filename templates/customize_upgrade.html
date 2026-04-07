@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Upgrade Required — Lumvi</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--cream:#F7F4EF;--gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;--dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.card{background:#fff;border:1px solid var(--border);border-radius:20px;padding:48px 40px;max-width:460px;width:100%;text-align:center;box-shadow:0 16px 48px rgba(0,0,0,0.08);}
+.icon{width:60px;height:60px;border-radius:16px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 22px;}
+.icon svg{width:26px;height:26px;color:var(--gold);}
+h1{font-family:'Fraunces',serif;font-size:22px;font-weight:700;margin-bottom:10px;}
+p{color:var(--mid);font-size:14px;line-height:1.7;margin-bottom:8px;font-weight:300;}
+.plan{display:inline-block;padding:3px 12px;background:var(--gold-lt);color:var(--gold-dk);border-radius:20px;font-size:12px;font-weight:600;text-transform:capitalize;border:1px solid rgba(184,146,74,0.2);margin:10px 0 18px;}
+.feats{background:var(--cream);border-radius:12px;padding:16px 18px;margin:18px 0 26px;text-align:left;}
+.feats h3{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--sub);margin-bottom:10px;}
+.fi{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--mid);margin-bottom:7px;}
+.fi:last-child{margin-bottom:0;}
+.fck{width:17px;height:17px;border-radius:50%;background:var(--gold-lt);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;}
+.btns{display:flex;flex-direction:column;gap:10px;}
+.bp{padding:13px;background:var(--gold);color:#fff;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;box-shadow:0 4px 16px rgba(184,146,74,0.35);display:block;transition:all 0.2s;}
+.bp:hover{background:var(--gold-dk);}
+.bo{padding:12px;background:transparent;color:var(--mid);border:1.5px solid var(--border);border-radius:10px;font-size:14px;font-weight:600;text-decoration:none;display:block;transition:all 0.15s;}
+.bo:hover{border-color:var(--gold);color:var(--gold-dk);}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg></div>
+  <h1>Theme Customization</h1>
+  <p>Branding customization is not available on your current plan.</p>
+  <div class="plan">{{ plan_type }} plan</div>
+  <div class="feats">
+    <h3>Unlocked on Starter and above</h3>
+    <div class="fi"><div class="fck">✓</div>Custom brand colours</div>
+    <div class="fi"><div class="fck">✓</div>Logo upload</div>
+    <div class="fi"><div class="fck">✓</div>Bot name, avatar and messages</div>
+    <div class="fi"><div class="fck">✓</div>Quick-reply buttons</div>
+    <div class="fi"><div class="fck">✓</div>Webhooks on Pro · White-label on Agency</div>
+  </div>
+  <div class="btns">
+    <a href="/upgrade" class="bp">Upgrade to Starter →</a>
+    <a href="/dashboard" class="bo">Back to Dashboard</a>
+  </div>
+</div>
+</body>
+</html>

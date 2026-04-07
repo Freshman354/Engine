@@ -1622,60 +1622,36 @@ def customize_page():
     if not client_id or not models.verify_client_ownership(current_user.id, client_id):
         return "Unauthorized", 403
 
-    user = models.get_user_by_id(current_user.id)
-    plan_limits = PLAN_LIMITS.get(user['plan_type'], PLAN_LIMITS['free'])
+    fresh_user  = models.get_user_by_id(current_user.id)
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
 
     if not plan_limits['customization']:
-        return f'''
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Upgrade Required</title>
-            <style>
-                body {{
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-                    min-height: 100vh;
-                    display: flex; align-items: center; justify-content: center;
-                    padding: 20px;
-                }}
-                .container {{
-                    background: rgba(30,41,59,0.9);
-                    border: 1px solid rgba(255,255,255,0.1);
-                    border-radius: 20px; padding: 48px;
-                    max-width: 500px; text-align: center; color: #f8fafc;
-                }}
-                h1 {{ font-size: 28px; font-weight: 800; margin-bottom: 16px; }}
-                p {{ color: #94a3b8; margin-bottom: 20px; font-size: 15px; }}
-                ul {{ text-align: left; color: #cbd5e1; margin: 20px 0; font-size: 14px; line-height: 2; }}
-                .btn {{
-                    display: inline-block; padding: 13px 28px;
-                    border-radius: 10px; font-weight: 700;
-                    text-decoration: none; margin: 6px; font-size: 14px;
-                }}
-                .btn-primary {{ background: #06b6d4; color: #0f172a; }}
-                .btn-secondary {{ background: transparent; color: #94a3b8; border: 1px solid rgba(255,255,255,0.15); }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>🎨 Customization Locked</h1>
-                <p>Branding customization is not available on the Free plan.</p>
-                <p>Upgrade to Starter ($49/mo) or higher to unlock:</p>
-                <ul>
-                    <li>Custom colors &amp; branding</li>
-                    <li>Logo upload</li>
-                    <li>Bot personality settings</li>
-                    <li>White-label on Agency plan</li>
-                </ul>
-                <a href="/upgrade" class="btn btn-primary">Upgrade Now →</a>
-                <a href="/dashboard" class="btn btn-secondary">← Back</a>
-            </div>
-        </body>
-        </html>
-        ''', 403
+        return render_template(
+            'customize_upgrade.html',
+            user=current_user, plan_type=plan_type
+        ), 403
 
-    return render_template('customize.html', user=current_user)
+    client = models.get_client_by_id(client_id)
+    branding_settings = {}
+    if client and client.get('branding_settings'):
+        try:
+            branding_settings = json.loads(client['branding_settings'])
+        except Exception:
+            branding_settings = {}
+
+    return render_template(
+        'customize.html',
+        user            = current_user,
+        client_id       = client_id,
+        client          = client,
+        branding        = branding_settings,
+        plan_type       = plan_type,
+        plan_limits     = plan_limits,
+        has_webhooks    = plan_limits.get('webhooks', False),
+        has_white_label = plan_limits.get('white_label', False),
+        has_analytics   = plan_limits.get('analytics', False),
+    )
 
 
 @app.route('/api/admin/customize', methods=['POST'])
@@ -1760,6 +1736,47 @@ def save_customization():
     except Exception as e:
         app.logger.error(f'Error saving customization: {e}')
         return jsonify({'success': False, 'error': 'Failed to save customization'}), 500
+
+
+@app.route('/api/admin/test-webhook', methods=['POST'])
+@login_required
+def test_webhook():
+    """Fire a test POST to the configured webhook URL and return status."""
+    try:
+        data       = request.json or {}
+        webhook_url = data.get('webhook_url', '').strip()
+        client_id   = data.get('client_id', '')
+
+        if not webhook_url:
+            return jsonify({'success': False, 'error': 'No webhook URL provided'}), 400
+
+        plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
+        if not plan_limits.get('webhooks'):
+            return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+
+        payload = {
+            'event':     'test',
+            'client_id': client_id,
+            'message':   'This is a test webhook from Lumvi',
+            'timestamp': datetime.utcnow().isoformat(),
+        }
+
+        resp = requests.post(webhook_url, json=payload, timeout=8,
+                             headers={'Content-Type': 'application/json',
+                                      'X-Lumvi-Event': 'test'})
+        return jsonify({
+            'success': True,
+            'status_code': resp.status_code,
+            'message': f'Webhook responded with HTTP {resp.status_code}'
+        })
+
+    except requests.exceptions.Timeout:
+        return jsonify({'success': False, 'error': 'Webhook timed out (>8s)'}), 200
+    except requests.exceptions.ConnectionError:
+        return jsonify({'success': False, 'error': 'Could not connect to webhook URL'}), 200
+    except Exception as e:
+        app.logger.error(f'[test-webhook] {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/analytics')
