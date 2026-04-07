@@ -1536,24 +1536,36 @@ def widget():
 
     if not client:
         client = {
-            'client_id': 'demo',
-            'company_name': 'Demo Company',
-            'widget_color': '#667eea',
-            'bot_name': 'Team Support',
+            'client_id':       'demo',
+            'company_name':    'Demo Company',
+            'widget_color':    '#B8924A',
+            'bot_name':        'Support',
+            'bot_avatar':      '🤖',
+            'tagline':         'Typically replies instantly',
             'welcome_message': 'Hi! How can I help you today?',
-            'remove_branding': 0
+            'fallback_message': '',
+            'quick_replies':   ['What are your hours?', 'Pricing info', 'Contact us'],
+            'remove_branding': 0,
+            'logo_url':        '',
+            'contact':         {},
         }
     else:
         client = dict(client)
         branding_settings = json.loads(client.get('branding_settings') or '{}')
         bot_settings = branding_settings.get('bot_settings', {})
-        branding = branding_settings.get('branding', {})
-        client['bot_name'] = bot_settings.get('bot_name') or client.get('company_name') or 'Team Support'
+        branding     = branding_settings.get('branding', {})
+        contact      = branding_settings.get('contact', {})
+
+        client['bot_name']        = bot_settings.get('bot_name')        or client.get('company_name') or 'Support'
+        client['bot_avatar']      = bot_settings.get('bot_avatar')      or '🤖'
+        client['tagline']         = branding.get('tagline')             or 'Typically replies instantly'
         client['welcome_message'] = bot_settings.get('welcome_message') or client.get('welcome_message') or 'Hi! How can I help you today?'
-        client['widget_color'] = branding.get('primary_color') or client.get('widget_color') or '#667eea'
-        client['remove_branding'] = branding.get('remove_branding', client.get('remove_branding', 0))
-        client['logo_url'] = branding.get('logo_url') or ''
-        # Pass full branding_settings as dict so chat.html can access quick_replies
+        client['fallback_message'] = bot_settings.get('fallback_message') or ''
+        client['quick_replies']   = bot_settings.get('quick_replies')   or []
+        client['widget_color']    = branding.get('primary_color')       or client.get('widget_color') or '#B8924A'
+        client['remove_branding'] = branding.get('remove_branding',     client.get('remove_branding', 0))
+        client['logo_url']        = branding.get('logo')               or branding.get('logo_url') or ''
+        client['contact']         = contact
         client['branding_settings'] = branding_settings
 
     return render_template('chat.html', client=client)
