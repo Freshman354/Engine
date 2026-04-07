@@ -1765,63 +1765,22 @@ def save_customization():
 @app.route('/analytics')
 @login_required
 def analytics_page():
+    fresh_user  = models.get_user_by_id(current_user.id)
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+    is_admin    = bool((fresh_user or {}).get('is_admin', False))
+
+    if not plan_limits['analytics'] and not is_admin:
+        return render_template('analytics_upgrade.html',
+                               user=current_user, plan_type=plan_type), 403
+
+    clients   = models.get_user_clients(current_user.id)
     client_id = request.args.get('client_id')
-    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
-        return "Unauthorized", 403
 
-    user = models.get_user_by_id(current_user.id)
-    plan_limits = PLAN_LIMITS.get(user['plan_type'], PLAN_LIMITS['free'])
+    # Default to first client if none specified
+    if not client_id and clients:
+        client_id = clients[0]['client_id']
 
-    if not plan_limits['analytics']:
-        return f'''
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Upgrade Required</title>
-            <style>
-                body {{
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-                    min-height: 100vh;
-                    display: flex; align-items: center; justify-content: center;
-                    padding: 20px;
-                }}
-                .container {{
-                    background: rgba(30,41,59,0.9);
-                    border: 1px solid rgba(255,255,255,0.1);
-                    border-radius: 20px; padding: 48px;
-                    max-width: 500px; text-align: center; color: #f8fafc;
-                }}
-                h1 {{ font-size: 28px; font-weight: 800; margin-bottom: 16px; }}
-                p {{ color: #94a3b8; margin-bottom: 20px; font-size: 15px; }}
-                ul {{ text-align: left; color: #cbd5e1; margin: 20px 0; font-size: 14px; line-height: 2; }}
-                .btn {{
-                    display: inline-block; padding: 13px 28px;
-                    border-radius: 10px; font-weight: 700;
-                    text-decoration: none; margin: 6px; font-size: 14px;
-                }}
-                .btn-primary {{ background: #06b6d4; color: #0f172a; }}
-                .btn-secondary {{ background: transparent; color: #94a3b8; border: 1px solid rgba(255,255,255,0.15); }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>📊 Analytics Locked</h1>
-                <p>Analytics is available on Pro ($99/mo) and Agency ($299/mo) plans.</p>
-                <ul>
-                    <li>Conversation volume &amp; trends</li>
-                    <li>Lead tracking</li>
-                    <li>Answer rate &amp; top questions</li>
-                    <li>Unanswered question reports</li>
-                </ul>
-                <a href="/upgrade" class="btn btn-primary">Upgrade Now →</a>
-                <a href="/dashboard" class="btn btn-secondary">← Back</a>
-            </div>
-        </body>
-        </html>
-        ''', 403
-
-    clients = models.get_user_clients(current_user.id)
     for c in clients:
         if c.get('branding_settings'):
             try:
@@ -1829,7 +1788,169 @@ def analytics_page():
             except Exception:
                 c['branding_settings'] = {}
 
-    return render_template('analytics.html', clients=clients, client_id=client_id)
+    is_agency = plan_type in ('pro', 'agency', 'enterprise') or is_admin
+
+    return render_template(
+        'analytics.html',
+        clients      = clients,
+        client_id    = client_id,
+        plan_type    = plan_type,
+        plan_limits  = plan_limits,
+        is_agency    = is_agency,
+        user         = current_user,
+    )
+
+
+@app.route('/api/analytics/agency')
+@login_required
+def get_agency_analytics():
+    """
+    Multi-client overview analytics.
+    Returns per-client stats + totals for the agency dashboard.
+    """
+    try:
+        fresh_user  = models.get_user_by_id(current_user.id)
+        plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+        plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+        is_admin    = bool((fresh_user or {}).get('is_admin', False))
+
+        if not plan_limits['analytics'] and not is_admin:
+            return jsonify({'success': False, 'error': 'Upgrade required'}), 403
+
+        date_range = request.args.get('range', 'week')
+        now        = datetime.now()
+        if date_range == 'today':
+            start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif date_range == 'week':
+            start_date = now - timedelta(days=7)
+        elif date_range == 'month':
+            start_date = now - timedelta(days=30)
+        else:
+            start_date = datetime(2020, 1, 1)
+
+        clients    = models.get_user_clients(current_user.id)
+        client_ids = [c['client_id'] for c in clients]
+
+        if not client_ids:
+            return jsonify({'success': True, 'clients': [], 'totals': {}, 'timeline': []})
+
+        conn, cursor = models.get_db()
+
+        # ── Per-client stats in bulk ──────────────────────────────────
+        cursor.execute(
+            """SELECT client_id,
+                      COUNT(*) AS total,
+                      SUM(CASE WHEN matched = TRUE THEN 1 ELSE 0 END) AS matched
+               FROM conversations
+               WHERE client_id = ANY(%s) AND timestamp >= %s
+               GROUP BY client_id""",
+            (client_ids, start_date)
+        )
+        conv_stats = {r['client_id']: dict(r) for r in cursor.fetchall()}
+
+        cursor.execute(
+            "SELECT client_id, COUNT(*) AS cnt FROM leads WHERE client_id = ANY(%s) AND created_at >= %s GROUP BY client_id",
+            (client_ids, start_date)
+        )
+        lead_stats = {r['client_id']: int(r['cnt']) for r in cursor.fetchall()}
+
+        cursor.execute(
+            "SELECT client_id, COUNT(*) AS cnt FROM conversations WHERE client_id = ANY(%s) AND matched = FALSE AND timestamp >= %s GROUP BY client_id",
+            (client_ids, start_date)
+        )
+        unanswered_stats = {r['client_id']: int(r['cnt']) for r in cursor.fetchall()}
+
+        today_str = now.strftime('%Y-%m-%d')
+        cursor.execute(
+            "SELECT client_id, COUNT(*) AS cnt FROM conversations WHERE client_id = ANY(%s) AND DATE(timestamp) = %s GROUP BY client_id",
+            (client_ids, today_str)
+        )
+        daily_stats = {r['client_id']: int(r['cnt']) for r in cursor.fetchall()}
+
+        cursor.execute(
+            "SELECT client_id, MAX(timestamp) AS last_ts FROM conversations WHERE client_id = ANY(%s) GROUP BY client_id",
+            (client_ids,)
+        )
+        last_active = {r['client_id']: r['last_ts'] for r in cursor.fetchall()}
+
+        # ── 7-day combined timeline ───────────────────────────────────
+        timeline = []
+        for i in range(7):
+            d     = (now - timedelta(days=6 - i)).strftime('%Y-%m-%d')
+            cursor.execute(
+                "SELECT COUNT(*) AS cnt FROM conversations WHERE client_id = ANY(%s) AND DATE(timestamp) = %s",
+                (client_ids, d)
+            )
+            c_row = cursor.fetchone() or {}
+            cursor.execute(
+                "SELECT COUNT(*) AS cnt FROM leads WHERE client_id = ANY(%s) AND DATE(created_at) = %s",
+                (client_ids, d)
+            )
+            l_row = cursor.fetchone() or {}
+            timeline.append({'date': d, 'conversations': int(c_row.get('cnt', 0)), 'leads': int(l_row.get('cnt', 0))})
+
+        cursor.close()
+        conn.close()
+
+        # ── Build per-client result list ──────────────────────────────
+        client_map   = {c['client_id']: c for c in clients}
+        plan_limits_ = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+        daily_limit  = plan_limits_['messages_per_day']
+
+        result_clients = []
+        for cid in client_ids:
+            cs       = conv_stats.get(cid, {'total': 0, 'matched': 0})
+            total    = int(cs.get('total', 0))
+            matched  = int(cs.get('matched', 0))
+            leads    = lead_stats.get(cid, 0)
+            daily    = daily_stats.get(cid, 0)
+            unanswered = unanswered_stats.get(cid, 0)
+            res_rate = round(matched / total * 100) if total > 0 else 0
+            last_ts  = last_active.get(cid)
+
+            if daily_limit >= 999999:
+                usage_pct = 0
+            else:
+                usage_pct = min(round(daily / daily_limit * 100), 100)
+
+            result_clients.append({
+                'client_id':    cid,
+                'name':         client_map.get(cid, {}).get('company_name', cid),
+                'conversations': total,
+                'leads':         leads,
+                'resolution_rate': res_rate,
+                'daily_msgs':    daily,
+                'daily_limit':   'Unlimited' if daily_limit >= 999999 else daily_limit,
+                'usage_pct':     usage_pct,
+                'unanswered':    unanswered,
+                'last_active':   last_ts.isoformat() if last_ts else None,
+            })
+
+        # Sort by conversations desc
+        result_clients.sort(key=lambda x: x['conversations'], reverse=True)
+
+        # ── Totals ────────────────────────────────────────────────────
+        tot_conv   = sum(c['conversations'] for c in result_clients)
+        tot_leads  = sum(c['leads'] for c in result_clients)
+        tot_unanswered = sum(c['unanswered'] for c in result_clients)
+        avg_res    = round(sum(c['resolution_rate'] for c in result_clients) / len(result_clients)) if result_clients else 0
+
+        return jsonify({
+            'success':  True,
+            'clients':  result_clients,
+            'timeline': timeline,
+            'totals': {
+                'clients':         len(clients),
+                'conversations':   tot_conv,
+                'leads':           tot_leads,
+                'resolution_rate': avg_res,
+                'unanswered':      tot_unanswered,
+            }
+        })
+
+    except Exception as e:
+        app.logger.error(f'[agency analytics] {e}', exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/admin/analytics', methods=['GET'])

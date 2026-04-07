@@ -1,500 +1,749 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Analytics Dashboard - Chatbot Admin</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analytics — Lumvi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
+  --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
+  --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#fff;
+  --success:#16A34A;--success-lt:#F0FDF4;
+  --warning:#D97706;--warning-lt:#FFFBEB;
+  --danger:#EF4444;--danger-lt:#FEF2F2;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;}
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f9fafb;
-            min-height: 100vh;
-        }
+/* TOPBAR */
+.topbar{background:var(--white);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+.topbar-brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.topbar-brand img{width:32px;height:32px;border-radius:8px;object-fit:cover;}
+.topbar-brand span{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.plan-chip{padding:4px 12px;background:var(--gold-lt);color:var(--gold-dk);border-radius:20px;font-size:12px;font-weight:600;text-transform:capitalize;border:1px solid rgba(184,146,74,0.2);}
+.btn-link{padding:7px 14px;color:var(--sub);border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:500;text-decoration:none;transition:all 0.15s;}
+.btn-link:hover{color:var(--dark);border-color:#ccc;}
 
-        .header {
-            background: white;
-            border-bottom: 1px solid #e5e7eb;
-            padding: 20px 40px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        .header h1 { font-size: 24px; color: #1f2937; }
-        .header p { color: #6b7280; margin-top: 4px; }
+/* PAGE */
+.page{max-width:1300px;margin:0 auto;padding:28px;}
 
-        .container { max-width: 1400px; margin: 0 auto; padding: 40px; }
+/* TOOLBAR */
+.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:24px;}
+.toolbar h1{font-family:'Fraunces',serif;font-size:22px;font-weight:700;letter-spacing:-0.3px;margin-right:auto;}
+.select-styled{padding:8px 14px;border:1px solid var(--border);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--white);color:var(--dark);outline:none;cursor:pointer;transition:border-color 0.2s;}
+.select-styled:focus{border-color:var(--gold);}
+.btn-refresh{padding:8px 16px;background:var(--gold);color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;display:flex;align-items:center;gap:5px;transition:background 0.2s;}
+.btn-refresh:hover{background:var(--gold-dk);}
+.btn-refresh svg{width:13px;height:13px;}
+.btn-export{padding:8px 14px;background:var(--white);color:var(--mid);border:1px solid var(--border);border-radius:9px;font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all 0.15s;}
+.btn-export:hover{border-color:var(--gold);color:var(--gold-dk);}
+.btn-export svg{width:13px;height:13px;}
 
-        .controls {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            display: flex;
-            gap: 16px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .controls label { font-weight: 600; color: #374151; }
-        .controls select {
-            padding: 8px 12px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-        .controls button {
-            padding: 8px 16px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-        .controls button:hover { background: #5568d3; }
+/* VIEW TOGGLE */
+.view-toggle{display:flex;background:var(--panel);border-radius:9px;padding:3px;gap:2px;}
+.view-btn{padding:6px 14px;border-radius:7px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;color:var(--sub);background:transparent;transition:all 0.15s;}
+.view-btn.active{background:var(--white);color:var(--dark);box-shadow:0 1px 4px rgba(0,0,0,0.08);}
 
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 24px;
-            margin-bottom: 32px;
-        }
+/* SUMMARY CARDS */
+.summary-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:24px;}
+@media(max-width:1100px){.summary-row{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:640px){.summary-row{grid-template-columns:repeat(2,1fr);}}
+.stat-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:18px 20px;transition:box-shadow 0.2s;position:relative;overflow:hidden;}
+.stat-card:hover{box-shadow:0 4px 20px rgba(0,0,0,0.06);}
+.stat-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;}
+.stat-card.gold::after{background:var(--gold);}
+.stat-card.green::after{background:var(--success);}
+.stat-card.blue::after{background:#3B82F6;}
+.stat-card.amber::after{background:var(--warning);}
+.stat-card.red::after{background:var(--danger);}
+.stat-label{font-size:11px;color:var(--sub);font-weight:500;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.stat-label svg{width:13px;height:13px;opacity:0.7;}
+.stat-value{font-family:'Fraunces',serif;font-size:28px;font-weight:700;letter-spacing:-0.5px;color:var(--dark);}
+.stat-sub{font-size:11px;color:var(--sub);margin-top:4px;}
+.stat-trend{font-size:11px;font-weight:600;margin-top:4px;}
+.stat-trend.up{color:var(--success);}
+.stat-trend.down{color:var(--danger);}
 
-        .stat-card {
-            background: white;
-            padding: 24px;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            border-left: 4px solid #667eea;
-        }
-        .stat-card h3 {
-            font-size: 14px;
-            color: #6b7280;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-        .stat-card .value {
-            font-size: 36px;
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: 4px;
-        }
-        .stat-card .change { font-size: 13px; color: #10b981; }
-        .stat-card.negative .change { color: #ef4444; }
+/* SECTION */
+.section{background:var(--white);border:1px solid var(--border);border-radius:16px;margin-bottom:20px;overflow:hidden;}
+.section-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);}
+.section-title{font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:var(--dark);}
+.section-head-right{display:flex;align-items:center;gap:8px;}
+.section-body{padding:20px;}
 
-        .chart-section {
-            background: white;
-            padding: 32px;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 24px;
-        }
-        .chart-section h2 {
-            font-size: 18px;
-            color: #1f2937;
-            margin-bottom: 24px;
-            font-weight: 600;
-        }
-        .chart-container { position: relative; height: 300px; }
+/* CHARTS ROW */
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
+@media(max-width:900px){.charts-row{grid-template-columns:1fr;}}
+.chart-wrap{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:20px;}
+.chart-title{font-family:'Fraunces',serif;font-size:14px;font-weight:700;color:var(--dark);margin-bottom:16px;}
+.chart-canvas-wrap{position:relative;height:220px;}
 
-        .questions-list {
-            background: white;
-            padding: 32px;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-        .questions-list h2 {
-            font-size: 18px;
-            color: #1f2937;
-            margin-bottom: 24px;
-            font-weight: 600;
-        }
+/* MULTI-CLIENT TABLE */
+.clients-table-wrap{overflow-x:auto;}
+.mc-table{width:100%;border-collapse:collapse;min-width:900px;}
+.mc-table thead tr{background:var(--cream);}
+.mc-table th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap;}
+.mc-table th:hover{color:var(--gold-dk);}
+.mc-table td{padding:12px 14px;font-size:13.5px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.mc-table tbody tr:last-child td{border-bottom:none;}
+.mc-table tbody tr{cursor:pointer;transition:background 0.12s;}
+.mc-table tbody tr:hover{background:#FDFCFA;}
+.mc-table tbody tr.selected-row{background:var(--gold-lt);}
+.client-cell-m{display:flex;align-items:center;gap:9px;}
+.client-avatar-m{width:32px;height:32px;border-radius:9px;background:var(--gold-lt);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:13px;font-weight:700;color:var(--gold-dk);flex-shrink:0;}
+.client-name-m{font-weight:600;color:var(--dark);font-size:13.5px;}
+.mini-bar-bg{height:5px;background:var(--cream2);border-radius:3px;width:80px;overflow:hidden;display:inline-block;vertical-align:middle;margin-right:6px;}
+.mini-bar-fill{height:100%;border-radius:3px;}
+.mini-bar-fill.success{background:var(--success);}
+.mini-bar-fill.warning{background:var(--warning);}
+.mini-bar-fill.danger{background:var(--danger);}
+.rate-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11.5px;font-weight:600;}
+.rate-high{background:var(--success-lt);color:var(--success);}
+.rate-mid{background:var(--warning-lt);color:var(--warning);}
+.rate-low{background:var(--danger-lt);color:var(--danger);}
+.btn-xs-action{padding:4px 10px;font-size:11.5px;border-radius:6px;border:none;cursor:pointer;font-weight:600;font-family:'DM Sans',sans-serif;text-decoration:none;display:inline-flex;align-items:center;gap:3px;transition:all 0.12s;}
+.btn-xs-view{background:var(--gold-lt);color:var(--gold-dk);}
+.btn-xs-view:hover{background:rgba(184,146,74,0.22);}
+.btn-xs-brand{background:var(--cream2);color:var(--mid);}
+.btn-xs-brand:hover{background:var(--panel);color:var(--dark);}
 
-        .question-item {
-            padding: 16px;
-            border-bottom: 1px solid #e5e7eb;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .question-item:last-child { border-bottom: none; }
-        .question-text { color: #374151; flex: 1; }
-        .question-count {
-            background: #667eea;
-            color: white;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 13px;
-            font-weight: 600;
-            margin-left: 12px;
-            white-space: nowrap;
-        }
-        .unanswered { background: #ef4444; }
+/* LEADS SECTION */
+.leads-filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.leads-search{padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--white);color:var(--dark);outline:none;width:220px;}
+.leads-search:focus{border-color:var(--gold);}
+.leads-table-wrap{overflow-x:auto;margin-top:4px;}
+.leads-table{width:100%;border-collapse:collapse;min-width:680px;}
+.leads-table thead tr{background:var(--cream);}
+.leads-table th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border);}
+.leads-table td{padding:11px 14px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.leads-table tbody tr:last-child td{border-bottom:none;}
+.leads-table tbody tr:hover{background:#FDFCFA;}
+.lead-avatar{width:28px;height:28px;border-radius:50%;background:var(--gold-lt);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--gold-dk);flex-shrink:0;font-family:'Fraunces',serif;}
 
-        .loading { text-align: center; padding: 60px; color: #6b7280; }
+/* QUESTIONS */
+.q-list{list-style:none;display:flex;flex-direction:column;gap:8px;}
+.q-item{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--cream);border-radius:9px;}
+.q-bar-bg{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+.q-bar-fill{height:100%;border-radius:3px;background:var(--gold);}
+.q-text{font-size:13px;color:var(--dark);flex:3;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.q-count{font-family:'DM Mono',monospace;font-size:12px;color:var(--sub);font-weight:500;white-space:nowrap;}
+.q-item.unanswered .q-bar-fill{background:var(--danger);}
 
-        /* ── Leads Captured Table ───────────────────────────────────── */
-        .leads-section {
-            background: white;
-            padding: 32px;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-top: 24px;
-        }
-        .leads-section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-        .leads-section-header h2 {
-            font-size: 18px;
-            color: #1f2937;
-            font-weight: 600;
-        }
-        .leads-count-badge {
-            background: #ecfdf5;
-            color: #059669;
-            border: 1px solid #a7f3d0;
-            padding: 4px 12px;
-            border-radius: 999px;
-            font-size: 13px;
-            font-weight: 700;
-        }
-        .leads-table-wrap {
-            overflow-x: auto;
-            border-radius: 8px;
-            border: 1px solid #e5e7eb;
-        }
-        .leads-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
-        }
-        .leads-table thead {
-            background: #f9fafb;
-            border-bottom: 2px solid #e5e7eb;
-        }
-        .leads-table th {
-            padding: 12px 16px;
-            text-align: left;
-            font-size: 12px;
-            font-weight: 700;
-            color: #6b7280;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            white-space: nowrap;
-        }
-        .leads-table td {
-            padding: 14px 16px;
-            border-bottom: 1px solid #f3f4f6;
-            color: #374151;
-            vertical-align: top;
-        }
-        .leads-table tbody tr:last-child td { border-bottom: none; }
-        .leads-table tbody tr:hover { background: #f9fafb; }
-        .lead-email {
-            color: #667eea;
-            font-weight: 500;
-            word-break: break-all;
-        }
-        .lead-name { font-weight: 600; color: #1f2937; }
-        .lead-phone { color: #6b7280; }
-        .lead-company { color: #6b7280; font-style: italic; }
-        .lead-message {
-            max-width: 220px;
-            color: #6b7280;
-            font-size: 13px;
-            overflow: hidden;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-        }
-        .lead-date {
-            color: #9ca3af;
-            font-size: 13px;
-            white-space: nowrap;
-        }
-        .empty-leads {
-            text-align: center;
-            padding: 48px 20px;
-            color: #9ca3af;
-        }
-        .empty-leads .emoji { font-size: 32px; margin-bottom: 12px; }
-        .empty-leads p { font-size: 15px; }
-    </style>
+/* LOADING SKELETON */
+.skeleton{background:linear-gradient(90deg,var(--panel) 25%,var(--cream2) 50%,var(--panel) 75%);background-size:200% 100%;animation:shimmer 1.4s infinite;border-radius:6px;}
+@keyframes shimmer{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+.skeleton-card{height:80px;border-radius:14px;}
+.skeleton-row{height:44px;border-radius:8px;margin-bottom:8px;}
+
+/* EMPTY STATE */
+.empty-state{text-align:center;padding:56px 24px;}
+.empty-icon{width:56px;height:56px;background:var(--gold-lt);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+.empty-icon svg{width:24px;height:24px;color:var(--gold);}
+.empty-state h3{font-family:'Fraunces',serif;font-size:17px;font-weight:700;margin-bottom:6px;}
+.empty-state p{color:var(--sub);font-size:13px;font-weight:300;}
+
+/* COLLAPSIBLE */
+.collapsible-toggle{background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:6px;color:var(--mid);font-size:13px;font-weight:600;font-family:'DM Sans',sans-serif;transition:color 0.15s;padding:0;}
+.collapsible-toggle:hover{color:var(--dark);}
+.collapsible-toggle svg{width:14px;height:14px;transition:transform 0.2s;}
+.collapsible-toggle.open svg{transform:rotate(180deg);}
+.collapsible-body{display:none;}
+.collapsible-body.open{display:block;}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;right:20px;padding:12px 18px;border-radius:10px;font-size:14px;font-weight:600;color:#fff;z-index:9999;opacity:0;transform:translateY(10px);transition:all 0.3s;pointer-events:none;max-width:300px;}
+.toast.show{opacity:1;transform:translateY(0);}
+.toast.success{background:var(--success);}
+.toast.error{background:var(--danger);}
+
+@media(max-width:768px){.page{padding:16px;}.toolbar{gap:8px;}.charts-row{grid-template-columns:1fr;}}
+@media(max-width:480px){.summary-row{grid-template-columns:1fr 1fr;}.stat-value{font-size:22px;}}
+</style>
 </head>
 <body>
-    <div class="header">
-        <h1>📊 Analytics Dashboard</h1>
-        <p>Track conversations, leads, and performance</p>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <a href="/dashboard" class="topbar-brand">
+    <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi">
+    <span>Lumvi</span>
+  </a>
+  <div class="topbar-right">
+    <span class="plan-chip">{{ plan_type }}</span>
+    <a href="/dashboard" class="btn-link">Dashboard</a>
+    <a href="/logout" class="btn-link">Logout</a>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <h1>Analytics</h1>
+
+    {% if is_agency and clients|length > 1 %}
+    <div class="view-toggle">
+      <button class="view-btn active" id="btnAgency" onclick="setView('agency')">All Clients</button>
+      <button class="view-btn" id="btnSingle" onclick="setView('single')">Single Client</button>
+    </div>
+    {% endif %}
+
+    <!-- Client selector (single view) -->
+    <select class="select-styled" id="clientSelect" onchange="onClientChange()"
+      {% if not is_agency or clients|length <= 1 %}style="display:block"{% else %}style="display:none"{% endif %}>
+      {% for c in clients %}
+      <option value="{{ c.client_id }}" {% if c.client_id == client_id %}selected{% endif %}>
+        {{ c.company_name }}
+      </option>
+      {% endfor %}
+    </select>
+
+    <select class="select-styled" id="dateRange" onchange="loadData()">
+      <option value="today">Today</option>
+      <option value="week" selected>Last 7 Days</option>
+      <option value="month">Last 30 Days</option>
+      <option value="all">All Time</option>
+    </select>
+
+    <button class="btn-export" onclick="exportLeads()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export
+    </button>
+
+    <button class="btn-refresh" onclick="loadData()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      Refresh
+    </button>
+  </div>
+
+  <!-- SUMMARY CARDS -->
+  <div class="summary-row" id="summaryRow">
+    <div class="stat-card gold">
+      <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Clients</div>
+      <div class="stat-value" id="sc-clients"><div class="skeleton skeleton-card" style="width:60px;height:32px;"></div></div>
+      <div class="stat-sub" id="sc-clients-sub">Loading…</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Conversations</div>
+      <div class="stat-value" id="sc-convos"><div class="skeleton" style="width:60px;height:32px;"></div></div>
+      <div class="stat-sub" id="sc-convos-sub">this period</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Leads Captured</div>
+      <div class="stat-value" id="sc-leads"><div class="skeleton" style="width:60px;height:32px;"></div></div>
+      <div class="stat-sub" id="sc-leads-sub">this period</div>
+    </div>
+    <div class="stat-card amber">
+      <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Resolution Rate</div>
+      <div class="stat-value" id="sc-rate"><div class="skeleton" style="width:60px;height:32px;"></div></div>
+      <div class="stat-sub">questions answered</div>
+    </div>
+    <div class="stat-card red">
+      <div class="stat-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Unanswered</div>
+      <div class="stat-value" id="sc-unanswered"><div class="skeleton" style="width:60px;height:32px;"></div></div>
+      <div class="stat-sub">need FAQ coverage</div>
+    </div>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="charts-row">
+    <div class="chart-wrap">
+      <div class="chart-title">Conversation Volume</div>
+      <div class="chart-canvas-wrap"><canvas id="convChart"></canvas></div>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-title">Leads vs Conversations</div>
+      <div class="chart-canvas-wrap"><canvas id="leadsChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- MULTI-CLIENT TABLE (agency view) -->
+  <div class="section" id="agencyTable">
+    <div class="section-head">
+      <span class="section-title">Client Overview</span>
+      <div class="section-head-right">
+        <span id="tableSubtitle" style="font-size:12px;color:var(--sub);"></span>
+      </div>
+    </div>
+    <div class="section-body" style="padding:0;">
+      <div class="clients-table-wrap">
+        <table class="mc-table" id="mcTable">
+          <thead>
+            <tr>
+              <th onclick="sortMcTable(0)">Company ↕</th>
+              <th onclick="sortMcTable(1)">Conversations ↕</th>
+              <th onclick="sortMcTable(2)">Leads ↕</th>
+              <th onclick="sortMcTable(3)">Resolution ↕</th>
+              <th>Daily Usage</th>
+              <th onclick="sortMcTable(5)">Unanswered ↕</th>
+              <th onclick="sortMcTable(6)">Last Active ↕</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="mcTableBody">
+            <tr><td colspan="8" style="padding:40px;text-align:center;">
+              <div class="skeleton skeleton-row"></div>
+              <div class="skeleton skeleton-row"></div>
+              <div class="skeleton skeleton-row" style="width:70%;"></div>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="mcEmpty" style="display:none;">
+        <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+        <h3>No clients found</h3>
+        <p>Create a client from the dashboard to see analytics here.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SINGLE-CLIENT DEEP DIVE -->
+  <div id="singleView" style="display:none;">
+
+    <!-- Top Questions -->
+    <div class="section" style="margin-bottom:20px;">
+      <div class="section-head">
+        <span class="section-title">Top Questions</span>
+        <button class="collapsible-toggle open" id="topQToggle" onclick="toggleSection('topQ','topQToggle')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          Collapse
+        </button>
+      </div>
+      <div class="section-body collapsible-body open" id="topQ">
+        <ul class="q-list" id="topQuestionsList">
+          <li style="color:var(--sub);font-size:13px;padding:10px;">Loading…</li>
+        </ul>
+      </div>
     </div>
 
-    <div class="container">
-        <div class="controls">
-            <label for="client-select">Client:</label>
-            <select id="client-select">
-                {% for c in clients %}
-                    <option value="{{ c.client_id }}">{{ c.company_name or c.client_id }}</option>
-                {% endfor %}
-                <option value="default">Default</option>
-                <option value="demo">Demo</option>
-            </select>
-
-            <label for="date-range">Period:</label>
-            <select id="date-range">
-                <option value="today">Today</option>
-                <option value="week">Last 7 Days</option>
-                <option value="month">Last 30 Days</option>
-                <option value="all">All Time</option>
-            </select>
-
-            <button onclick="loadAnalytics()">🔄 Refresh</button>
-        </div>
-
-        <!-- Stats cards -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <h3>Total Conversations</h3>
-                <div class="value" id="total-conversations">—</div>
-                <div class="change">↗ +0% from last period</div>
-            </div>
-            <div class="stat-card">
-                <h3>Leads Captured</h3>
-                <div class="value" id="total-leads">—</div>
-                <div class="change" id="conversion-rate">↗ +0% conversion rate</div>
-            </div>
-            <div class="stat-card">
-                <h3>Questions Answered</h3>
-                <div class="value" id="answered-rate">—</div>
-                <div class="change">Matched FAQ responses</div>
-            </div>
-            <div class="stat-card negative">
-                <h3>Unanswered Questions</h3>
-                <div class="value" id="unanswered-count">—</div>
-                <div class="change">↘ Need FAQ improvement</div>
-            </div>
-        </div>
-
-        <!-- Chart -->
-        <div class="chart-section">
-            <h2>📈 Conversations Over Time</h2>
-            <div class="chart-container">
-                <canvas id="conversationsChart"></canvas>
-            </div>
-        </div>
-
-        <!-- Leads Captured Table -->
-        <div class="leads-section">
-            <div class="leads-section-header">
-                <h2>🎯 Leads Captured</h2>
-                <span class="leads-count-badge" id="leads-badge">0 leads</span>
-            </div>
-            <div id="leads-table-container">
-                <div class="loading">Loading leads...</div>
-            </div>
-        </div>
-
-        <!-- Top questions -->
-        <div class="questions-list" style="margin-top: 24px;">
-            <h2>💬 Most Asked Questions</h2>
-            <div id="top-questions">
-                <div class="loading">Loading analytics data...</div>
-            </div>
-        </div>
-
-        <!-- Unanswered questions -->
-        <div class="questions-list" style="margin-top: 24px;">
-            <h2>❓ Unanswered Questions</h2>
-            <div id="unanswered-questions">
-                <div class="loading">Loading...</div>
-            </div>
-        </div>
+    <!-- Unanswered Questions -->
+    <div class="section" style="margin-bottom:20px;">
+      <div class="section-head">
+        <span class="section-title">Unanswered Questions</span>
+        <button class="collapsible-toggle open" id="unQToggle" onclick="toggleSection('unQ','unQToggle')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          Collapse
+        </button>
+      </div>
+      <div class="section-body collapsible-body open" id="unQ">
+        <ul class="q-list" id="unansweredList">
+          <li style="color:var(--sub);font-size:13px;padding:10px;">Loading…</li>
+        </ul>
+      </div>
     </div>
 
-    <script>
-        let conversationsChart = null;
+  </div>
 
-        window.onload = function() {
-            let clientId = '{{ client_id or "demo" }}';
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('client_id')) clientId = urlParams.get('client_id');
-            document.getElementById('client-select').value = clientId;
-            loadAnalytics();
-        };
+  <!-- LEADS TABLE -->
+  <div class="section">
+    <div class="section-head">
+      <span class="section-title">Leads Captured</span>
+      <div class="section-head-right">
+        <input class="leads-search" id="leadsSearch" type="text" placeholder="Search leads…" oninput="filterLeads()">
+        <button class="btn-export" onclick="exportLeads()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          CSV
+        </button>
+        <button class="collapsible-toggle open" id="leadsToggle" onclick="toggleSection('leadsBody','leadsToggle')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="collapsible-body open section-body" id="leadsBody" style="padding:0;">
+      <div class="leads-table-wrap">
+        <table class="leads-table">
+          <thead><tr>
+            <th>Name</th><th>Email</th><th>Phone</th>
+            <th>Company</th><th>Message</th><th>Captured</th>
+          </tr></thead>
+          <tbody id="leadsTableBody">
+            <tr><td colspan="6" style="padding:40px;text-align:center;color:var(--sub);font-size:13px;">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="empty-state" id="leadsEmpty" style="display:none;">
+        <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg></div>
+        <h3>No leads yet</h3>
+        <p>Leads are captured when visitors share contact info during chat.</p>
+      </div>
+    </div>
+  </div>
 
-        async function loadAnalytics() {
-            const clientId = document.getElementById('client-select').value;
-            const dateRange = document.getElementById('date-range').value;
+</div><!-- /page -->
 
-            // Reset to loading state
-            document.getElementById('leads-table-container').innerHTML = '<div class="loading">Loading leads...</div>';
-            document.getElementById('top-questions').innerHTML = '<div class="loading">Loading...</div>';
-            document.getElementById('unanswered-questions').innerHTML = '<div class="loading">Loading...</div>';
+<div class="toast" id="toast"></div>
 
-            try {
-                const response = await fetch(`/api/admin/analytics?client_id=${clientId}&range=${dateRange}`);
-                const data = await response.json();
+<script>
+// ── State ──────────────────────────────────────────────────────────────
+const CLIENTS   = {{ clients | tojson }};
+const IS_AGENCY = {{ 'true' if is_agency else 'false' }};
+let   _view     = (IS_AGENCY && CLIENTS.length > 1) ? 'agency' : 'single';
+let   _convChart = null, _leadsChart = null;
+let   _leadsData = [];
+let   _mcSortCol = -1, _mcSortAsc = true;
 
-                if (data.success) {
-                    updateStats(data.analytics);
-                    updateChart(data.analytics.timeline);
-                    updateLeadsTable(data.analytics.leads_captured || []);
-                    updateTopQuestions(data.analytics.top_questions);
-                    updateUnansweredQuestions(data.analytics.unanswered);
-                } else {
-                    showError('Failed to load analytics: ' + (data.error || 'unknown error'));
-                }
-            } catch (error) {
-                showError('Network error: ' + error.message);
-            }
-        }
+// ── Init ───────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  applyView();
+  loadData();
+});
 
-        function showError(msg) {
-            const container = document.querySelector('.container');
-            // Remove any existing error
-            const existing = container.querySelector('.analytics-error');
-            if (existing) existing.remove();
-            const err = document.createElement('div');
-            err.className = 'analytics-error';
-            err.style.cssText = 'color:#ef4444;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px 20px;margin-bottom:20px;font-size:14px;';
-            err.textContent = '⚠️ ' + msg;
-            container.insertBefore(err, container.firstChild);
-        }
+function applyView() {
+  const agencyTable = document.getElementById('agencyTable');
+  const singleView  = document.getElementById('singleView');
+  const clientSel   = document.getElementById('clientSelect');
+  document.getElementById('btnAgency')?.classList.toggle('active', _view === 'agency');
+  document.getElementById('btnSingle')?.classList.toggle('active', _view === 'single');
+  agencyTable.style.display = _view === 'agency' ? '' : 'none';
+  singleView.style.display  = _view === 'single' ? '' : 'none';
+  clientSel.style.display   = (_view === 'single' || !IS_AGENCY || CLIENTS.length <= 1) ? 'block' : 'none';
+}
 
-        function updateStats(analytics) {
-            document.getElementById('total-conversations').textContent = analytics.total_conversations.toLocaleString();
-            document.getElementById('total-leads').textContent = analytics.total_leads.toLocaleString();
-            document.getElementById('answered-rate').textContent = analytics.answer_rate + '%';
-            document.getElementById('unanswered-count').textContent = analytics.unanswered_count.toLocaleString();
+function setView(v) {
+  _view = v;
+  applyView();
+  loadData();
+}
 
-            // Conversion rate = leads / conversations
-            if (analytics.total_conversations > 0) {
-                const convRate = ((analytics.total_leads / analytics.total_conversations) * 100).toFixed(1);
-                document.getElementById('conversion-rate').textContent = `↗ ${convRate}% of conversations → leads`;
-            }
-        }
+function onClientChange() {
+  loadData();
+}
 
-        function updateChart(timeline) {
-            const ctx = document.getElementById('conversationsChart');
-            if (conversationsChart) conversationsChart.destroy();
+// ── Load data ──────────────────────────────────────────────────────────
+async function loadData() {
+  const range = document.getElementById('dateRange').value;
+  try {
+    if (_view === 'agency' && IS_AGENCY && CLIENTS.length > 1) {
+      await loadAgencyData(range);
+    } else {
+      const cid = document.getElementById('clientSelect').value;
+      if (cid) await loadSingleData(cid, range);
+    }
+  } catch(e) {
+    showToast('Failed to load data', 'error');
+  }
+}
 
-            conversationsChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: timeline.map(t => t.date),
-                    datasets: [
-                        {
-                            label: 'Conversations',
-                            data: timeline.map(t => t.count),
-                            borderColor: '#667eea',
-                            backgroundColor: 'rgba(102,126,234,0.1)',
-                            tension: 0.4,
-                            fill: true
-                        },
-                        {
-                            label: 'Leads',
-                            data: timeline.map(t => t.leads),
-                            borderColor: '#10b981',
-                            backgroundColor: 'rgba(16,185,129,0.08)',
-                            tension: 0.4,
-                            fill: true
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: true, position: 'top' } },
-                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-                }
-            });
-        }
+// ── Agency multi-client ────────────────────────────────────────────────
+async function loadAgencyData(range) {
+  const res  = await fetch(`/api/analytics/agency?range=${range}`);
+  const data = await res.json();
+  if (!data.success) { showToast(data.error || 'Error', 'error'); return; }
 
-        function updateLeadsTable(leads) {
-            const container = document.getElementById('leads-table-container');
-            const badge = document.getElementById('leads-badge');
-            badge.textContent = `${leads.length} lead${leads.length !== 1 ? 's' : ''}`;
+  const t = data.totals;
+  setStat('sc-clients',    t.clients,          `of ${CLIENTS.length} total`);
+  setStat('sc-convos',     t.conversations,     'this period');
+  setStat('sc-leads',      t.leads,             'this period');
+  setStat('sc-rate',       t.resolution_rate+'%','questions answered');
+  setStat('sc-unanswered', t.unanswered,        'need FAQ coverage');
 
-            if (!leads || leads.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-leads">
-                        <div class="emoji">📭</div>
-                        <p>No leads captured in this period yet.<br>
-                        <small style="color:#d1d5db">Leads appear here when visitors submit their contact info through the chatbot.</small></p>
-                    </div>`;
-                return;
-            }
+  renderTimeline(data.timeline);
+  renderLeadsChart(data.timeline);
+  renderMcTable(data.clients);
 
-            const rows = leads.map(lead => {
-                const date = lead.created_at
-                    ? new Date(lead.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                    : '—';
-                return `
-                <tr>
-                    <td><div class="lead-name">${escapeHtml(lead.name || '—')}</div></td>
-                    <td><div class="lead-email">${escapeHtml(lead.email || '—')}</div></td>
-                    <td><div class="lead-phone">${escapeHtml(lead.phone || '—')}</div></td>
-                    <td><div class="lead-company">${escapeHtml(lead.company || '—')}</div></td>
-                    <td><div class="lead-message">${escapeHtml(lead.message || '—')}</div></td>
-                    <td><div class="lead-date">${date}</div></td>
-                </tr>`;
-            }).join('');
+  // Pull full leads for the leads table from single client (first active)
+  if (data.clients.length > 0) {
+    const topCid = data.clients[0].client_id;
+    fetchLeads(topCid, range);
+  }
 
-            container.innerHTML = `
-                <div class="leads-table-wrap">
-                    <table class="leads-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th>Phone</th>
-                                <th>Company</th>
-                                <th>Message</th>
-                                <th>Captured</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rows}</tbody>
-                    </table>
-                </div>`;
-        }
+  document.getElementById('tableSubtitle').textContent =
+    `${data.clients.length} client${data.clients.length !== 1 ? 's' : ''}`;
+}
 
-        function updateTopQuestions(questions) {
-            const container = document.getElementById('top-questions');
-            if (!questions || questions.length === 0) {
-                container.innerHTML = '<div class="loading">No matched questions yet</div>';
-                return;
-            }
-            container.innerHTML = questions.map(q => `
-                <div class="question-item">
-                    <div class="question-text">${escapeHtml(q.question)}</div>
-                    <div class="question-count">${q.count}</div>
-                </div>`).join('');
-        }
+// ── Single client ──────────────────────────────────────────────────────
+async function loadSingleData(clientId, range) {
+  const res  = await fetch(`/api/admin/analytics?client_id=${clientId}&range=${range}`);
+  const data = await res.json();
+  if (!data.success) { showToast(data.error || 'Error', 'error'); return; }
 
-        function updateUnansweredQuestions(questions) {
-            const container = document.getElementById('unanswered-questions');
-            if (!questions || questions.length === 0) {
-                container.innerHTML = '<div class="loading">All questions answered! 🎉</div>';
-                return;
-            }
-            container.innerHTML = questions.map(q => `
-                <div class="question-item">
-                    <div class="question-text">${escapeHtml(q.question)}</div>
-                    <div class="question-count unanswered">${q.count}</div>
-                </div>`).join('');
-        }
+  const a = data.analytics;
+  setStat('sc-clients',    '1',              'selected client');
+  setStat('sc-convos',     a.total_conversations, 'this period');
+  setStat('sc-leads',      a.total_leads,    'this period');
+  setStat('sc-rate',       a.answer_rate+'%','questions answered');
+  setStat('sc-unanswered', a.unanswered_count,'need FAQ coverage');
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = String(text);
-            return div.innerHTML;
-        }
-    </script>
+  renderTimeline(a.timeline.map(d => ({date: d.date, conversations: d.count, leads: d.leads})));
+  renderLeadsChart(a.timeline.map(d => ({date: d.date, conversations: d.count, leads: d.leads})));
+  renderTopQuestions(a.top_questions);
+  renderUnansweredQuestions(a.unanswered);
+  renderLeadsTable(a.leads_captured);
+}
+
+async function fetchLeads(cid, range) {
+  try {
+    const res  = await fetch(`/api/admin/analytics?client_id=${cid}&range=${range}`);
+    const data = await res.json();
+    if (data.success) renderLeadsTable(data.analytics.leads_captured);
+  } catch {}
+}
+
+// ── Stats helper ───────────────────────────────────────────────────────
+function setStat(id, val, sub) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val ?? '—';
+  const subEl = document.getElementById(id + '-sub');
+  if (subEl && sub) subEl.textContent = sub;
+}
+
+// ── Timeline chart ─────────────────────────────────────────────────────
+function renderTimeline(timeline) {
+  const labels = timeline.map(d => fmtDate(d.date));
+  const values = timeline.map(d => d.conversations ?? d.count ?? 0);
+  if (_convChart) _convChart.destroy();
+  _convChart = new Chart(document.getElementById('convChart'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Conversations',
+        data: values,
+        fill: true,
+        tension: 0.4,
+        borderColor: '#B8924A',
+        backgroundColor: 'rgba(184,146,74,0.1)',
+        pointBackgroundColor: '#B8924A',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#F0EBE1' }, ticks: { font: { size: 11 }, color: '#A8A29E' } },
+        y: { grid: { color: '#F0EBE1' }, ticks: { font: { size: 11 }, color: '#A8A29E' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+// ── Leads vs Conversations chart ────────────────────────────────────────
+function renderLeadsChart(timeline) {
+  const labels   = timeline.map(d => fmtDate(d.date));
+  const convos   = timeline.map(d => d.conversations ?? d.count ?? 0);
+  const leads    = timeline.map(d => d.leads ?? 0);
+  if (_leadsChart) _leadsChart.destroy();
+  _leadsChart = new Chart(document.getElementById('leadsChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Conversations', data: convos, backgroundColor: 'rgba(184,146,74,0.6)', borderRadius: 4 },
+        { label: 'Leads',         data: leads,  backgroundColor: 'rgba(22,163,74,0.7)',  borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, color: '#57534E', boxWidth: 12 } } },
+      scales: {
+        x: { stacked: false, grid: { color: '#F0EBE1' }, ticks: { font: { size: 11 }, color: '#A8A29E' } },
+        y: { grid: { color: '#F0EBE1' }, ticks: { font: { size: 11 }, color: '#A8A29E' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+// ── Multi-client table ─────────────────────────────────────────────────
+function renderMcTable(clients) {
+  const tbody = document.getElementById('mcTableBody');
+  const empty = document.getElementById('mcEmpty');
+  if (!clients || clients.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = clients.map(c => {
+    const rateClass = c.resolution_rate >= 75 ? 'rate-high' : (c.resolution_rate >= 50 ? 'rate-mid' : 'rate-low');
+    const barClass  = c.usage_pct >= 90 ? 'danger' : (c.usage_pct >= 70 ? 'warning' : 'success');
+    const lastStr   = c.last_active ? fmtRelTime(c.last_active) : 'No activity';
+    const unlimited = c.daily_limit === 'Unlimited';
+    return `<tr onclick="drillClient('${c.client_id}', event)">
+      <td><div class="client-cell-m">
+        <div class="client-avatar-m">${(c.name||'?')[0].toUpperCase()}</div>
+        <div class="client-name-m">${esc(c.name)}</div>
+      </div></td>
+      <td>${c.conversations}</td>
+      <td style="color:var(--success);font-weight:600;">${c.leads}</td>
+      <td><span class="rate-badge ${rateClass}">${c.resolution_rate}%</span></td>
+      <td>
+        ${unlimited
+          ? '<span style="font-size:12px;color:var(--sub);">Unlimited</span>'
+          : `<div style="display:flex;align-items:center;gap:6px;">
+              <div class="mini-bar-bg"><div class="mini-bar-fill ${barClass}" style="width:${c.usage_pct}%"></div></div>
+              <span style="font-size:11.5px;color:var(--sub);">${c.daily_msgs}/${c.daily_limit}</span>
+             </div>`}
+      </td>
+      <td style="color:${c.unanswered > 0 ? 'var(--danger)' : 'var(--sub)'};">${c.unanswered}</td>
+      <td style="color:var(--sub);font-size:13px;">${lastStr}</td>
+      <td>
+        <div style="display:flex;gap:5px;">
+          <button class="btn-xs-action btn-xs-view" onclick="event.stopPropagation();viewClient('${c.client_id}')">Details</button>
+          <a href="/customize?client_id=${c.client_id}" class="btn-xs-action btn-xs-brand" onclick="event.stopPropagation()">Brand</a>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function drillClient(cid, event) {
+  if (event.target.closest('a,button')) return;
+  setView('single');
+  document.getElementById('clientSelect').value = cid;
+  loadData();
+}
+
+function viewClient(cid) {
+  setView('single');
+  document.getElementById('clientSelect').value = cid;
+  loadData();
+}
+
+// ── Sort multi-client table ────────────────────────────────────────────
+let _mcData = [];
+function sortMcTable(col) {
+  _mcSortAsc = (_mcSortCol === col) ? !_mcSortAsc : true;
+  _mcSortCol = col;
+  const fields = ['name','conversations','leads','resolution_rate','','unanswered','last_active'];
+  const key    = fields[col];
+  if (!key) return;
+  _mcData.sort((a,b) => {
+    let av = a[key] ?? '', bv = b[key] ?? '';
+    const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
+    return _mcSortAsc ? cmp : -cmp;
+  });
+  renderMcTable(_mcData);
+  document.querySelectorAll('.mc-table th').forEach((th,i) => {
+    th.textContent = th.textContent.replace(/[↑↓↕]/g,'').trim() + (i === col ? (_mcSortAsc ? ' ↑' : ' ↓') : ' ↕');
+  });
+}
+
+// ── Questions ──────────────────────────────────────────────────────────
+function renderTopQuestions(qs) {
+  const el  = document.getElementById('topQuestionsList');
+  const max = qs.reduce((m,q) => Math.max(m, q.count), 1);
+  el.innerHTML = qs.length ? qs.map(q => `
+    <li class="q-item">
+      <span class="q-text" title="${esc(q.question)}">${esc(q.question)}</span>
+      <div class="q-bar-bg"><div class="q-bar-fill" style="width:${Math.round(q.count/max*100)}%"></div></div>
+      <span class="q-count">${q.count}×</span>
+    </li>`).join('') : '<li style="color:var(--sub);font-size:13px;padding:10px;">No data for this period.</li>';
+}
+
+function renderUnansweredQuestions(qs) {
+  const el  = document.getElementById('unansweredList');
+  const max = qs.reduce((m,q) => Math.max(m, q.count), 1);
+  el.innerHTML = qs.length ? qs.map(q => `
+    <li class="q-item unanswered">
+      <span class="q-text" title="${esc(q.question)}">${esc(q.question)}</span>
+      <div class="q-bar-bg"><div class="q-bar-fill" style="width:${Math.round(q.count/max*100)}%"></div></div>
+      <span class="q-count" style="color:var(--danger);">${q.count}×</span>
+    </li>`).join('') : '<li style="color:var(--sub);font-size:13px;padding:10px;">No unanswered questions. All caught!</li>';
+}
+
+// ── Leads table ────────────────────────────────────────────────────────
+function renderLeadsTable(leads) {
+  _leadsData = leads || [];
+  renderLeadsFiltered(_leadsData);
+}
+
+function filterLeads() {
+  const q = document.getElementById('leadsSearch').value.toLowerCase();
+  renderLeadsFiltered(_leadsData.filter(l =>
+    (l.name||'').toLowerCase().includes(q) ||
+    (l.email||'').toLowerCase().includes(q) ||
+    (l.company||'').toLowerCase().includes(q)
+  ));
+}
+
+function renderLeadsFiltered(leads) {
+  const tbody = document.getElementById('leadsTableBody');
+  const empty = document.getElementById('leadsEmpty');
+  if (!leads.length) {
+    tbody.innerHTML = '<tr><td colspan="6"></td></tr>';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = leads.map(l => `<tr>
+    <td><div style="display:flex;align-items:center;gap:8px;">
+      <div class="lead-avatar">${(l.name||'?')[0].toUpperCase()}</div>
+      <span>${esc(l.name||'—')}</span>
+    </div></td>
+    <td><a href="mailto:${esc(l.email)}" style="color:var(--gold);text-decoration:none;">${esc(l.email||'—')}</a></td>
+    <td style="color:var(--mid);">${esc(l.phone||'—')}</td>
+    <td style="color:var(--mid);">${esc(l.company||'—')}</td>
+    <td style="color:var(--mid);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(l.message||'')}">${esc(l.message||'—')}</td>
+    <td style="color:var(--sub);font-size:12px;white-space:nowrap;">${fmtDate(l.created_at)}</td>
+  </tr>`).join('');
+}
+
+// ── Export CSV ─────────────────────────────────────────────────────────
+function exportLeads() {
+  if (!_leadsData.length) { showToast('No leads to export', 'error'); return; }
+  const cols = ['name','email','phone','company','message','created_at'];
+  const csv  = [cols.join(','),
+    ..._leadsData.map(l => cols.map(c => `"${(l[c]||'').toString().replace(/"/g,'""')}"`).join(','))
+  ].join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = `leads_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  showToast('Leads exported', 'success');
+}
+
+// ── Collapsible sections ───────────────────────────────────────────────
+function toggleSection(bodyId, toggleId) {
+  const body   = document.getElementById(bodyId);
+  const toggle = document.getElementById(toggleId);
+  const open   = body.classList.toggle('open');
+  toggle.classList.toggle('open', open);
+  toggle.querySelector('span') && (toggle.querySelector('span').textContent = open ? 'Collapse' : 'Expand');
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+function fmtDate(str) {
+  if (!str) return '—';
+  try {
+    const d = new Date(str);
+    return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+  } catch { return str; }
+}
+
+function fmtRelTime(str) {
+  if (!str) return '—';
+  try {
+    const diff = (Date.now() - new Date(str)) / 1000;
+    if (diff < 86400) return 'Today';
+    if (diff < 172800) return 'Yesterday';
+    if (diff < 604800) return Math.floor(diff/86400) + 'd ago';
+    return fmtDate(str);
+  } catch { return str; }
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `toast ${type} show`;
+  setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+
+// Patch renderMcTable to save data for sorting
+const _origRenderMc = renderMcTable;
+window.renderMcTable = function(clients) {
+  _mcData = clients || [];
+  _origRenderMc(clients);
+};
+</script>
 </body>
 </html>
