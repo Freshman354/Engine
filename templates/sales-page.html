@@ -1,906 +1,725 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>White-Label FAQ Chatbot for Agencies | Lumvi</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --secondary: #ec4899;
-            --dark-bg: #0f172a;
-            --card-bg: rgba(30, 41, 59, 0.7);
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --success: #10b981;
-            --accent: #06b6d4;
-            --agency-color: #a78bfa;
-            --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.5);
-        }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--dark-bg);
-            color: var(--text-main);
-            line-height: 1.6;
-        }
-
-        /* ── HERO ── */
-        .hero {
-            background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 50%, #1e1b4b 100%);
-            border-bottom: 1px solid rgba(99, 102, 241, 0.3);
-            padding: 120px 20px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .hero::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 800px;
-            height: 800px;
-            background: radial-gradient(circle, rgba(99,102,241,0.15) 0%, transparent 70%);
-            pointer-events: none;
-        }
-
-        .hero h1 {
-            font-size: 52px;
-            font-weight: 800;
-            letter-spacing: -1.5px;
-            margin-bottom: 20px;
-            line-height: 1.15;
-            position: relative;
-        }
-
-        .hero h1 span {
-            background: linear-gradient(135deg, var(--primary), #a78bfa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .hero p {
-            font-size: 20px;
-            color: var(--text-muted);
-            margin-bottom: 40px;
-            max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
-            position: relative;
-        }
-
-        .hero-cta {
-            display: inline-block;
-            padding: 18px 44px;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-            text-decoration: none;
-            border-radius: 12px;
-            font-size: 18px;
-            font-weight: 700;
-            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.5);
-            transition: all 0.2s;
-            position: relative;
-        }
-
-        .hero-cta:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(99, 102, 241, 0.7);
-        }
-
-        /* ── CONTAINER ── */
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 90px 20px;
-        }
-
-        /* ── PROBLEM ── */
-        .problem {
-            text-align: center;
-            margin-bottom: 70px;
-        }
-
-        .problem h2 {
-            font-size: 38px;
-            font-weight: 800;
-            letter-spacing: -1px;
-            margin-bottom: 20px;
-        }
-
-        .problem p {
-            font-size: 18px;
-            color: var(--text-muted);
-            max-width: 760px;
-            margin: 0 auto;
-        }
-
-        /* ── FEATURES ── */
-        .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 24px;
-        }
-
-        .feature {
-            background: var(--card-bg);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 20px;
-            padding: 36px;
-            text-align: center;
-            transition: transform 0.3s, border-color 0.3s;
-        }
-
-        .feature:hover {
-            transform: translateY(-6px);
-            border-color: var(--primary);
-        }
-
-        .feature-icon { font-size: 44px; margin-bottom: 18px; }
-        .feature h3 { font-size: 20px; font-weight: 700; margin-bottom: 10px; color: white; }
-        .feature p { color: var(--text-muted); font-size: 15px; }
-
-        /* ── PRICING SECTION ── */
-        .pricing {
-            padding: 90px 20px;
-            text-align: center;
-        }
-
-        .pricing-header { margin-bottom: 32px; }
-
-        .pricing-header h2 {
-            font-size: 38px;
-            font-weight: 800;
-            letter-spacing: -1px;
-            margin-bottom: 12px;
-        }
-
-        .pricing-header p {
-            font-size: 17px;
-            color: var(--text-muted);
-            font-weight: 300;
-        }
-
-        /* ── BILLING TOGGLE ── */
-        .billing-toggle {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            margin-bottom: 52px;
-        }
-
-        .toggle-label { font-size: 14px; color: var(--text-muted); }
-
-        .toggle-switch {
-            position: relative;
-            width: 46px;
-            height: 24px;
-            cursor: pointer;
-        }
-
-        .toggle-switch input { opacity: 0; width: 0; height: 0; }
-
-        .toggle-track {
-            position: absolute;
-            inset: 0;
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 100px;
-            transition: background 0.3s;
-        }
-
-        .toggle-thumb {
-            position: absolute;
-            top: 3px; left: 3px;
-            width: 16px; height: 16px;
-            background: var(--text-muted);
-            border-radius: 50%;
-            transition: transform 0.3s, background 0.3s;
-        }
-
-        .toggle-switch input:checked ~ .toggle-track { background: var(--accent); border-color: var(--accent); }
-        .toggle-switch input:checked ~ .toggle-thumb { transform: translateX(22px); background: #0f172a; }
-
-        .save-badge {
-            background: rgba(16,185,129,0.15);
-            border: 1px solid rgba(16,185,129,0.3);
-            color: var(--success);
-            font-size: 12px;
-            font-weight: 600;
-            padding: 3px 10px;
-            border-radius: 100px;
-            opacity: 0;
-            transform: translateX(-4px);
-            transition: opacity 0.3s, transform 0.3s;
-        }
-
-        .save-badge.visible { opacity: 1; transform: translateX(0); }
-
-        /* ── PRICING GRID ── */
-        .pricing-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-            max-width: 1280px;
-            margin: 0 auto;
-            align-items: start;
-        }
-
-        /* ── PRICING CARDS ── */
-        .pricing-card {
-            background: var(--card-bg);
-            backdrop-filter: blur(12px);
-            padding: 40px 36px;
-            border-radius: 24px;
-            border: 1px solid rgba(255,255,255,0.1);
-            text-align: left;
-            transition: transform 0.3s ease, border-color 0.3s;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .pricing-card:hover { transform: translateY(-8px); border-color: rgba(99,102,241,0.4); }
-
-        .pricing-card.featured {
-            background: rgba(15, 25, 50, 0.95);
-            border: 1.5px solid var(--accent);
-            box-shadow: 0 0 30px rgba(6,182,212,0.2), 0 20px 50px rgba(0,0,0,0.4);
-            transform: scale(1.04);
-        }
-
-        .pricing-card.featured:hover { transform: scale(1.04) translateY(-6px); }
-
-        .pricing-card.agency-card { border-color: rgba(167,139,250,0.2); }
-        .pricing-card.agency-card:hover { border-color: rgba(167,139,250,0.4); }
-
-        .popular-badge {
-            background: var(--accent);
-            color: #0f172a;
-            font-weight: 800;
-            padding: 5px 16px;
-            border-radius: 0 0 10px 10px;
-            position: absolute;
-            top: -1px;
-            left: 50%;
-            transform: translateX(-50%);
-            text-transform: uppercase;
-            font-size: 11px;
-            letter-spacing: 0.08em;
-            white-space: nowrap;
-        }
-
-        .plan-name {
-            font-size: 13px;
-            font-weight: 700;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            margin-bottom: 16px;
-            margin-top: 8px;
-        }
-
-        .pricing-card.featured .plan-name { color: var(--accent); }
-        .pricing-card.agency-card .plan-name { color: var(--agency-color); }
-
-        .price-row {
-            display: flex;
-            align-items: flex-end;
-            gap: 2px;
-            margin-bottom: 4px;
-        }
-
-        .price-dollar {
-            font-size: 22px;
-            font-weight: 700;
-            color: var(--text-muted);
-            margin-bottom: 8px;
-        }
-
-        .pricing-card.featured .price-dollar { color: var(--accent); }
-        .pricing-card.agency-card .price-dollar { color: var(--agency-color); }
-
-        .price-amount {
-            font-size: 58px;
-            font-weight: 800;
-            color: white;
-            letter-spacing: -2.5px;
-            line-height: 1;
-            transition: opacity 0.2s, transform 0.2s;
-        }
-
-        .pricing-card.featured .price-amount { color: var(--accent); }
-        .pricing-card.agency-card .price-amount { color: var(--agency-color); }
-
-        .price-period {
-            font-size: 14px;
-            color: var(--text-muted);
-            margin-bottom: 4px;
-            font-weight: 400;
-        }
-
-        .price-annual {
-            font-size: 13px;
-            color: var(--success);
-            font-weight: 500;
-            margin-bottom: 16px;
-            min-height: 20px;
-        }
-
-        .plan-tagline {
-            font-size: 13px;
-            color: var(--text-muted);
-            margin-bottom: 20px;
-            font-weight: 300;
-            line-height: 1.5;
-            min-height: 40px;
-        }
-
-        /* ── FEATURE LIST ── */
-        .features-list { list-style: none; margin-bottom: 32px; flex-grow: 1; }
-
-        .features-list li {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            color: #cbd5e1;
-            font-size: 14px;
-            padding: 10px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .features-list li:last-child { border-bottom: none; }
-
-        .check {
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: rgba(16,185,129,0.12);
-            color: var(--success);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            font-weight: 700;
-            flex-shrink: 0;
-        }
-
-        .pricing-card.featured .check {
-            background: rgba(6,182,212,0.12);
-            color: var(--accent);
-        }
-
-        .pricing-card.agency-card .check {
-            background: rgba(167,139,250,0.12);
-            color: var(--agency-color);
-        }
-
-        /* ── BUTTONS ── */
-        .btn {
-            display: block;
-            width: 100%;
-            padding: 14px;
-            border-radius: 10px;
-            font-weight: 700;
-            text-align: center;
-            text-decoration: none;
-            transition: all 0.2s;
-            font-size: 15px;
-            border: none;
-            cursor: pointer;
-            font-family: 'Inter', sans-serif;
-            letter-spacing: 0.01em;
-        }
-
-        .btn-primary {
-            background: var(--accent);
-            color: #0f172a;
-            box-shadow: 0 4px 16px rgba(6,182,212,0.3);
-        }
-
-        .btn-primary:hover {
-            background: #22d3ee;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(6,182,212,0.45);
-        }
-
-        .btn-secondary {
-            background: transparent;
-            color: white;
-            border: 1px solid rgba(255,255,255,0.15);
-        }
-
-        .btn-secondary:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.3); }
-
-        .btn-agency {
-            background: transparent;
-            color: var(--agency-color);
-            border: 1px solid rgba(167,139,250,0.3);
-        }
-
-        .btn-agency:hover {
-            background: rgba(167,139,250,0.08);
-            border-color: var(--agency-color);
-            transform: translateY(-1px);
-        }
-
-        .pricing-card.solo-card { border-color: rgba(34,211,160,0.18); }
-        .pricing-card.solo-card:hover { border-color: rgba(34,211,160,0.38); }
-        .pricing-card.solo-card .plan-name { color: #22d3a0; }
-        .pricing-card.solo-card .price-amount { color: #22d3a0; }
-        .pricing-card.solo-card .price-dollar { color: #22d3a0; }
-        .pricing-card.solo-card .check { background: rgba(34,211,160,0.12); color: #22d3a0; }
-        .plan-badge-solo {
-            background: linear-gradient(135deg, #22d3a0, #0ea875);
-            color: #fff; font-weight: 800;
-            padding: 5px 16px; border-radius: 0 0 10px 10px;
-            position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
-            text-transform: uppercase; font-size: 11px; letter-spacing: 0.08em; white-space: nowrap;
-        }
-
-        
-        .annual-note {
-            text-align: center;
-            margin-top: 20px;
-            font-size: 13px;
-            color: var(--success);
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-
-        /* ── ENTERPRISE STRIP ── */
-        .enterprise-strip {
-            max-width: 1100px;
-            margin: 24px auto 0;
-            background: var(--card-bg);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 16px;
-            padding: 24px 32px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            flex-wrap: wrap;
-            text-align: left;
-        }
-
-        .enterprise-strip h4 {
-            font-size: 15px;
-            font-weight: 700;
-            color: white;
-            margin-bottom: 4px;
-        }
-
-        .enterprise-strip p {
-            font-size: 13px;
-            color: var(--text-muted);
-            font-weight: 300;
-        }
-
-        .enterprise-feats {
-            display: flex;
-            gap: 20px;
-            flex-wrap: wrap;
-        }
-
-        .ent-feat {
-            font-size: 13px;
-            color: #94a3b8;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .ent-feat::before { content: '✓'; color: var(--success); font-weight: 700; }
-
-        .btn-enterprise {
-            background: transparent;
-            border: 1px solid rgba(255,255,255,0.15);
-            color: white;
-            padding: 10px 24px;
-            border-radius: 9px;
-            font-size: 13px;
-            font-weight: 600;
-            text-decoration: none;
-            white-space: nowrap;
-            transition: all 0.2s;
-            flex-shrink: 0;
-        }
-
-        .btn-enterprise:hover { background: rgba(255,255,255,0.06); }
-
-        /* ── TESTIMONIALS ── */
-        .testimonials { padding: 0 20px 90px; }
-
-        .testimonials-inner { max-width: 1000px; margin: 0 auto; }
-
-        .testimonials h2 {
-            font-size: 38px;
-            font-weight: 800;
-            letter-spacing: -1px;
-            text-align: center;
-            margin-bottom: 50px;
-        }
-
-        .testimonial {
-            background: var(--card-bg);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255,255,255,0.08);
-            padding: 36px 40px;
-            border-radius: 20px;
-            margin-bottom: 24px;
-            transition: border-color 0.3s;
-        }
-
-        .testimonial:hover { border-color: var(--primary); }
-
-        .testimonial-text {
-            font-size: 17px;
-            color: #cbd5e1;
-            font-style: italic;
-            margin-bottom: 16px;
-            line-height: 1.7;
-        }
-
-        .testimonial-text::before {
-            content: '"';
-            font-size: 40px;
-            color: var(--primary);
-            line-height: 0;
-            vertical-align: -14px;
-            margin-right: 4px;
-        }
-
-        .testimonial-author { font-weight: 700; color: var(--text-muted); font-size: 14px; }
-
-        /* ── CTA SECTION ── */
-        .cta-section {
-            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%);
-            border-top: 1px solid rgba(99, 102, 241, 0.3);
-            padding: 100px 20px;
-            text-align: center;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .cta-section::before {
-            content: '';
-            position: absolute;
-            bottom: -30%;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 600px;
-            height: 600px;
-            background: radial-gradient(circle, rgba(99,102,241,0.2) 0%, transparent 70%);
-            pointer-events: none;
-        }
-
-        .cta-section h2 {
-            font-size: 44px;
-            font-weight: 800;
-            letter-spacing: -1.5px;
-            margin-bottom: 16px;
-            position: relative;
-        }
-
-        .cta-section p {
-            font-size: 18px;
-            color: var(--text-muted);
-            margin-bottom: 40px;
-            position: relative;
-        }
-
-        .cta-demo-btn {
-            display: inline-block;
-            padding: 18px 44px;
-            background: white;
-            color: var(--primary-dark);
-            text-decoration: none;
-            border-radius: 12px;
-            font-size: 18px;
-            font-weight: 700;
-            transition: all 0.2s;
-            position: relative;
-        }
-
-        .cta-demo-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(255,255,255,0.2); }
-
-        /* ── FOOTER ── */
-        .footer {
-            padding: 30px 20px;
-            text-align: center;
-            border-top: 1px solid rgba(255,255,255,0.06);
-        }
-
-        .footer a {
-            color: var(--text-muted);
-            text-decoration: none;
-            margin: 0 12px;
-            font-size: 14px;
-        }
-
-        .footer a:hover { color: white; }
-
-        @media (max-width: 1100px) {
-            .pricing-grid { grid-template-columns: repeat(2, 1fr); max-width: 680px; }
-            .pricing-card.featured { transform: none; }
-            .pricing-card.featured:hover { transform: translateY(-6px); }
-        }
-
-        @media (max-width: 900px) {
-            .hero h1 { font-size: 34px; }
-            .cta-section h2 { font-size: 30px; }
-            .enterprise-strip { flex-direction: column; }
-        }
-
-        @media (max-width: 600px) {
-            .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>White-Label AI Chatbot for Agencies | Lumvi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F7F4EF;
+  --cream2:#F0EBE1;
+  --panel:#EDEAE3;
+  --gold:#B8924A;
+  --gold-lt:rgba(184,146,74,0.12);
+  --gold-lt2:rgba(184,146,74,0.07);
+  --gold-dk:#9A7A3A;
+  --gold-glow:rgba(184,146,74,0.25);
+  --dark:#1C1917;
+  --mid:#57534E;
+  --sub:#A8A29E;
+  --border:#E7E2DA;
+  --white:#fff;
+  --success:#16A34A;
+  --success-lt:#F0FDF4;
+  --danger:#EF4444;
+}
+html{scroll-behavior:smooth;}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);line-height:1.6;}
+
+/* ─── NAV ─────────────────────────────────────────────────── */
+.nav{
+  background:rgba(247,244,239,0.92);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--border);
+  padding:0 32px;height:62px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;
+}
+.nav-brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.nav-brand-mark{
+  width:36px;height:36px;background:var(--gold);border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif;font-size:16px;font-weight:800;color:#fff;
+}
+.nav-brand-name{font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--dark);}
+.nav-links{display:flex;align-items:center;gap:6px;}
+.nav-link{padding:7px 14px;color:var(--mid);border-radius:8px;font-size:13.5px;font-weight:500;text-decoration:none;transition:all 0.15s;}
+.nav-link:hover{background:var(--cream2);color:var(--dark);}
+.nav-cta{padding:8px 18px;background:var(--gold);color:#fff;border-radius:9px;font-size:13.5px;font-weight:700;text-decoration:none;transition:all 0.2s;box-shadow:0 2px 8px var(--gold-glow);}
+.nav-cta:hover{background:var(--gold-dk);transform:translateY(-1px);}
+@media(max-width:700px){.nav-links .nav-link:not(.nav-cta){display:none;}}
+
+/* ─── HERO ────────────────────────────────────────────────── */
+.hero{
+  padding:100px 24px 90px;
+  text-align:center;
+  background:radial-gradient(ellipse 900px 600px at 50% -80px, rgba(184,146,74,0.09) 0%, transparent 70%);
+  position:relative;
+  overflow:hidden;
+}
+.hero::before{
+  content:'';position:absolute;inset:0;
+  background:url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Ccircle cx='30' cy='30' r='1' fill='%23B8924A' fill-opacity='0.07'/%3E%3C/g%3E%3C/svg%3E");
+  pointer-events:none;
+}
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:5px 14px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.25);
+  border-radius:20px;font-size:12.5px;font-weight:700;color:var(--gold-dk);
+  letter-spacing:0.06em;text-transform:uppercase;margin-bottom:24px;
+}
+.hero-eyebrow svg{width:12px;height:12px;}
+.hero h1{
+  font-family:'Fraunces',serif;
+  font-size:clamp(38px,6vw,68px);
+  font-weight:800;letter-spacing:-2px;
+  line-height:1.1;
+  margin-bottom:22px;
+  color:var(--dark);
+}
+.hero h1 em{
+  font-style:normal;
+  color:var(--gold);
+}
+.hero-sub{
+  font-size:clamp(16px,2vw,20px);color:var(--mid);
+  max-width:600px;margin:0 auto 40px;font-weight:300;line-height:1.65;
+}
+.hero-actions{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;}
+.btn-hero-primary{
+  padding:16px 36px;background:var(--gold);color:#fff;
+  border-radius:12px;font-size:16px;font-weight:700;text-decoration:none;
+  box-shadow:0 6px 24px var(--gold-glow);transition:all 0.22s;
+  display:inline-flex;align-items:center;gap:8px;
+}
+.btn-hero-primary:hover{background:var(--gold-dk);transform:translateY(-3px);box-shadow:0 10px 32px rgba(184,146,74,0.38);}
+.btn-hero-primary svg{width:16px;height:16px;}
+.btn-hero-ghost{
+  padding:15px 28px;border:1.5px solid var(--border);color:var(--mid);
+  border-radius:12px;font-size:16px;font-weight:600;text-decoration:none;transition:all 0.2s;
+}
+.btn-hero-ghost:hover{border-color:var(--gold);color:var(--gold-dk);background:var(--gold-lt);}
+.hero-proof{
+  display:flex;align-items:center;justify-content:center;gap:16px;
+  margin-top:32px;font-size:13px;color:var(--sub);flex-wrap:wrap;
+}
+.proof-dot{width:4px;height:4px;border-radius:50%;background:var(--border);}
+
+/* ─── PROBLEM ─────────────────────────────────────────────── */
+.problem-section{padding:80px 24px;background:var(--white);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.section-inner{max-width:1100px;margin:0 auto;}
+.section-tag{
+  display:inline-block;padding:3px 12px;background:var(--gold-lt);
+  color:var(--gold-dk);border-radius:20px;font-size:12px;font-weight:700;
+  letter-spacing:0.07em;text-transform:uppercase;margin-bottom:14px;
+}
+.section-h2{
+  font-family:'Fraunces',serif;font-size:clamp(28px,4vw,42px);
+  font-weight:700;letter-spacing:-0.8px;margin-bottom:14px;
+  line-height:1.2;
+}
+.section-lead{font-size:17px;color:var(--mid);max-width:640px;font-weight:300;line-height:1.7;}
+.problem-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;margin-top:50px;}
+@media(max-width:760px){.problem-grid{grid-template-columns:1fr;}}
+.problem-list{display:flex;flex-direction:column;gap:16px;}
+.problem-item{
+  display:flex;align-items:flex-start;gap:14px;
+  padding:16px 18px;background:var(--cream);border-radius:12px;
+  border:1px solid var(--border);
+}
+.problem-x{
+  width:28px;height:28px;border-radius:8px;background:#fef2f2;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.problem-x svg{width:13px;height:13px;color:var(--danger);}
+.problem-item-text h4{font-size:14px;font-weight:700;color:var(--dark);margin-bottom:3px;}
+.problem-item-text p{font-size:13px;color:var(--mid);line-height:1.5;}
+.solution-box{
+  background:var(--gold-lt2);border:1.5px solid rgba(184,146,74,0.2);
+  border-radius:20px;padding:36px 32px;
+}
+.solution-box h3{font-family:'Fraunces',serif;font-size:24px;font-weight:700;color:var(--dark);margin-bottom:16px;}
+.solution-row{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px;}
+.solution-row:last-child{margin-bottom:0;}
+.sol-check{
+  width:22px;height:22px;border-radius:6px;background:var(--gold-lt);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;
+}
+.sol-check svg{width:11px;height:11px;color:var(--gold);}
+.solution-row p{font-size:14px;color:var(--mid);line-height:1.55;}
+.solution-row p strong{color:var(--dark);}
+
+/* ─── FEATURES ────────────────────────────────────────────── */
+.features-section{padding:90px 24px;}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:50px;}
+@media(max-width:900px){.features-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:560px){.features-grid{grid-template-columns:1fr;}}
+.feature-card{
+  background:var(--white);border:1px solid var(--border);border-radius:16px;
+  padding:28px 24px;transition:all 0.2s;
+}
+.feature-card:hover{box-shadow:0 8px 32px rgba(0,0,0,0.07);transform:translateY(-4px);border-color:rgba(184,146,74,0.3);}
+.feature-icon{
+  width:44px;height:44px;border-radius:12px;background:var(--gold-lt);
+  border:1px solid rgba(184,146,74,0.2);
+  display:flex;align-items:center;justify-content:center;margin-bottom:14px;
+}
+.feature-icon svg{width:20px;height:20px;color:var(--gold);}
+.feature-card h3{font-size:15px;font-weight:700;color:var(--dark);margin-bottom:8px;}
+.feature-card p{font-size:13.5px;color:var(--mid);line-height:1.6;font-weight:300;}
+
+/* ─── PRICING ─────────────────────────────────────────────── */
+.pricing-section{padding:90px 24px;background:var(--white);border-top:1px solid var(--border);}
+.billing-toggle{
+  display:flex;align-items:center;justify-content:center;gap:10px;margin-top:28px;margin-bottom:48px;
+}
+.toggle-label{font-size:14px;color:var(--sub);font-weight:500;}
+.toggle-switch{position:relative;width:44px;height:24px;cursor:pointer;flex-shrink:0;}
+.toggle-switch input{opacity:0;width:0;height:0;}
+.toggle-track{
+  position:absolute;inset:0;background:var(--panel);
+  border:1px solid var(--border);border-radius:12px;transition:all 0.25s;
+}
+.toggle-thumb{
+  position:absolute;top:3px;left:3px;width:16px;height:16px;
+  background:var(--sub);border-radius:50%;transition:all 0.25s;
+}
+.toggle-switch input:checked~.toggle-track{background:var(--gold);border-color:var(--gold);}
+.toggle-switch input:checked~.toggle-thumb{transform:translateX(20px);background:#fff;}
+.save-pill{
+  padding:3px 10px;background:var(--success-lt);
+  border:1px solid rgba(22,163,74,0.2);border-radius:20px;
+  font-size:12px;font-weight:700;color:var(--success);
+  opacity:0;transform:translateX(-4px);transition:all 0.25s;
+}
+.save-pill.visible{opacity:1;transform:translateX(0);}
+
+.pricing-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:18px;
+  max-width:1200px;margin:0 auto;align-items:start;
+}
+@media(max-width:1100px){.pricing-grid{grid-template-columns:repeat(2,1fr);max-width:700px;}}
+@media(max-width:600px){.pricing-grid{grid-template-columns:1fr;max-width:420px;}}
+
+.pricing-card{
+  background:var(--cream);border:1.5px solid var(--border);
+  border-radius:20px;padding:32px 28px;
+  display:flex;flex-direction:column;
+  position:relative;transition:all 0.22s;
+}
+.pricing-card:hover{box-shadow:0 12px 40px rgba(0,0,0,0.09);transform:translateY(-5px);}
+.pricing-card.featured{
+  background:var(--dark);border-color:var(--gold);
+  box-shadow:0 20px 60px rgba(184,146,74,0.2);
+  transform:scale(1.03);
+}
+.pricing-card.featured:hover{transform:scale(1.03) translateY(-5px);}
+.featured-badge{
+  position:absolute;top:-1px;left:50%;transform:translateX(-50%);
+  background:var(--gold);color:#fff;font-size:11px;font-weight:800;
+  padding:4px 16px;border-radius:0 0 10px 10px;letter-spacing:0.08em;
+  text-transform:uppercase;white-space:nowrap;
+}
+.plan-tag{
+  font-size:11px;font-weight:700;letter-spacing:0.12em;
+  text-transform:uppercase;color:var(--sub);
+  margin-bottom:14px;margin-top:10px;
+}
+.pricing-card.featured .plan-tag{color:rgba(255,255,255,0.5);}
+.price-row{display:flex;align-items:flex-end;gap:2px;margin-bottom:2px;}
+.price-curr{font-size:20px;font-weight:700;color:var(--sub);margin-bottom:7px;}
+.price-num{
+  font-family:'Fraunces',serif;
+  font-size:56px;font-weight:800;line-height:1;letter-spacing:-3px;
+  color:var(--dark);transition:all 0.18s;
+}
+.pricing-card.featured .price-num{color:var(--gold);}
+.pricing-card.featured .price-curr{color:var(--gold);opacity:0.8;}
+.price-per{font-size:13px;color:var(--sub);margin-bottom:3px;}
+.price-annual-note{font-size:12px;color:var(--success);font-weight:600;min-height:18px;margin-bottom:14px;}
+.plan-tagline{
+  font-size:13px;color:var(--mid);font-weight:300;
+  line-height:1.55;min-height:42px;margin-bottom:22px;
+}
+.pricing-card.featured .plan-tagline{color:rgba(255,255,255,0.55);}
+.plan-features{list-style:none;flex:1;margin-bottom:24px;}
+.plan-features li{
+  display:flex;align-items:center;gap:10px;
+  font-size:13.5px;color:var(--mid);
+  padding:9px 0;border-bottom:1px solid rgba(0,0,0,0.06);
+}
+.pricing-card.featured .plan-features li{color:rgba(255,255,255,0.65);border-color:rgba(255,255,255,0.07);}
+.plan-features li:last-child{border-bottom:none;}
+.pcheck{
+  width:18px;height:18px;border-radius:5px;
+  background:var(--gold-lt);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.pcheck svg{width:10px;height:10px;color:var(--gold);}
+.pricing-card.featured .pcheck{background:rgba(184,146,74,0.2);}
+
+/* Pricing buttons */
+.btn-plan{
+  display:block;width:100%;padding:13px;border-radius:10px;
+  font-weight:700;font-size:14.5px;text-align:center;
+  text-decoration:none;transition:all 0.2s;border:none;
+  cursor:pointer;font-family:'DM Sans',sans-serif;
+}
+.btn-plan-ghost{background:var(--white);color:var(--dark);border:1.5px solid var(--border);}
+.btn-plan-ghost:hover{border-color:var(--gold);color:var(--gold-dk);background:var(--gold-lt);}
+.btn-plan-primary{background:var(--gold);color:#fff;box-shadow:0 4px 16px var(--gold-glow);}
+.btn-plan-primary:hover{background:var(--gold-dk);transform:translateY(-1px);}
+.btn-plan-dark{background:var(--cream);color:var(--dark);border:1.5px solid var(--border);}
+.btn-plan-dark:hover{background:var(--panel);}
+
+/* Annual note */
+.annual-note-bar{
+  text-align:center;margin-top:16px;font-size:13px;color:var(--success);
+  font-weight:600;min-height:20px;transition:opacity 0.3s;
+}
+
+/* Enterprise strip */
+.enterprise-strip{
+  max-width:1060px;margin:28px auto 0;
+  background:var(--cream);border:1px solid var(--border);
+  border-radius:16px;padding:22px 28px;
+  display:flex;align-items:center;justify-content:space-between;
+  gap:20px;flex-wrap:wrap;
+}
+.enterprise-strip h4{font-size:15px;font-weight:700;color:var(--dark);margin-bottom:3px;}
+.enterprise-strip p{font-size:13px;color:var(--mid);}
+.ent-feats{display:flex;gap:16px;flex-wrap:wrap;}
+.ent-feat{font-size:13px;color:var(--mid);display:flex;align-items:center;gap:5px;}
+.ent-feat::before{content:'✓';color:var(--success);font-weight:700;}
+.btn-enterprise{
+  padding:9px 22px;border:1.5px solid var(--border);color:var(--mid);
+  border-radius:9px;font-size:13px;font-weight:700;text-decoration:none;
+  white-space:nowrap;transition:all 0.2s;flex-shrink:0;
+}
+.btn-enterprise:hover{border-color:var(--gold);color:var(--gold-dk);}
+
+/* ─── COMPARISON TABLE ─────────────────────────────────────── */
+.comparison-section{padding:90px 24px;}
+.comparison-wrap{max-width:800px;margin:48px auto 0;background:var(--white);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+.comp-table{width:100%;border-collapse:collapse;}
+.comp-table th{padding:14px 20px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--sub);text-align:left;background:var(--cream);border-bottom:1px solid var(--border);}
+.comp-table th:not(:first-child){text-align:center;}
+.comp-table td{padding:13px 20px;font-size:13.5px;border-bottom:1px solid var(--border);color:var(--mid);}
+.comp-table td:not(:first-child){text-align:center;font-weight:700;}
+.comp-table tbody tr:last-child td{border-bottom:none;}
+.comp-table tbody tr:hover{background:#fdfcfa;}
+.comp-lumvi{color:var(--gold-dk) !important;}
+.comp-bad{color:var(--danger) !important;}
+.comp-good{color:var(--success) !important;}
+
+/* ─── TESTIMONIALS ────────────────────────────────────────── */
+.testimonials-section{padding:90px 24px;background:var(--white);border-top:1px solid var(--border);}
+.testimonials-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:48px;max-width:900px;margin-left:auto;margin-right:auto;}
+@media(max-width:680px){.testimonials-grid{grid-template-columns:1fr;}}
+.testimonial-card{
+  background:var(--cream);border:1px solid var(--border);
+  border-radius:16px;padding:28px;transition:all 0.2s;
+}
+.testimonial-card:hover{box-shadow:0 6px 24px rgba(0,0,0,0.07);border-color:rgba(184,146,74,0.3);}
+.quote-mark{
+  font-family:'Fraunces',serif;font-size:48px;line-height:0.8;
+  color:var(--gold);margin-bottom:12px;display:block;
+}
+.testimonial-text{font-size:15px;color:var(--mid);line-height:1.7;font-weight:300;font-style:italic;margin-bottom:16px;}
+.testimonial-author{font-size:13px;font-weight:700;color:var(--dark);}
+.testimonial-role{font-size:12px;color:var(--sub);margin-top:1px;}
+
+/* ─── FINAL CTA ───────────────────────────────────────────── */
+.cta-section{
+  padding:100px 24px;text-align:center;
+  background:radial-gradient(ellipse 900px 500px at 50% 110%, rgba(184,146,74,0.1) 0%, transparent 70%);
+  border-top:1px solid var(--border);
+}
+.cta-section h2{
+  font-family:'Fraunces',serif;
+  font-size:clamp(32px,5vw,52px);
+  font-weight:800;letter-spacing:-1.5px;
+  margin-bottom:16px;color:var(--dark);
+}
+.cta-section p{font-size:18px;color:var(--mid);max-width:520px;margin:0 auto 40px;font-weight:300;}
+.btn-cta-main{
+  padding:18px 44px;background:var(--gold);color:#fff;
+  border-radius:12px;font-size:18px;font-weight:700;text-decoration:none;
+  box-shadow:0 8px 28px var(--gold-glow);transition:all 0.22s;
+  display:inline-block;
+}
+.btn-cta-main:hover{background:var(--gold-dk);transform:translateY(-3px);box-shadow:0 14px 40px rgba(184,146,74,0.35);}
+
+/* ─── FOOTER ──────────────────────────────────────────────── */
+.footer{
+  padding:28px 24px;border-top:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+}
+.footer-brand{font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--dark);}
+.footer-links{display:flex;gap:4px;}
+.footer-links a{padding:6px 12px;font-size:13px;color:var(--sub);text-decoration:none;border-radius:7px;transition:all 0.15s;}
+.footer-links a:hover{color:var(--dark);background:var(--cream2);}
+</style>
 </head>
 <body>
 
-    <!-- HERO -->
-    <div class="hero">
-        <h1>White-Label FAQ Chatbot<br><span>Built for Agencies</span></h1>
-        <p>One platform. Unlimited clients. Complete white-label customization under your brand.</p>
-        <a href="#pricing" class="hero-cta">View Pricing →</a>
+<!-- NAV -->
+<nav class="nav">
+  <a href="/" class="nav-brand">
+    <div class="nav-brand-mark">L</div>
+    <span class="nav-brand-name">Lumvi</span>
+  </a>
+  <div class="nav-links">
+    <a href="#features" class="nav-link">Features</a>
+    <a href="#pricing" class="nav-link">Pricing</a>
+    <a href="/demo" class="nav-link">Demo</a>
+    <a href="/login" class="nav-link">Log in</a>
+    <a href="/signup" class="nav-cta">Start free →</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+    Built for agencies
+  </div>
+  <h1>White-Label AI Chatbot<br>for <em>Every Client You Have</em></h1>
+  <p class="hero-sub">One flat fee. Unlimited clients. Your brand, your logo, zero mention of us — anywhere.</p>
+  <div class="hero-actions">
+    <a href="/signup" class="btn-hero-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+      Start 7-day free trial
+    </a>
+    <a href="/demo" class="btn-hero-ghost">View live demo</a>
+  </div>
+  <div class="hero-proof">
+    <span>No credit card required</span>
+    <span class="proof-dot"></span>
+    <span>Cancel anytime</span>
+    <span class="proof-dot"></span>
+    <span>One line of code to deploy</span>
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section class="problem-section">
+  <div class="section-inner">
+    <span class="section-tag">The problem</span>
+    <h2 class="section-h2">Per-client SaaS pricing punishes growth</h2>
+    <p class="section-lead">Intercom, Drift, and Tidio charge per workspace. 10 clients means 10 subscriptions — $740–$3,000 per month before you've made a cent of margin.</p>
+
+    <div class="problem-grid">
+      <div class="problem-list">
+        <div class="problem-item">
+          <div class="problem-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+          <div class="problem-item-text">
+            <h4>Per-seat pricing that scales against you</h4>
+            <p>Every new client adds another $74–$300/month to your cost base.</p>
+          </div>
+        </div>
+        <div class="problem-item">
+          <div class="problem-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+          <div class="problem-item-text">
+            <h4>Not truly white-label</h4>
+            <p>Clients see competitor logos in the widget footer. You can't brand it as your own product.</p>
+          </div>
+        </div>
+        <div class="problem-item">
+          <div class="problem-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+          <div class="problem-item-text">
+            <h4>Complex setup takes days, not minutes</h4>
+            <p>Technical onboarding, API keys, developer support — for every single client site.</p>
+          </div>
+        </div>
+      </div>
+      <div class="solution-box">
+        <h3>Lumvi is built differently</h3>
+        <div class="solution-row">
+          <div class="sol-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <p><strong>One flat monthly price</strong> covers all your clients — no per-seat fees, ever.</p>
+        </div>
+        <div class="solution-row">
+          <div class="sol-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <p><strong>True white-label</strong> — your logo, your colors, your domain. Lumvi is invisible.</p>
+        </div>
+        <div class="solution-row">
+          <div class="sol-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <p><strong>10-minute setup</strong> — one script tag, any website. WordPress, Shopify, custom.</p>
+        </div>
+        <div class="solution-row">
+          <div class="sol-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <p><strong>Resell as your own product</strong> — keep 100% of the margin you charge clients.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features-section" id="features">
+  <div class="section-inner" style="text-align:center;">
+    <span class="section-tag">Features</span>
+    <h2 class="section-h2">Everything agencies need, nothing they don't</h2>
+    <p class="section-lead" style="margin:0 auto;">Built around one goal: helping you add chatbots to client sites in minutes and charge a recurring monthly fee.</p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg></div>
+        <h3>Full White-Label</h3>
+        <p>Your logo, brand colors, and custom domain. Clients never see "Lumvi" — anywhere.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></div>
+        <h3>Smart Lead Capture</h3>
+        <p>Conversational forms that feel natural — not pop-ups. Feeds leads into Zapier, Make, and webhooks.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <h3>CSV / PDF Knowledge Base</h3>
+        <p>Upload FAQs once — the AI answers questions forever. No manual scripting or decision trees.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+        <h3>Agency Dashboard</h3>
+        <p>See all client chatbots from one screen — leads, conversations, usage, and branding.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <h3>Built-In Analytics</h3>
+        <p>Show clients exactly what the chatbot achieved — conversations, leads, resolution rate.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
+        <h3>Webhooks &amp; Zapier</h3>
+        <p>Push every lead capture and conversation event to your CRM in real time. HMAC-signed for security.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing-section" id="pricing">
+  <div class="section-inner" style="text-align:center;">
+    <span class="section-tag">Pricing</span>
+    <h2 class="section-h2">Simple. Transparent. Flat.</h2>
+    <p class="section-lead" style="margin:0 auto;">7-day free trial on all plans. No credit card required.</p>
+
+    <div class="billing-toggle">
+      <span class="toggle-label">Monthly</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="billingToggle" onchange="toggleBilling()">
+        <div class="toggle-track"></div>
+        <div class="toggle-thumb"></div>
+      </label>
+      <span class="toggle-label">Annual</span>
+      <span class="save-pill" id="savePill">2 months free</span>
     </div>
 
-    <!-- PROBLEM + FEATURES -->
-    <div class="container">
-        <div class="problem">
-            <h2>The Problem with Current Chatbots</h2>
-            <p>Tools like Intercom and Drift charge $74–$300 per client. If you manage 10 clients, that's $740–$3,000/month. Plus they're complex, time-consuming, and not truly white-label. Lumvi gives you one flat fee for every client you have.</p>
-        </div>
+    <div class="pricing-grid">
 
-        <div class="features">
-            <div class="feature">
-                <div class="feature-icon">🎨</div>
-                <h3>True White-Label</h3>
-                <p>Your logo, colors, domain. Zero mention of us anywhere. Your clients think you built it.</p>
-            </div>
-            <div class="feature">
-                <div class="feature-icon">⚡</div>
-                <h3>10-Minute Setup</h3>
-                <p>One line of code. Works on any website — WordPress, Shopify, custom builds.</p>
-            </div>
-            <div class="feature">
-                <div class="feature-icon">📊</div>
-                <h3>Built-In Analytics</h3>
-                <p>Show clients ROI with conversation tracking, lead capture stats, and usage insights.</p>
-            </div>
-            <div class="feature">
-                <div class="feature-icon">💬</div>
-                <h3>Smart Lead Capture</h3>
-                <p>Conversational lead forms that feel natural — not pushy pop-ups. Feeds directly into webhooks and Zapier.</p>
-            </div>
-            <div class="feature">
-                <div class="feature-icon">🔧</div>
-                <h3>Visual Customization</h3>
-                <p>No coding needed. Color picker, logo upload, custom avatar — live preview instantly.</p>
-            </div>
-            <div class="feature">
-                <div class="feature-icon">∞</div>
-                <h3>Flat Monthly Pricing</h3>
-                <p>One price covers all your clients. No per-seat fees, no per-contact charges, ever.</p>
-            </div>
+      <!-- SOLO -->
+      <div class="pricing-card">
+        <div class="plan-tag">Solo</div>
+        <div class="price-row">
+          <span class="price-curr">$</span>
+          <span class="price-num" id="p-solo">19</span>
         </div>
+        <div class="price-per">per month</div>
+        <div class="price-annual-note" id="pa-solo"></div>
+        <p class="plan-tagline">One website, one chatbot. Everything a small business needs.</p>
+        <ul class="plan-features">
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>1 chatbot</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Unlimited messages</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Lead capture forms</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Custom branding &amp; colors</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Embed anywhere</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Email support</li>
+        </ul>
+        <a href="/signup?plan=solo" class="btn-plan btn-plan-ghost">Start free trial →</a>
+      </div>
+
+      <!-- STARTER -->
+      <div class="pricing-card">
+        <div class="plan-tag">Starter</div>
+        <div class="price-row">
+          <span class="price-curr">$</span>
+          <span class="price-num" id="p-starter">49</span>
+        </div>
+        <div class="price-per">per month</div>
+        <div class="price-annual-note" id="pa-starter"></div>
+        <p class="plan-tagline">For small agencies ready to automate FAQ responses for a handful of clients.</p>
+        <ul class="plan-features">
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>3 chatbots</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>2,000 messages / month</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>CSV / PDF knowledge base</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Lead capture forms</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Embed anywhere</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Email support</li>
+        </ul>
+        <a href="/signup?plan=starter" class="btn-plan btn-plan-ghost">Start free trial →</a>
+      </div>
+
+      <!-- PRO (featured) -->
+      <div class="pricing-card featured">
+        <div class="featured-badge">Most Popular</div>
+        <div class="plan-tag">Pro</div>
+        <div class="price-row">
+          <span class="price-curr">$</span>
+          <span class="price-num" id="p-pro">99</span>
+        </div>
+        <div class="price-per" style="color:rgba(255,255,255,0.4);">per month</div>
+        <div class="price-annual-note" id="pa-pro"></div>
+        <p class="plan-tagline">For agencies capturing leads 24/7 and proving real ROI to clients.</p>
+        <ul class="plan-features">
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>10 chatbots</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Unlimited messages</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Lead capture + CRM webhooks</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Zapier / Make integration</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Analytics dashboard</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Priority support</li>
+        </ul>
+        <a href="/signup?plan=pro" class="btn-plan btn-plan-primary">Start free trial →</a>
+      </div>
+
+      <!-- AGENCY -->
+      <div class="pricing-card">
+        <div class="plan-tag">Agency</div>
+        <div class="price-row">
+          <span class="price-curr">$</span>
+          <span class="price-num" id="p-agency">299</span>
+        </div>
+        <div class="price-per">per month</div>
+        <div class="price-annual-note" id="pa-agency"></div>
+        <p class="plan-tagline">Unlimited clients. Full white-label. Resell as your own product.</p>
+        <ul class="plan-features">
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Unlimited chatbots</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Unlimited messages</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Full white-label (your logo + domain)</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Client management portal</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Reseller rights — 100% margin</li>
+          <li><div class="pcheck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div>Onboarding call + priority support</li>
+        </ul>
+        <a href="/signup?plan=agency" class="btn-plan btn-plan-ghost">Start free trial →</a>
+      </div>
+
     </div>
 
-    <!-- PRICING -->
-    <div class="pricing" id="pricing">
-        <div class="pricing-header">
-            <h2>Simple, Transparent Pricing</h2>
-            <p>7-day free trial on all plans. No credit card required. Cancel anytime.</p>
-        </div>
+    <p class="annual-note-bar" id="annualBar" style="opacity:0;">Annual billing saves you 2 full months. Billed once per year at a locked-in price.</p>
 
-        <!-- Billing Toggle -->
-        <div class="billing-toggle">
-            <span class="toggle-label">Monthly</span>
-            <label class="toggle-switch">
-                <input type="checkbox" id="billingToggle" onchange="toggleBilling()">
-                <div class="toggle-track"></div>
-                <div class="toggle-thumb"></div>
-            </label>
-            <span class="toggle-label">Annual</span>
-            <span class="save-badge" id="saveBadge">2 months free</span>
-        </div>
-
-        <div class="pricing-grid">
-
-            <!-- SOLO -->
-            <div class="pricing-card solo-card">
-                <div class="plan-badge-solo">Small Business</div>
-                <div class="plan-name" style="margin-top:20px;">Solo</div>
-                <div class="price-row">
-                    <span class="price-dollar">$</span>
-                    <span class="price-amount" id="solo-price">19</span>
-                </div>
-                <div class="price-period">per month</div>
-                <div class="price-annual" id="solo-annual"></div>
-                <p class="plan-tagline">One website, one chatbot. Everything a small business needs — nothing they don't.</p>
-                <ul class="features-list">
-                    <li><span class="check">✓</span> 1 chatbot</li>
-                    <li><span class="check">✓</span> Unlimited messages</li>
-                    <li><span class="check">✓</span> Unlimited FAQs</li>
-                    <li><span class="check">✓</span> Lead capture forms</li>
-                    <li><span class="check">✓</span> Custom branding &amp; colors</li>
-                    <li><span class="check">✓</span> Embed on any website</li>
-                    <li><span class="check">✓</span> Email support</li>
-                </ul>
-                <a href="/signup?plan=solo" class="btn" style="background:rgba(34,211,160,0.1);color:#22d3a0;border:1px solid rgba(34,211,160,0.3);display:block;width:100%;padding:14px;border-radius:10px;font-weight:700;text-align:center;text-decoration:none;transition:all 0.2s;font-size:15px;">Start Free Trial →</a>
-            </div>
-
-            <!-- STARTER -->
-            <div class="pricing-card">
-                <div class="plan-name">Starter</div>
-                <div class="price-row">
-                    <span class="price-dollar">$</span>
-                    <span class="price-amount" id="starter-price">49</span>
-                </div>
-                <div class="price-period">per month</div>
-                <div class="price-annual" id="starter-annual"></div>
-                <p class="plan-tagline">Everything you need to automate FAQs and stop answering the same questions manually.</p>
-
-                <ul class="features-list">
-                    <li><span class="check">✓</span> 3 chatbots</li>
-                    <li><span class="check">✓</span> 2,000 messages/month</li>
-                    <li><span class="check">✓</span> Lead capture forms</li>
-                    <li><span class="check">✓</span> CSV / PDF knowledge base</li>
-                    <li><span class="check">✓</span> Embed on any website</li>
-                    <li><span class="check">✓</span> Email support</li>
-                </ul>
-
-                <a href="/signup?plan=starter" class="btn btn-secondary">Start Free Trial →</a>
-            </div>
-
-            <!-- PRO (FEATURED) -->
-            <div class="pricing-card featured">
-                <div class="popular-badge">Most Popular</div>
-                <div class="plan-name">Pro</div>
-                <div class="price-row">
-                    <span class="price-dollar">$</span>
-                    <span class="price-amount" id="pro-price">99</span>
-                </div>
-                <div class="price-period">per month</div>
-                <div class="price-annual" id="pro-annual"></div>
-                <p class="plan-tagline">For businesses ready to capture leads 24/7 and let AI handle the first conversation.</p>
-
-                <ul class="features-list">
-                    <li><span class="check">✓</span> 10 chatbots</li>
-                    <li><span class="check">✓</span> Unlimited messages</li>
-                    <li><span class="check">✓</span> Lead capture + CRM webhooks</li>
-                    <li><span class="check">✓</span> Zapier / Make integration</li>
-                    <li><span class="check">✓</span> Analytics dashboard</li>
-                    <li><span class="check">✓</span> Custom chatbot branding</li>
-                    <li><span class="check">✓</span> Priority email support</li>
-                </ul>
-
-                <a href="/signup?plan=pro" class="btn btn-primary">Start Free Trial →</a>
-            </div>
-
-            <!-- AGENCY -->
-            <div class="pricing-card agency-card">
-                <div class="plan-name">Agency</div>
-                <div class="price-row">
-                    <span class="price-dollar">$</span>
-                    <span class="price-amount" id="agency-price">299</span>
-                </div>
-                <div class="price-period">per month</div>
-                <div class="price-annual" id="agency-annual"></div>
-                <p class="plan-tagline">White-label Lumvi under your own brand. Deploy for all your clients and keep 100% of the margin.</p>
-
-                <ul class="features-list">
-                    <li><span class="check">✓</span> Unlimited chatbots</li>
-                    <li><span class="check">✓</span> Unlimited messages</li>
-                    <li><span class="check">✓</span> Full white-label (your logo, domain)</li>
-                    <li><span class="check">✓</span> Client management portal</li>
-                    <li><span class="check">✓</span> Reseller rights — keep 100% margin</li>
-                    <li><span class="check">✓</span> Onboarding call included</li>
-                    <li><span class="check">✓</span> Priority phone + email support</li>
-                </ul>
-
-                <a href="/signup?plan=agency" class="btn btn-agency">Start Free Trial →</a>
-            </div>
-
-        </div>
-
-        <!-- Annual note -->
-        <p class="annual-note" id="annualNote">Annual billing saves you 2 full months. Locked in price, billed once per year.</p>
-
-        <!-- Enterprise strip -->
-        <div class="enterprise-strip">
-            <div>
-                <h4>Need something bigger?</h4>
-                <p>Custom contracts, dedicated infrastructure, SLA guarantees, and volume pricing.</p>
-            </div>
-            <div class="enterprise-feats">
-                <span class="ent-feat">Dedicated instance</span>
-                <span class="ent-feat">SLA guarantee</span>
-                <span class="ent-feat">Custom integrations</span>
-                <span class="ent-feat">Volume pricing</span>
-            </div>
-            <a href="/cdn-cgi/l/email-protection#bbc8cecbcbd4c9cffbd7ced6cdd295d5decf" class="btn-enterprise">Talk to us →</a>
-        </div>
+    <div class="enterprise-strip">
+      <div>
+        <h4>Need something custom?</h4>
+        <p>Dedicated infrastructure, SLA guarantees, custom integrations, and volume pricing.</p>
+      </div>
+      <div class="ent-feats">
+        <span class="ent-feat">Dedicated instance</span>
+        <span class="ent-feat">SLA guarantee</span>
+        <span class="ent-feat">Custom integrations</span>
+        <span class="ent-feat">Volume pricing</span>
+      </div>
+      <a href="mailto:hello@lumvi.net" class="btn-enterprise">Talk to us →</a>
     </div>
+  </div>
+</section>
 
-    <!-- TESTIMONIALS -->
-    <div class="testimonials">
-        <div class="testimonials-inner">
-            <h2>What Agencies Say</h2>
+<!-- COMPARISON -->
+<section class="comparison-section">
+  <div class="section-inner" style="text-align:center;">
+    <span class="section-tag">Why Lumvi</span>
+    <h2 class="section-h2">How we compare</h2>
+    <p class="section-lead" style="margin:0 auto;">For agencies managing 5–50 clients, the math is simple.</p>
 
-            <div class="testimonial">
-                <div class="testimonial-text">We were spending $370/month on Intercom for 5 clients. Now we pay a flat fee for all 15 clients. The ROI was immediate, and our clients love it.</div>
-                <div class="testimonial-author">— Sarah M., Digital Marketing Agency</div>
-            </div>
-
-            <div class="testimonial">
-                <div class="testimonial-text">Setup took literally 10 minutes. We've added it to all our client sites and they think we built it custom for them. Perfect white-label solution.</div>
-                <div class="testimonial-author">— Mike R., Web Development Agency</div>
-            </div>
-        </div>
+    <div class="comparison-wrap">
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th style="color:var(--gold-dk);">Lumvi</th>
+            <th>Intercom</th>
+            <th>Tidio</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Price for 10 clients</td><td class="comp-lumvi">$99/mo flat</td><td class="comp-bad">$740+/mo</td><td class="comp-bad">$390+/mo</td></tr>
+          <tr><td>True white-label</td><td class="comp-lumvi">✓ Full</td><td class="comp-bad">✗</td><td class="comp-bad">Partial</td></tr>
+          <tr><td>Agency dashboard</td><td class="comp-lumvi">✓</td><td class="comp-bad">✗</td><td class="comp-bad">✗</td></tr>
+          <tr><td>Setup time per client</td><td class="comp-lumvi">~10 min</td><td class="comp-bad">Hours</td><td class="comp-bad">~45 min</td></tr>
+          <tr><td>AI-powered FAQ matching</td><td class="comp-lumvi">✓ Gemini AI</td><td class="comp-good">✓</td><td class="comp-good">✓</td></tr>
+          <tr><td>Lead capture webhooks</td><td class="comp-lumvi">✓ HMAC-signed</td><td class="comp-good">✓</td><td class="comp-good">✓</td></tr>
+        </tbody>
+      </table>
     </div>
+  </div>
+</section>
 
-    <!-- CTA SECTION -->
-    <div class="cta-section">
-        <h2>Ready to Add Recurring Revenue?</h2>
-        <p>Start offering chatbots to your clients today. No long-term contracts.</p>
-        <a href="/demo" class="cta-demo-btn">Try Live Demo →</a>
+<!-- TESTIMONIALS -->
+<section class="testimonials-section">
+  <div class="section-inner" style="text-align:center;">
+    <span class="section-tag">Social proof</span>
+    <h2 class="section-h2">What agencies say</h2>
+    <div class="testimonials-grid">
+      <div class="testimonial-card">
+        <span class="quote-mark">"</span>
+        <p class="testimonial-text">We were spending $370/month on Intercom for 5 clients. Now we pay a flat fee for all 15. The ROI was immediate and our clients love the branded widget.</p>
+        <div class="testimonial-author">Sarah M.</div>
+        <div class="testimonial-role">Digital Marketing Agency</div>
+      </div>
+      <div class="testimonial-card">
+        <span class="quote-mark">"</span>
+        <p class="testimonial-text">Setup took 10 minutes. We've added it to all our client sites and they think we built it custom for them. Perfect white-label tool for an agency.</p>
+        <div class="testimonial-author">Mike R.</div>
+        <div class="testimonial-role">Web Development Agency</div>
+      </div>
     </div>
+  </div>
+</section>
 
-    <!-- FOOTER -->
-    <div class="footer">
-        <a href="/terms">Terms</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/dashboard">Dashboard</a>
-        <a href="/cdn-cgi/l/email-protection#a8c0cdc4c4c7e8c4ddc5dec186c6cddc">Support</a>
-    </div>
+<!-- CTA -->
+<section class="cta-section">
+  <h2>Ready to add recurring revenue?</h2>
+  <p>Start offering AI chatbots to your clients today. 7-day free trial, no credit card.</p>
+  <a href="/signup" class="btn-cta-main">Start free trial →</a>
+</section>
 
-    <!-- Chatbot -->
-    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://lumvi.net/static/widget.js"></script>
+<!-- FOOTER -->
+<footer class="footer">
+  <span class="footer-brand">Lumvi</span>
+  <div class="footer-links">
+    <a href="/terms">Terms</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/dashboard">Dashboard</a>
+    <a href="mailto:hello@lumvi.net">Support</a>
+  </div>
+</footer>
 
-    <script>
-        const prices = {
-            solo:    { monthly: 19,  annual: Math.round(19  * 10 / 12) },
-            starter: { monthly: 49,  annual: Math.round(49  * 10 / 12) },
-            pro:     { monthly: 99,  annual: Math.round(99  * 10 / 12) },
-            agency:  { monthly: 299, annual: Math.round(299 * 10 / 12) },
-        };
-
-        function toggleBilling() {
-            const isAnnual = document.getElementById('billingToggle').checked;
-            document.getElementById('saveBadge').classList.toggle('visible', isAnnual);
-            document.getElementById('annualNote').style.opacity = isAnnual ? '1' : '0';
-
-            ['solo', 'starter', 'pro', 'agency'].forEach(function(plan) {
-                const el = document.getElementById(plan + '-price');
-                const annualEl = document.getElementById(plan + '-annual');
-
-                el.style.transition = 'opacity 0.15s, transform 0.15s';
-                el.style.opacity = '0';
-                el.style.transform = 'scale(0.85)';
-
-                setTimeout(function() {
-                    el.textContent = isAnnual ? prices[plan].annual : prices[plan].monthly;
-                    annualEl.textContent = isAnnual
-                        ? '$' + (prices[plan].monthly * 10) + '/yr — 2 months free'
-                        : '';
-                    el.style.opacity = '1';
-                    el.style.transform = 'scale(1)';
-                }, 150);
-            });
-        }
-    </script>
-
+<script src="https://lumvi.net/static/widget.js"></script>
+<script>
+const PRICES = {
+  solo:    {monthly:19,  annual: Math.round(19*10/12)},
+  starter: {monthly:49,  annual: Math.round(49*10/12)},
+  pro:     {monthly:99,  annual: Math.round(99*10/12)},
+  agency:  {monthly:299, annual: Math.round(299*10/12)},
+};
+function toggleBilling() {
+  const ann = document.getElementById('billingToggle').checked;
+  document.getElementById('savePill').classList.toggle('visible', ann);
+  document.getElementById('annualBar').style.opacity = ann ? '1' : '0';
+  ['solo','starter','pro','agency'].forEach(p => {
+    const el = document.getElementById('p-'+p);
+    const an = document.getElementById('pa-'+p);
+    el.style.transition = 'opacity 0.15s, transform 0.15s';
+    el.style.opacity='0'; el.style.transform='scale(0.86)';
+    setTimeout(() => {
+      el.textContent = ann ? PRICES[p].annual : PRICES[p].monthly;
+      an.textContent = ann ? `$${PRICES[p].monthly*10}/yr · 2 months free` : '';
+      el.style.opacity='1'; el.style.transform='scale(1)';
+    }, 150);
+  });
+}
+</script>
 </body>
 </html>

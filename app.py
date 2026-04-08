@@ -2376,6 +2376,28 @@ def faq_manager_page():
     return render_template('faq-manager.html')
 
 
+@app.route('/article-manager')
+@login_required
+def article_manager_page():
+    """Help Center article manager — create, edit and delete articles per client."""
+    client_id = request.args.get('client_id')
+
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return "Unauthorized", 403
+
+    client      = models.get_client_by_id(client_id)
+    fresh_user  = models.get_user_by_id(current_user.id)
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+
+    return render_template(
+        'article-manager.html',
+        client_id  = client_id,
+        client     = client,
+        plan_type  = plan_type,
+        user       = current_user,
+    )
+
+
 @app.route('/api/faqs', methods=['GET', 'POST'])
 @login_required
 def manage_faqs():

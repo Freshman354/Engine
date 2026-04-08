@@ -425,8 +425,11 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
                       context_str: str) -> Tuple[str, float, str]:
         """
         Inject top chunks as RAG context and generate a grounded response.
-        Includes explicit follow-up handling when context_str signals a referential
-        message pattern.
+        The prompt is structured in three layers:
+          1. Universal follow-up inference rules (always present, covers every vertical)
+          2. Conversation context built by _build_context
+          3. Retrieved knowledge chunks + tightly scoped instructions
+
         Returns (response_text, confidence, method_tag).
         """
         vert_cfg    = self.personalities.get(vertical, self.personalities['general'])
@@ -442,47 +445,88 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
                 f"Content: {chunk.get('answer', chunk.get('content', ''))}\n"
             )
 
-        # Detect follow-up from the annotated context block
         is_followup = '[Follow-up context]' in context_str
 
-        followup_block = ""
+        # ── Universal follow-up inference rules ───────────────────────
+        # Always injected — cheap insurance even when is_followup is False,
+        # because the model should always be ready to handle referential phrasing.
+        followup_rules = """
+╔══════════════════════════════════════════════════════════════════════╗
+║  FOLLOW-UP & REFERENTIAL QUESTION RULES  (read before answering)   ║
+╠══════════════════════════════════════════════════════════════════════╣
+║                                                                      ║
+║  This assistant is embedded on websites across many industries:      ║
+║  SaaS platforms, law firms, dental clinics, e-commerce stores,       ║
+║  restaurants, real estate agencies, gyms, plumbers, and more.        ║
+║  Users ALWAYS speak in conversational shorthand. Short or vague      ║
+║  messages are almost NEVER standalone questions — they are           ║
+║  continuations of the previous topic.                                ║
+║                                                                      ║
+║  FOLLOW-UP PATTERNS you will encounter in every vertical:           ║
+║                                                                      ║
+║  Pricing / plans:                                                    ║
+║    "how about the pro plan?"  "and agency?"  "same for enterprise?"  ║
+║    "what does that one cost?" "how much is it?"  "the yearly price?" ║
+║                                                                      ║
+║  Features / inclusions:                                              ║
+║    "what's included?"  "what are the features?"  "does it have X?"   ║
+║    "is that covered?"  "what does that come with?"                   ║
+║                                                                      ║
+║  Services / appointments / hours:                                    ║
+║    "and their Saturday hours?"  "do they also do X?"                 ║
+║    "how long does that take?"  "is it available on weekends?"        ║
+║                                                                      ║
+║  Comparisons:                                                        ║
+║    "which is better?"  "what's the difference?"  "vs the other one?" ║
+║    "is the pro worth it over starter?"                               ║
+║                                                                      ║
+║  Contact / location:                                                 ║
+║    "and their number?"  "where are they located?"  "email address?"  ║
+║                                                                      ║
+║  Generic continuations:                                              ║
+║    "what about X?"  "same question for Y"  "the Z one?"              ║
+║    "tell me more"  "go on"  "and that one?"  "is that right?"        ║
+║                                                                      ║
+║  HOW TO RESOLVE INTENT:                                              ║
+║  1. Read [Conversation so far] to identify the active topic.        ║
+║  2. Apply the current short message to that topic.                   ║
+║  3. Answer directly from the retrieved knowledge below.             ║
+║                                                                      ║
+║  ABSOLUTE RULES:                                                     ║
+║  ✗ NEVER say "I'm not sure what you mean" when history is present.  ║
+║  ✗ NEVER say "Could you clarify?" when a reasonable read exists.    ║
+║  ✗ NEVER say "I don't know" just because the message is short.      ║
+║  ✓ If the entity or topic can be named from history, answer it.     ║
+║  ✓ Only say you can't help when the knowledge truly has no answer.  ║
+╚══════════════════════════════════════════════════════════════════════╝"""
+
+        # Extra emphasis block only shown when follow-up is positively detected
+        followup_emphasis = ""
         if is_followup:
-            followup_block = """
-── FOLLOW-UP HANDLING (read carefully) ──────────────────────────────────
-This message is a CONTINUATION of the previous topic — not a fresh question.
-Common patterns you must handle:
-  • "how about X?" / "what about X?"         → answer X on the same topic
-  • "and the Y one?" / "the Y plan?"         → answer Y on the same topic
-  • "what are the features?" / "what's included?" → answer for the entity just discussed
-  • "is it worth it?" / "that sounds good"   → respond about what was last discussed
-  • "same question for Z" / "and Z?"         → apply the same question to Z
+            followup_emphasis = """
+[CONFIRMED FOLLOW-UP] The message below is flagged as a direct continuation.
+The [Follow-up context] section above names the preceding question explicitly.
+Do NOT treat the current message in isolation — combine it with that context
+to reconstruct the full intent, then answer it from the knowledge provided."""
 
-Rules:
-  • Read [Conversation so far] to identify the topic and the user's intent.
-  • NEVER say "I'm not sure what you're referring to" — the thread makes it clear.
-  • NEVER ask for clarification if a reasonable interpretation exists.
-  • If you can identify the entity (e.g. "Pro", "Agency", "enterprise plan"),
-    look it up in the knowledge below and answer directly.
-─────────────────────────────────────────────────────────────────────────
-"""
-
-        prompt = f"""You are a {personality} customer support assistant engaged in a real, flowing conversation — not answering isolated questions.
-{followup_block}
+        prompt = f"""You are a {personality} customer support assistant having a real, flowing conversation.
+{followup_rules}
+{followup_emphasis}
 {context_str}
 
 Current message: "{user_message}"
 
-Relevant knowledge:
+Retrieved knowledge (answer ONLY from what is here):
 {chunks_context.strip()}
 
-Instructions:
-- Treat every message as part of an ongoing thread. Use the [Conversation so far] above to understand full intent.
-- If this is a follow-up (short message, referential phrase, or continuation), infer the complete question from history and answer it directly.
-- Use ONLY the provided knowledge — never invent details not present in the sources.
-- Be natural and warm: 1–3 sentences, contractions preferred (I'm, it's, you'd).
-- If genuinely listing 3+ items, a short list is fine. Otherwise plain prose.
-- Only say "I'm not sure" or offer to connect with the team when the knowledge truly cannot answer — not because the message is short or ambiguous.
-- No markdown, no preamble, no closing pleasantries.
+Response rules:
+- Infer the full question from context when the current message is short or referential.
+- Ground every fact in the retrieved knowledge above — never invent details.
+- Natural and warm tone: 1–3 sentences, contractions welcome (I'm, it's, you'd, they're).
+- A short bullet list is fine only when listing 3+ distinct items — otherwise prose.
+- Do NOT hedge, ask for clarification, or offer to escalate unless the knowledge
+  genuinely cannot answer the inferred question.
+- No markdown headers, no preamble, no sign-off.
 
 Return ONLY the response text."""
 

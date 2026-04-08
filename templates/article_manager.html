@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Help Center Articles — Lumvi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
+  --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
+  --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#fff;
+  --success:#16A34A;--success-lt:#F0FDF4;
+  --danger:#EF4444;--danger-lt:#FEF2F2;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;}
+
+/* TOPBAR */
+.topbar{background:var(--white);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+.topbar-brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.topbar-brand img{width:32px;height:32px;border-radius:8px;object-fit:cover;}
+.topbar-brand span{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.btn-link{padding:7px 14px;color:var(--sub);border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:500;text-decoration:none;transition:all 0.15s;}
+.btn-link:hover{color:var(--dark);}
+
+/* PAGE */
+.page{max-width:1100px;margin:0 auto;padding:32px 28px;}
+@media(max-width:768px){.page{padding:20px 16px;}}
+
+/* HEADER */
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:14px;margin-bottom:28px;}
+.page-header h1{font-family:'Fraunces',serif;font-size:24px;font-weight:700;letter-spacing:-0.3px;margin-bottom:4px;}
+.page-header p{font-size:13px;color:var(--sub);}
+.client-chip{display:inline-flex;align-items:center;gap:5px;padding:2px 10px;background:var(--cream2);border-radius:6px;font-size:11px;font-family:'DM Mono',monospace;color:var(--mid);margin-top:6px;}
+
+/* BTN */
+.btn-primary{padding:10px 20px;background:var(--gold);color:#fff;border-radius:9px;border:none;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(184,146,74,0.3);transition:all 0.2s;cursor:pointer;}
+.btn-primary:hover{background:var(--gold-dk);transform:translateY(-1px);}
+.btn-primary svg{width:14px;height:14px;}
+
+/* SPLIT LAYOUT */
+.layout{display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start;}
+@media(max-width:900px){.layout{grid-template-columns:1fr;}}
+
+/* ARTICLE LIST */
+.list-panel{background:var(--white);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+.list-toolbar{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);}
+.search-wrap{flex:1;position:relative;}
+.search-wrap svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--sub);}
+.search-input{width:100%;padding:8px 12px 8px 32px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);outline:none;transition:all 0.2s;}
+.search-input:focus{border-color:var(--gold);background:var(--white);box-shadow:0 0 0 3px var(--gold-lt);}
+.cat-filter{padding:8px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);outline:none;cursor:pointer;}
+.cat-filter:focus{border-color:var(--gold);}
+
+/* ARTICLES */
+.article-list{display:flex;flex-direction:column;}
+.article-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.12s;}
+.article-row:last-child{border-bottom:none;}
+.article-row:hover{background:#fdfcfa;}
+.article-row.active{background:var(--gold-lt);}
+.art-icon{width:36px;height:36px;border-radius:10px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.art-icon svg{width:16px;height:16px;color:var(--gold);}
+.art-meta{flex:1;min-width:0;}
+.art-title{font-size:14px;font-weight:600;color:var(--dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.art-cat{font-size:11.5px;color:var(--sub);margin-top:2px;}
+.art-actions{display:flex;gap:5px;flex-shrink:0;}
+.btn-xs{padding:5px 10px;font-size:11.5px;font-weight:600;border-radius:7px;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.12s;text-decoration:none;display:inline-flex;align-items:center;gap:3px;}
+.btn-xs svg{width:11px;height:11px;}
+.btn-edit{background:var(--gold-lt);color:var(--gold-dk);}
+.btn-edit:hover{background:rgba(184,146,74,0.22);}
+.btn-del{background:var(--danger-lt);color:var(--danger);}
+.btn-del:hover{background:#fecaca;}
+.article-count{padding:10px 16px;font-size:12px;color:var(--sub);border-top:1px solid var(--border);background:var(--cream);}
+
+/* EMPTY STATE */
+.empty-state{padding:60px 20px;text-align:center;}
+.empty-icon{width:56px;height:56px;background:var(--gold-lt);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+.empty-icon svg{width:24px;height:24px;color:var(--gold);}
+.empty-state h3{font-family:'Fraunces',serif;font-size:17px;font-weight:700;margin-bottom:6px;}
+.empty-state p{font-size:13px;color:var(--sub);font-weight:300;margin-bottom:18px;}
+
+/* EDITOR PANEL */
+.editor-panel{background:var(--white);border:1px solid var(--border);border-radius:16px;overflow:hidden;position:sticky;top:76px;}
+.editor-head{padding:15px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.editor-head h2{font-family:'Fraunces',serif;font-size:15px;font-weight:700;}
+.editor-close{width:28px;height:28px;border-radius:8px;background:var(--cream2);border:none;color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.editor-close svg{width:12px;height:12px;}
+.editor-body{padding:18px;}
+
+/* FORM FIELDS */
+.field{margin-bottom:16px;}
+.field:last-of-type{margin-bottom:0;}
+label{display:block;font-size:11px;font-weight:600;color:var(--mid);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.07em;}
+.field input,.field select,.field textarea{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;font-family:'DM Sans',sans-serif;color:var(--dark);background:var(--cream);outline:none;transition:all 0.2s;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--gold);background:var(--white);box-shadow:0 0 0 3px var(--gold-lt);}
+.field textarea{resize:vertical;min-height:180px;line-height:1.6;}
+.char-count{font-size:11px;color:var(--sub);text-align:right;margin-top:4px;}
+.editor-footer{padding:14px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;}
+.btn-save{padding:9px 20px;background:var(--gold);color:#fff;border-radius:9px;border:none;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;box-shadow:0 2px 8px rgba(184,146,74,0.3);transition:all 0.2s;}
+.btn-save:hover{background:var(--gold-dk);}
+.btn-save:disabled{opacity:0.6;cursor:not-allowed;}
+.btn-save svg{width:13px;height:13px;}
+.spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.btn-cancel-edit{padding:9px 16px;background:var(--white);border:1.5px solid var(--border);border-radius:9px;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:600;color:var(--mid);cursor:pointer;transition:all 0.15s;}
+.btn-cancel-edit:hover{border-color:var(--gold);color:var(--gold-dk);}
+
+/* DELETE MODAL */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(28,25,23,0.5);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;padding:16px;}
+.modal-box{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:30px;max-width:380px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.12);animation:slideUp 0.22s ease;}
+.del-icon{width:50px;height:50px;border-radius:14px;background:var(--danger-lt);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
+.del-icon svg{width:22px;height:22px;color:var(--danger);}
+.modal-box h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:8px;}
+.modal-box p{color:var(--mid);font-size:13.5px;line-height:1.6;margin-bottom:18px;}
+.modal-actions{display:flex;gap:10px;}
+.btn-modal-cancel{flex:1;padding:11px;background:transparent;color:var(--mid);border:1.5px solid var(--border);border-radius:9px;font-weight:600;font-size:14px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;}
+.btn-modal-cancel:hover{border-color:var(--gold);color:var(--gold-dk);}
+.btn-modal-delete{flex:1;padding:11px;background:var(--danger);color:#fff;border:none;border-radius:9px;font-weight:700;font-size:14px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background 0.15s;}
+.btn-modal-delete:hover{background:#dc2626;}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);padding:11px 18px;border-radius:10px;font-size:13.5px;font-weight:600;color:#fff;z-index:9999;opacity:0;transition:all 0.3s;pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:6px;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.success{background:var(--success);}
+.toast.error{background:var(--danger);}
+.toast svg{width:14px;height:14px;}
+
+@keyframes slideUp{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <a href="/dashboard" class="topbar-brand">
+    <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi">
+    <span>Lumvi</span>
+  </a>
+  <div class="topbar-right">
+    <a href="/faq-manager?client_id={{ client_id }}" class="btn-link">FAQs</a>
+    <a href="/customize?client_id={{ client_id }}" class="btn-link">Customize</a>
+    <a href="/dashboard" class="btn-link">Dashboard</a>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- PAGE HEADER -->
+  <div class="page-header">
+    <div>
+      <h1>Help Center Articles</h1>
+      <p>Articles appear in the Help Center tab of the chat widget.</p>
+      <div class="client-chip">{{ client.company_name if client else client_id }} · {{ client_id }}</div>
+    </div>
+    <button class="btn-primary" onclick="openNew()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New Article
+    </button>
+  </div>
+
+  <div class="layout">
+
+    <!-- LEFT: ARTICLE LIST -->
+    <div class="list-panel">
+      <div class="list-toolbar">
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="search-input" id="searchInput" type="text" placeholder="Search articles…" oninput="filterArticles()">
+        </div>
+        <select class="cat-filter" id="catFilter" onchange="filterArticles()">
+          <option value="">All categories</option>
+        </select>
+      </div>
+
+      <div id="articleList">
+        <div class="empty-state">
+          <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg></div>
+          <h3>Loading articles…</h3>
+          <p>Fetching your Help Center content.</p>
+        </div>
+      </div>
+
+      <div class="article-count" id="articleCount" style="display:none;"></div>
+    </div>
+
+    <!-- RIGHT: EDITOR -->
+    <div class="editor-panel" id="editorPanel">
+      <div class="editor-head">
+        <h2 id="editorTitle">New Article</h2>
+        <button class="editor-close" onclick="closeEditor()" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="editor-body">
+        <input type="hidden" id="editingId">
+        <div class="field">
+          <label>Title</label>
+          <input type="text" id="artTitle" placeholder="e.g. How to reset your password" maxlength="200" oninput="charCount('artTitle','tc-title',200)">
+          <div class="char-count" id="tc-title">0 / 200</div>
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <input type="text" id="artCategory" placeholder="General" list="catSuggestions">
+          <datalist id="catSuggestions"></datalist>
+        </div>
+        <div class="field">
+          <label>Content</label>
+          <textarea id="artContent" placeholder="Write the full article content here…" maxlength="5000" oninput="charCount('artContent','tc-content',5000)"></textarea>
+          <div class="char-count" id="tc-content">0 / 5000</div>
+        </div>
+      </div>
+      <div class="editor-footer">
+        <button class="btn-cancel-edit" onclick="closeEditor()">Cancel</button>
+        <button class="btn-save" id="saveBtn" onclick="saveArticle()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Save Article
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- DELETE MODAL -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal-box">
+    <div class="del-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></div>
+    <h2>Delete Article?</h2>
+    <p>This will permanently remove the article from your Help Center. This cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeDeleteModal()">Cancel</button>
+      <button class="btn-modal-delete" id="confirmDeleteBtn" onclick="executeDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+const CID = {{ client_id | tojson }};
+let allArticles = [];
+let pendingDeleteId = null;
+let activeRow = null;
+
+// ── Fetch articles ────────────────────────────────────────────────────
+async function loadArticles() {
+  try {
+    const r = await fetch(`/api/articles/manage?client_id=${CID}`);
+    const d = await r.json();
+    if (d.success) {
+      allArticles = d.articles || [];
+      renderArticles(allArticles);
+      buildCatFilter();
+    } else {
+      showEmpty('Could not load articles.');
+    }
+  } catch {
+    showEmpty('Network error loading articles.');
+  }
+}
+
+function buildCatFilter() {
+  const cats = [...new Set(allArticles.map(a => a.category || 'General'))].sort();
+  const sel  = document.getElementById('catFilter');
+  sel.innerHTML = '<option value="">All categories</option>' +
+    cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+
+  // Also update datalist
+  const dl = document.getElementById('catSuggestions');
+  dl.innerHTML = cats.map(c => `<option value="${esc(c)}">`).join('');
+}
+
+function renderArticles(arts) {
+  const el    = document.getElementById('articleList');
+  const count = document.getElementById('articleCount');
+
+  if (!arts.length) {
+    el.innerHTML = `<div class="empty-state">
+      <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg></div>
+      <h3>No articles yet</h3>
+      <p>Create your first Help Center article using the form on the right.</p>
+      <button class="btn-primary" onclick="openNew()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Article
+      </button>
+    </div>`;
+    count.style.display = 'none';
+    return;
+  }
+
+  el.innerHTML = arts.map(a => `
+    <div class="article-row" id="row-${a.id}" onclick="selectRow(${a.id})">
+      <div class="art-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+      <div class="art-meta">
+        <div class="art-title">${esc(a.title)}</div>
+        <div class="art-cat">${esc(a.category || 'General')}</div>
+      </div>
+      <div class="art-actions" onclick="event.stopPropagation()">
+        <button class="btn-xs btn-edit" onclick="openEdit(${a.id})">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Edit
+        </button>
+        <button class="btn-xs btn-del" onclick="confirmDelete(${a.id})">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
+    </div>`).join('');
+
+  count.textContent = `${arts.length} article${arts.length !== 1 ? 's' : ''}`;
+  count.style.display = 'block';
+}
+
+function selectRow(id) {
+  if (activeRow) document.getElementById('row-'+activeRow)?.classList.remove('active');
+  activeRow = id;
+  document.getElementById('row-'+id)?.classList.add('active');
+  openEdit(id);
+}
+
+function filterArticles() {
+  const q   = document.getElementById('searchInput').value.toLowerCase();
+  const cat = document.getElementById('catFilter').value;
+  renderArticles(allArticles.filter(a => {
+    const matchQ   = !q   || (a.title||'').toLowerCase().includes(q) || (a.content||'').toLowerCase().includes(q);
+    const matchCat = !cat || (a.category||'General') === cat;
+    return matchQ && matchCat;
+  }));
+}
+
+// ── Editor ────────────────────────────────────────────────────────────
+function openNew() {
+  if (activeRow) document.getElementById('row-'+activeRow)?.classList.remove('active');
+  activeRow = null;
+  document.getElementById('editingId').value  = '';
+  document.getElementById('artTitle').value   = '';
+  document.getElementById('artCategory').value = 'General';
+  document.getElementById('artContent').value = '';
+  document.getElementById('editorTitle').textContent = 'New Article';
+  charCount('artTitle','tc-title',200);
+  charCount('artContent','tc-content',5000);
+  document.getElementById('artTitle').focus();
+}
+
+function openEdit(id) {
+  const a = allArticles.find(x => x.id === id);
+  if (!a) return;
+  document.getElementById('editingId').value  = id;
+  document.getElementById('artTitle').value   = a.title   || '';
+  document.getElementById('artCategory').value = a.category || 'General';
+  document.getElementById('artContent').value = a.content  || '';
+  document.getElementById('editorTitle').textContent = 'Edit Article';
+  charCount('artTitle','tc-title',200);
+  charCount('artContent','tc-content',5000);
+}
+
+function closeEditor() {
+  openNew();
+}
+
+async function saveArticle() {
+  const id      = document.getElementById('editingId').value;
+  const title   = document.getElementById('artTitle').value.trim();
+  const content = document.getElementById('artContent').value.trim();
+  const category = document.getElementById('artCategory').value.trim() || 'General';
+
+  if (!title) { toast('Title is required', 'error'); return; }
+  if (!content) { toast('Content is required', 'error'); return; }
+
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Saving…';
+
+  const method  = id ? 'PUT' : 'POST';
+  const payload = { client_id: CID, title, content, category, ...(id ? {id: parseInt(id)} : {}) };
+
+  try {
+    const r = await fetch('/api/articles/manage', {
+      method, headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (d.success) {
+      toast(id ? 'Article updated' : 'Article created', 'success');
+      await loadArticles();
+      if (!id && d.id) selectRow(d.id);
+      openNew();
+    } else {
+      toast(d.error || 'Save failed', 'error');
+    }
+  } catch {
+    toast('Network error', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Save Article';
+  }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────
+function confirmDelete(id) {
+  pendingDeleteId = id;
+  document.getElementById('deleteModal').style.display = 'flex';
+}
+function closeDeleteModal() {
+  pendingDeleteId = null;
+  document.getElementById('deleteModal').style.display = 'none';
+}
+
+async function executeDelete() {
+  if (!pendingDeleteId) return;
+  const btn = document.getElementById('confirmDeleteBtn');
+  btn.textContent = 'Deleting…'; btn.disabled = true;
+  try {
+    const r = await fetch('/api/articles/manage', {
+      method:'DELETE', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({client_id: CID, id: pendingDeleteId})
+    });
+    const d = await r.json();
+    if (d.success) {
+      toast('Article deleted', 'success');
+      closeDeleteModal();
+      await loadArticles();
+      openNew();
+    } else {
+      toast(d.error || 'Delete failed', 'error');
+    }
+  } catch { toast('Network error', 'error'); }
+  finally { btn.textContent = 'Delete'; btn.disabled = false; }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────
+function charCount(inputId, counterId, max) {
+  const len = document.getElementById(inputId).value.length;
+  document.getElementById(counterId).textContent = `${len} / ${max}`;
+}
+
+function showEmpty(msg) {
+  document.getElementById('articleList').innerHTML =
+    `<div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><h3>Error</h3><p>${esc(msg)}</p></div>`;
+}
+
+function toast(msg, type='success') {
+  const t = document.getElementById('toast');
+  const ic = type === 'success'
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  t.innerHTML = ic + msg; t.className = `toast ${type} show`;
+  setTimeout(() => { t.className = 'toast'; }, 3500);
+}
+
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// Keyboard + backdrop
+document.getElementById('deleteModal').addEventListener('click', e => { if (e.target === document.getElementById('deleteModal')) closeDeleteModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDeleteModal(); });
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); saveArticle(); }
+});
+
+// Init
+loadArticles();
+</script>
+</body>
+</html>
