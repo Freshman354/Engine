@@ -170,13 +170,19 @@ class AIHelper:
                 'is_lead':    True,
             }
 
-        # ── 3. Embedding search ────────────────────────────────────────
-        candidates, scores = self._embedding_search(clean, faqs, client_id)
+        # ── 3. Conversation context (built BEFORE search so it can enrich query) ──
+        context_str = self._build_context(conversation_history, client_id, clean)
 
-        # ── 4. Reranking ───────────────────────────────────────────────
-        reranked = self._rerank(clean, candidates, scores)
+        # ── 4. Embedding search — use enriched query for follow-ups ────
+        # For referential messages ("how about pro?") the enriched query
+        # borrows topic keywords from history so the embedding score stays high.
+        search_query = self._resolve_query(clean, conversation_history or [])
+        candidates, scores = self._embedding_search(search_query, faqs, client_id)
 
-        # ── Cache check (after we know which FAQ wins) ─────────────────
+        # ── 5. Reranking ────────────────────────────────────────────────
+        reranked = self._rerank(search_query, candidates, scores)
+
+        # ── Cache check (keyed on original clean message, not enriched query) ──
         top_id    = str(reranked[0]['kb_id']) if reranked else ''
         cache_key = self._cache_key(clean, top_id, vertical)
         if cache_key in self._response_cache:
@@ -187,9 +193,6 @@ class AIHelper:
                 'confidence': scores[0] if scores else 0.8,
                 'is_lead':    False,
             }
-
-        # ── 5. Conversation context ────────────────────────────────────
-        context_str = self._build_context(conversation_history, client_id)
 
         # ── 6. LLM generation ─────────────────────────────────────────
         if reranked and self.enabled:
@@ -422,6 +425,8 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
                       context_str: str) -> Tuple[str, float, str]:
         """
         Inject top chunks as RAG context and generate a grounded response.
+        Includes explicit follow-up handling when context_str signals a referential
+        message pattern.
         Returns (response_text, confidence, method_tag).
         """
         vert_cfg    = self.personalities.get(vertical, self.personalities['general'])
@@ -431,25 +436,55 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
         # Build multi-chunk context (top 3 for richer grounding)
         chunks_context = ""
         for i, chunk in enumerate(reranked[:3], 1):
-            chunks_context += f"\n[Source {i}]\nTitle: {chunk.get('question', chunk.get('title', ''))}\nContent: {chunk.get('answer', chunk.get('content', ''))}\n"
+            chunks_context += (
+                f"\n[Source {i}]\n"
+                f"Title: {chunk.get('question', chunk.get('title', ''))}\n"
+                f"Content: {chunk.get('answer', chunk.get('content', ''))}\n"
+            )
 
-        prompt = f"""You are a {personality} customer support assistant.
+        # Detect follow-up from the annotated context block
+        is_followup = '[Follow-up context]' in context_str
 
+        followup_block = ""
+        if is_followup:
+            followup_block = """
+── FOLLOW-UP HANDLING (read carefully) ──────────────────────────────────
+This message is a CONTINUATION of the previous topic — not a fresh question.
+Common patterns you must handle:
+  • "how about X?" / "what about X?"         → answer X on the same topic
+  • "and the Y one?" / "the Y plan?"         → answer Y on the same topic
+  • "what are the features?" / "what's included?" → answer for the entity just discussed
+  • "is it worth it?" / "that sounds good"   → respond about what was last discussed
+  • "same question for Z" / "and Z?"         → apply the same question to Z
+
+Rules:
+  • Read [Conversation so far] to identify the topic and the user's intent.
+  • NEVER say "I'm not sure what you're referring to" — the thread makes it clear.
+  • NEVER ask for clarification if a reasonable interpretation exists.
+  • If you can identify the entity (e.g. "Pro", "Agency", "enterprise plan"),
+    look it up in the knowledge below and answer directly.
+─────────────────────────────────────────────────────────────────────────
+"""
+
+        prompt = f"""You are a {personality} customer support assistant engaged in a real, flowing conversation — not answering isolated questions.
+{followup_block}
 {context_str}
 
-User asked: "{user_message}"
+Current message: "{user_message}"
 
 Relevant knowledge:
 {chunks_context.strip()}
 
-Rules:
-- Answer ONLY using the provided knowledge — do NOT invent information
-- Speak naturally and warmly (use contractions: I'm, you're, it's)
-- Be concise: 1–3 sentences maximum
-- If the knowledge doesn't fully answer the question, say so and offer to connect with the team
-- Use emojis sparingly and only when they naturally fit
+Instructions:
+- Treat every message as part of an ongoing thread. Use the [Conversation so far] above to understand full intent.
+- If this is a follow-up (short message, referential phrase, or continuation), infer the complete question from history and answer it directly.
+- Use ONLY the provided knowledge — never invent details not present in the sources.
+- Be natural and warm: 1–3 sentences, contractions preferred (I'm, it's, you'd).
+- If genuinely listing 3+ items, a short list is fine. Otherwise plain prose.
+- Only say "I'm not sure" or offer to connect with the team when the knowledge truly cannot answer — not because the message is short or ambiguous.
+- No markdown, no preamble, no closing pleasantries.
 
-Return ONLY the response text. No markdown, no quotes, no preamble."""
+Return ONLY the response text."""
 
         try:
             response      = self.model.generate_content(prompt)
@@ -522,33 +557,191 @@ Sound friendly and human. Return ONLY the response text."""
         return response_text
 
     # ═══════════════════════════════════════════════════════════════════
+    # FOLLOW-UP DETECTION & QUERY ENRICHMENT
+    # ═══════════════════════════════════════════════════════════════════
+
+    # Phrases that almost always mean the message is continuing a prior topic
+    _FOLLOWUP_STARTERS = (
+        'how about', 'what about', 'and the ', 'and a ', 'and an ',
+        'what are the ', 'what are its ', "what's the ", "what's its ",
+        'tell me about the ', 'how much is the ', 'how much does the ',
+        'what does the ', 'what is the ', 'is the ', 'does the ',
+        'how about the ', 'same for ', 'same question for ', 'and for ',
+        'the ', 'that one', 'this one', 'the same ',
+    )
+
+    def _is_followup(self, message: str, history: List[Dict]) -> bool:
+        """
+        Returns True when the current message is likely a referential follow-up
+        that needs conversation history to resolve intent.
+
+        Triggers on:
+          - Messages starting with known continuation phrases
+          - Very short messages (≤ 6 words) when a substantive prior answer exists
+        """
+        if not history:
+            return False
+
+        msg = message.strip().lower()
+
+        # Explicit continuation openers
+        for starter in self._FOLLOWUP_STARTERS:
+            if msg.startswith(starter):
+                return True
+
+        # Short message + prior assistant answer exists → likely a follow-up
+        words = msg.split()
+        if len(words) <= 6:
+            # Ignore pure greetings / acknowledgements
+            GREETINGS = {'hi', 'hello', 'hey', 'thanks', 'thank', 'ok', 'okay',
+                         'great', 'cool', 'bye', 'goodbye', 'yes', 'no', 'sure'}
+            if not GREETINGS.issuperset(set(words)):
+                last_bot = next(
+                    (m.get('content', '') for m in reversed(history)
+                     if m.get('role') != 'user'),
+                    None
+                )
+                if last_bot and len(last_bot) > 40:
+                    return True
+
+        return False
+
+    # Stop words excluded when extracting topic keywords from history
+    _TOPIC_STOPS = {
+        'what', 'how', 'is', 'are', 'the', 'a', 'an', 'do', 'does', 'can',
+        'could', 'would', 'should', 'tell', 'me', 'about', 'much', 'many',
+        'long', 'i', 'you', 'we', 'my', 'your', 'it', 'its', 'please',
+        'hi', 'hey', 'and', 'or', 'for', 'in', 'on', 'at', 'with', 'to',
+        'of', 'that', 'this', 'there', 'their', 'these', 'those', 'was',
+        'were', 'been', 'have', 'has', 'had', 'get', 'got', 'also', 'just',
+        'more', 'than', 'some', 'any', 'all', 'one', 'two', 'three',
+    }
+
+    def _resolve_query(self, message: str, history: List[Dict]) -> str:
+        """
+        For referential follow-up messages, builds an enriched search query
+        by borrowing topic keywords from the previous conversation turns.
+
+        Examples:
+          history: "how much is the starter plan?" + answer
+          message: "how about the pro plan?"
+          → "how about the pro plan? pro plan pricing starter"
+
+          history: "what features does the pro plan have?" + answer
+          message: "and the agency one?"
+          → "and the agency one? agency plan features pro"
+
+        The enriched query is used ONLY for embedding search — the LLM always
+        receives the original clean message.
+        """
+        if not self._is_followup(message, history):
+            return message   # not a follow-up — use message as-is
+
+        # Collect keywords from the last 2 user messages in history
+        recent_user = [
+            m.get('content', '').strip()
+            for m in (history or [])[-6:]
+            if m.get('role') == 'user' and m.get('content')
+        ]
+
+        topic_words: List[str] = []
+        for past_msg in recent_user[-2:]:
+            words = re.findall(r'\b[a-z]{3,}\b', past_msg.lower())
+            topic_words.extend(
+                w for w in words if w not in self._TOPIC_STOPS
+            )
+
+        # Also get keywords from the current message
+        current_kws = [
+            w for w in re.findall(r'\b[a-z]{3,}\b', message.lower())
+            if w not in self._TOPIC_STOPS
+        ]
+
+        # Append only the *new* topic words (not already in current_kws)
+        current_set  = set(current_kws)
+        extra_topics = []
+        seen: set    = set()
+        for w in topic_words:
+            if w not in current_set and w not in seen:
+                seen.add(w)
+                extra_topics.append(w)
+            if len(extra_topics) >= 6:
+                break
+
+        if not extra_topics:
+            return message
+
+        enriched = message + ' ' + ' '.join(extra_topics)
+        logger.debug(f"[ResolveQuery] '{message}' → '{enriched}'")
+        return enriched
+
+    # ═══════════════════════════════════════════════════════════════════
     # CONVERSATION CONTEXT
     # ═══════════════════════════════════════════════════════════════════
 
     def _build_context(self, conversation_history: List[Dict],
-                       client_id: str = None) -> str:
-        """Build prompt context from stored summary + last 15 messages."""
+                       client_id: str = None,
+                       current_message: str = None) -> str:
+        """
+        Build a rich prompt context from:
+          1. Stored conversation summary (earlier context from DB)
+          2. Last 8 turns as an explicit structured dialogue
+          3. A follow-up annotation block when the current message is referential
+
+        The explicit structure is critical for follow-up handling: the LLM
+        sees not just raw turns but a labelled conversation thread and an
+        explicit flag when the current message depends on prior context.
+        """
         parts = []
 
-        # Latest stored summary
+        # ── 1. Earlier summary from DB ────────────────────────────────
         if client_id:
             try:
                 import models as _m
                 summary = _m.get_latest_conversation_summary(client_id)
                 if summary:
-                    parts.append(f"[Earlier context]\n{summary}")
+                    parts.append(f"[Earlier in this conversation]\n{summary}")
             except Exception:
                 pass
 
-        # Last 15 raw messages
+        # ── 2. Recent turns as structured dialogue ────────────────────
         if conversation_history:
-            recent = conversation_history[-15:]
-            turns  = "\n".join([
-                f"{'User' if m.get('role') == 'user' else 'Assistant'}: {m.get('content', '').strip()}"
-                for m in recent if m.get('content')
-            ])
-            if turns:
-                parts.append(f"[Recent conversation]\n{turns}")
+            recent = conversation_history[-8:]   # last 8 turns — tighter than 15
+
+            turns_lines = []
+            for m in recent:
+                role    = 'User' if m.get('role') == 'user' else 'Assistant'
+                content = m.get('content', '').strip()
+                if not content:
+                    continue
+                # Truncate long assistant answers to keep prompt lean
+                if role == 'Assistant' and len(content) > 220:
+                    content = content[:220] + '…'
+                turns_lines.append(f"  {role}: {content}")
+
+            if turns_lines:
+                parts.append("[Conversation so far]\n" + "\n".join(turns_lines))
+
+            # ── 3. Follow-up annotation ───────────────────────────────
+            if current_message:
+                recent_user_msgs = [
+                    m.get('content', '').strip()
+                    for m in recent
+                    if m.get('role') == 'user' and m.get('content')
+                ]
+
+                if self._is_followup(current_message, conversation_history) and recent_user_msgs:
+                    # Surface the most recent prior question explicitly so the
+                    # LLM has no ambiguity about what topic is being continued.
+                    prev_question = recent_user_msgs[-1]
+                    parts.append(
+                        "[Follow-up context]\n"
+                        f"The user's current message (\"{current_message}\") is a follow-up "
+                        f"or continuation.\n"
+                        f"Their immediately preceding question was: \"{prev_question}\"\n"
+                        f"Infer what they are now asking from the conversation thread above "
+                        f"and answer it directly."
+                    )
 
         return "\n\n".join(parts) if parts else ""
 
