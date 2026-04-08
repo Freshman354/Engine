@@ -203,6 +203,49 @@ input[type=color]::-webkit-color-swatch{border-radius:6px;border:none;}
 .toast.success{background:var(--success);}
 .toast.error{background:var(--danger);}
 .toast svg{width:14px;height:14px;flex-shrink:0;}
+@keyframes spin{to{transform:rotate(360deg);}}
+/* WEBHOOK MANAGER */
+.wh-item{background:var(--cream);border:1.5px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;}
+.wh-item-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.wh-item-name{flex:1;font-weight:600;font-size:13.5px;color:var(--dark);}
+.wh-enable-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub);cursor:pointer;}
+.wh-enable-toggle input{accent-color:var(--gold);}
+.wh-item-fields{display:flex;flex-direction:column;gap:10px;}
+.wh-field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.wh-secret-row{display:flex;align-items:center;gap:8px;}
+.wh-secret-val{flex:1;font-family:'DM Mono',monospace;font-size:11.5px;padding:8px 10px;
+  background:var(--white);border:1.5px solid var(--border);border-radius:8px;
+  color:var(--mid);word-break:break-all;line-height:1.4;}
+.wh-secret-val.revealed{color:var(--dark);}
+.btn-regen{padding:6px 12px;background:var(--white);border:1.5px solid var(--border);
+  border-radius:8px;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;
+  color:var(--mid);cursor:pointer;white-space:nowrap;transition:all 0.15s;flex-shrink:0;}
+.btn-regen:hover{border-color:var(--gold);color:var(--gold-dk);}
+.wh-events{display:flex;flex-wrap:wrap;gap:7px;margin-top:2px;}
+.wh-evt{display:flex;align-items:center;gap:4px;padding:4px 10px;
+  background:var(--white);border:1.5px solid var(--border);border-radius:20px;
+  font-size:11.5px;font-weight:600;color:var(--mid);cursor:pointer;user-select:none;transition:all 0.15s;}
+.wh-evt input{accent-color:var(--gold);flex-shrink:0;}
+.wh-evt:has(input:checked){border-color:var(--gold-dk);background:var(--gold-lt);color:var(--gold-dk);}
+.wh-item-foot{display:flex;justify-content:flex-end;margin-top:10px;}
+.btn-rm-wh{padding:5px 12px;background:var(--danger-lt);color:var(--danger);border:none;
+  border-radius:7px;font-size:12px;font-weight:600;font-family:'DM Sans',sans-serif;
+  cursor:pointer;display:flex;align-items:center;gap:4px;transition:background 0.15s;}
+.btn-rm-wh:hover{background:#fecaca;}
+.btn-rm-wh svg{width:11px;height:11px;}
+/* Log rows */
+.log-row{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);font-size:12.5px;}
+.log-row:last-child{border-bottom:none;}
+.log-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.log-dot.ok{background:var(--success);}
+.log-dot.fail{background:var(--danger);}
+.log-event{font-weight:600;color:var(--dark);font-family:'DM Mono',monospace;font-size:11.5px;flex:1;}
+.log-name{color:var(--sub);font-size:11px;flex:1;}
+.log-code{font-family:'DM Mono',monospace;font-size:11.5px;font-weight:700;}
+.log-code.ok{color:var(--success);}
+.log-code.fail{color:var(--danger);}
+.log-dur{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;white-space:nowrap;}
+.log-time{font-size:11px;color:var(--sub);white-space:nowrap;}
 hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
 </style>
 </head>
@@ -367,43 +410,93 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
     </div>
   </div>
 
-  <!-- 5. INTEGRATIONS -->
+  <!-- 5. INTEGRATIONS / WEBHOOKS -->
   <div class="card">
     <div class="card-header open" onclick="tc(this)">
       <div class="card-icon" style="background:#fdf2f8;"><svg viewBox="0 0 24 24" fill="none" stroke="#9d174d" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></div>
-      <div class="card-text"><h2>Integrations</h2><p>Webhooks, Zapier &amp; Make</p></div>
+      <div class="card-text"><h2>Webhooks</h2><p>Real-time event delivery to your endpoints</p></div>
       <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
     </div>
-    <div class="card-body open">
+    <div class="card-body open" id="webhookCardBody">
       {% if has_webhooks %}
-      <div class="field">
-        <label>Webhook URL</label>
-        <div class="wh-row">
-          <div class="field">
-            <input type="url" id="webhook_url" placeholder="https://hooks.zapier.com/…"
-              value="{{ branding.get('integrations', {}).get('webhook_url', '') }}">
-          </div>
-          <button class="btn-test" type="button" onclick="testWH()" id="whTestBtn">Test</button>
-        </div>
-        <p id="whStatus" class="wh-status"></p>
-        <p class="hint">Fired when a lead is captured. Works with Zapier, Make and any REST endpoint.</p>
-      </div>
+
+      <!-- ── WEBHOOK LIST ── -->
+      <div id="whList"></div>
+
+      <button class="btn-add" type="button" onclick="addWebhook()" id="btnAddWH">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Webhook
+      </button>
+      <p class="hint" style="margin-top:7px;">Max 10 webhooks · signed with HMAC-SHA256 · retried on failure.</p>
+
       <hr class="div">
+
+      <!-- ── TEST PANEL ── -->
       <div class="field">
-        <label>Zapier / Make Trigger URL</label>
-        <input type="url" id="zapier_url" placeholder="https://hooks.zapier.com/…"
-          value="{{ branding.get('integrations', {}).get('zapier_url', '') }}">
-        <p class="hint">For Zapier "Catch Hook" and Make "Custom Webhook" triggers.</p>
+        <label>Test a Delivery</label>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div class="field" style="margin:0;">
+            <label style="margin-bottom:5px;">Target Webhook</label>
+            <select id="whTestTarget" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'DM Sans',sans-serif;font-size:13px;background:var(--cream);outline:none;">
+              <option value="">— select —</option>
+            </select>
+          </div>
+          <div class="field" style="margin:0;">
+            <label style="margin-bottom:5px;">Event Type</label>
+            <select id="whTestEvent" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-family:'DM Sans',sans-serif;font-size:13px;background:var(--cream);outline:none;">
+              <option value="test">test</option>
+              <option value="lead_captured">lead_captured</option>
+              <option value="conversation_ended">conversation_ended</option>
+              <option value="faq_matched">faq_matched</option>
+              <option value="message_sent">message_sent</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Payload preview -->
+        <div style="position:relative;margin-bottom:10px;">
+          <div style="position:absolute;top:9px;right:10px;font-size:10px;font-weight:700;color:var(--gold-dk);background:var(--gold-lt);padding:2px 8px;border-radius:5px;letter-spacing:0.5px;">PREVIEW</div>
+          <pre id="whPayloadPreview" style="background:#1C1917;border-radius:10px;padding:14px;font-family:'DM Mono',monospace;font-size:11px;color:#D4C4A8;line-height:1.6;max-height:160px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;">{}</pre>
+        </div>
+
+        <button class="btn-test" type="button" onclick="runTest()" id="whRunBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;display:inline-block;margin-right:4px;vertical-align:middle;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Send Test
+        </button>
+
+        <!-- Test result -->
+        <div id="whTestResult" style="display:none;margin-top:10px;border-radius:10px;overflow:hidden;border:1px solid var(--border);">
+          <div id="whResultHeader" style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;">
+            <div id="whResultStatus" style="font-size:13px;font-weight:700;"></div>
+            <div id="whResultMeta" style="font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;"></div>
+          </div>
+          <pre id="whResultBody" style="padding:12px 14px;background:var(--cream);font-family:'DM Mono',monospace;font-size:11px;color:var(--mid);max-height:120px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;margin:0;border-top:1px solid var(--border);"></pre>
+        </div>
       </div>
+
+      <hr class="div">
+
+      <!-- ── DELIVERY LOGS ── -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <label style="margin:0;">Recent Deliveries</label>
+        <button onclick="loadLogs()" style="font-size:11.5px;font-weight:600;color:var(--gold-dk);background:none;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;padding:0;" type="button">Refresh</button>
+      </div>
+      <div id="whLogs">
+        <div style="text-align:center;padding:20px;color:var(--sub);font-size:13px;">Click Refresh to load delivery history.</div>
+      </div>
+
       {% else %}
+
+      <!-- UPGRADE WALL -->
       <div class="upgrade-box">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-        <p>Webhooks and Zapier require the <strong>Pro plan ($99/mo)</strong>. <a href="/upgrade">Upgrade to connect your CRM →</a></p>
+        <p>Webhooks require the <strong>Pro plan ($99/mo)</strong>. <a href="/upgrade">Upgrade to connect your CRM, Zapier, or Make →</a></p>
       </div>
       <div class="locked-wrap">
         <div class="field"><label>Webhook URL</label><input type="url" disabled placeholder="https://hooks.zapier.com/…"></div>
         <div class="lock-over"><div class="lock-chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Pro required</div></div>
       </div>
+
       {% endif %}
     </div>
   </div>
@@ -607,23 +700,242 @@ function ptab(t, btn) {
   document.getElementById('pEmbed').style.display = t === 'embed' ? '' : 'none';
 }
 
-// Webhook test
-async function testWH() {
-  const url = (document.getElementById('webhook_url')?.value || '').trim();
-  const st  = document.getElementById('whStatus');
-  const btn = document.getElementById('whTestBtn');
-  if (!url) { st.textContent = 'Enter a URL first.'; st.className = 'wh-status wh-fail'; return; }
-  btn.textContent = 'Testing…'; btn.disabled = true; st.style.display = 'none';
+// ═══════════════════════════════════════════════════
+// WEBHOOK MANAGER
+// ═══════════════════════════════════════════════════
+const ALL_EVENTS = ['lead_captured','conversation_ended','faq_matched','message_sent'];
+let _webhooks = [];  // {webhook_id, name, url, events[], enabled, signing_secret}
+
+// Sample payloads keyed by event (mirrors backend)
+const SAMPLE_PAYLOADS = {
+  test:                { event:'test', client_id:CID, timestamp:new Date().toISOString(), data:{ message:'Test delivery from Lumvi', sent_by:'you' } },
+  lead_captured:       { event:'lead_captured', client_id:CID, timestamp:new Date().toISOString(), data:{ name:'Jane Smith', email:'jane@example.com', phone:'+1 555 000 0000', company:'Acme Corp' } },
+  conversation_ended:  { event:'conversation_ended', client_id:CID, timestamp:new Date().toISOString(), data:{ session_id:'sess_abc123', message_count:6, resolved:true, duration_secs:142 } },
+  faq_matched:         { event:'faq_matched', client_id:CID, timestamp:new Date().toISOString(), data:{ question:'What are your hours?', confidence:0.94, method:'ai_smart' } },
+  message_sent:        { event:'message_sent', client_id:CID, timestamp:new Date().toISOString(), data:{ role:'user', content:'Do you offer refunds?' } },
+};
+
+// Load webhooks from backend on init
+async function initWebhooks() {
+  if (!HWH) return;
+  try {
+    const r = await fetch(`/api/admin/webhooks?client_id=${CID}`);
+    const d = await r.json();
+    if (d.success) { _webhooks = d.webhooks || []; renderWebhooks(); }
+  } catch {}
+  updateTestTargetSelect();
+  updatePayloadPreview();
+}
+
+function renderWebhooks() {
+  const el = document.getElementById('whList');
+  if (!el) return;
+  if (!_webhooks.length) {
+    el.innerHTML = '<div style="text-align:center;padding:20px 0;color:var(--sub);font-size:13px;">No webhooks yet. Add one below.</div>';
+    updateTestTargetSelect();
+    return;
+  }
+  el.innerHTML = _webhooks.map((wh, i) => whItemHTML(wh, i)).join('');
+  updateTestTargetSelect();
+}
+
+function whItemHTML(wh, i) {
+  const maskedSecret = wh.signing_secret
+    ? wh.signing_secret.slice(0,8) + '••••••••••••••••••••••••'
+    : '— not generated yet —';
+  const evtCheckboxes = ALL_EVENTS.map(e =>
+    `<label class="wh-evt">
+      <input type="checkbox" value="${e}" ${(wh.events||[]).includes(e) ? 'checked' : ''} onchange="whEvtChange(${i},this)">
+      ${e}
+    </label>`
+  ).join('');
+
+  return `<div class="wh-item" id="whItem-${i}">
+    <div class="wh-item-head">
+      <input type="text" value="${esc(wh.name||'Webhook '+(i+1))}" placeholder="Webhook name"
+        style="flex:1;font-weight:600;font-size:13.5px;border:none;background:transparent;outline:none;color:var(--dark);font-family:'DM Sans',sans-serif;"
+        oninput="_webhooks[${i}].name=this.value; updateTestTargetSelect();">
+      <label class="wh-enable-toggle">
+        <input type="checkbox" ${wh.enabled ? 'checked' : ''} onchange="_webhooks[${i}].enabled=this.checked;">
+        Enabled
+      </label>
+    </div>
+    <div class="wh-item-fields">
+      <div class="field" style="margin:0;">
+        <label>Endpoint URL</label>
+        <input type="url" value="${esc(wh.url||'')}" placeholder="https://hooks.zapier.com/…"
+          oninput="_webhooks[${i}].url=this.value;"
+          style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;font-family:'DM Sans',sans-serif;color:var(--dark);background:var(--cream);outline:none;">
+      </div>
+      <div class="field" style="margin:0;">
+        <label>Events to receive</label>
+        <div class="wh-events">${evtCheckboxes}</div>
+      </div>
+      <div class="field" style="margin:0;">
+        <label>Signing Secret <span style="font-weight:400;color:var(--sub);text-transform:none;">(HMAC-SHA256)</span></label>
+        <div class="wh-secret-row">
+          <div class="wh-secret-val" id="secretVal-${i}">${esc(maskedSecret)}</div>
+          <button class="btn-regen" type="button" onclick="regenSecret(${i},'${esc(wh.webhook_id||'')}')">Regenerate</button>
+        </div>
+        <p class="hint">Add <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 5px;border-radius:3px;">X-Lumvi-Signature</code> header verification in your endpoint.</p>
+      </div>
+    </div>
+    <div class="wh-item-foot">
+      <button class="btn-rm-wh" type="button" onclick="removeWebhook(${i})">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        Remove
+      </button>
+    </div>
+  </div>`;
+}
+
+function whEvtChange(idx, el) {
+  const events = _webhooks[idx].events || [];
+  if (el.checked) { if (!events.includes(el.value)) events.push(el.value); }
+  else { const i = events.indexOf(el.value); if (i > -1) events.splice(i,1); }
+  _webhooks[idx].events = events;
+}
+
+function addWebhook() {
+  if (_webhooks.length >= 10) { toast('Maximum 10 webhooks', 'error'); return; }
+  _webhooks.push({
+    webhook_id: '', name: 'New Webhook', url: '',
+    events: ['lead_captured'], enabled: true, signing_secret: ''
+  });
+  renderWebhooks();
+}
+
+function removeWebhook(i) {
+  _webhooks.splice(i, 1);
+  renderWebhooks();
+}
+
+async function regenSecret(idx, webhookId) {
+  if (!webhookId) { toast('Save webhooks first to generate a secret', 'error'); return; }
+  const btn = event.target;
+  btn.textContent = '…'; btn.disabled = true;
+  try {
+    const r = await fetch('/api/admin/webhooks/regenerate-secret', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({client_id: CID, webhook_id: webhookId})
+    });
+    const d = await r.json();
+    if (d.success) {
+      _webhooks[idx].signing_secret = d.signing_secret;
+      const el = document.getElementById(`secretVal-${idx}`);
+      if (el) { el.textContent = d.signing_secret; el.classList.add('revealed'); }
+      toast('New secret generated', 'success');
+    } else toast(d.error || 'Failed', 'error');
+  } catch { toast('Network error', 'error'); }
+  finally { btn.textContent = 'Regenerate'; btn.disabled = false; }
+}
+
+async function saveWebhooks() {
+  try {
+    const r = await fetch('/api/admin/webhooks', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({client_id: CID, webhooks: _webhooks})
+    });
+    const d = await r.json();
+    if (d.success) {
+      // Refresh to get generated webhook_ids + secrets from server
+      const r2 = await fetch(`/api/admin/webhooks?client_id=${CID}`);
+      const d2 = await r2.json();
+      if (d2.success) { _webhooks = d2.webhooks; renderWebhooks(); }
+    }
+    return d.success;
+  } catch { return false; }
+}
+
+// Test panel
+function updateTestTargetSelect() {
+  const sel = document.getElementById('whTestTarget');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">— select webhook —</option>' +
+    _webhooks.map(wh => `<option value="${esc(wh.webhook_id)}">${esc(wh.name)} — ${esc((wh.url||'').slice(0,40))}…</option>`).join('');
+  if (prev) sel.value = prev;
+}
+
+function updatePayloadPreview() {
+  const evt = document.getElementById('whTestEvent')?.value || 'test';
+  const pre = document.getElementById('whPayloadPreview');
+  if (pre) pre.textContent = JSON.stringify(SAMPLE_PAYLOADS[evt] || SAMPLE_PAYLOADS.test, null, 2);
+}
+
+if (HWH) {
+  document.getElementById('whTestEvent')?.addEventListener('change', updatePayloadPreview);
+}
+
+async function runTest() {
+  const target = document.getElementById('whTestTarget')?.value;
+  const event_ = document.getElementById('whTestEvent')?.value || 'test';
+  const wh     = _webhooks.find(w => w.webhook_id === target);
+
+  if (!wh || !wh.url) { toast('Select a saved webhook with a URL first', 'error'); return; }
+
+  const btn = document.getElementById('whRunBtn');
+  btn.disabled = true; btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid #ccc;border-top-color:var(--dark);border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:5px;"></span>Sending…';
+
+  const result = document.getElementById('whTestResult');
+  result.style.display = 'none';
+
   try {
     const r = await fetch('/api/admin/test-webhook', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({webhook_url: url, client_id: CID})
+      body: JSON.stringify({client_id: CID, webhook_id: target, webhook_url: wh.url, event_type: event_})
     });
     const d = await r.json();
-    st.textContent = d.success ? '✓ ' + d.message : '✗ ' + (d.error || 'Failed');
-    st.className   = 'wh-status ' + (d.success ? 'wh-ok' : 'wh-fail');
-  } catch { st.textContent = '✗ Network error'; st.className = 'wh-status wh-fail'; }
-  finally  { btn.textContent = 'Test'; btn.disabled = false; }
+    const ok = d.success;
+    const hdr = document.getElementById('whResultHeader');
+    hdr.style.background = ok ? 'var(--success-lt)' : 'var(--danger-lt)';
+    document.getElementById('whResultStatus').innerHTML =
+      `<span style="color:${ok ? 'var(--success)' : 'var(--danger)'};">${ok ? '✓' : '✗'} ${d.message || (d.error||'Failed')}</span>`;
+    document.getElementById('whResultMeta').textContent =
+      d.status_code ? `HTTP ${d.status_code} · ${d.duration_ms}ms` : '';
+    document.getElementById('whResultBody').textContent =
+      d.response_body ? d.response_body.slice(0,400) : (d.error || '');
+    result.style.display = 'block';
+    if (ok) loadLogs();
+  } catch(e) {
+    toast('Network error — ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;display:inline-block;margin-right:4px;vertical-align:middle;"><polygon points="5 3 19 12 5 21 5 3"/></svg>Send Test';
+  }
+}
+
+// Delivery logs
+async function loadLogs() {
+  const el = document.getElementById('whLogs');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:14px;color:var(--sub);font-size:12.5px;">Loading…</div>';
+  try {
+    const r = await fetch(`/api/admin/webhooks/logs?client_id=${CID}`);
+    const d = await r.json();
+    if (!d.success) { el.innerHTML = `<div style="padding:14px;color:var(--danger);font-size:12.5px;">${esc(d.error||'Error')}</div>`; return; }
+    const logs = d.logs || [];
+    if (!logs.length) {
+      el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--sub);font-size:12.5px;">No deliveries yet. Send a test to see logs here.</div>';
+      return;
+    }
+    el.innerHTML = `<div style="background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;">` +
+      logs.map(l => {
+        const ok  = l.success;
+        const ts  = l.fired_at ? new Date(l.fired_at).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
+        const dur = l.duration_ms != null ? l.duration_ms + 'ms' : '';
+        return `<div class="log-row">
+          <div class="log-dot ${ok?'ok':'fail'}"></div>
+          <div class="log-event">${esc(l.event_type)}</div>
+          <div class="log-name">${esc(l.webhook_name||l.webhook_id.slice(0,8)+'…')}</div>
+          <div class="log-code ${ok?'ok':'fail'}">${l.status_code||'ERR'}</div>
+          <div class="log-dur">${dur}</div>
+          <div class="log-time">${ts}</div>
+        </div>`;
+      }).join('') + '</div>';
+  } catch {
+    el.innerHTML = '<div style="padding:14px;color:var(--danger);font-size:12.5px;">Failed to load logs.</div>';
+  }
 }
 
 // Save
@@ -631,6 +943,10 @@ async function save() {
   const btn = document.getElementById('saveBtn');
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner"></div> Saving…';
+
+  // Save webhooks first (separate endpoint)
+  if (HWH) await saveWebhooks();
+
   const payload = {
     client_id: CID,
     branding: {
@@ -652,10 +968,7 @@ async function save() {
       hours:   document.getElementById('business_hours').value.trim(),
       website: document.getElementById('contact_website').value.trim(),
     },
-    integrations: HWH ? {
-      webhook_url: document.getElementById('webhook_url')?.value.trim() || '',
-      zapier_url:  document.getElementById('zapier_url')?.value.trim()  || '',
-    } : {},
+    integrations: {},  // webhooks now managed via /api/admin/webhooks
     remove_branding: HWL && (document.getElementById('remove_branding')?.checked || false),
   };
   try {
@@ -691,7 +1004,9 @@ function toast(msg, type = 'success') {
 
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
+// Boot
 up();
+initWebhooks();
 </script>
 </body>
 </html>

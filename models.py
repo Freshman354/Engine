@@ -2453,5 +2453,252 @@ def get_embeddings_for_client(client_id: str) -> list:
         return []
 
 
+# =====================================================================
+# WEBHOOK MANAGEMENT — Agency-grade multi-webhook system
+# =====================================================================
+
+def migrate_webhooks():
+    """
+    Create webhook_configs and webhook_logs tables.
+    Safe to call every startup — uses IF NOT EXISTS.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS webhook_configs (
+                id             SERIAL PRIMARY KEY,
+                client_id      TEXT NOT NULL,
+                webhook_id     TEXT NOT NULL UNIQUE,
+                name           TEXT NOT NULL,
+                url            TEXT NOT NULL,
+                events         TEXT NOT NULL DEFAULT '["lead_captured"]',
+                enabled        BOOLEAN DEFAULT TRUE,
+                signing_secret TEXT,
+                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_wh_client ON webhook_configs (client_id)"
+        )
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS webhook_logs (
+                id           SERIAL PRIMARY KEY,
+                client_id    TEXT NOT NULL,
+                webhook_id   TEXT NOT NULL,
+                event_type   TEXT NOT NULL,
+                url          TEXT NOT NULL,
+                payload      TEXT,
+                status_code  INTEGER,
+                response     TEXT,
+                success      BOOLEAN DEFAULT FALSE,
+                duration_ms  INTEGER,
+                fired_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_whl_client ON webhook_logs (client_id, fired_at DESC)"
+        )
+        conn.commit()
+        print("✅ Webhook tables ready.")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_webhooks: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_webhooks(client_id: str) -> list:
+    """Return all webhook configs for a client."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """SELECT webhook_id, name, url, events, enabled, signing_secret, created_at
+               FROM webhook_configs WHERE client_id = %s ORDER BY created_at""",
+            (client_id,)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for r in rows:
+            result.append({
+                'webhook_id':     r['webhook_id'],
+                'name':           r['name'],
+                'url':            r['url'],
+                'events':         json.loads(r['events'] or '[]'),
+                'enabled':        bool(r['enabled']),
+                'signing_secret': r['signing_secret'] or '',
+                'created_at':     r['created_at'].isoformat() if r['created_at'] else None,
+            })
+        return result
+    except Exception:
+        return []
+
+
+def save_webhooks(client_id: str, webhooks: list) -> int:
+    """
+    Replace all webhooks for a client. Preserves signing_secret when
+    the caller doesn't send one (secret is managed separately).
+    Returns count saved.
+    """
+    if not isinstance(webhooks, list):
+        return 0
+    conn, cursor = get_db()
+    try:
+        # Fetch existing secrets so we don't lose them on update
+        cursor.execute(
+            "SELECT webhook_id, signing_secret FROM webhook_configs WHERE client_id = %s",
+            (client_id,)
+        )
+        existing_secrets = {r['webhook_id']: r['signing_secret'] for r in cursor.fetchall()}
+
+        # Delete removed webhooks
+        incoming_ids = [w.get('webhook_id') for w in webhooks if w.get('webhook_id')]
+        cursor.execute(
+            "DELETE FROM webhook_configs WHERE client_id = %s AND webhook_id <> ALL(%s)",
+            (client_id, incoming_ids or ['__none__'])
+        )
+
+        saved = 0
+        for wh in webhooks:
+            wid    = wh.get('webhook_id') or str(uuid.uuid4())
+            secret = existing_secrets.get(wid) or _generate_signing_secret()
+            cursor.execute(
+                """INSERT INTO webhook_configs
+                       (client_id, webhook_id, name, url, events, enabled, signing_secret)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (webhook_id) DO UPDATE SET
+                       name       = EXCLUDED.name,
+                       url        = EXCLUDED.url,
+                       events     = EXCLUDED.events,
+                       enabled    = EXCLUDED.enabled,
+                       updated_at = CURRENT_TIMESTAMP""",
+                (
+                    client_id, wid,
+                    wh.get('name', 'Webhook')[:120],
+                    wh.get('url', ''),
+                    json.dumps(wh.get('events', ['lead_captured'])),
+                    bool(wh.get('enabled', True)),
+                    secret,
+                )
+            )
+            saved += 1
+        conn.commit()
+        return saved
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[save_webhooks] {e}")
+        return 0
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_signing_secret(client_id: str, webhook_id: str) -> str:
+    """Return the signing secret for a specific webhook."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "SELECT signing_secret FROM webhook_configs WHERE client_id = %s AND webhook_id = %s",
+            (client_id, webhook_id)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return row['signing_secret'] if row else ''
+    except Exception:
+        return ''
+
+
+def regenerate_signing_secret(client_id: str, webhook_id: str) -> str:
+    """Generate and persist a new signing secret. Returns the new secret."""
+    new_secret = _generate_signing_secret()
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """UPDATE webhook_configs SET signing_secret = %s, updated_at = CURRENT_TIMESTAMP
+               WHERE client_id = %s AND webhook_id = %s""",
+            (new_secret, client_id, webhook_id)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+    return new_secret
+
+
+def _generate_signing_secret() -> str:
+    """32-byte hex signing secret (64 chars)."""
+    return secrets.token_hex(32)
+
+
+def log_webhook_delivery(client_id: str, webhook_id: str, event_type: str,
+                         url: str, payload: dict, status_code: int,
+                         response_text: str, success: bool, duration_ms: int) -> None:
+    """Append one delivery record to webhook_logs."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """INSERT INTO webhook_logs
+                   (client_id, webhook_id, event_type, url, payload,
+                    status_code, response, success, duration_ms)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (
+                client_id, webhook_id, event_type, url,
+                json.dumps(payload)[:4000],
+                status_code,
+                (response_text or '')[:1000],
+                success,
+                duration_ms,
+            )
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+
+
+def get_webhook_logs(client_id: str, limit: int = 20) -> list:
+    """Return latest webhook delivery logs for a client."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """SELECT l.webhook_id, l.event_type, l.url, l.status_code,
+                      l.response, l.success, l.duration_ms, l.fired_at,
+                      c.name AS webhook_name
+               FROM webhook_logs l
+               LEFT JOIN webhook_configs c
+                 ON l.webhook_id = c.webhook_id AND l.client_id = c.client_id
+               WHERE l.client_id = %s
+               ORDER BY l.fired_at DESC
+               LIMIT %s""",
+            (client_id, limit)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for r in rows:
+            result.append({
+                'webhook_id':   r['webhook_id'],
+                'webhook_name': r['webhook_name'] or 'Deleted webhook',
+                'event_type':   r['event_type'],
+                'url':          r['url'],
+                'status_code':  r['status_code'],
+                'response':     r['response'],
+                'success':      bool(r['success']),
+                'duration_ms':  r['duration_ms'],
+                'fired_at':     r['fired_at'].isoformat() if r['fired_at'] else None,
+            })
+        return result
+    except Exception:
+        return []
+
+
 if __name__ == '__main__':
     init_db()

@@ -356,6 +356,8 @@ try:
         models.migrate_conversation_features()
     if hasattr(models, 'migrate_knowledge_base'):
         models.migrate_knowledge_base()
+    if hasattr(models, 'migrate_webhooks'):
+        models.migrate_webhooks()
     print("✅ Database initialized/migrated successfully!")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
@@ -1750,45 +1752,207 @@ def save_customization():
         return jsonify({'success': False, 'error': 'Failed to save customization'}), 500
 
 
+@app.route('/api/admin/webhooks', methods=['GET'])
+@login_required
+def get_webhooks():
+    """List all webhook configs for a client."""
+    client_id = request.args.get('client_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
+    if not plan_limits.get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    return jsonify({'success': True, 'webhooks': models.get_webhooks(client_id)})
+
+
+@app.route('/api/admin/webhooks', methods=['POST'])
+@login_required
+def save_webhooks():
+    """Save (upsert) the full list of webhooks for a client."""
+    data      = request.json or {}
+    client_id = data.get('client_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
+    if not plan_limits.get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    webhooks = data.get('webhooks', [])
+    if len(webhooks) > 10:
+        return jsonify({'success': False, 'error': 'Maximum 10 webhooks per client'}), 400
+    count = models.save_webhooks(client_id, webhooks)
+    app.logger.info(f"[Webhooks] Saved {count} webhooks for client={client_id} user={current_user.id}")
+    return jsonify({'success': True, 'saved': count})
+
+
+@app.route('/api/admin/webhooks/regenerate-secret', methods=['POST'])
+@login_required
+def regenerate_webhook_secret():
+    """Generate a new signing secret for a specific webhook."""
+    data       = request.json or {}
+    client_id  = data.get('client_id', '')
+    webhook_id = data.get('webhook_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
+    if not plan_limits.get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    new_secret = models.regenerate_signing_secret(client_id, webhook_id)
+    return jsonify({'success': True, 'signing_secret': new_secret})
+
+
+@app.route('/api/admin/webhooks/logs', methods=['GET'])
+@login_required
+def get_webhook_logs():
+    """Return last 20 webhook deliveries for a client."""
+    client_id = request.args.get('client_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
+    if not plan_limits.get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    return jsonify({'success': True, 'logs': models.get_webhook_logs(client_id, limit=20)})
+
+
 @app.route('/api/admin/test-webhook', methods=['POST'])
 @login_required
 def test_webhook():
-    """Fire a test POST to the configured webhook URL and return status."""
-    try:
-        data       = request.json or {}
-        webhook_url = data.get('webhook_url', '').strip()
-        client_id   = data.get('client_id', '')
+    """
+    Fire a test delivery to a specific webhook.
+    Returns status_code, response body, duration, and the exact payload sent.
+    Also logs the delivery to webhook_logs.
+    """
+    import time, hmac, hashlib
 
-        if not webhook_url:
-            return jsonify({'success': False, 'error': 'No webhook URL provided'}), 400
+    data       = request.json or {}
+    webhook_url = data.get('webhook_url', '').strip()
+    client_id  = data.get('client_id', '')
+    webhook_id = data.get('webhook_id', '')
+    event_type = data.get('event_type', 'test')
 
-        plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
-        if not plan_limits.get('webhooks'):
-            return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    if not webhook_url:
+        return jsonify({'success': False, 'error': 'No webhook URL provided'}), 400
 
-        payload = {
+    plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
+    if not plan_limits.get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    # Build event-specific sample payload
+    ts = datetime.utcnow().isoformat() + 'Z'
+    SAMPLE_PAYLOADS = {
+        'lead_captured': {
+            'event':     'lead_captured',
+            'client_id': client_id,
+            'timestamp': ts,
+            'data': {
+                'name':    'Jane Smith',
+                'email':   'jane@example.com',
+                'phone':   '+1 555 000 0000',
+                'company': 'Acme Corp',
+                'message': 'I am interested in your services.',
+                'source_url': 'https://example.com',
+            }
+        },
+        'conversation_ended': {
+            'event':     'conversation_ended',
+            'client_id': client_id,
+            'timestamp': ts,
+            'data': {
+                'session_id':    'sess_abc123',
+                'message_count': 6,
+                'resolved':      True,
+                'duration_secs': 142,
+            }
+        },
+        'faq_matched': {
+            'event':     'faq_matched',
+            'client_id': client_id,
+            'timestamp': ts,
+            'data': {
+                'question':   'What are your business hours?',
+                'faq_id':     'faq_xyz',
+                'confidence': 0.94,
+                'method':     'ai_smart',
+            }
+        },
+        'message_sent': {
+            'event':     'message_sent',
+            'client_id': client_id,
+            'timestamp': ts,
+            'data': {
+                'role':    'user',
+                'content': 'Do you offer refunds?',
+            }
+        },
+        'test': {
             'event':     'test',
             'client_id': client_id,
-            'message':   'This is a test webhook from Lumvi',
-            'timestamp': datetime.utcnow().isoformat(),
-        }
+            'timestamp': ts,
+            'data': {
+                'message': 'This is a test delivery from Lumvi.',
+                'sent_by': current_user.email,
+            }
+        },
+    }
 
-        resp = requests.post(webhook_url, json=payload, timeout=8,
-                             headers={'Content-Type': 'application/json',
-                                      'X-Lumvi-Event': 'test'})
+    payload = SAMPLE_PAYLOADS.get(event_type, SAMPLE_PAYLOADS['test'])
+
+    # Sign the payload if we have a signing secret
+    signing_secret = models.get_signing_secret(client_id, webhook_id) if webhook_id else ''
+    headers = {
+        'Content-Type':    'application/json',
+        'X-Lumvi-Event':   event_type,
+        'X-Lumvi-Delivery': str(uuid.uuid4()),
+    }
+    if signing_secret:
+        body_bytes = json.dumps(payload).encode()
+        sig = hmac.new(signing_secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+        headers['X-Lumvi-Signature'] = f'sha256={sig}'
+
+    t0 = time.time()
+    try:
+        resp = requests.post(webhook_url, json=payload, headers=headers, timeout=10)
+        duration_ms = int((time.time() - t0) * 1000)
+        success     = 200 <= resp.status_code < 300
+        response_body = resp.text[:500]
+
+        # Log the delivery
+        if webhook_id:
+            models.log_webhook_delivery(
+                client_id=client_id, webhook_id=webhook_id,
+                event_type=event_type, url=webhook_url,
+                payload=payload, status_code=resp.status_code,
+                response_text=response_body, success=success,
+                duration_ms=duration_ms,
+            )
+
         return jsonify({
-            'success': True,
-            'status_code': resp.status_code,
-            'message': f'Webhook responded with HTTP {resp.status_code}'
+            'success':      success,
+            'status_code':  resp.status_code,
+            'duration_ms':  duration_ms,
+            'response_body': response_body,
+            'payload_sent': payload,
+            'message':      f'HTTP {resp.status_code} · {duration_ms}ms',
         })
 
     except requests.exceptions.Timeout:
-        return jsonify({'success': False, 'error': 'Webhook timed out (>8s)'}), 200
-    except requests.exceptions.ConnectionError:
-        return jsonify({'success': False, 'error': 'Could not connect to webhook URL'}), 200
+        duration_ms = int((time.time() - t0) * 1000)
+        if webhook_id:
+            models.log_webhook_delivery(
+                client_id=client_id, webhook_id=webhook_id,
+                event_type=event_type, url=webhook_url,
+                payload=payload, status_code=0,
+                response_text='Timeout', success=False,
+                duration_ms=duration_ms,
+            )
+        return jsonify({'success': False, 'error': 'Request timed out (>10s)', 'payload_sent': payload})
+    except requests.exceptions.ConnectionError as e:
+        return jsonify({'success': False, 'error': 'Could not connect — check the URL', 'payload_sent': payload})
     except Exception as e:
         app.logger.error(f'[test-webhook] {e}')
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e), 'payload_sent': payload})
 
 
 @app.route('/analytics')
