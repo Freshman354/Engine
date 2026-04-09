@@ -2297,10 +2297,9 @@ def sales_page():
 @app.route('/help-center')
 @login_required
 def help_center_page():
-    client_id = request.args.get('client_id')
-    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
-        return "Unauthorized", 403
-    return render_template('help-center.html', client_id=client_id)
+    # Redirects to the new article manager — keeps old bookmarks working
+    client_id = request.args.get('client_id', '')
+    return redirect(url_for('article_manager_page', client_id=client_id))
 
 
 @app.route('/api/articles', methods=['GET'])
@@ -2313,22 +2312,51 @@ def get_articles():
     return jsonify({'success': True, 'articles': articles})
 
 
-@app.route('/articles/manage')
+@app.route('/api/articles/manage', methods=['GET', 'POST', 'PUT', 'DELETE'])
 @login_required
 def manage_articles():
-    client_id = request.args.get('client_id')
-    
-    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
-        flash("You don't have access to this client's articles.", "danger")
-        return redirect(url_for('dashboard'))
-    
-    client = models.get_client_by_id(client_id)
-    articles = models.get_articles(client_id)
-    
-    return render_template('article_manager.html',
-                           client_id=client_id,
-                           client=client,
-                           articles=articles)
+    try:
+        if request.method == 'GET':
+            client_id = request.args.get('client_id')
+            if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+                return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+            articles = models.get_articles(client_id)
+            return jsonify({'success': True, 'articles': articles})
+
+        data = request.get_json()
+        client_id = data.get('client_id')
+        if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+        if request.method == 'POST':
+            title    = data.get('title', '').strip()
+            content  = data.get('content', '').strip()
+            category = data.get('category', 'General').strip()
+            if not title or not content:
+                return jsonify({'success': False, 'error': 'Title and content are required'}), 400
+            article_id = models.create_article(client_id, title, content, category)
+            return jsonify({'success': True, 'id': article_id})
+
+        if request.method == 'PUT':
+            article_id = data.get('id')
+            title    = data.get('title', '').strip()
+            content  = data.get('content', '').strip()
+            category = data.get('category', 'General').strip()
+            if not article_id or not title or not content:
+                return jsonify({'success': False, 'error': 'id, title and content are required'}), 400
+            models.update_article(article_id, client_id, title, content, category)
+            return jsonify({'success': True})
+
+        if request.method == 'DELETE':
+            article_id = data.get('id')
+            if not article_id:
+                return jsonify({'success': False, 'error': 'id required'}), 400
+            models.delete_article(article_id, client_id)
+            return jsonify({'success': True})
+
+    except Exception as e:
+        app.logger.error(f'Articles error: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/thank-you')
