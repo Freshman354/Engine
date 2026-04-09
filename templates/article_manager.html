@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Help Center Articles — Lumvi</title>
+<title>Help Center Articles — {{ client.company_name or 'Client' }}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
@@ -153,7 +153,7 @@ label{display:block;font-size:11px;font-weight:600;color:var(--mid);margin-botto
     <div>
       <h1>Help Center Articles</h1>
       <p>Articles appear in the Help Center tab of the chat widget.</p>
-      <div class="client-chip">{{ client.company_name if client else client_id }} · {{ client_id }}</div>
+      <div class="client-chip">{{ client.company_name or client_id }} · {{ client_id }}</div>
     </div>
     <button class="btn-primary" onclick="openNew()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>

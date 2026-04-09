@@ -367,7 +367,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                     </div>
                     <div class="client-card-actions">
                         <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">FAQs</a>
-                        <a href="/article_manager.html?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">Help</a>
+                        <a href="/articles/manage?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">Help</a>
                         {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<a href="/manage-client-users?client_id={{ client.client_id }}" class="btn-xs btn-xs-logins">Logins</a>{% endif %}
                         <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed">Embed</button>
                         {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics">Analytics</a>{% endif %}

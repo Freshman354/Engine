@@ -3892,6 +3892,23 @@ def admin_enforce_subscriptions():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/articles/manage')
+@login_required
+def manage_articles():
+    client_id = request.args.get('client_id')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        flash("You don't have access to this client's articles.", "danger")
+        return redirect(url_for('dashboard'))
+    
+    client = models.get_client_by_id(client_id)
+    articles = models.get_articles(client_id)
+    
+    return render_template('article_manager.html', 
+                           client_id=client_id, 
+                           client=client, 
+                           articles=articles)
+
+
 @app.route('/terms')
 def terms():
     return render_template('terms.html')
