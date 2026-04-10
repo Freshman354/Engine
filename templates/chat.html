@@ -739,14 +739,21 @@ function addLeadSuccess(msg) {
 
 // ── Help Center ────────────────────────────────────────────────────────
 async function loadArts() {
-  if (allArts.length) return;
+  // Always re-fetch so newly added articles appear without a page reload.
+  // Articles are small — the network cost is negligible.
+  const container = document.getElementById('hcContainer');
+  container.innerHTML = '<div class="hc-empty" style="padding:32px 20px;"><p style="color:var(--sub);font-size:13px;">Loading…</p></div>';
   try {
     const r = await fetch('/api/articles?client_id=' + CID);
     const d = await r.json();
+    if (!d.success) {
+      container.innerHTML = '<div class="hc-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px;height:36px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>Could not load articles.</p></div>';
+      return;
+    }
     allArts = d.articles || [];
     renderArts(allArts);
   } catch {
-    document.getElementById('hcContainer').innerHTML =
+    container.innerHTML =
       '<div class="hc-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px;height:36px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>Could not load articles.</p></div>';
   }
 }
