@@ -358,6 +358,8 @@ try:
         models.migrate_knowledge_base()
     if hasattr(models, 'migrate_webhooks'):
         models.migrate_webhooks()
+    if hasattr(models, 'migrate_white_label'):
+        models.migrate_white_label()
     print("✅ Database initialized/migrated successfully!")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
@@ -1130,8 +1132,47 @@ def submit_lead():
 
         app.logger.info(f'Lead captured for client: {client_id}')
 
-        config = json.loads(client['branding_settings']) if client['branding_settings'] else {}
+        config       = json.loads(client['branding_settings']) if client['branding_settings'] else {}
         contact_info = config.get('contact', {})
+
+        # Send branded lead notification to the client's contact email if set
+        notify_email = contact_info.get('email')
+        if notify_email:
+            try:
+                sender_info = models.get_email_from_for_client(client_id)
+                msg = Message(
+                    subject=f"New Lead: {name}",
+                    sender=f"{sender_info['name']} <{sender_info['address']}>",
+                    recipients=[notify_email],
+                    html=f"""
+                    <div style="font-family:'DM Sans',sans-serif;max-width:520px;margin:0 auto;
+                                background:#F7F4EF;padding:36px;border-radius:16px;">
+                      <h2 style="font-size:20px;font-weight:700;color:#1C1917;margin-bottom:4px;">
+                        New Lead Captured</h2>
+                      <p style="color:#A8A29E;font-size:13px;margin-bottom:24px;">
+                        via {client.get('company_name','your chatbot')}</p>
+                      <table style="width:100%;border-collapse:collapse;">
+                        <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                       font-size:13px;color:#57534E;width:100px;">Name</td>
+                            <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                       font-size:13px;font-weight:600;color:#1C1917;">{name}</td></tr>
+                        <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                       font-size:13px;color:#57534E;">Email</td>
+                            <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                       font-size:13px;font-weight:600;color:#1C1917;">{email}</td></tr>
+                        {'<tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;color:#57534E;">Phone</td><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;font-weight:600;color:#1C1917;">'+phone+'</td></tr>' if phone else ''}
+                        {'<tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;color:#57534E;">Company</td><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;font-weight:600;color:#1C1917;">'+company+'</td></tr>' if company else ''}
+                      </table>
+                      <a href="https://lumvi.net/admin/leads?client_id={client_id}"
+                         style="display:inline-block;margin-top:24px;padding:11px 22px;
+                                background:#B8924A;color:#fff;text-decoration:none;
+                                border-radius:9px;font-weight:700;font-size:13.5px;">
+                        View All Leads →</a>
+                    </div>"""
+                )
+                mail.send(msg)
+            except Exception as _mail_err:
+                app.logger.warning(f"[Lead email] failed for {client_id}: {_mail_err}")
 
         return jsonify({
             'success': True,
@@ -1533,23 +1574,45 @@ def index():
 
 @app.route('/widget')
 def widget():
-    client_id = request.args.get('client_id', 'demo')
-    client = models.get_client_by_id(client_id)
+    """
+    Serves the chat widget HTML.
+    Resolution order:
+      1. ?client_id= query param (standard embed)
+      2. request.host matches a client's custom_widget_domain (white-label domain)
+      3. Falls back to demo client
+    """
+    client_id = request.args.get('client_id', '').strip()
+    client    = None
 
+    # 1. Standard lookup by client_id param
+    if client_id and client_id != 'demo':
+        client = models.get_client_by_id(client_id)
+
+    # 2. Custom domain lookup — host header (strip port for local dev)
+    if not client:
+        host = request.host.split(':')[0].lower()
+        if host and host not in ('lumvi.net', 'www.lumvi.net', 'localhost', '127.0.0.1'):
+            client = models.get_client_by_custom_domain(host)
+            if client:
+                client_id = client['client_id']
+                app.logger.info(f"[Widget] Custom domain match: host={host} client={client_id}")
+
+    # 3. Demo fallback
     if not client:
         client = {
-            'client_id':       'demo',
-            'company_name':    'Demo Company',
-            'widget_color':    '#B8924A',
-            'bot_name':        'Support',
-            'bot_avatar':      '🤖',
-            'tagline':         'Typically replies instantly',
-            'welcome_message': 'Hi! How can I help you today?',
+            'client_id':        'demo',
+            'company_name':     'Demo Company',
+            'widget_color':     '#B8924A',
+            'bot_name':         'Support',
+            'bot_avatar':       '🤖',
+            'tagline':          'Typically replies instantly',
+            'welcome_message':  'Hi! How can I help you today?',
             'fallback_message': '',
-            'quick_replies':   ['What are your hours?', 'Pricing info', 'Contact us'],
-            'remove_branding': 0,
-            'logo_url':        '',
-            'contact':         {},
+            'quick_replies':    ['What are your hours?', 'Pricing info', 'Contact us'],
+            'remove_branding':  0,
+            'logo_url':         '',
+            'custom_css':       '',
+            'contact':          {},
         }
     else:
         client = dict(client)
@@ -1558,16 +1621,17 @@ def widget():
         branding     = branding_settings.get('branding', {})
         contact      = branding_settings.get('contact', {})
 
-        client['bot_name']        = bot_settings.get('bot_name')        or client.get('company_name') or 'Support'
-        client['bot_avatar']      = bot_settings.get('bot_avatar')      or '🤖'
-        client['tagline']         = branding.get('tagline')             or 'Typically replies instantly'
-        client['welcome_message'] = bot_settings.get('welcome_message') or client.get('welcome_message') or 'Hi! How can I help you today?'
+        client['bot_name']         = bot_settings.get('bot_name')        or client.get('company_name') or 'Support'
+        client['bot_avatar']       = bot_settings.get('bot_avatar')      or '🤖'
+        client['tagline']          = branding.get('tagline')             or 'Typically replies instantly'
+        client['welcome_message']  = bot_settings.get('welcome_message') or client.get('welcome_message') or 'Hi! How can I help you today?'
         client['fallback_message'] = bot_settings.get('fallback_message') or ''
-        client['quick_replies']   = bot_settings.get('quick_replies')   or []
-        client['widget_color']    = branding.get('primary_color')       or client.get('widget_color') or '#B8924A'
-        client['remove_branding'] = branding.get('remove_branding',     client.get('remove_branding', 0))
-        client['logo_url']        = branding.get('logo')               or branding.get('logo_url') or ''
-        client['contact']         = contact
+        client['quick_replies']    = bot_settings.get('quick_replies')   or []
+        client['widget_color']     = branding.get('primary_color')       or client.get('widget_color') or '#B8924A'
+        client['remove_branding']  = branding.get('remove_branding',     client.get('remove_branding', 0))
+        client['logo_url']         = branding.get('logo')               or branding.get('logo_url') or ''
+        client['custom_css']       = client.get('custom_css') or ''
+        client['contact']          = contact
         client['branding_settings'] = branding_settings
 
     return render_template('chat.html', client=client)
@@ -1953,6 +2017,168 @@ def test_webhook():
     except Exception as e:
         app.logger.error(f'[test-webhook] {e}')
         return jsonify({'success': False, 'error': str(e), 'payload_sent': payload})
+
+
+# =====================================================================
+# WHITE-LABEL ROUTES
+# =====================================================================
+
+@app.route('/api/admin/white-label', methods=['GET'])
+@login_required
+def get_white_label():
+    """Return white-label settings for a client (custom domain, CSS, email from)."""
+    client_id = request.args.get('client_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    fresh_user  = models.get_user_by_id(current_user.id)
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+
+    if not plan_limits.get('customization'):
+        return jsonify({'success': False, 'error': 'Plan upgrade required'}), 403
+
+    client = models.get_client_by_id(client_id)
+    if not client:
+        return jsonify({'success': False, 'error': 'Client not found'}), 404
+
+    return jsonify({
+        'success': True,
+        'custom_widget_domain': client.get('custom_widget_domain') or '',
+        'custom_css':           client.get('custom_css') or '',
+        'branded_email_from':   client.get('branded_email_from') or '',
+        'has_custom_domain':    bool(client.get('custom_widget_domain')),
+    })
+
+
+@app.route('/api/admin/white-label', methods=['POST'])
+@login_required
+def save_white_label():
+    """
+    Save white-label settings for a client.
+    Plan gating:
+      - branded_email_from  → Pro+
+      - custom_widget_domain, custom_css → Agency only
+    """
+    data      = request.json or {}
+    client_id = data.get('client_id', '')
+
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    fresh_user  = models.get_user_by_id(current_user.id)
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+    is_agency   = plan_type in ('agency', 'enterprise')
+    is_pro_plus = plan_type in ('pro', 'agency', 'enterprise')
+
+    domain             = data.get('custom_widget_domain', '').strip().lower() or None
+    custom_css         = data.get('custom_css', '').strip() or None
+    branded_email_from = data.get('branded_email_from', '').strip() or None
+
+    # Validate domain format
+    if domain and not models.is_valid_domain(domain):
+        return jsonify({'success': False, 'error': f'"{domain}" is not a valid domain name. Use format: chat.yoursite.com'}), 400
+
+    # Plan gating
+    if domain and not is_agency:
+        return jsonify({'success': False, 'error': 'Custom widget domain requires the Agency plan'}), 403
+    if custom_css and not is_agency:
+        return jsonify({'success': False, 'error': 'Custom CSS requires the Agency plan'}), 403
+    if branded_email_from and not is_pro_plus:
+        return jsonify({'success': False, 'error': 'Branded email sender requires Pro or Agency plan'}), 403
+
+    # Check domain uniqueness (another client can't use the same domain)
+    if domain:
+        existing = models.get_client_by_custom_domain(domain)
+        if existing and existing['client_id'] != client_id:
+            return jsonify({'success': False, 'error': f'Domain "{domain}" is already in use by another client'}), 409
+
+    models.save_white_label_settings(client_id, domain, custom_css, branded_email_from)
+    app.logger.info(f"[WhiteLabel] saved client={client_id} domain={domain} user={current_user.id}")
+
+    return jsonify({
+        'success': True,
+        'message': 'White-label settings saved',
+        'cname_target': 'lumvi.net',
+        'cname_instructions': (
+            f'Point a CNAME record from {domain} → lumvi.net in your DNS provider, '
+            'then wait up to 24h for propagation.'
+        ) if domain else None,
+    })
+
+
+@app.route('/api/admin/agency-branding', methods=['GET'])
+@login_required
+def get_agency_branding():
+    """Return the agency-wide default branding for the current user."""
+    fresh_user = models.get_user_by_id(current_user.id)
+    plan_type  = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    if plan_type not in ('agency', 'enterprise'):
+        return jsonify({'success': False, 'error': 'Agency plan required'}), 403
+    return jsonify({'success': True, 'agency_branding': models.get_agency_branding(current_user.id)})
+
+
+@app.route('/api/admin/agency-branding', methods=['POST'])
+@login_required
+def save_agency_branding_route():
+    """
+    Save agency-wide default branding.
+    These defaults are auto-applied when a new client is created under this agency account.
+    """
+    fresh_user = models.get_user_by_id(current_user.id)
+    plan_type  = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    if plan_type not in ('agency', 'enterprise'):
+        return jsonify({'success': False, 'error': 'Agency plan required'}), 403
+
+    data = request.json or {}
+    agency_branding = {
+        'branding': data.get('branding', {}),
+        'bot_settings': data.get('bot_settings', {}),
+        'contact': data.get('contact', {}),
+        'branded_email_from': data.get('branded_email_from', ''),
+    }
+    models.save_agency_branding(current_user.id, agency_branding)
+    app.logger.info(f"[AgencyBranding] saved user={current_user.id}")
+    return jsonify({'success': True, 'message': 'Agency branding defaults saved'})
+
+
+@app.route('/api/admin/white-label/verify-domain', methods=['POST'])
+@login_required
+def verify_custom_domain():
+    """
+    Lightweight DNS check — resolves the CNAME and reports whether it points to lumvi.net.
+    This is informational only; the widget route itself does the real lookup.
+    """
+    import socket
+    data      = request.json or {}
+    domain    = data.get('domain', '').strip().lower()
+    client_id = data.get('client_id', '')
+
+    if not domain or not models.is_valid_domain(domain):
+        return jsonify({'success': False, 'error': 'Invalid domain'}), 400
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    try:
+        resolved = socket.getaddrinfo(domain, None)
+        # Also try to resolve lumvi.net for comparison
+        lumvi_ips = {r[4][0] for r in socket.getaddrinfo('lumvi.net', None)}
+        domain_ips = {r[4][0] for r in resolved}
+        pointed = bool(lumvi_ips & domain_ips)
+        return jsonify({
+            'success':      True,
+            'domain':       domain,
+            'pointed':      pointed,
+            'message':      '✓ Domain is pointing to Lumvi' if pointed else '⏳ CNAME not yet propagated — check back in a few hours',
+        })
+    except socket.gaierror:
+        return jsonify({
+            'success': True,
+            'domain':  domain,
+            'pointed': False,
+            'message': '✗ Domain not found — check your DNS records',
+        })
 
 
 @app.route('/analytics')

@@ -218,6 +218,41 @@ def migrate_clients_table():
     print("✅ Clients table migration complete")
 
 
+def migrate_white_label():
+    """
+    Adds white-label columns to clients and users tables.
+    Safe to run on every startup — uses IF NOT EXISTS / SAVEPOINT pattern.
+    """
+    conn, cursor = get_db()
+    try:
+        # ── clients table ─────────────────────────────────────────────
+        for sql in [
+            # Custom domain the client owner CNAMEs to lumvi.net
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS custom_widget_domain TEXT",
+            # Custom CSS injected into the widget <style> block
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS custom_css TEXT",
+            # Branded "From" email name  e.g. "Acme Support"
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS branded_email_from TEXT",
+        ]:
+            cursor.execute(sql)
+
+        # ── users table ────────────────────────────────────────────────
+        for sql in [
+            # Agency default branding JSON; auto-applied to new clients
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS agency_branding_settings TEXT",
+        ]:
+            cursor.execute(sql)
+
+        conn.commit()
+        print("✅ migrate_white_label complete")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_white_label: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def migrate_faqs_table():
     """
     Idempotent migration for the faqs table.
@@ -863,36 +898,223 @@ def update_user_password(user_id, new_password):
     conn.close()
 
 def create_client(user_id, company_name, branding_settings=None):
-    """Create a new client for a user"""
+    """
+    Create a new client for a user.
+    If the owner is an agency and has agency_branding_settings, those are
+    auto-applied to the new client unless branding_settings is explicitly passed.
+    """
     conn, cursor = get_db()
-    client_id = f"{company_name.lower().replace(' ', '-')}-{secrets.token_hex(4)}"
-    
+    import re as _re
+    slug      = _re.sub(r'[^a-z0-9-]', '', company_name.lower().replace(' ', '-'))
+    client_id = f"{slug}-{secrets.token_hex(4)}"
+
+    # Auto-inherit agency defaults when nothing is passed
+    if branding_settings is None:
+        owner = get_user_by_id(user_id)
+        agency_raw = (owner or {}).get('agency_branding_settings')
+        if agency_raw:
+            try:
+                agency_bs = json.loads(agency_raw) if isinstance(agency_raw, str) else agency_raw
+                # Deep-copy and personalise for this client
+                branding_settings = {
+                    'branding': dict(agency_bs.get('branding', {})),
+                    'bot_settings': dict(agency_bs.get('bot_settings', {})),
+                    'contact': dict(agency_bs.get('contact', {})),
+                    'integrations': {},
+                }
+                # Reset company-specific fields so owner fills them in
+                branding_settings['branding']['company_name'] = company_name
+            except Exception:
+                branding_settings = None
+
     if branding_settings is None:
         branding_settings = {
-            "company_name": company_name,
-            "logo_url": "",
-            "primary_color": "#667eea",
-            "secondary_color": "#764ba2",
-            "bot_avatar": "",
-            "bot_name": "Support Assistant",
-            "welcome_message": "Hi! How can I help you today?"
+            'branding': {
+                'company_name': company_name,
+                'primary_color': '#B8924A',
+                'remove_branding': False,
+            },
+            'bot_settings': {
+                'bot_name': 'Support Assistant',
+                'welcome_message': 'Hi! How can I help you today?',
+            },
+            'contact': {},
+            'integrations': {},
         }
-    
+
     primary_color = branding_settings.get('branding', {}).get('primary_color')
-    welcome_msg = branding_settings.get('bot_settings', {}).get('welcome_message')
-    remove_flag = bool(branding_settings.get('branding', {}).get('remove_branding', False))
+    welcome_msg   = branding_settings.get('bot_settings', {}).get('welcome_message')
+    remove_flag   = bool(branding_settings.get('branding', {}).get('remove_branding', False))
 
     cursor.execute(
-        '''INSERT INTO clients (user_id, client_id, company_name, branding_settings, widget_color, welcome_message, remove_branding)
+        '''INSERT INTO clients
+               (user_id, client_id, company_name, branding_settings,
+                widget_color, welcome_message, remove_branding)
            VALUES (%s, %s, %s, %s, %s, %s, %s)''',
-        (user_id, client_id, company_name, json.dumps(branding_settings), primary_color, welcome_msg, remove_flag)
+        (user_id, client_id, company_name,
+         json.dumps(branding_settings),
+         primary_color, welcome_msg, remove_flag)
     )
     conn.commit()
     cursor.close()
     conn.close()
     return client_id
 
+
 def get_user_clients(user_id):
+    """Get all clients for a user"""
+    conn, cursor = get_db()
+    cursor.execute('SELECT * FROM clients WHERE user_id = %s', (user_id,))
+    clients = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [dict(client) for client in clients]
+
+
+# =====================================================================
+# WHITE-LABEL HELPERS
+# =====================================================================
+
+_DOMAIN_RE = __import__('re').compile(
+    r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
+)
+
+def is_valid_domain(domain: str) -> bool:
+    """Return True if `domain` looks like a valid hostname (no scheme, no path)."""
+    if not domain or len(domain) > 253:
+        return False
+    return bool(_DOMAIN_RE.match(domain.strip()))
+
+
+def get_client_by_custom_domain(domain: str):
+    """
+    Look up a client whose custom_widget_domain matches `domain`.
+    Used by the /widget route to serve white-labelled widgets on custom domains.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            'SELECT * FROM clients WHERE custom_widget_domain = %s',
+            (domain.lower().strip(),)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return dict(row) if row else None
+    except Exception:
+        return None
+
+
+def save_white_label_settings(client_id: str, domain: str | None,
+                               custom_css: str | None,
+                               branded_email_from: str | None) -> None:
+    """
+    Persist the three white-label columns for a client in one atomic UPDATE.
+    Pass None for any field to leave it unchanged.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """UPDATE clients
+               SET custom_widget_domain = COALESCE(%s, custom_widget_domain),
+                   custom_css           = COALESCE(%s, custom_css),
+                   branded_email_from   = COALESCE(%s, branded_email_from)
+               WHERE client_id = %s""",
+            (domain, custom_css, branded_email_from, client_id)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[save_white_label_settings] {e}")
+
+
+def get_email_from_for_client(client_id: str) -> dict:
+    """
+    Return the branded email sender info for a client.
+
+    Priority:
+      1. client.branded_email_from
+      2. owner agency_branding_settings.branded_email_from
+      3. Lumvi default
+
+    Returns {'name': str, 'address': str}
+    """
+    DEFAULT = {'name': 'Lumvi', 'address': 'support@lumvi.net'}
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''SELECT c.branded_email_from, c.branding_settings,
+                      u.agency_branding_settings, c.company_name
+               FROM clients c
+               JOIN users u ON u.id = c.user_id
+               WHERE c.client_id = %s''',
+            (client_id,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not row:
+            return DEFAULT
+
+        # 1. Client-level override
+        if row.get('branded_email_from'):
+            return {'name': row['branded_email_from'], 'address': 'support@lumvi.net'}
+
+        # 2. Agency default
+        agency_raw = row.get('agency_branding_settings')
+        if agency_raw:
+            try:
+                ab = json.loads(agency_raw) if isinstance(agency_raw, str) else agency_raw
+                agency_from = ab.get('branded_email_from')
+                if agency_from:
+                    return {'name': agency_from, 'address': 'support@lumvi.net'}
+            except Exception:
+                pass
+
+        # 3. Use company name as a friendly default
+        company = row.get('company_name')
+        if company:
+            return {'name': company, 'address': 'support@lumvi.net'}
+
+        return DEFAULT
+    except Exception:
+        return DEFAULT
+
+
+def save_agency_branding(user_id: int, agency_branding: dict) -> None:
+    """Persist the agency-wide branding defaults for a user."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "UPDATE users SET agency_branding_settings = %s WHERE id = %s",
+            (json.dumps(agency_branding), user_id)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[save_agency_branding] {e}")
+
+
+def get_agency_branding(user_id: int) -> dict:
+    """Return the agency's default branding dict, or {}."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "SELECT agency_branding_settings FROM users WHERE id = %s", (user_id,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        raw = (row or {}).get('agency_branding_settings')
+        if raw:
+            return json.loads(raw) if isinstance(raw, str) else raw
+        return {}
+    except Exception:
+        return {}
     """Get all clients for a user"""
     conn, cursor = get_db()
     cursor.execute('SELECT * FROM clients WHERE user_id = %s', (user_id,))

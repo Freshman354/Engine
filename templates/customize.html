@@ -536,6 +536,137 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
     </div>
   </div>
 
+  <!-- 7. WHITE-LABEL (Pro / Agency) -->
+  <div class="card">
+    <div class="card-header open" onclick="tc(this)">
+      <div class="card-icon" style="background:#f0fdf4;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      </div>
+      <div class="card-text">
+        <h2>White-Label Settings</h2>
+        <p>Custom domain, CSS overrides, branded emails</p>
+      </div>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    </div>
+    <div class="card-body open">
+
+      <!-- Branded email from (Pro+) -->
+      {% if has_webhooks %}{# has_webhooks == Pro+ #}
+      <div class="field">
+        <label>Branded "From" Name
+          <span style="font-weight:400;color:var(--sub);text-transform:none;margin-left:4px;">— for lead notification emails</span>
+        </label>
+        <input type="text" id="wl_email_from" placeholder="Acme Support"
+          value="{{ client.get('branded_email_from', '') if client else '' }}">
+        <p class="hint">Lead notification emails will arrive as "Acme Support &lt;support@lumvi.net&gt;" instead of "Lumvi".</p>
+      </div>
+      <hr class="div">
+      {% else %}
+      <div class="upgrade-box" style="margin-bottom:14px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <p>Branded email sender requires <strong>Pro plan ($99/mo)</strong>. <a href="/upgrade">Upgrade →</a></p>
+      </div>
+      {% endif %}
+
+      <!-- Custom widget domain (Agency only) -->
+      {% if has_white_label %}
+      <div class="field">
+        <div class="label-row">
+          <label>Custom Widget Domain</label>
+          <span id="domainStatusBadge" style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;display:none;"></span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="wl_domain" placeholder="chat.yourcompany.com"
+            value="{{ client.get('custom_widget_domain', '') if client else '' }}"
+            style="flex:1;" oninput="clearDomainStatus()">
+          <button class="btn-test" type="button" onclick="verifyDomain()" id="verifyDomainBtn">Check DNS</button>
+        </div>
+        <p class="hint">Create a CNAME record: <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 5px;border-radius:3px;">chat.yourcompany.com → lumvi.net</code> · DNS may take up to 24h to propagate.</p>
+      </div>
+
+      <div class="field">
+        <label>Custom CSS
+          <span style="font-weight:400;color:var(--sub);text-transform:none;margin-left:4px;">— injected into the widget</span>
+        </label>
+        <textarea id="wl_css" rows="5"
+          placeholder=".bubble-bot { border-radius: 4px; }"
+          style="font-family:'DM Mono',monospace;font-size:12px;">{{ client.get('custom_css', '') if client else '' }}</textarea>
+        <p class="hint">Advanced. Targets chat widget CSS classes. Changes apply immediately after saving.</p>
+      </div>
+
+      <!-- CNAME instructions box -->
+      <div id="cnameInstructions" style="display:none;padding:14px 16px;background:var(--success-lt);border:1px solid rgba(22,163,74,0.2);border-radius:10px;margin-top:4px;">
+        <div style="font-size:13px;font-weight:700;color:var(--success);margin-bottom:8px;">CNAME Setup Instructions</div>
+        <ol style="font-size:12.5px;color:var(--mid);line-height:1.8;padding-left:18px;">
+          <li>Log in to your DNS provider (Cloudflare, GoDaddy, Namecheap, etc.)</li>
+          <li>Add a <strong>CNAME record</strong>:</li>
+        </ol>
+        <div style="background:#1C1917;border-radius:8px;padding:12px;margin:10px 0;font-family:'DM Mono',monospace;font-size:11.5px;color:#D4C4A8;line-height:1.7;">
+          <span style="color:#A3C4A8;">Type:</span>  CNAME<br>
+          <span style="color:#A3C4A8;">Name:</span>  <span id="cnameHost">chat</span><br>
+          <span style="color:#A3C4A8;">Value:</span> lumvi.net<br>
+          <span style="color:#A3C4A8;">TTL:</span>   Auto
+        </div>
+        <p style="font-size:12px;color:var(--sub);">After propagation (up to 24h), visitors to <strong id="cnameDomain"></strong> will see your branded widget automatically.</p>
+      </div>
+
+      {% else %}
+      <div class="upgrade-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <p>Custom widget domain and CSS override require the <strong>Agency plan ($299/mo)</strong>. <a href="/upgrade">Upgrade →</a></p>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  <!-- 8. AGENCY DEFAULTS (Agency only) -->
+  {% if plan_type in ('agency', 'enterprise') %}
+  <div class="card">
+    <div class="card-header open" onclick="tc(this)">
+      <div class="card-icon" style="background:var(--gold-lt);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </div>
+      <div class="card-text">
+        <h2>Agency Defaults</h2>
+        <p>Auto-applied when you create a new client</p>
+      </div>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    </div>
+    <div class="card-body open">
+      <p class="hint" style="margin-bottom:14px;">These settings are automatically applied to every new client you create. You can still override them per-client on the customize page.</p>
+      <div class="field-row">
+        <div class="field">
+          <label>Default Brand Colour</label>
+          <div class="color-row">
+            <input type="color" id="ag_color_pick" value="#B8924A" oninput="document.getElementById('ag_primary_color').value=this.value;">
+            <input type="text" id="ag_primary_color" placeholder="#B8924A" value="" oninput="if(/^#[0-9A-Fa-f]{6}$/.test(this.value))document.getElementById('ag_color_pick').value=this.value;" style="font-family:'DM Mono',monospace;font-size:13px;">
+          </div>
+        </div>
+        <div class="field">
+          <label>Default Bot Name</label>
+          <input type="text" id="ag_bot_name" placeholder="Support Assistant">
+        </div>
+      </div>
+      <div class="field">
+        <label>Default Welcome Message</label>
+        <textarea id="ag_welcome" rows="2" placeholder="Hi! How can I help you today?"></textarea>
+      </div>
+      <div class="field">
+        <label>Default Branded Email From</label>
+        <input type="text" id="ag_email_from" placeholder="Your Agency Name">
+        <p class="hint">Lead emails from all clients will use this sender name unless overridden per-client.</p>
+      </div>
+      <div style="margin-top:14px;">
+        <button class="btn-save" type="button" onclick="saveAgencyDefaults()" id="agSaveBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Save Agency Defaults
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <div style="height:74px;"></div>
 
   <!-- SAVE BAR -->
@@ -947,6 +1078,9 @@ async function save() {
   // Save webhooks first (separate endpoint)
   if (HWH) await saveWebhooks();
 
+  // Save white-label settings (separate endpoint)
+  await saveWhiteLabel();
+
   const payload = {
     client_id: CID,
     branding: {
@@ -1004,9 +1138,150 @@ function toast(msg, type = 'success') {
 
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
+// ═══════════════════════════════════════════════════
+// WHITE-LABEL
+// ═══════════════════════════════════════════════════
+const HWL_DOMAIN = {{ 'true' if has_white_label else 'false' }};
+const PLAN_TYPE  = {{ plan_type | tojson }};
+
+// Load existing white-label settings on page open
+async function initWhiteLabel() {
+  if (!{{ 'true' if has_webhooks or has_white_label else 'false' }}) return;
+  try {
+    const r = await fetch(`/api/admin/white-label?client_id=${CID}`);
+    const d = await r.json();
+    if (!d.success) return;
+    if (d.custom_widget_domain) {
+      const el = document.getElementById('wl_domain');
+      if (el) el.value = d.custom_widget_domain;
+    }
+    if (d.custom_css) {
+      const el = document.getElementById('wl_css');
+      if (el) el.value = d.custom_css;
+    }
+    if (d.branded_email_from) {
+      const el = document.getElementById('wl_email_from');
+      if (el) el.value = d.branded_email_from;
+    }
+  } catch {}
+}
+
+async function saveWhiteLabel() {
+  const domain    = document.getElementById('wl_domain')?.value.trim()     || '';
+  const css       = document.getElementById('wl_css')?.value.trim()        || '';
+  const emailFrom = document.getElementById('wl_email_from')?.value.trim() || '';
+  if (!domain && !css && !emailFrom) return true; // nothing to save
+  try {
+    const r = await fetch('/api/admin/white-label', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ client_id: CID, custom_widget_domain: domain,
+                             custom_css: css, branded_email_from: emailFrom })
+    });
+    const d = await r.json();
+    if (d.success) {
+      if (d.cname_instructions) {
+        updateCnameBox(domain);
+      }
+      return true;
+    } else {
+      toast(d.error || 'White-label save failed', 'error');
+      return false;
+    }
+  } catch { return false; }
+}
+
+function clearDomainStatus() {
+  const badge = document.getElementById('domainStatusBadge');
+  if (badge) badge.style.display = 'none';
+}
+
+function updateCnameBox(domain) {
+  const box = document.getElementById('cnameInstructions');
+  if (!box || !domain) return;
+  const parts = domain.split('.');
+  document.getElementById('cnameHost').textContent  = parts[0];
+  document.getElementById('cnameDomain').textContent = domain;
+  box.style.display = 'block';
+}
+
+async function verifyDomain() {
+  const domain = (document.getElementById('wl_domain')?.value || '').trim();
+  const badge  = document.getElementById('domainStatusBadge');
+  const btn    = document.getElementById('verifyDomainBtn');
+  if (!domain) { toast('Enter a domain first', 'error'); return; }
+  btn.textContent = 'Checking…'; btn.disabled = true;
+  try {
+    const r = await fetch('/api/admin/white-label/verify-domain', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ client_id: CID, domain })
+    });
+    const d = await r.json();
+    if (badge) {
+      badge.style.display = 'inline-block';
+      badge.style.background = d.pointed ? 'var(--success-lt)' : 'var(--warning-lt)';
+      badge.style.color      = d.pointed ? 'var(--success)'    : 'var(--warning)';
+      badge.style.border     = d.pointed
+        ? '1px solid rgba(22,163,74,0.2)'
+        : '1px solid rgba(217,119,6,0.2)';
+      badge.textContent = d.message;
+    }
+    if (d.pointed) updateCnameBox(domain);
+  } catch { toast('DNS check failed', 'error'); }
+  finally { btn.textContent = 'Check DNS'; btn.disabled = false; }
+}
+
+// Agency defaults
+async function initAgencyDefaults() {
+  if (!['agency','enterprise'].includes(PLAN_TYPE)) return;
+  try {
+    const r = await fetch('/api/admin/agency-branding');
+    const d = await r.json();
+    if (!d.success) return;
+    const ab = d.agency_branding;
+    const color = ab?.branding?.primary_color;
+    if (color) {
+      const cp = document.getElementById('ag_color_pick');
+      const ct = document.getElementById('ag_primary_color');
+      if (cp) cp.value = color;
+      if (ct) ct.value = color;
+    }
+    if (ab?.bot_settings?.bot_name)          document.getElementById('ag_bot_name').value  = ab.bot_settings.bot_name;
+    if (ab?.bot_settings?.welcome_message)    document.getElementById('ag_welcome').value   = ab.bot_settings.welcome_message;
+    if (ab?.branded_email_from)               document.getElementById('ag_email_from').value = ab.branded_email_from;
+  } catch {}
+}
+
+async function saveAgencyDefaults() {
+  const btn = document.getElementById('agSaveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Saving…';
+  try {
+    const r = await fetch('/api/admin/agency-branding', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        branding:     { primary_color: document.getElementById('ag_primary_color').value.trim() },
+        bot_settings: {
+          bot_name:        document.getElementById('ag_bot_name').value.trim(),
+          welcome_message: document.getElementById('ag_welcome').value.trim(),
+        },
+        branded_email_from: document.getElementById('ag_email_from').value.trim(),
+      })
+    });
+    const d = await r.json();
+    if (d.success) toast('Agency defaults saved — applied to new clients automatically', 'success');
+    else toast(d.error || 'Save failed', 'error');
+  } catch { toast('Network error', 'error'); }
+  finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Save Agency Defaults';
+  }
+}
+
 // Boot
 up();
 initWebhooks();
+initWhiteLabel();
+initAgencyDefaults();
 </script>
 </body>
 </html>
