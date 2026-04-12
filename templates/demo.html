@@ -1,629 +1,517 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Demo - Lumvi</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --indigo: #6366f1;
-            --violet: #8b5cf6;
-            --indigo-light: #818cf8;
-            --gradient: linear-gradient(135deg, #6366f1, #8b5cf6);
-            --transition: 0.3s ease;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive Demo — Lumvi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F7F4EF;
+  --cream2:#F0EBE1;
+  --panel:#EDEAE3;
+  --gold:#B8924A;
+  --gold-lt:rgba(184,146,74,0.12);
+  --gold-lt2:rgba(184,146,74,0.07);
+  --gold-dk:#9A7A3A;
+  --gold-glow:rgba(184,146,74,0.22);
+  --dark:#1C1917;
+  --mid:#57534E;
+  --sub:#A8A29E;
+  --border:#E7E2DA;
+  --white:#fff;
+  --success:#16A34A;
+  --success-lt:#F0FDF4;
+  --success-border:rgba(22,163,74,0.2);
+}
+html{scroll-behavior:smooth;}
+body{
+  font-family:'DM Sans',sans-serif;
+  background:var(--cream);
+  color:var(--dark);
+  min-height:100vh;
+  overflow-x:hidden;
+}
 
-        [data-theme="dark"] {
-            --bg:            #06060f;
-            --bg-secondary:  #0d0c1e;
-            --surface:       rgba(255,255,255,0.04);
-            --surface-2:     rgba(255,255,255,0.07);
-            --border:        rgba(255,255,255,0.08);
-            --border-accent: rgba(99,102,241,0.3);
-            --text:          #f1f0ff;
-            --text-muted:    rgba(241,240,255,0.55);
-            --text-dim:      rgba(241,240,255,0.3);
-            --card-bg:       rgba(13,12,30,0.8);
-            --card-border:   rgba(255,255,255,0.07);
-            --mockup-bg:     rgba(255,255,255,0.03);
-            --mockup-inner:  rgba(12,11,28,0.9);
-            --code-bg:       #0d1117;
-            --code-text:     #7ee787;
-            --input-bg:      rgba(255,255,255,0.06);
-            --input-border:  rgba(255,255,255,0.1);
-            --success-bg:    rgba(52,211,153,0.12);
-            --success-text:  #6ee7b7;
-            --success-border:rgba(52,211,153,0.25);
-            --info-bg:       rgba(99,102,241,0.1);
-            --info-text:     #a5b4fc;
-            --info-border:   rgba(99,102,241,0.25);
-            --nav-bg:        rgba(6,6,15,0.85);
-            --field-bg:      rgba(255,255,255,0.04);
-            --field-border:  rgba(255,255,255,0.07);
-        }
+/* Subtle dot pattern */
+body::before{
+  content:'';
+  position:fixed;inset:0;
+  background-image:radial-gradient(circle, rgba(184,146,74,0.06) 1px, transparent 1px);
+  background-size:40px 40px;
+  pointer-events:none;z-index:0;
+}
 
-        [data-theme="light"] {
-            --bg:            #f5f4ff;
-            --bg-secondary:  #ffffff;
-            --surface:       rgba(0,0,0,0.03);
-            --surface-2:     rgba(0,0,0,0.05);
-            --border:        rgba(0,0,0,0.08);
-            --border-accent: rgba(99,102,241,0.35);
-            --text:          #12101f;
-            --text-muted:    #5b5880;
-            --text-dim:      #9ca3af;
-            --card-bg:       #ffffff;
-            --card-border:   rgba(0,0,0,0.07);
-            --mockup-bg:     #f3f2ff;
-            --mockup-inner:  #ffffff;
-            --code-bg:       #1e1b2e;
-            --code-text:     #10b981;
-            --input-bg:      #f9f8ff;
-            --input-border:  #e5e3f5;
-            --success-bg:    #d1fae5;
-            --success-text:  #065f46;
-            --success-border:#a7f3d0;
-            --info-bg:       #eef2ff;
-            --info-text:     #3730a3;
-            --info-border:   #c7d2fe;
-            --nav-bg:        rgba(245,244,255,0.92);
-            --field-bg:      #f3f2ff;
-            --field-border:  #e0defa;
-        }
+/* Radial glow */
+.bg-glow{
+  position:fixed;border-radius:50%;
+  filter:blur(120px);pointer-events:none;z-index:0;
+}
+.bg-glow-1{
+  width:700px;height:700px;
+  background:radial-gradient(circle,rgba(184,146,74,0.1) 0%,transparent 70%);
+  top:-200px;left:-150px;
+}
+.bg-glow-2{
+  width:500px;height:500px;
+  background:radial-gradient(circle,rgba(154,122,58,0.08) 0%,transparent 70%);
+  bottom:-100px;right:-100px;
+}
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+/* ── NAV ── */
+nav{
+  position:sticky;top:0;z-index:100;
+  background:rgba(247,244,239,0.92);
+  backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  padding:0 32px;height:62px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.nav-brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.nav-logo-img{width:36px;height:36px;border-radius:10px;object-fit:cover;border:1.5px solid rgba(184,146,74,0.3);}
+.nav-logo-text{font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--dark);}
+.nav-right{display:flex;align-items:center;gap:6px;}
+.nav-link{padding:7px 14px;color:var(--mid);border-radius:8px;font-size:13.5px;font-weight:500;text-decoration:none;transition:all 0.15s;}
+.nav-link:hover{background:var(--cream2);color:var(--dark);}
+.nav-cta{padding:8px 18px;background:var(--gold);color:#fff;border-radius:9px;font-size:13.5px;font-weight:700;text-decoration:none;transition:all 0.2s;box-shadow:0 2px 8px var(--gold-glow);}
+.nav-cta:hover{background:var(--gold-dk);transform:translateY(-1px);}
+@media(max-width:640px){.nav-link{display:none;}}
 
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            transition: background var(--transition), color var(--transition);
-            position: relative;
-            overflow-x: hidden;
-        }
+/* ── PAGE ── */
+.page{
+  position:relative;z-index:1;
+  max-width:1100px;margin:0 auto;
+  padding:72px 24px 96px;
+}
 
-        [data-theme="dark"] body::before {
-            content: '';
-            position: fixed;
-            inset: 0;
-            background-image:
-                linear-gradient(rgba(99,102,241,0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(99,102,241,0.03) 1px, transparent 1px);
-            background-size: 48px 48px;
-            pointer-events: none;
-            z-index: 0;
-        }
+/* ── HEADER ── */
+.demo-header{text-align:center;margin-bottom:72px;}
+.eyebrow{
+  display:inline-flex;align-items:center;gap:7px;
+  font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;
+  color:var(--gold-dk);
+  background:var(--gold-lt);border:1px solid rgba(184,146,74,0.25);
+  border-radius:30px;padding:5px 16px;margin-bottom:20px;
+}
+.eyebrow svg{width:12px;height:12px;}
+.demo-header h1{
+  font-family:'Fraunces',serif;
+  font-size:clamp(32px,5vw,56px);
+  font-weight:800;letter-spacing:-1.5px;
+  line-height:1.12;margin-bottom:16px;
+  color:var(--dark);
+}
+.demo-header h1 em{font-style:normal;color:var(--gold);}
+.demo-header p{font-size:18px;color:var(--mid);max-width:480px;margin:0 auto;line-height:1.65;font-weight:300;}
 
-        .bg-glow {
-            position: fixed;
-            border-radius: 50%;
-            filter: blur(130px);
-            pointer-events: none;
-            z-index: 0;
-        }
-        .bg-glow-1 {
-            width: 650px; height: 650px;
-            background: radial-gradient(circle, rgba(99,102,241,0.16) 0%, transparent 70%);
-            top: -200px; left: -150px;
-        }
-        .bg-glow-2 {
-            width: 550px; height: 550px;
-            background: radial-gradient(circle, rgba(139,92,246,0.12) 0%, transparent 70%);
-            bottom: -100px; right: -100px;
-        }
-        [data-theme="light"] .bg-glow { opacity: 0.35; }
+/* ── STEPS ── */
+.steps-container{display:grid;gap:20px;margin-bottom:64px;}
 
-        nav {
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            background: var(--nav-bg);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border);
-            padding: 0 40px;
-            height: 60px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            transition: background var(--transition), border-color var(--transition);
-        }
+.step{
+  background:var(--white);
+  border:1px solid var(--border);
+  border-radius:20px;padding:40px;
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:44px;align-items:center;
+  transition:box-shadow 0.2s,border-color 0.2s;
+}
+.step:hover{
+  box-shadow:0 12px 40px rgba(0,0,0,0.07);
+  border-color:rgba(184,146,74,0.3);
+}
 
-        .nav-logo {
-            font-size: 18px;
-            font-weight: 800;
-            background: var(--gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            text-decoration: none;
-        }
+.step.reverse .step-content{order:2;}
+.step.reverse .step-visual{order:1;}
 
-        .nav-right { display: flex; align-items: center; gap: 16px; }
+.step-number{
+  width:44px;height:44px;
+  background:var(--gold);border-radius:14px;
+  font-family:'Fraunces',serif;
+  font-size:20px;font-weight:800;color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:18px;
+  box-shadow:0 6px 18px var(--gold-glow);
+}
+.step-content h2{
+  font-family:'Fraunces',serif;
+  font-size:24px;font-weight:700;
+  color:var(--dark);margin-bottom:10px;
+  letter-spacing:-0.3px;line-height:1.25;
+}
+.step-content>p{font-size:14.5px;color:var(--mid);line-height:1.7;margin-bottom:18px;font-weight:300;}
 
-        .nav-link {
-            font-size: 13.5px;
-            font-weight: 500;
-            color: var(--text-muted);
-            text-decoration: none;
-            transition: color 0.2s;
-        }
-        .nav-link:hover { color: var(--text); }
+.feature-list{list-style:none;}
+.feature-list li{
+  padding:9px 0 9px 26px;position:relative;
+  color:var(--mid);font-size:14px;
+  border-bottom:1px solid var(--border);
+}
+.feature-list li:last-child{border-bottom:none;}
+.feature-list li::before{
+  content:'✓';position:absolute;left:0;
+  color:var(--gold);font-weight:700;font-size:13px;
+}
 
-        /* Theme toggle */
-        .theme-toggle {
-            position: relative;
-            width: 54px; height: 28px;
-            cursor: pointer; flex-shrink: 0;
-        }
-        .theme-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
-        .toggle-track {
-            position: absolute; inset: 0;
-            border-radius: 30px;
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            transition: all var(--transition);
-            display: flex; align-items: center; padding: 0 4px;
-        }
-        [data-theme="dark"] .toggle-track { background: rgba(99,102,241,0.18); border-color: rgba(99,102,241,0.3); }
-        .toggle-thumb {
-            width: 20px; height: 20px; border-radius: 50%;
-            background: var(--gradient);
-            box-shadow: 0 2px 8px rgba(99,102,241,0.4);
-            transition: transform var(--transition);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 11px;
-        }
-        [data-theme="dark"]  .toggle-thumb { transform: translateX(26px); }
-        [data-theme="light"] .toggle-thumb { transform: translateX(0px); }
+/* ── VISUAL / MOCKUP ── */
+.step-visual{
+  background:var(--cream);border:1px solid var(--border);
+  border-radius:14px;padding:4px;
+}
+.mockup{
+  background:var(--white);border-radius:11px;
+  overflow:hidden;border:1px solid var(--border);
+}
+.mockup-bar{
+  display:flex;align-items:center;gap:6px;
+  padding:11px 14px;border-bottom:1px solid var(--border);
+  background:var(--cream);
+}
+.dot{width:9px;height:9px;border-radius:50%;}
+.dot-r{background:#ff5f57;} .dot-y{background:#ffbd2e;} .dot-g{background:#28ca41;}
+.mockup-title{
+  flex:1;text-align:center;font-size:10.5px;
+  color:var(--sub);font-weight:600;
+  margin-right:30px;text-transform:uppercase;letter-spacing:0.06em;
+}
+.mockup-body{padding:18px;}
 
-        /* Layout */
-        .page {
-            position: relative; z-index: 1;
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 64px 24px 80px;
-        }
+/* Step 1 fields */
+.field-row{
+  background:var(--cream);border:1px solid var(--border);
+  border-radius:9px;padding:10px 13px;margin-bottom:8px;
+  font-size:13px;color:var(--mid);
+  display:flex;align-items:center;gap:10px;
+}
+.field-row:last-child{margin-bottom:0;}
+.field-label{color:var(--sub);font-size:10.5px;width:88px;flex-shrink:0;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;}
+.field-val{color:var(--dark);font-weight:600;flex:1;font-size:12.5px;}
+.color-swatch{width:18px;height:18px;border-radius:5px;background:var(--gold);flex-shrink:0;border:1px solid rgba(184,146,74,0.3);}
 
-        /* Header */
-        .demo-header { text-align: center; margin-bottom: 64px; }
-        .eyebrow {
-            display: inline-flex; align-items: center; gap: 6px;
-            font-size: 11px; font-weight: 600;
-            text-transform: uppercase; letter-spacing: 0.1em;
-            color: var(--indigo-light);
-            background: rgba(99,102,241,0.1);
-            border: 1px solid rgba(99,102,241,0.2);
-            border-radius: 30px; padding: 5px 14px;
-            margin-bottom: 20px;
-        }
-        .demo-header h1 {
-            font-size: clamp(30px, 5vw, 52px);
-            font-weight: 900; line-height: 1.15; margin-bottom: 16px;
-        }
-        .demo-header h1 span {
-            background: var(--gradient);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
-        }
-        .demo-header p { font-size: 18px; color: var(--text-muted); max-width: 500px; margin: 0 auto; line-height: 1.6; }
+/* Step 2 upload */
+.drop-zone{
+  border:2px dashed rgba(184,146,74,0.35);
+  border-radius:10px;padding:26px 20px;text-align:center;
+  background:var(--gold-lt2);margin-bottom:12px;
+}
+.drop-icon{font-size:34px;margin-bottom:8px;}
+.drop-text{font-size:12.5px;color:var(--mid);margin-bottom:3px;font-weight:500;}
+.drop-sub{font-size:11px;color:var(--sub);}
+.success-banner{
+  background:var(--success-lt);border:1px solid var(--success-border);
+  border-radius:9px;padding:10px 14px;font-size:12.5px;
+  color:var(--success);display:flex;align-items:center;gap:8px;font-weight:600;
+}
 
-        /* Steps */
-        .steps-container { display: grid; gap: 24px; margin-bottom: 56px; }
+/* Step 3 code */
+.code-block{
+  background:#1C1917;border-radius:10px;padding:16px;
+  font-family:'DM Mono',monospace;font-size:11px;
+  color:#D4C4A8;line-height:1.75;margin-bottom:12px;
+}
+.kw{color:#B8924A;} .str{color:#A3C4A8;} .tag{color:#C8B89A;}
+.copy-btn{
+  width:100%;padding:11px;
+  background:var(--gold);color:#fff;border:none;
+  border-radius:9px;font-weight:700;font-size:13.5px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  box-shadow:0 4px 14px var(--gold-glow);
+  transition:all 0.2s;font-family:'DM Sans',sans-serif;
+}
+.copy-btn:hover{background:var(--gold-dk);transform:translateY(-1px);}
+.copy-btn svg{width:14px;height:14px;}
 
-        .step {
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 20px; padding: 40px;
-            display: grid; grid-template-columns: 1fr 1fr;
-            gap: 44px; align-items: center;
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            transition: background var(--transition), border-color var(--transition), box-shadow 0.2s;
-        }
-        [data-theme="dark"] .step {
-            box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 20px 60px rgba(0,0,0,0.3);
-        }
-        [data-theme="light"] .step {
-            box-shadow: 0 2px 20px rgba(99,102,241,0.06), 0 1px 4px rgba(0,0,0,0.04);
-        }
-        .step:hover { border-color: var(--border-accent); }
+/* Step 4 chat */
+.chat-preview{border-radius:10px;overflow:hidden;border:1px solid var(--border);}
+.chat-preview-header{
+  background:var(--gold);padding:13px 16px;
+  display:flex;align-items:center;gap:10px;
+}
+.chat-header-icon{
+  width:30px;height:30px;border-radius:9px;
+  background:rgba(255,255,255,0.2);
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+}
+.chat-header-name{font-size:13.5px;font-weight:700;color:#fff;}
+.chat-header-status{font-size:10.5px;color:rgba(255,255,255,0.8);display:flex;align-items:center;gap:4px;margin-top:2px;}
+.online-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 5px #4ade80;animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
+.chat-messages{background:var(--cream);padding:14px;display:flex;flex-direction:column;gap:10px;}
+.chat-msg{display:flex;gap:8px;align-items:flex-start;}
+.chat-msg.user{flex-direction:row-reverse;}
+.chat-bubble{max-width:78%;padding:9px 12px;border-radius:12px;font-size:12.5px;line-height:1.55;}
+.bubble-bot{background:var(--white);border:1px solid var(--border);border-bottom-left-radius:4px;color:var(--dark);}
+.bubble-user{background:var(--gold);color:#fff;border-bottom-right-radius:4px;box-shadow:0 4px 12px var(--gold-glow);}
+.bot-icon{width:26px;height:26px;border-radius:8px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.25);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
+.chat-input-row{background:var(--white);border-top:1px solid var(--border);padding:10px 12px;display:flex;gap:8px;align-items:center;}
+.chat-input-fake{flex:1;background:var(--cream);border:1.5px solid var(--border);border-radius:20px;padding:8px 14px;font-size:12px;color:var(--sub);font-family:'DM Sans',sans-serif;}
+.chat-send{width:32px;height:32px;border-radius:9px;background:var(--gold);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 10px var(--gold-glow);flex-shrink:0;}
+.chat-send svg{width:13px;height:13px;color:#fff;}
 
-        .step.reverse .step-content { order: 2; }
-        .step.reverse .step-visual  { order: 1; }
+/* Live callout */
+.live-callout{
+  background:var(--gold-lt2);border:1px solid rgba(184,146,74,0.2);
+  border-radius:14px;padding:20px;margin-top:20px;
+}
+.live-callout h3{
+  font-family:'Fraunces',serif;
+  color:var(--gold-dk);font-size:15px;font-weight:700;margin-bottom:6px;
+}
+.live-callout p{font-size:13px;color:var(--mid);line-height:1.6;font-weight:300;}
+.float-emoji{text-align:center;font-size:40px;margin-top:12px;animation:floaty 3s ease-in-out infinite;}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
 
-        .step-number {
-            width: 44px; height: 44px;
-            background: var(--gradient); border-radius: 14px;
-            font-size: 20px; font-weight: 800; color: white;
-            display: flex; align-items: center; justify-content: center;
-            margin-bottom: 18px;
-            box-shadow: 0 6px 18px rgba(99,102,241,0.35);
-        }
+/* ── CTA ── */
+.cta-section{
+  background:var(--white);border:1px solid var(--border);
+  border-radius:20px;padding:60px 40px;text-align:center;
+  box-shadow:0 4px 32px rgba(0,0,0,0.06);
+  background:radial-gradient(ellipse 800px 400px at 50% 110%, rgba(184,146,74,0.07) 0%, transparent 70%),var(--white);
+}
+.cta-section h2{
+  font-family:'Fraunces',serif;
+  font-size:clamp(28px,4vw,40px);
+  font-weight:800;letter-spacing:-0.8px;
+  margin-bottom:12px;color:var(--dark);
+}
+.cta-section>p{font-size:16px;color:var(--mid);margin-bottom:32px;font-weight:300;}
+.btn-row{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;}
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:14px 28px;border-radius:10px;
+  font-weight:700;font-size:14.5px;
+  text-decoration:none;transition:all 0.2s;
+  font-family:'DM Sans',sans-serif;cursor:pointer;border:none;
+}
+.btn-primary{background:var(--gold);color:#fff;box-shadow:0 4px 18px var(--gold-glow);}
+.btn-primary:hover{background:var(--gold-dk);transform:translateY(-2px);box-shadow:0 8px 28px rgba(184,146,74,0.35);}
+.btn-secondary{background:transparent;color:var(--mid);border:1.5px solid var(--border);}
+.btn-secondary:hover{border-color:var(--gold);color:var(--gold-dk);background:var(--gold-lt);}
+.cta-fine{margin-top:20px;font-size:12.5px;color:var(--sub);}
 
-        .step h2 { font-size: 24px; font-weight: 800; color: var(--text); margin-bottom: 10px; line-height: 1.25; }
-        .step > .step-content > p { font-size: 14.5px; color: var(--text-muted); line-height: 1.7; margin-bottom: 18px; }
-
-        .feature-list { list-style: none; }
-        .feature-list li {
-            padding: 8px 0 8px 24px; position: relative;
-            color: var(--text-muted); font-size: 14px;
-            border-bottom: 1px solid var(--border);
-        }
-        .feature-list li:last-child { border-bottom: none; }
-        .feature-list li::before { content: "✓"; position: absolute; left: 0; color: #34d399; font-weight: 700; font-size: 13px; }
-
-        /* Mockup */
-        .step-visual {
-            background: var(--mockup-bg);
-            border: 1px solid var(--border);
-            border-radius: 14px; padding: 4px;
-            transition: background var(--transition), border-color var(--transition);
-        }
-        .mockup { background: var(--mockup-inner); border-radius: 11px; overflow: hidden; border: 1px solid var(--border); }
-        .mockup-bar {
-            display: flex; align-items: center; gap: 6px;
-            padding: 11px 14px; border-bottom: 1px solid var(--border);
-            background: var(--surface);
-        }
-        .dot { width: 9px; height: 9px; border-radius: 50%; }
-        .dot-r { background: #ff5f57; }
-        .dot-y { background: #ffbd2e; }
-        .dot-g { background: #28ca41; }
-        .mockup-title { flex: 1; text-align: center; font-size: 10.5px; color: var(--text-dim); font-weight: 500; margin-right: 30px; }
-        .mockup-body { padding: 18px; }
-
-        /* Step 1 fields */
-        .field-row {
-            background: var(--field-bg);
-            border: 1px solid var(--field-border);
-            border-radius: 8px; padding: 10px 13px;
-            margin-bottom: 9px; font-size: 13px;
-            color: var(--text-muted);
-            display: flex; align-items: center; gap: 8px;
-            transition: background var(--transition), border-color var(--transition);
-        }
-        .field-label { color: var(--text-dim); font-size: 10.5px; width: 90px; flex-shrink: 0; }
-        .field-val { color: var(--text); font-weight: 500; flex: 1; font-size: 12.5px; }
-        .color-swatch { width: 18px; height: 18px; border-radius: 5px; background: linear-gradient(135deg,#6366f1,#8b5cf6); flex-shrink: 0; }
-
-        /* Step 2 upload */
-        .drop-zone {
-            border: 2px dashed var(--border-accent);
-            border-radius: 10px; padding: 26px 20px; text-align: center;
-            background: rgba(99,102,241,0.04); margin-bottom: 12px;
-        }
-        .drop-icon { font-size: 34px; margin-bottom: 8px; }
-        .drop-text { font-size: 12.5px; color: var(--text-muted); margin-bottom: 3px; }
-        .drop-sub { font-size: 11px; color: var(--text-dim); }
-        .success-banner {
-            background: var(--success-bg); border: 1px solid var(--success-border);
-            border-radius: 8px; padding: 10px 14px; font-size: 12.5px;
-            color: var(--success-text); display: flex; align-items: center; gap: 8px;
-            transition: background var(--transition);
-        }
-
-        /* Step 3 code */
-        .code-block {
-            background: var(--code-bg); border-radius: 10px; padding: 16px;
-            font-family: 'Courier New', monospace; font-size: 11px;
-            color: var(--code-text); line-height: 1.7; margin-bottom: 12px;
-            transition: background var(--transition);
-        }
-        .kw  { color: #f97583; }
-        .str { color: #79b8ff; }
-        .tag { color: #85e89d; }
-
-        .copy-btn {
-            width: 100%; padding: 10px;
-            background: var(--gradient); color: white; border: none;
-            border-radius: 8px; font-weight: 700; font-size: 13px; cursor: pointer;
-            display: flex; align-items: center; justify-content: center; gap: 6px;
-            box-shadow: 0 4px 14px rgba(99,102,241,0.3);
-            transition: opacity 0.2s, transform 0.15s;
-            font-family: 'Inter', sans-serif;
-        }
-        .copy-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-
-        /* Step 4 chat */
-        .chat-preview { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
-        .chat-preview-header {
-            background: var(--gradient); padding: 13px 16px;
-            display: flex; align-items: center; gap: 10px;
-        }
-        .chat-header-icon {
-            width: 28px; height: 28px; border-radius: 8px;
-            background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 14px;
-        }
-        .chat-header-name { font-size: 13px; font-weight: 700; color: white; }
-        .chat-header-status { font-size: 10.5px; color: rgba(255,255,255,0.8); display: flex; align-items: center; gap: 4px; margin-top: 1px; }
-        .online-dot { width: 6px; height: 6px; border-radius: 50%; background: #34d399; box-shadow: 0 0 5px #34d399; animation: blink 2s infinite; }
-        @keyframes blink { 0%,100%{opacity:1}50%{opacity:0.45} }
-
-        .chat-messages { background: var(--mockup-bg); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-        .chat-msg { display: flex; gap: 8px; align-items: flex-start; }
-        .chat-msg.user { flex-direction: row-reverse; }
-        .chat-bubble {
-            max-width: 78%; padding: 9px 12px; border-radius: 12px;
-            font-size: 12.5px; line-height: 1.5; color: var(--text);
-        }
-        .bubble-bot { background: var(--surface-2); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
-        .bubble-user { background: var(--gradient); color: white; border-bottom-right-radius: 4px; box-shadow: 0 4px 12px rgba(99,102,241,0.25); }
-        .bot-icon { width: 26px; height: 26px; border-radius: 8px; background: var(--gradient); display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
-        .chat-input-row { background: var(--mockup-inner); border-top: 1px solid var(--border); padding: 10px 12px; display: flex; gap: 8px; align-items: center; transition: background var(--transition); }
-        .chat-input-fake { flex: 1; background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 20px; padding: 8px 14px; font-size: 12px; color: var(--text-dim); font-family: 'Inter', sans-serif; transition: background var(--transition), border-color var(--transition); }
-        .chat-send { width: 32px; height: 32px; border-radius: 10px; background: var(--gradient); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(99,102,241,0.3); font-size: 13px; flex-shrink: 0; }
-
-        .live-callout { background: var(--info-bg); border: 1px solid var(--info-border); border-radius: 12px; padding: 20px; margin-top: 20px; transition: background var(--transition); }
-        .live-callout h3 { color: var(--info-text); font-size: 15px; margin-bottom: 6px; }
-        .live-callout p { font-size: 13px; color: var(--info-text); opacity: 0.85; line-height: 1.5; }
-        .float-emoji { text-align: center; font-size: 40px; margin-top: 12px; animation: floaty 3s ease-in-out infinite; }
-        @keyframes floaty { 0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)} }
-
-        /* CTA */
-        .cta-section {
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 20px; padding: 56px 40px; text-align: center;
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            transition: background var(--transition), border-color var(--transition);
-        }
-        [data-theme="dark"] .cta-section { box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 20px 60px rgba(0,0,0,0.3); border-color: var(--border-accent); }
-        [data-theme="light"] .cta-section { box-shadow: 0 4px 24px rgba(99,102,241,0.08); }
-
-        .cta-section h2 { font-size: 34px; font-weight: 900; margin-bottom: 12px; }
-        .cta-section > p { font-size: 16px; color: var(--text-muted); margin-bottom: 32px; }
-
-        .btn-row { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; }
-        .btn {
-            display: inline-flex; align-items: center; gap: 6px;
-            padding: 14px 28px; border-radius: 10px;
-            font-weight: 700; font-size: 14.5px;
-            text-decoration: none; transition: all 0.2s;
-            font-family: 'Inter', sans-serif; cursor: pointer; border: none;
-        }
-        .btn-primary { background: var(--gradient); color: white; box-shadow: 0 4px 20px rgba(99,102,241,0.4); }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(99,102,241,0.5); }
-        .btn-secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
-        .btn-secondary:hover { border-color: var(--border-accent); }
-        .cta-fine { margin-top: 22px; font-size: 12.5px; color: var(--text-dim); }
-
-        @media (max-width: 768px) {
-            .step { grid-template-columns: 1fr; padding: 28px 20px; gap: 24px; }
-            .step.reverse .step-content, .step.reverse .step-visual { order: unset; }
-            nav { padding: 0 20px; }
-            .nav-link { display: none; }
-            .page { padding: 40px 16px 60px; }
-            .cta-section { padding: 40px 20px; }
-        }
-    </style>
+@media(max-width:768px){
+  .step{grid-template-columns:1fr;padding:28px 20px;gap:24px;}
+  .step.reverse .step-content,.step.reverse .step-visual{order:unset;}
+  .page{padding:44px 16px 64px;}
+  .cta-section{padding:44px 22px;}
+}
+</style>
 </head>
 <body>
 
 <div class="bg-glow bg-glow-1"></div>
 <div class="bg-glow bg-glow-2"></div>
 
+<!-- NAV -->
 <nav>
-    <a href="/" class="logo">
-        <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi Logo" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid rgba(99,102,241,0.4);box-shadow:0 0 16px rgba(99,102,241,0.3);">
-        <span class="logo-text">Lumvi</span>
-    </a>
-    <div class="nav-right">
-        <a href="/landing#features" class="nav-link">Features</a>
-        <a href="/landing#pricing" class="nav-link">Pricing</a>
-        <a href="/login" class="nav-link">Login</a>
-        <label class="theme-toggle" title="Toggle dark/light mode">
-            <input type="checkbox" id="themeToggle">
-            <div class="toggle-track">
-                <div class="toggle-thumb"><span id="toggleIcon">🌙</span></div>
-            </div>
-        </label>
-    </div>
+  <a href="/" class="nav-brand">
+    <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi" class="nav-logo-img">
+    <span class="nav-logo-text">Lumvi</span>
+  </a>
+  <div class="nav-right">
+    <a href="/sales" class="nav-link">Features</a>
+    <a href="/sales#pricing" class="nav-link">Pricing</a>
+    <a href="/login" class="nav-link">Log in</a>
+    <a href="/signup" class="nav-cta">Start free →</a>
+  </div>
 </nav>
 
 <div class="page">
 
-    <div class="demo-header">
-        <div class="eyebrow">⚡ Interactive Walkthrough</div>
-        <h1>See <span>Lumvi</span> in Action</h1>
-        <p>Launch your own AI chatbot in under 5 minutes — no code, no hassle.</p>
+  <!-- HEADER -->
+  <div class="demo-header">
+    <div class="eyebrow">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      Interactive Walkthrough
+    </div>
+    <h1>See <em>Lumvi</em> in Action</h1>
+    <p>Launch your own AI chatbot in under 5 minutes — no code, no hassle.</p>
+  </div>
+
+  <div class="steps-container">
+
+    <!-- Step 1 -->
+    <div class="step">
+      <div class="step-content">
+        <div class="step-number">1</div>
+        <h2>Sign Up &amp; Create Your Chatbot</h2>
+        <p>Start with a free account — no credit card required. Create your first branded chatbot in seconds.</p>
+        <ul class="feature-list">
+          <li>Email signup in 30 seconds</li>
+          <li>Auto-generated client ID</li>
+          <li>Choose your brand colours</li>
+          <li>Customise welcome message</li>
+        </ul>
+      </div>
+      <div class="step-visual">
+        <div class="mockup">
+          <div class="mockup-bar">
+            <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+            <div class="mockup-title">New Bot Setup</div>
+          </div>
+          <div class="mockup-body">
+            <div class="field-row"><span class="field-label">Company</span><span class="field-val">Your Business</span></div>
+            <div class="field-row"><span class="field-label">Brand colour</span><div class="color-swatch"></div><span class="field-val">#B8924A</span></div>
+            <div class="field-row"><span class="field-label">Welcome msg</span><span class="field-val">Hi! How can I help? 👋</span></div>
+            <div class="field-row"><span class="field-label">Bot name</span><span class="field-val">Support Assistant</span></div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="steps-container">
-
-        <!-- Step 1 -->
-        <div class="step">
-            <div class="step-content">
-                <div class="step-number">1</div>
-                <h2>Sign Up & Create Your Chatbot</h2>
-                <p>Start with a free account — no credit card required. Create your first branded chatbot in seconds.</p>
-                <ul class="feature-list">
-                    <li>Email signup in 30 seconds</li>
-                    <li>Auto-generated client ID</li>
-                    <li>Choose your brand colors</li>
-                    <li>Customize welcome message</li>
-                </ul>
+    <!-- Step 2 -->
+    <div class="step reverse">
+      <div class="step-content">
+        <div class="step-number">2</div>
+        <h2>Add Your FAQs</h2>
+        <p>Upload questions and answers via CSV, Excel, or PDF. Our AI auto-generates keyword triggers instantly.</p>
+        <ul class="feature-list">
+          <li>Upload 100+ FAQs from CSV / Excel</li>
+          <li>Auto-extract from PDF documents</li>
+          <li>AI-powered keyword generation</li>
+          <li>Bulk edit and organise</li>
+        </ul>
+      </div>
+      <div class="step-visual">
+        <div class="mockup">
+          <div class="mockup-bar">
+            <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+            <div class="mockup-title">FAQ Manager</div>
+          </div>
+          <div class="mockup-body">
+            <div class="drop-zone">
+              <div class="drop-icon">📁</div>
+              <div class="drop-text">Drop CSV, Excel, or PDF here</div>
+              <div class="drop-sub">or click to browse files</div>
             </div>
-            <div class="step-visual">
-                <div class="mockup">
-                    <div class="mockup-bar">
-                        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-                        <div class="mockup-title">New Bot Setup</div>
-                    </div>
-                    <div class="mockup-body">
-                        <div class="field-row"><span class="field-label">Company</span><span class="field-val">Your Business</span></div>
-                        <div class="field-row"><span class="field-label">Brand color</span><div class="color-swatch"></div><span class="field-val">#6366f1</span></div>
-                        <div class="field-row"><span class="field-label">Welcome msg</span><span class="field-val">Hi! How can I help? 👋</span></div>
-                        <div class="field-row"><span class="field-label">Bot name</span><span class="field-val">Support Assistant</span></div>
-                    </div>
-                </div>
+            <div class="success-banner">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>
+              47 FAQs imported successfully
             </div>
+          </div>
         </div>
+      </div>
+    </div>
 
-        <!-- Step 2 -->
-        <div class="step reverse">
-            <div class="step-content">
-                <div class="step-number">2</div>
-                <h2>Add Your FAQs</h2>
-                <p>Upload questions and answers via CSV, Excel, or PDF. Our AI auto-generates keyword triggers instantly.</p>
-                <ul class="feature-list">
-                    <li>Upload 100+ FAQs from CSV/Excel</li>
-                    <li>Auto-extract from PDF documents</li>
-                    <li>AI-powered keyword generation</li>
-                    <li>Bulk edit and organize</li>
-                </ul>
-            </div>
-            <div class="step-visual">
-                <div class="mockup">
-                    <div class="mockup-bar">
-                        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-                        <div class="mockup-title">FAQ Manager</div>
-                    </div>
-                    <div class="mockup-body">
-                        <div class="drop-zone">
-                            <div class="drop-icon">📁</div>
-                            <div class="drop-text">Drop CSV, Excel, or PDF here</div>
-                            <div class="drop-sub">or click to browse files</div>
-                        </div>
-                        <div class="success-banner">✓ &nbsp;47 FAQs imported successfully</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Step 3 -->
-        <div class="step">
-            <div class="step-content">
-                <div class="step-number">3</div>
-                <h2>Copy & Embed</h2>
-                <p>Get your one-line embed code and paste it anywhere. Works with WordPress, Shopify, Wix, or custom HTML.</p>
-                <ul class="feature-list">
-                    <li>One-line embed code</li>
-                    <li>Works on any website platform</li>
-                    <li>Mobile responsive by default</li>
-                    <li>No coding required</li>
-                </ul>
-            </div>
-            <div class="step-visual">
-                <div class="mockup">
-                    <div class="mockup-bar">
-                        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-                        <div class="mockup-title">Embed Code</div>
-                    </div>
-                    <div class="mockup-body">
-                        <div class="code-block">
-<span class="tag">&lt;script&gt;</span><br>
+    <!-- Step 3 -->
+    <div class="step">
+      <div class="step-content">
+        <div class="step-number">3</div>
+        <h2>Copy &amp; Embed</h2>
+        <p>Get your one-line embed code and paste it anywhere. Works with WordPress, Shopify, Wix, or custom HTML.</p>
+        <ul class="feature-list">
+          <li>One-line embed code</li>
+          <li>Works on any website platform</li>
+          <li>Mobile responsive by default</li>
+          <li>No coding required</li>
+        </ul>
+      </div>
+      <div class="step-visual">
+        <div class="mockup">
+          <div class="mockup-bar">
+            <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+            <div class="mockup-title">Embed Code</div>
+          </div>
+          <div class="mockup-body">
+            <div class="code-block"><span class="tag">&lt;script&gt;</span><br>
 &nbsp;<span class="kw">var</span> s = document.<span class="kw">createElement</span>(<span class="str">'script'</span>);<br>
 &nbsp;s.src = <span class="str">'https://lumvi.net/widget.js'</span>;<br>
 &nbsp;s.<span class="kw">setAttribute</span>(<span class="str">'data-client-id'</span>, <span class="str">'your-id'</span>);<br>
 &nbsp;document.body.<span class="kw">appendChild</span>(s);<br>
-<span class="tag">&lt;/script&gt;</span>
-                        </div>
-                        <button class="copy-btn" onclick="copyCode(this)">📋 Copy Embed Code</button>
-                    </div>
-                </div>
-            </div>
+<span class="tag">&lt;/script&gt;</span></div>
+            <button class="copy-btn" onclick="copyCode(this)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy Embed Code
+            </button>
+          </div>
         </div>
-
-        <!-- Step 4 -->
-        <div class="step reverse">
-            <div class="step-content">
-                <div class="step-number">4</div>
-                <h2>Watch It Work!</h2>
-                <p>Your chatbot goes live instantly. Visitors ask questions 24/7 and you capture leads automatically — no babysitting needed.</p>
-                <div class="live-callout">
-                    <h3>👉 Try It Now</h3>
-                    <p>Click the chat button in the bottom-right corner of this page to test a live Lumvi demo bot!</p>
-                    <div class="float-emoji">💬</div>
-                </div>
-            </div>
-            <div class="step-visual">
-                <div class="mockup">
-                    <div class="mockup-bar">
-                        <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-                        <div class="mockup-title">Live Chat Widget</div>
-                    </div>
-                    <div class="chat-preview">
-                        <div class="chat-preview-header">
-                            <div class="chat-header-icon">🤖</div>
-                            <div>
-                                <div class="chat-header-name">Support Assistant</div>
-                                <div class="chat-header-status"><div class="online-dot"></div> Online · replies instantly</div>
-                            </div>
-                        </div>
-                        <div class="chat-messages">
-                            <div class="chat-msg">
-                                <div class="bot-icon">🤖</div>
-                                <div class="chat-bubble bubble-bot">Hi! 👋 How can I help you today?</div>
-                            </div>
-                            <div class="chat-msg user">
-                                <div class="chat-bubble bubble-user">What are your prices?</div>
-                            </div>
-                            <div class="chat-msg">
-                                <div class="bot-icon">🤖</div>
-                                <div class="chat-bubble bubble-bot">Plans start at $15/mo. Want me to walk you through what's included? 🎉</div>
-                            </div>
-                        </div>
-                        <div class="chat-input-row">
-                            <input class="chat-input-fake" placeholder="Type a message…" readonly>
-                            <button class="chat-send">➤</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
+      </div>
     </div>
 
-    <!-- CTA -->
-    <div class="cta-section">
-        <h2>Ready to Launch Your Chatbot?</h2>
-        <p>Join businesses using Lumvi to automate support and capture more leads — free for 7 days.</p>
-        <div class="btn-row">
-            <a href="/signup" class="btn btn-primary">Start Free Trial</a>
-            <a href="/landing#pricing" class="btn btn-secondary">View Pricing</a>
+    <!-- Step 4 -->
+    <div class="step reverse">
+      <div class="step-content">
+        <div class="step-number">4</div>
+        <h2>Watch It Work!</h2>
+        <p>Your chatbot goes live instantly. Visitors ask questions 24/7 and you capture leads automatically — no babysitting needed.</p>
+        <div class="live-callout">
+          <h3>👉 Try It Now</h3>
+          <p>Click the chat button in the bottom-right corner of this page to test a live Lumvi demo bot!</p>
+          <div class="float-emoji">💬</div>
         </div>
-        <p class="cta-fine">No credit card required · 7-day free trial · Cancel anytime</p>
+      </div>
+      <div class="step-visual">
+        <div class="mockup">
+          <div class="mockup-bar">
+            <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+            <div class="mockup-title">Live Chat Widget</div>
+          </div>
+          <div class="chat-preview">
+            <div class="chat-preview-header">
+              <div class="chat-header-icon">🤖</div>
+              <div>
+                <div class="chat-header-name">Support Assistant</div>
+                <div class="chat-header-status"><div class="online-dot"></div>Online · replies instantly</div>
+              </div>
+            </div>
+            <div class="chat-messages">
+              <div class="chat-msg">
+                <div class="bot-icon">🤖</div>
+                <div class="chat-bubble bubble-bot">Hi! 👋 How can I help you today?</div>
+              </div>
+              <div class="chat-msg user">
+                <div class="chat-bubble bubble-user">What are your prices?</div>
+              </div>
+              <div class="chat-msg">
+                <div class="bot-icon">🤖</div>
+                <div class="chat-bubble bubble-bot">Plans start at $19/mo. Want me to walk you through what's included?</div>
+              </div>
+            </div>
+            <div class="chat-input-row">
+              <input class="chat-input-fake" placeholder="Type a message…" readonly>
+              <button class="chat-send">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
+
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-section">
+    <h2>Ready to Launch Your Chatbot?</h2>
+    <p>Join businesses using Lumvi to automate support and capture more leads — free for 7 days.</p>
+    <div class="btn-row">
+      <a href="/signup" class="btn btn-primary">Start Free Trial →</a>
+      <a href="/sales#pricing" class="btn btn-secondary">View Pricing</a>
+    </div>
+    <p class="cta-fine">No credit card required · 7-day free trial · Cancel anytime</p>
+  </div>
 
 </div>
 
+<!-- Live demo widget -->
 <script>
-    (function() {
-        var s = document.createElement('script');
-        s.src = 'https://lumvi.net/static/widget.js';
-        s.setAttribute('data-client-id', 'demo');
-        document.body.appendChild(s);
-    })();
-</script>
+(function(){
+  var s = document.createElement('script');
+  s.src = 'https://lumvi.net/static/widget.js';
+  s.setAttribute('data-client-id','demo');
+  document.body.appendChild(s);
+})();
 
-<script>
-    const html = document.documentElement;
-    const toggle = document.getElementById('themeToggle');
-    const icon = document.getElementById('toggleIcon');
-
-    const saved = localStorage.getItem('lumvi-theme') || 'dark';
-    applyTheme(saved);
-
-    toggle.addEventListener('change', () => {
-        const theme = toggle.checked ? 'light' : 'dark';
-        applyTheme(theme);
-        localStorage.setItem('lumvi-theme', theme);
-    });
-
-    function applyTheme(theme) {
-        html.setAttribute('data-theme', theme);
-        toggle.checked = theme === 'light';
-        icon.textContent = theme === 'dark' ? '🌙' : '☀️';
-    }
-
-    function copyCode(btn) {
-        const code = `<script>\nvar s = document.createElement('script');\ns.src = 'https://lumvi.net/widget.js';\ns.setAttribute('data-client-id', 'your-id');\ndocument.body.appendChild(s);\n<\/script>`;
-        navigator.clipboard.writeText(code).then(() => {
-            btn.textContent = '✓ Copied!';
-            setTimeout(() => btn.innerHTML = '📋 Copy Embed Code', 2000);
-        });
-    }
+function copyCode(btn) {
+  const code = `<script>\n(function(){\n  var s=document.createElement('script');\n  s.src='https://lumvi.net/widget.js';\n  s.setAttribute('data-client-id','your-id');\n  document.body.appendChild(s);\n})();\n<\/script>`;
+  navigator.clipboard.writeText(code).then(() => {
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
+    setTimeout(() => {
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy Embed Code';
+    }, 2000);
+  });
+}
 </script>
 </body>
 </html>
