@@ -253,8 +253,15 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
 
 <div class="topbar">
   <a href="/dashboard" class="topbar-brand">
-    <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi">
-    <span>Lumvi</span>
+    {%- set wl_active = has_white_label and branding.get('branding', {}).get('remove_branding') -%}
+    {%- set client_logo = branding.get('branding', {}).get('logo') or branding.get('branding', {}).get('logo_url') -%}
+    {%- set client_name = branding.get('branding', {}).get('company_name') or (client.company_name if client else '') -%}
+    {% if wl_active and client_logo %}
+      <img src="{{ client_logo }}" alt="{{ client_name }}" style="width:32px;height:32px;border-radius:8px;object-fit:cover;">
+    {% else %}
+      <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi">
+    {% endif %}
+    <span>{% if wl_active and client_name %}{{ client_name }}{% else %}Lumvi{% endif %}</span>
   </a>
   <div class="topbar-right">
     <span class="plan-badge plan-{{ plan_type }}">{{ plan_type }}</span>
@@ -332,10 +339,45 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
             value="{{ branding.get('bot_settings', {}).get('bot_name', '') }}" oninput="up()">
         </div>
         <div class="field">
-          <label>Bot Emoji</label>
-          <input type="text" id="bot_avatar" placeholder="🤖"
-            value="{{ branding.get('bot_settings', {}).get('bot_avatar', '🤖') }}"
-            oninput="up()" style="font-size:17px;">
+          <label>Bot Avatar</label>
+          <!-- Toggle tabs -->
+          <div style="display:flex;background:var(--panel);border-radius:8px;padding:3px;gap:2px;margin-bottom:8px;width:fit-content;">
+            <button type="button" id="avTabEmoji" onclick="setAvTab('emoji')"
+              style="padding:5px 13px;border-radius:6px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;background:var(--white);color:var(--dark);box-shadow:0 1px 3px rgba(0,0,0,0.08);transition:all 0.15s;">
+              Emoji
+            </button>
+            <button type="button" id="avTabImage" onclick="setAvTab('image')"
+              style="padding:5px 13px;border-radius:6px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;background:transparent;color:var(--sub);transition:all 0.15s;">
+              Image
+            </button>
+          </div>
+          <!-- Emoji input -->
+          <div id="avEmojiPane">
+            <input type="text" id="bot_avatar" placeholder="🤖"
+              value="{{ branding.get('bot_settings', {}).get('bot_avatar', '🤖') }}"
+              oninput="up()" style="font-size:17px;">
+            <p class="hint">Paste any emoji — shown as the bot's avatar.</p>
+          </div>
+          <!-- Image upload -->
+          <div id="avImagePane" style="display:none;">
+            <div class="upload-zone" id="avZone" onclick="document.getElementById('avFile').click()"
+              style="display:flex;align-items:center;gap:12px;text-align:left;padding:12px 14px;">
+              <input type="file" id="avFile" accept="image/*" onchange="handleAvatar(event)" style="display:none;">
+              <div id="avImgPreview" style="width:44px;height:44px;border-radius:11px;overflow:hidden;background:var(--gold-lt);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg id="avUploadIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--sub)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                <img id="avImgEl" style="display:none;width:100%;height:100%;object-fit:cover;" alt="">
+              </div>
+              <div>
+                <div style="font-size:13px;font-weight:600;color:var(--dark);" id="avFileName">Click to upload image</div>
+                <div style="font-size:11px;color:var(--sub);margin-top:2px;">PNG, JPG, SVG · max 1 MB · square recommended</div>
+              </div>
+            </div>
+            <p class="hint" style="margin-top:6px;">Image overrides the emoji. Remove to revert to emoji.</p>
+            <button type="button" onclick="clearAvatar()"
+              style="margin-top:6px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--danger);background:var(--danger-lt);border:none;border-radius:7px;cursor:pointer;font-family:'DM Sans',sans-serif;display:none;" id="avClearBtn">
+              Remove image
+            </button>
+          </div>
         </div>
       </div>
       <div class="field">
@@ -373,40 +415,134 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
     </div>
   </div>
 
-  <!-- 4. WHITE-LABEL -->
+  <!-- 4. WHITE-LABEL & CUSTOM DOMAIN (merged) -->
   <div class="card">
     <div class="card-header open" onclick="tc(this)">
-      <div class="card-icon" style="background:var(--warning-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div>
-      <div class="card-text"><h2>White-Label</h2><p>Remove Lumvi branding</p></div>
+      <div class="card-icon" style="background:#f0fdf4;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      </div>
+      <div class="card-text">
+        <h2>White-Label &amp; Custom Domain</h2>
+        <p>Make Lumvi completely invisible — your brand everywhere</p>
+      </div>
       <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
     </div>
     <div class="card-body open">
+
       {% if has_white_label %}
-      <div class="toggle-row">
+
+      <!-- ── FULL WHITE-LABEL MODE TOGGLE ── -->
+      <div class="toggle-row" style="background:var(--gold-lt2,var(--gold-lt));border:1px solid rgba(184,146,74,0.2);border-radius:12px;padding:14px 16px;margin-bottom:16px;">
         <div>
-          <div class="toggle-lbl">Remove "Powered by Lumvi" footer</div>
-          <div class="toggle-desc">Your brand only — Lumvi is completely invisible to your clients.</div>
+          <div class="toggle-lbl" style="font-weight:700;">Full White-Label Mode</div>
+          <div class="toggle-desc">Hides all Lumvi mentions. Your clients see only <strong>your</strong> brand.</div>
         </div>
         <label class="toggle">
           <input type="checkbox" id="remove_branding"
             {% if branding.get('branding', {}).get('remove_branding') %}checked{% endif %}
-            onchange="up()">
+            onchange="up(); toggleTopbarPreview()">
           <span class="tslider"></span>
         </label>
       </div>
-      {% else %}
-      <div class="upgrade-box">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-        <p>White-label requires the <strong>Agency plan ($299/mo)</strong>. <a href="/upgrade">Upgrade to remove all Lumvi branding →</a></p>
+      <p class="hint" style="margin-bottom:16px;">When enabled: no "Powered by Lumvi" footer, no Lumvi references in the widget. The topbar on this page also reflects your branding.</p>
+
+      <hr class="div">
+
+      <!-- ── BRANDED EMAIL FROM ── -->
+      <div class="field">
+        <label>Branded "From" Name
+          <span style="font-weight:400;color:var(--sub);text-transform:none;margin-left:4px;">— lead notification emails</span>
+        </label>
+        <input type="text" id="wl_email_from" placeholder="Acme Support"
+          value="{{ client.get('branded_email_from', '') if client else '' }}">
+        <p class="hint">Lead emails arrive as <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 5px;border-radius:3px;">Acme Support &lt;support@lumvi.net&gt;</code> — your name, our infrastructure.</p>
       </div>
-      <div class="toggle-row" style="opacity:0.5;pointer-events:none;">
-        <div>
-          <div class="toggle-lbl">Remove "Powered by Lumvi" footer</div>
-          <div class="toggle-desc">Agency plan required.</div>
+
+      <hr class="div">
+
+      <!-- ── CUSTOM WIDGET DOMAIN ── -->
+      <div class="field">
+        <div class="label-row">
+          <label>Custom Widget Domain</label>
+          <span id="domainStatusBadge" style="font-size:11px;font-weight:700;padding:2px 10px;border-radius:20px;display:none;"></span>
         </div>
-        <label class="toggle"><input type="checkbox" disabled><span class="tslider"></span></label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="wl_domain" placeholder="chat.yourcompany.com"
+            value="{{ client.get('custom_widget_domain', '') if client else '' }}"
+            style="flex:1;" oninput="clearDomainStatus(); updateEmbedPreview();">
+          <button class="btn-test" type="button" onclick="verifyDomain()" id="verifyDomainBtn">Check DNS</button>
+        </div>
+        <p class="hint">Your clients embed <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 5px;border-radius:3px;">https://chat.yourcompany.com/widget.js</code> — no "lumvi.net" visible anywhere.</p>
+      </div>
+
+      <!-- CNAME instructions box (show on save / DNS verify) -->
+      <div id="cnameInstructions" style="display:{% if client and client.get('custom_widget_domain') %}block{% else %}none{% endif %};
+        padding:16px 18px;background:var(--success-lt);border:1px solid rgba(22,163,74,0.2);
+        border-radius:12px;margin-top:4px;margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:700;color:var(--success);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          CNAME Setup Instructions
+        </div>
+        <ol style="font-size:12.5px;color:var(--mid);line-height:1.9;padding-left:18px;margin-bottom:10px;">
+          <li>Log in to your DNS provider (Cloudflare, GoDaddy, Namecheap, Route 53…)</li>
+          <li>Create a new <strong>CNAME</strong> record:</li>
+        </ol>
+        <div style="background:#1C1917;border-radius:9px;padding:13px 15px;font-family:'DM Mono',monospace;font-size:11.5px;color:#D4C4A8;line-height:1.8;">
+          <span style="color:#A3C4A8;">Type :</span>  CNAME<br>
+          <span style="color:#A3C4A8;">Name :</span>  <span id="cnameHost">{{ (client.get('custom_widget_domain','').split('.')[0]) if client and client.get('custom_widget_domain') else 'chat' }}</span><br>
+          <span style="color:#A3C4A8;">Value:</span>  lumvi.net<br>
+          <span style="color:#A3C4A8;">TTL  :</span>  Auto (or 3600)
+        </div>
+        <p style="font-size:12px;color:var(--sub);margin-top:10px;">After propagation (up to 24 h), your embed code will use <strong id="cnameDomain">{{ client.get('custom_widget_domain','') if client else '' }}</strong> — Lumvi is never seen.</p>
+      </div>
+
+      <!-- ── CUSTOM CSS ── -->
+      <div class="field">
+        <label>Custom CSS
+          <span style="font-weight:400;color:var(--sub);text-transform:none;margin-left:4px;">— injected directly into the widget</span>
+        </label>
+        <textarea id="wl_css" rows="5"
+          placeholder="/* example */&#10;.bubble-bot { border-radius: 4px; }&#10;.w-header  { border-radius: 0; }"
+          style="font-family:'DM Mono',monospace;font-size:12px;">{{ client.get('custom_css', '') if client else '' }}</textarea>
+        <p class="hint">Targets the widget's internal CSS classes. Applied after save — no redeploy needed.</p>
+      </div>
+
+      {% else %}
+      <!-- NON-AGENCY UPGRADE WALL -->
+      <div class="upgrade-box" style="margin-bottom:16px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <p>Full white-label, custom domain, and custom CSS require the <strong>Agency plan ($299/mo)</strong>. <a href="/upgrade">Upgrade to make Lumvi invisible →</a></p>
+      </div>
+
+      <!-- Show branded email for Pro+ even without full white-label -->
+      {% if has_webhooks %}
+      <div class="field">
+        <label>Branded "From" Name
+          <span style="font-weight:400;color:var(--sub);text-transform:none;margin-left:4px;">— lead notification emails</span>
+        </label>
+        <input type="text" id="wl_email_from" placeholder="Acme Support"
+          value="{{ client.get('branded_email_from', '') if client else '' }}">
+        <p class="hint">Lead emails arrive as "Acme Support" instead of "Lumvi".</p>
+      </div>
+      {% else %}
+      <div class="upgrade-box" style="margin-top:8px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+        <p>Branded email sender requires the <strong>Pro plan ($99/mo)</strong>. <a href="/upgrade">Upgrade →</a></p>
       </div>
       {% endif %}
+
+      <!-- Dim preview of locked features -->
+      <div style="opacity:0.4;pointer-events:none;margin-top:14px;">
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-lbl">Full White-Label Mode</div>
+            <div class="toggle-desc">Agency plan required.</div>
+          </div>
+          <label class="toggle"><input type="checkbox" disabled><span class="tslider"></span></label>
+        </div>
+      </div>
+      {% endif %}
+
     </div>
   </div>
 
@@ -536,90 +672,6 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
     </div>
   </div>
 
-  <!-- 7. WHITE-LABEL (Pro / Agency) -->
-  <div class="card">
-    <div class="card-header open" onclick="tc(this)">
-      <div class="card-icon" style="background:#f0fdf4;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      </div>
-      <div class="card-text">
-        <h2>White-Label Settings</h2>
-        <p>Custom domain, CSS overrides, branded emails</p>
-      </div>
-      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
-    </div>
-    <div class="card-body open">
-
-      <!-- Branded email from (Pro+) -->
-      {% if has_webhooks %}{# has_webhooks == Pro+ #}
-      <div class="field">
-        <label>Branded "From" Name
-          <span style="font-weight:400;color:var(--sub);text-transform:none;margin-left:4px;">— for lead notification emails</span>
-        </label>
-        <input type="text" id="wl_email_from" placeholder="Acme Support"
-          value="{{ client.get('branded_email_from', '') if client else '' }}">
-        <p class="hint">Lead notification emails will arrive as "Acme Support &lt;support@lumvi.net&gt;" instead of "Lumvi".</p>
-      </div>
-      <hr class="div">
-      {% else %}
-      <div class="upgrade-box" style="margin-bottom:14px;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-        <p>Branded email sender requires <strong>Pro plan ($99/mo)</strong>. <a href="/upgrade">Upgrade →</a></p>
-      </div>
-      {% endif %}
-
-      <!-- Custom widget domain (Agency only) -->
-      {% if has_white_label %}
-      <div class="field">
-        <div class="label-row">
-          <label>Custom Widget Domain</label>
-          <span id="domainStatusBadge" style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px;display:none;"></span>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <input type="text" id="wl_domain" placeholder="chat.yourcompany.com"
-            value="{{ client.get('custom_widget_domain', '') if client else '' }}"
-            style="flex:1;" oninput="clearDomainStatus()">
-          <button class="btn-test" type="button" onclick="verifyDomain()" id="verifyDomainBtn">Check DNS</button>
-        </div>
-        <p class="hint">Create a CNAME record: <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 5px;border-radius:3px;">chat.yourcompany.com → lumvi.net</code> · DNS may take up to 24h to propagate.</p>
-      </div>
-
-      <div class="field">
-        <label>Custom CSS
-          <span style="font-weight:400;color:var(--sub);text-transform:none;margin-left:4px;">— injected into the widget</span>
-        </label>
-        <textarea id="wl_css" rows="5"
-          placeholder=".bubble-bot { border-radius: 4px; }"
-          style="font-family:'DM Mono',monospace;font-size:12px;">{{ client.get('custom_css', '') if client else '' }}</textarea>
-        <p class="hint">Advanced. Targets chat widget CSS classes. Changes apply immediately after saving.</p>
-      </div>
-
-      <!-- CNAME instructions box -->
-      <div id="cnameInstructions" style="display:none;padding:14px 16px;background:var(--success-lt);border:1px solid rgba(22,163,74,0.2);border-radius:10px;margin-top:4px;">
-        <div style="font-size:13px;font-weight:700;color:var(--success);margin-bottom:8px;">CNAME Setup Instructions</div>
-        <ol style="font-size:12.5px;color:var(--mid);line-height:1.8;padding-left:18px;">
-          <li>Log in to your DNS provider (Cloudflare, GoDaddy, Namecheap, etc.)</li>
-          <li>Add a <strong>CNAME record</strong>:</li>
-        </ol>
-        <div style="background:#1C1917;border-radius:8px;padding:12px;margin:10px 0;font-family:'DM Mono',monospace;font-size:11.5px;color:#D4C4A8;line-height:1.7;">
-          <span style="color:#A3C4A8;">Type:</span>  CNAME<br>
-          <span style="color:#A3C4A8;">Name:</span>  <span id="cnameHost">chat</span><br>
-          <span style="color:#A3C4A8;">Value:</span> lumvi.net<br>
-          <span style="color:#A3C4A8;">TTL:</span>   Auto
-        </div>
-        <p style="font-size:12px;color:var(--sub);">After propagation (up to 24h), visitors to <strong id="cnameDomain"></strong> will see your branded widget automatically.</p>
-      </div>
-
-      {% else %}
-      <div class="upgrade-box">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-        <p>Custom widget domain and CSS override require the <strong>Agency plan ($299/mo)</strong>. <a href="/upgrade">Upgrade →</a></p>
-      </div>
-      {% endif %}
-
-    </div>
-  </div>
-
   <!-- 8. AGENCY DEFAULTS (Agency only) -->
   {% if plan_type in ('agency', 'enterprise') %}
   <div class="card">
@@ -731,12 +783,88 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
 
 <div class="toast" id="toast"></div>
 
-<script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 const CID  = {{ client_id | tojson }};
 const HWH  = {{ 'true' if has_webhooks else 'false' }};
 const HWL  = {{ 'true' if has_white_label else 'false' }};
 const SQR  = {{ (branding.get('bot_settings', {}).get('quick_replies') or []) | tojson }};
-let   _logo = null, _sim = false;
+let   _logo = null, _avatarImg = null, _sim = false;
+
+// ── Avatar tab switcher ────────────────────────────────────────────────
+// Pre-populate from saved bot_avatar_url if it's a data URL / https URL
+(function() {
+  const savedAv = {{ (branding.get('bot_settings', {}).get('bot_avatar_url', '') or '') | tojson }};
+  if (savedAv && savedAv.startsWith('data:')) {
+    _avatarImg = savedAv;
+    _showAvatarImage(savedAv);
+    setAvTab('image');
+  } else if (savedAv && (savedAv.startsWith('http://') || savedAv.startsWith('https://'))) {
+    _avatarImg = savedAv;
+    _showAvatarImage(savedAv);
+    setAvTab('image');
+  }
+})();
+
+function setAvTab(tab) {
+  const emojiPane = document.getElementById('avEmojiPane');
+  const imagePane = document.getElementById('avImagePane');
+  const btnEmoji  = document.getElementById('avTabEmoji');
+  const btnImage  = document.getElementById('avTabImage');
+  const isEmoji   = tab === 'emoji';
+  emojiPane.style.display = isEmoji ? '' : 'none';
+  imagePane.style.display = isEmoji ? 'none' : '';
+  btnEmoji.style.background = isEmoji ? 'var(--white)' : 'transparent';
+  btnEmoji.style.color      = isEmoji ? 'var(--dark)'  : 'var(--sub)';
+  btnEmoji.style.boxShadow  = isEmoji ? '0 1px 3px rgba(0,0,0,0.08)' : 'none';
+  btnImage.style.background = isEmoji ? 'transparent' : 'var(--white)';
+  btnImage.style.color      = isEmoji ? 'var(--sub)'  : 'var(--dark)';
+  btnImage.style.boxShadow  = isEmoji ? 'none' : '0 1px 3px rgba(0,0,0,0.08)';
+  if (isEmoji) { _avatarImg = null; }
+  up();
+}
+
+function handleAvatar(e) {
+  const f = e.target.files[0];
+  if (!f) return;
+  if (f.size > 1048576) { toast('Avatar image must be under 1 MB', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    _avatarImg = ev.target.result;
+    _showAvatarImage(_avatarImg);
+    document.getElementById('avZone').classList.add('has-file');
+    up();
+  };
+  reader.readAsDataURL(f);
+}
+
+function _showAvatarImage(src) {
+  const img     = document.getElementById('avImgEl');
+  const icon    = document.getElementById('avUploadIcon');
+  const fname   = document.getElementById('avFileName');
+  const clearBtn= document.getElementById('avClearBtn');
+  img.src            = src;
+  img.style.display  = 'block';
+  icon.style.display = 'none';
+  fname.textContent  = 'Image loaded — click to change';
+  if (clearBtn) clearBtn.style.display = 'inline-block';
+}
+
+function clearAvatar() {
+  _avatarImg = null;
+  const img     = document.getElementById('avImgEl');
+  const icon    = document.getElementById('avUploadIcon');
+  const fname   = document.getElementById('avFileName');
+  const clearBtn= document.getElementById('avClearBtn');
+  const zone    = document.getElementById('avZone');
+  const fileInp = document.getElementById('avFile');
+  img.src = ''; img.style.display = 'none';
+  icon.style.display = 'block';
+  fname.textContent  = 'Click to upload image';
+  if (clearBtn) clearBtn.style.display = 'none';
+  zone.classList.remove('has-file');
+  if (fileInp) fileInp.value = '';
+  up();
+}
 
 // Card toggle
 function tc(h) {
@@ -801,7 +929,14 @@ function up() {
   document.getElementById('pUsr').style.background = color;
 
   const av = document.getElementById('pAv');
-  av.innerHTML = _logo ? `<img src="${_logo}" alt="">` : emo;
+  // Priority: bot avatar image > company logo > emoji
+  if (_avatarImg) {
+    av.innerHTML = `<img src="${_avatarImg}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
+  } else if (_logo) {
+    av.innerHTML = `<img src="${_logo}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
+  } else {
+    av.innerHTML = esc(emo);
+  }
 
   document.getElementById('pChips').innerHTML = qrs.map(r =>
     `<span class="qr-chip" style="background:${color}18;color:${color};border-color:${color}44;">${esc(r)}</span>`
@@ -809,12 +944,8 @@ function up() {
 
   document.getElementById('pFoot').style.display = noFt ? 'none' : '';
 
-  // Embed
-  document.getElementById('embedBlock').innerHTML =
-    `<span style="color:#6B7280;">/* Paste before &lt;/body&gt; */</span>\n\n` +
-    `<span style="color:#60A5FA;">&lt;script&gt;</span>\n` +
-    `(function(){\n  var s=document.createElement('script');\n  s.src='${location.origin}/static/widget.js';\n  s.setAttribute('data-client-id','${CID}');\n  document.body.appendChild(s);\n})();\n` +
-    `<span style="color:#60A5FA;">&lt;/script&gt;</span>`;
+  // Embed code — delegated to updateEmbedPreview so domain changes also trigger it
+  updateEmbedPreview();
 }
 
 function simConvo() {
@@ -1092,6 +1223,7 @@ async function save() {
     bot_settings: {
       bot_name:         document.getElementById('bot_name').value.trim(),
       bot_avatar:       document.getElementById('bot_avatar').value.trim(),
+      bot_avatar_url:   _avatarImg || '',   // image takes priority in widget; empty = use emoji
       welcome_message:  document.getElementById('welcome_message').value.trim(),
       fallback_message: document.getElementById('fallback_message').value.trim(),
       quick_replies:    getQR(),
@@ -1123,7 +1255,9 @@ async function save() {
 }
 
 function copyEmbed() {
-  const c = `<script>\n(function(){var s=document.createElement('script');s.src='${location.origin}/static/widget.js';s.setAttribute('data-client-id','${CID}');document.body.appendChild(s);})();\n<\/script>`;
+  const domain  = (document.getElementById('wl_domain')?.value || '').trim();
+  const baseUrl = domain ? `https://${domain}` : location.origin;
+  const c = `<script>\n(function(){var s=document.createElement('script');s.src='${baseUrl}/static/widget.js';s.setAttribute('data-client-id','${CID}');document.body.appendChild(s);})();\n<\/script>`;
   navigator.clipboard.writeText(c).then(() => toast('Embed code copied', 'success'));
 }
 
@@ -1141,11 +1275,28 @@ function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 // ═══════════════════════════════════════════════════
 // WHITE-LABEL
 // ═══════════════════════════════════════════════════
-const HWL_DOMAIN = {{ 'true' if has_white_label else 'false' }};
+// HWL and HWH are defined above in the constants block
 const PLAN_TYPE  = {{ plan_type | tojson }};
 
-// Load existing white-label settings on page open
-async function initWhiteLabel() {
+function toggleTopbarPreview() {
+  // When the white-label toggle changes, reload the page topbar
+  // immediately so the agency sees what clients will see.
+  // We do a soft reload only if the toggle state differs from what was saved.
+  updateEmbedPreview();
+}
+
+function updateEmbedPreview() {
+  // Regenerate the embed code in the preview panel using custom domain if set
+  const domain  = (document.getElementById('wl_domain')?.value || '').trim();
+  const baseUrl = domain ? `https://${domain}` : location.origin;
+  const block   = document.getElementById('embedBlock');
+  if (!block) return;
+  block.innerHTML =
+    `<span style="color:#6B7280;">/* Paste before &lt;/body&gt; */</span>\n\n` +
+    `<span style="color:#60A5FA;">&lt;script&gt;</span>\n` +
+    `(function(){\n  var s=document.createElement('script');\n  s.src='${baseUrl}/static/widget.js';\n  s.setAttribute('data-client-id','${CID}');\n  document.body.appendChild(s);\n})();\n` +
+    `<span style="color:#60A5FA;">&lt;/script&gt;</span>`;
+}
   if (!{{ 'true' if has_webhooks or has_white_label else 'false' }}) return;
   try {
     const r = await fetch(`/api/admin/white-label?client_id=${CID}`);
@@ -1163,6 +1314,30 @@ async function initWhiteLabel() {
       const el = document.getElementById('wl_email_from');
       if (el) el.value = d.branded_email_from;
     }
+  } catch {}
+}
+
+// Load existing white-label settings on page open
+async function initWhiteLabel() {
+  if (!HWL && !HWH) return;
+  try {
+    const r = await fetch(`/api/admin/white-label?client_id=${CID}`);
+    const d = await r.json();
+    if (!d.success) return;
+    if (d.custom_widget_domain) {
+      const el = document.getElementById('wl_domain');
+      if (el) { el.value = d.custom_widget_domain; updateCnameBox(d.custom_widget_domain); }
+    }
+    if (d.custom_css) {
+      const el = document.getElementById('wl_css');
+      if (el) el.value = d.custom_css;
+    }
+    if (d.branded_email_from) {
+      const el = document.getElementById('wl_email_from');
+      if (el) el.value = d.branded_email_from;
+    }
+    // Regenerate embed with saved domain
+    updateEmbedPreview();
   } catch {}
 }
 
@@ -1273,15 +1448,4 @@ async function saveAgencyDefaults() {
   } catch { toast('Network error', 'error'); }
   finally {
     btn.disabled = false;
-    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Save Agency Defaults';
-  }
-}
-
-// Boot
-up();
-initWebhooks();
-initWhiteLabel();
-initAgencyDefaults();
-</script>
-</body>
-</html>
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stro
