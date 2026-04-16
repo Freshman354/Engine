@@ -199,8 +199,9 @@ class AIHelper:
             response_text, confidence, method = self._rag_generate(
                 clean, reranked, scores, vertical, context_str
             )
-        elif faqs and self.enabled:
-            # No embedding hit — general vertical fallback
+        elif self.enabled:
+            # No embedding hit — let Gemini answer with whatever FAQs exist
+            # (even zero FAQs — context_str + personality is enough)
             response_text = self._vertical_fallback(clean, faqs[:12], vertical, context_str)
             confidence, method = 0.35, 'vertical_fallback'
         else:
@@ -320,23 +321,28 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
         if client_id and query_vec:
             try:
                 import models as _m
-                kb_chunks = _m.get_relevant_knowledge(client_id, limit=5)
+                # Pass query_vec so the model function can rank by cosine similarity
+                kb_chunks = _m.get_relevant_knowledge(client_id, query_vec, limit=5)
                 if kb_chunks:
                     scored = []
                     for chunk in kb_chunks:
-                        if chunk.get('embedding'):
-                            score = _cosine(query_vec, chunk['embedding'])
-                            if score > 0.38:
-                                scored.append(({
-                                    'id':       chunk['kb_id'],
-                                    'kb_id':    chunk['kb_id'],
-                                    'question': chunk['title'],
-                                    'answer':   chunk['content'],
-                                    'category': chunk['category'],
-                                    'type':     chunk.get('type', 'faq'),
-                                }, score))
-                    scored.sort(key=lambda x: x[1], reverse=True)
+                        emb = chunk.get('embedding')
+                        if emb:
+                            score = _cosine(query_vec, emb)
+                        else:
+                            # Chunk returned without embedding — use positional rank score
+                            score = max(0.0, 0.5 - (len(scored) * 0.05))
+                        if score > 0.30:   # lowered from 0.38 — catches more valid hits
+                            scored.append(({
+                                'id':       chunk.get('kb_id', chunk.get('id', '')),
+                                'kb_id':    chunk.get('kb_id', chunk.get('id', '')),
+                                'question': chunk.get('title', ''),
+                                'answer':   chunk.get('content', ''),
+                                'category': chunk.get('category', 'General'),
+                                'type':     chunk.get('type', 'faq'),
+                            }, score))
                     if scored:
+                        scored.sort(key=lambda x: x[1], reverse=True)
                         logger.debug(f"[KB Search] top_score={scored[0][1]:.3f} hits={len(scored)}")
                         return [s[0] for s in scored[:5]], [s[1] for s in scored[:5]]
             except Exception as _e:
@@ -364,7 +370,7 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
                     scored  = []
                     for fid, emb in stored.items():
                         score = _cosine(query_vec, emb)
-                        if score > 0.38 and fid in faq_idx:
+                        if score > 0.30 and fid in faq_idx:   # lowered from 0.38
                             scored.append((faq_idx[fid], score))
                     scored.sort(key=lambda x: x[1], reverse=True)
                     if scored:
@@ -373,17 +379,18 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
             except Exception as _e:
                 logger.warning(f"[_embedding_search] FAQ embed error: {_e}")
 
-        # ── Keyword overlap last resort ─────────────────────────────────
+        # ── Keyword overlap — also used when query_vec is empty ─────────
         q_words = set(user_message.lower().split())
         scored  = []
         for faq in faqs:
-            fq_words = set(faq.get('question', '').lower().split())
-            overlap  = len(q_words & fq_words)
+            combined = (faq.get('question', '') + ' ' + faq.get('answer', '')).lower()
+            fq_words  = set(combined.split())
+            overlap   = len(q_words & fq_words)
             if overlap > 0:
                 scored.append((faq, overlap / max(len(q_words), 1)))
         scored.sort(key=lambda x: x[1], reverse=True)
         if scored:
-            logger.debug(f"[Keyword Search] hits={len(scored)}")
+            logger.debug(f"[Keyword Search] hits={len(scored)} top_score={scored[0][1]:.3f}")
             return [s[0] for s in scored[:5]], [s[1] for s in scored[:5]]
 
         return [], []

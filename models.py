@@ -2369,33 +2369,37 @@ def get_knowledge_chunks(client_id: str, chunk_type: str = None, limit: int = 50
         conn.close()
 
 
-def get_relevant_knowledge(client_id: str, query_embedding: list, limit: int = 5) -> list:
+def get_relevant_knowledge(client_id: str, query_embedding: list = None, limit: int = 5) -> list:
     """
-    Return top-N knowledge chunks ordered by cosine similarity to query_embedding.
-    Falls back to recency order if no embeddings are stored.
+    Return top-N knowledge chunks for a client.
+    When query_embedding is provided, ranks by cosine similarity.
+    Falls back to quality+recency order when no embedding is given.
+    Always returns the embedding field so the AI layer can re-rank if needed.
     """
     chunks = get_knowledge_chunks(client_id)
     if not chunks:
         return []
 
-    # Chunks with embeddings → rank by cosine similarity
-    scored = []
-    for chunk in chunks:
-        emb = chunk.get('embedding')
-        if emb and query_embedding:
-            try:
-                dot   = sum(a * b for a, b in zip(query_embedding, emb))
-                mag_q = sum(a * a for a in query_embedding) ** 0.5
-                mag_e = sum(b * b for b in emb) ** 0.5
-                sim   = dot / (mag_q * mag_e) if mag_q and mag_e else 0.0
-            except Exception:
+    if query_embedding:
+        scored = []
+        for chunk in chunks:
+            emb = chunk.get('embedding')
+            if emb and query_embedding:
+                try:
+                    dot   = sum(a * b for a, b in zip(query_embedding, emb))
+                    mag_q = sum(a * a for a in query_embedding) ** 0.5
+                    mag_e = sum(b * b for b in emb) ** 0.5
+                    sim   = dot / (mag_q * mag_e) if mag_q and mag_e else 0.0
+                except Exception:
+                    sim = 0.0
+            else:
                 sim = 0.0
             scored.append((chunk, sim))
-        else:
-            scored.append((chunk, 0.0))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [c for c, _ in scored[:limit]]
 
-    scored.sort(key=lambda x: x[1], reverse=True)
-    return [c for c, _ in scored[:limit]]
+    # No embedding provided — return top chunks by quality/recency
+    return chunks[:limit]
 
 
 def store_embedding(client_id: str, chunk_id: str, embedding: list) -> None:
@@ -2569,44 +2573,6 @@ def save_knowledge_chunks(client_id: str, chunks: list) -> int:
         cursor.close()
         conn.close()
     return saved
-
-
-def get_relevant_knowledge(client_id: str, limit: int = 5) -> list:
-    """
-    Return all knowledge chunks with embeddings for a client,
-    ordered by quality descending. The AI layer does cosine ranking.
-    """
-    try:
-        conn, cursor = get_db()
-        cursor.execute(
-            '''SELECT kb_id, title, content, type, category, tags, embedding, metadata, quality
-               FROM knowledge_base
-               WHERE client_id = %s AND embedding IS NOT NULL
-               ORDER BY quality DESC, updated_at DESC
-               LIMIT %s''',
-            (client_id, min(limit * 5, 100))   # over-fetch, AI does final ranking
-        )
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        result = []
-        for r in rows:
-            result.append({
-                'kb_id':     r['kb_id'],
-                'title':     r['title'],
-                'content':   r['content'],
-                'type':      r['type'],
-                'category':  r['category'],
-                'tags':      json.loads(r['tags'] or '[]'),
-                'embedding': json.loads(r['embedding']) if r['embedding'] else [],
-                'metadata':  json.loads(r['metadata'] or '{}'),
-                'quality':   float(r['quality']),
-            })
-        return result
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"[get_relevant_knowledge] error: {e}")
-        return []
 
 
 def get_knowledge_chunks_raw(client_id: str) -> list:
