@@ -464,11 +464,12 @@ body{
 </div>
 
 <script>
-const CID    = {{ client.client_id | tojson }};
-const BNAME  = {{ (client.bot_name or client.company_name or 'Support') | tojson }};
+const CID        = {{ client.client_id | tojson }};
+const BNAME      = {{ (client.bot_name or client.company_name or 'Support') | tojson }};
 const BAVATAR    = {{ (client.bot_avatar or '🤖') | tojson }};
 const AVATAR_URL = {{ (client.bot_avatar_url or '') | tojson }};
 const LOGO       = {{ (client.logo_url or '') | tojson }};
+const LEAD_TRIGGERS = {{ (client.lead_triggers or []) | tojson }};
 
 let history_ = [];
 let leadMode = false;
@@ -503,8 +504,27 @@ function switchTab(tab) {
 // ── Quick replies ──────────────────────────────────────────────────────
 window.sendQR = function(btn, text) {
   document.getElementById('qrWrap').style.display = 'none';
+
+  // Check if this quick reply is a lead-intent message.
+  // If so, show the user message then immediately start lead collection
+  // — no round-trip to /api/chat needed, intent is already obvious.
+  const lower = text.toLowerCase();
+  const isLeadQR = LEAD_TRIGGERS.some(t => lower.includes(t.toLowerCase()));
+
+  addUserMsg(text);
+  history_.push({role:'user', content:text});
+
+  if (isLeadQR) {
+    startLead();
+    return;
+  }
+
+  // Non-lead QR — send normally through the chat pipeline
   document.getElementById('chatInput').value = text;
-  sendMsg();
+  // Clear the value we just set so sendMsg picks up a fresh send
+  // (sendMsg reads from chatInput; we already added the message above,
+  //  so we bypass sendMsg's addUserMsg call by sending directly to the API)
+  _sendToAPI(text);
 };
 
 // ── Message rendering ──────────────────────────────────────────────────
@@ -581,9 +601,16 @@ async function sendMsg() {
     inp.focus();
     return;
   }
+  await _sendToAPI(text);
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('chatInput').focus();
+}
+
+// Shared API call — used by both sendMsg and non-lead sendQR
+async function _sendToAPI(text) {
   showTyping();
   try {
-    const r    = await fetch('/api/chat', {
+    const r = await fetch('/api/chat', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({message:text, client_id:CID, history:history_})
     });
@@ -599,9 +626,6 @@ async function sendMsg() {
   } catch {
     hideTyping();
     addBotMsg("I can't connect right now. Please try again shortly.");
-  } finally {
-    document.getElementById('sendBtn').disabled = false;
-    inp.focus();
   }
 }
 
