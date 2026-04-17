@@ -390,7 +390,13 @@ body{
   </div>
 
   <!-- Quick replies (outside scroll, below messages) -->
-  {% set qr = client.quick_replies if client.quick_replies else [] %}
+  {%- set _raw_qr = client.quick_replies if client.quick_replies else [] -%}
+  {%- set qr = [] -%}
+  {%- for btn in _raw_qr -%}
+    {%- if btn and btn | string | trim -%}
+      {%- set qr = qr + [btn | string | trim] -%}
+    {%- endif -%}
+  {%- endfor -%}
   {% if qr %}
   <div class="qr-wrap" id="qrWrap">
     {% for btn in qr[:5] %}

@@ -1623,10 +1623,11 @@ def widget():
 
         client['bot_name']         = bot_settings.get('bot_name')        or client.get('company_name') or 'Support'
         client['bot_avatar']       = bot_settings.get('bot_avatar')      or '🤖'
+        client['bot_avatar_url']   = bot_settings.get('bot_avatar_url')  or ''
         client['tagline']          = branding.get('tagline')             or 'Typically replies instantly'
         client['welcome_message']  = bot_settings.get('welcome_message') or client.get('welcome_message') or 'Hi! How can I help you today?'
         client['fallback_message'] = bot_settings.get('fallback_message') or ''
-        client['quick_replies']    = bot_settings.get('quick_replies')   or []
+        client['quick_replies']    = [r for r in (bot_settings.get('quick_replies') or []) if r and str(r).strip()]
         client['widget_color']     = branding.get('primary_color')       or client.get('widget_color') or '#B8924A'
         client['remove_branding']  = branding.get('remove_branding',     client.get('remove_branding', 0))
         client['logo_url']         = branding.get('logo')               or branding.get('logo_url') or ''
@@ -1776,6 +1777,12 @@ def save_customization():
             'bot_settings': data.get('bot_settings', {}),
             'integrations': integrations   # persisted for pro/agency; empty for free/starter
         }
+
+        # Scrub empty quick reply strings so they never persist to the DB
+        raw_qr = branding_settings['bot_settings'].get('quick_replies') or []
+        branding_settings['bot_settings']['quick_replies'] = [
+            r for r in raw_qr if r and str(r).strip()
+        ]
 
         # White-label only on agency/enterprise
         remove_branding = False
