@@ -687,7 +687,7 @@ Sound friendly and human. Return ONLY the response text."""
         """
         if not self._is_followup(message, history):
             return message   # not a follow-up — use message as-is
-
+  
         # Collect keywords from the last 2 user messages in history
         recent_user = [
             m.get('content', '').strip()

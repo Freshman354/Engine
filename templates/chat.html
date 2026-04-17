@@ -333,7 +333,9 @@ body{
   </div>
   <div class="header-profile">
     <div class="header-avatar">
-      {% if client.logo_url %}
+      {% if client.bot_avatar_url %}
+        <img src="{{ client.bot_avatar_url }}" alt="{{ client.bot_name }}" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">
+      {% elif client.logo_url %}
         <img src="{{ client.logo_url }}" alt="{{ client.bot_name }}" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">
       {% else %}{{ client.bot_avatar or '🤖' }}{% endif %}
     </div>
@@ -367,7 +369,7 @@ body{
     <!-- Welcome message -->
     <div class="msg-row" id="welcomeRow">
       <div class="msg-avatar" id="botAv1">
-        {% if client.logo_url %}<img src="{{ client.logo_url }}" alt="" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">{% else %}{{ client.bot_avatar or '🤖' }}{% endif %}
+        {% if client.bot_avatar_url %}<img src="{{ client.bot_avatar_url }}" alt="" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">{% elif client.logo_url %}<img src="{{ client.logo_url }}" alt="" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">{% else %}{{ client.bot_avatar or '🤖' }}{% endif %}
       </div>
       <div class="msg-col">
         <div class="sender-label">{{ client.bot_name or 'Support' }}</div>
@@ -379,7 +381,7 @@ body{
     <!-- Typing indicator (fixed at bottom) -->
     <div class="typing-row" id="typingRow" style="display:none;">
       <div class="msg-avatar" id="botAv2">
-        {% if client.logo_url %}<img src="{{ client.logo_url }}" alt="" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">{% else %}{{ client.bot_avatar or '🤖' }}{% endif %}
+        {% if client.bot_avatar_url %}<img src="{{ client.bot_avatar_url }}" alt="" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">{% elif client.logo_url %}<img src="{{ client.logo_url }}" alt="" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">{% else %}{{ client.bot_avatar or '🤖' }}{% endif %}
       </div>
       <div class="typing-bubble" id="typingBubble">
         <div class="td"></div><div class="td"></div><div class="td"></div>
@@ -388,18 +390,16 @@ body{
   </div>
 
   <!-- Quick replies (outside scroll, below messages) -->
+  {% set qr = client.quick_replies if client.quick_replies else [] %}
+  {% if qr %}
   <div class="qr-wrap" id="qrWrap">
-    {% set qr = client.quick_replies if client.quick_replies else [] %}
-    {% if qr %}
-      {% for btn in qr[:5] %}
+    {% for btn in qr[:5] %}
       <button class="qr-btn" onclick="sendQR(this, '{{ btn | e }}')">{{ btn }}</button>
-      {% endfor %}
-    {% else %}
-      <button class="qr-btn" onclick="sendQR(this, 'What are your business hours?')">Business hours?</button>
-      <button class="qr-btn" onclick="sendQR(this, 'What are your prices?')">Pricing</button>
-      <button class="qr-btn" onclick="sendQR(this, 'Contact us')">Contact us</button>
-    {% endif %}
+    {% endfor %}
   </div>
+  {% else %}
+  <div id="qrWrap" style="display:none;"></div>
+  {% endif %}
 
   <!-- Input -->
   <div class="input-area">
@@ -460,8 +460,9 @@ body{
 <script>
 const CID    = {{ client.client_id | tojson }};
 const BNAME  = {{ (client.bot_name or client.company_name or 'Support') | tojson }};
-const BAVATAR= {{ (client.bot_avatar or '🤖') | tojson }};
-const LOGO   = {{ (client.logo_url or '') | tojson }};
+const BAVATAR    = {{ (client.bot_avatar or '🤖') | tojson }};
+const AVATAR_URL = {{ (client.bot_avatar_url or '') | tojson }};
+const LOGO       = {{ (client.logo_url or '') | tojson }};
 
 let history_ = [];
 let leadMode = false;
@@ -502,7 +503,9 @@ window.sendQR = function(btn, text) {
 
 // ── Message rendering ──────────────────────────────────────────────────
 function botAvatarHTML() {
-  if (LOGO) return `<img src="${LOGO}" alt="" onerror="this.parentElement.innerHTML='${esc(BAVATAR)}'">`;
+  // Priority: bot avatar image > company logo > emoji
+  if (AVATAR_URL) return `<img src="${AVATAR_URL}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='${esc(BAVATAR)}'">`;
+  if (LOGO)       return `<img src="${LOGO}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='${esc(BAVATAR)}'">`;
   return esc(BAVATAR);
 }
 
@@ -739,20 +742,22 @@ function addLeadSuccess(msg) {
 
 // ── Help Center ────────────────────────────────────────────────────────
 async function loadArts() {
-  // Always re-fetch so newly added articles appear without a page reload.
-  // Articles are small — the network cost is negligible.
   const container = document.getElementById('hcContainer');
   container.innerHTML = '<div class="hc-empty" style="padding:32px 20px;"><p style="color:var(--sub);font-size:13px;">Loading…</p></div>';
+  console.log('[Lumvi] Loading articles for client_id:', CID);
   try {
     const r = await fetch('/api/articles?client_id=' + CID);
     const d = await r.json();
+    console.log('[Lumvi] Articles API response:', d);
     if (!d.success) {
       container.innerHTML = '<div class="hc-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px;height:36px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>Could not load articles.</p></div>';
       return;
     }
     allArts = d.articles || [];
+    console.log('[Lumvi] Articles found:', allArts.length);
     renderArts(allArts);
-  } catch {
+  } catch(e) {
+    console.error('[Lumvi] Articles fetch error:', e);
     container.innerHTML =
       '<div class="hc-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px;height:36px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>Could not load articles.</p></div>';
   }
