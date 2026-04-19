@@ -208,26 +208,30 @@ body{
   display:flex;gap:9px;align-items:flex-end;
 }
 .input-wrap{
-  flex:1;background:var(--bg);border:1.5px solid var(--border);
+  flex:1;min-width:0;background:var(--bg);border:1.5px solid var(--border);
   border-radius:22px;padding:9px 14px;
   display:flex;align-items:center;transition:border-color 0.2s;
 }
 .input-wrap:focus-within{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-glow);}
 .chat-input{
-  flex:1;border:none;background:transparent;outline:none;
+  flex:1;min-width:0;border:none;background:transparent;outline:none;
   font-size:13.5px;font-family:inherit;color:var(--dark);
   resize:none;max-height:80px;line-height:1.4;
 }
 .chat-input::placeholder{color:var(--sub);}
 .send-btn{
-  width:38px;height:38px;border-radius:50%;background:var(--brand);
+  width:42px;height:42px;min-width:42px;min-height:42px;
+  border-radius:50%;background:var(--brand);
   border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
   flex-shrink:0;transition:all 0.18s;
   box-shadow:0 2px 8px var(--brand-glow);
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
 }
 .send-btn:hover{transform:scale(1.06);}
+.send-btn:active{transform:scale(0.96);}
 .send-btn:disabled{opacity:0.45;transform:none;cursor:not-allowed;}
-.send-btn svg{width:15px;height:15px;color:#fff;}
+.send-btn svg{width:15px;height:15px;color:#fff;pointer-events:none;}
 
 /* POWERED BY */
 .powered{
@@ -264,18 +268,21 @@ body{
   padding:13px 14px;border-bottom:1px solid var(--border);
   cursor:pointer;transition:background 0.15s;
   display:flex;align-items:center;justify-content:space-between;gap:10px;
+  min-width:0;
 }
 .hc-art:hover{background:var(--brand-soft);}
-.hc-art-left{display:flex;align-items:flex-start;gap:10px;}
+.hc-art-left{display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0;}
 .hc-art-icon{
   width:32px;height:32px;border-radius:9px;
   background:var(--brand-soft);border:1px solid var(--brand-border);
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
 }
 .hc-art-icon svg{width:14px;height:14px;color:var(--brand);}
-.hc-art-title{font-size:13px;font-weight:600;color:var(--dark);line-height:1.35;}
+.hc-art-meta{flex:1;min-width:0;}
+.hc-art-title{font-size:13px;font-weight:600;color:var(--dark);line-height:1.35;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .hc-art-preview{font-size:11.5px;color:var(--sub);margin-top:2px;line-height:1.4;
-  display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;}
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .hc-arrow{color:var(--sub);flex-shrink:0;}
 .hc-arrow svg{width:15px;height:15px;}
 .hc-empty{padding:48px 20px;text-align:center;}
@@ -315,7 +322,8 @@ body{
   .header{padding:12px 14px 32px;}
   .header-name{font-size:16px;}
   .messages{padding:12px 10px;}
-  .input-area{padding:10px 12px;}
+  .input-area{padding:10px 12px;gap:8px;}
+  .send-btn{width:40px;height:40px;min-width:40px;min-height:40px;}
 }
 </style>
 </head>
@@ -819,7 +827,7 @@ function renderArts(arts) {
       html += `<div class="hc-art" onclick="showArt(${a.id})">
         <div class="hc-art-left">
           <div class="hc-art-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
-          <div>
+          <div class="hc-art-meta">
             <div class="hc-art-title">${esc(a.title)}</div>
             <div class="hc-art-preview">${esc(preview)}…</div>
           </div>
@@ -835,7 +843,7 @@ function filterArts() {
   const q = document.getElementById('hcSearch').value.toLowerCase();
   renderArts(allArts.filter(a =>
     (a.title||'').toLowerCase().includes(q) || (a.content||'').toLowerCase().includes(q)
-  ));`
+  ));
 }
 
 function showArt(id) {

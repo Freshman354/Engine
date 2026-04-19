@@ -37,7 +37,7 @@
         </svg>
     `;
     
-    // Button styles — color loaded from client config below
+    // Button styles — hidden until brand color is loaded to prevent flash
     Object.assign(button.style, {
         position: 'fixed',
         bottom: '20px',
@@ -45,31 +45,40 @@
         width: '60px',
         height: '60px',
         borderRadius: '50%',
-        background: 'linear-gradient(135deg, #6366f1 0%, #06b6d4 100%)',
+        background: '#B8924A',   // neutral default — overwritten before visible
         border: 'none',
         color: 'white',
         cursor: 'pointer',
-        boxShadow: '0 4px 16px rgba(99, 102, 241, 0.4)',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
         zIndex: '999998',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        transition: 'all 0.3s ease'
+        transition: 'opacity 0.25s ease, transform 0.2s ease, box-shadow 0.2s ease',
+        opacity: '0',           // invisible until color is ready
+        pointerEvents: 'none'   // not clickable while invisible
     });
 
-    // Fetch client config and apply brand color to button
+    // Fetch brand color BEFORE showing the button — eliminates the blue→gold flash
     fetch(`${baseUrl}/api/config?client_id=${clientId}`)
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            if (data.success && data.config) {
-                var color = (data.config.branding && data.config.branding.primary_color) || '#6366f1';
-                button.style.background = color;
-                button.style.boxShadow = '0 4px 16px ' + color + '66';
-                // Store color for hover effects
-                button._brandColor = color;
+            var color = '#B8924A';  // Lumvi gold fallback
+            if (data.success && data.config && data.config.branding && data.config.branding.primary_color) {
+                color = data.config.branding.primary_color;
             }
+            button.style.background  = color;
+            button.style.boxShadow   = '0 4px 16px ' + color + '66';
+            button._brandColor       = color;
+            // Now reveal — user sees the button exactly once, already in the right color
+            button.style.opacity       = '1';
+            button.style.pointerEvents = 'auto';
         })
-        .catch(function() {});
+        .catch(function() {
+            // Network error — still show the button with the default color
+            button.style.opacity       = '1';
+            button.style.pointerEvents = 'auto';
+        });
 
     
     // Create chat container
