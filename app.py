@@ -1604,7 +1604,7 @@ def widget():
             'company_name':     'Demo Company',
             'widget_color':     '#B8924A',
             'bot_name':         'Support',
-            'bot_avatar':       '🤖',
+            'bot_avatar':       '',
             'tagline':          'Typically replies instantly',
             'welcome_message':  'Hi! How can I help you today?',
             'fallback_message': '',
@@ -1613,6 +1613,7 @@ def widget():
             'logo_url':         '',
             'custom_css':       '',
             'contact':          {},
+            'lead_triggers':    ['contact', 'sales', 'demo', 'speak', 'talk', 'human', 'agent'],
         }
     else:
         client = dict(client)
@@ -1622,8 +1623,8 @@ def widget():
         contact      = branding_settings.get('contact', {})
 
         client['bot_name']         = bot_settings.get('bot_name')        or client.get('company_name') or 'Support'
-        client['bot_avatar']       = bot_settings.get('bot_avatar')      or '🤖'
-        client['bot_avatar_url']   = bot_settings.get('bot_avatar_url')  or ''
+        client['bot_avatar']       = bot_settings.get('bot_avatar')     or ''   # empty = use SVG icon in widget
+        client['bot_avatar_url']   = bot_settings.get('bot_avatar_url') or ''
         client['tagline']          = branding.get('tagline')             or 'Typically replies instantly'
         client['welcome_message']  = bot_settings.get('welcome_message') or client.get('welcome_message') or 'Hi! How can I help you today?'
         client['fallback_message'] = bot_settings.get('fallback_message') or ''
@@ -1634,6 +1635,10 @@ def widget():
         client['custom_css']       = client.get('custom_css') or ''
         client['contact']          = contact
         client['branding_settings'] = branding_settings
+        # Expose lead_triggers so the widget can short-circuit on QR taps
+        client['lead_triggers']    = branding_settings.get('bot_settings', {}).get(
+            'lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk', 'human', 'agent']
+        )
 
     return render_template('chat.html', client=client)
 
@@ -1775,8 +1780,11 @@ def save_customization():
             'branding': data.get('branding', {}),
             'contact': data.get('contact', {}),
             'bot_settings': data.get('bot_settings', {}),
-            'integrations': integrations   # persisted for pro/agency; empty for free/starter
+            'integrations': integrations
         }
+
+        # Ensure contact always includes address (may be absent from old saves)
+        branding_settings['contact'].setdefault('address', '')
 
         # Scrub empty quick reply strings so they never persist to the DB
         raw_qr = branding_settings['bot_settings'].get('quick_replies') or []

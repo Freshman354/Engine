@@ -334,10 +334,14 @@ body{
   <div class="header-profile">
     <div class="header-avatar">
       {% if client.bot_avatar_url %}
-        <img src="{{ client.bot_avatar_url }}" alt="{{ client.bot_name }}" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">
+        <img src="{{ client.bot_avatar_url }}" alt="{{ client.bot_name }}"
+          onerror="this.outerHTML='<svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.5\' style=\'width:20px;height:20px;opacity:0.75;\'><rect x=\'3\' y=\'11\' width=\'18\' height=\'11\' rx=\'2\'/><path d=\'M7 11V7a5 5 0 0 1 10 0v4\'/><circle cx=\'9\' cy=\'16\' r=\'1\' fill=\'currentColor\'/><circle cx=\'15\' cy=\'16\' r=\'1\' fill=\'currentColor\'/></svg>'">
       {% elif client.logo_url %}
-        <img src="{{ client.logo_url }}" alt="{{ client.bot_name }}" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">
-      {% else %}{{ client.bot_avatar or '🤖' }}{% endif %}
+        <img src="{{ client.logo_url }}" alt="{{ client.bot_name }}"
+          onerror="this.outerHTML='<svg viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.5\' style=\'width:20px;height:20px;opacity:0.75;\'><rect x=\'3\' y=\'11\' width=\'18\' height=\'11\' rx=\'2\'/><path d=\'M7 11V7a5 5 0 0 1 10 0v4\'/><circle cx=\'9\' cy=\'16\' r=\'1\' fill=\'currentColor\'/><circle cx=\'15\' cy=\'16\' r=\'1\' fill=\'currentColor\'/></svg>'">
+      {% else %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:20px;height:20px;opacity:0.75;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="9" cy="16" r="1" fill="currentColor"/><circle cx="15" cy="16" r="1" fill="currentColor"/></svg>
+      {% endif %}
     </div>
     <div class="header-info">
       <div class="header-name">{{ client.bot_name or client.company_name or 'Support' }}</div>
@@ -369,7 +373,9 @@ body{
     <!-- Welcome message -->
     <div class="msg-row" id="welcomeRow">
       <div class="msg-avatar" id="botAv1">
-        {% if client.bot_avatar_url %}<img src="{{ client.bot_avatar_url }}" alt="" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">{% elif client.logo_url %}<img src="{{ client.logo_url }}" alt="" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">{% else %}{{ client.bot_avatar or '🤖' }}{% endif %}
+        {% if client.bot_avatar_url %}<img src="{{ client.bot_avatar_url }}" alt="" style="width:100%;height:100%;object-fit:cover;">
+        {% elif client.logo_url %}<img src="{{ client.logo_url }}" alt="" style="width:100%;height:100%;object-fit:cover;">
+        {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:20px;height:20px;opacity:0.75;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="9" cy="16" r="1" fill="currentColor"/><circle cx="15" cy="16" r="1" fill="currentColor"/></svg>{% endif %}
       </div>
       <div class="msg-col">
         <div class="sender-label">{{ client.bot_name or 'Support' }}</div>
@@ -381,7 +387,9 @@ body{
     <!-- Typing indicator (fixed at bottom) -->
     <div class="typing-row" id="typingRow" style="display:none;">
       <div class="msg-avatar" id="botAv2">
-        {% if client.bot_avatar_url %}<img src="{{ client.bot_avatar_url }}" alt="" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">{% elif client.logo_url %}<img src="{{ client.logo_url }}" alt="" onerror="this.parentElement.innerHTML='{{ client.bot_avatar or '🤖' }}'">{% else %}{{ client.bot_avatar or '🤖' }}{% endif %}
+        {% if client.bot_avatar_url %}<img src="{{ client.bot_avatar_url }}" alt="" style="width:100%;height:100%;object-fit:cover;">
+        {% elif client.logo_url %}<img src="{{ client.logo_url }}" alt="" style="width:100%;height:100%;object-fit:cover;">
+        {% else %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:20px;height:20px;opacity:0.75;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="9" cy="16" r="1" fill="currentColor"/><circle cx="15" cy="16" r="1" fill="currentColor"/></svg>{% endif %}
       </div>
       <div class="typing-bubble" id="typingBubble">
         <div class="td"></div><div class="td"></div><div class="td"></div>
@@ -466,9 +474,11 @@ body{
 <script>
 const CID        = {{ client.client_id | tojson }};
 const BNAME      = {{ (client.bot_name or client.company_name or 'Support') | tojson }};
-const BAVATAR    = {{ (client.bot_avatar or '🤖') | tojson }};
+const BAVATAR    = {{ (client.bot_avatar or '') | tojson }};  // empty = use BOT_SVG fallback
 const AVATAR_URL = {{ (client.bot_avatar_url or '') | tojson }};
 const LOGO       = {{ (client.logo_url or '') | tojson }};
+// Default bot icon — shown when no avatar image or logo is set
+const BOT_SVG    = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:20px;height:20px;opacity:0.75;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="9" cy="16" r="1" fill="currentColor"/><circle cx="15" cy="16" r="1" fill="currentColor"/></svg>';
 const LEAD_TRIGGERS = {{ (client.lead_triggers or []) | tojson }};
 
 let history_ = [];
@@ -529,10 +539,10 @@ window.sendQR = function(btn, text) {
 
 // ── Message rendering ──────────────────────────────────────────────────
 function botAvatarHTML() {
-  // Priority: bot avatar image > company logo > emoji
-  if (AVATAR_URL) return `<img src="${AVATAR_URL}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='${esc(BAVATAR)}'">`;
-  if (LOGO)       return `<img src="${LOGO}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='${esc(BAVATAR)}'">`;
-  return esc(BAVATAR);
+  // Priority: bot avatar image → company logo → default SVG bot icon
+  if (AVATAR_URL) return `<img src="${AVATAR_URL}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=BOT_SVG">`;
+  if (LOGO)       return `<img src="${LOGO}"       alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=BOT_SVG">`;
+  return BOT_SVG;
 }
 
 function addUserMsg(text) {
@@ -825,7 +835,7 @@ function filterArts() {
   const q = document.getElementById('hcSearch').value.toLowerCase();
   renderArts(allArts.filter(a =>
     (a.title||'').toLowerCase().includes(q) || (a.content||'').toLowerCase().includes(q)
-  ));
+  ));`
 }
 
 function showArt(id) {

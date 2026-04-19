@@ -279,11 +279,11 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
     <div class="client-chip">{{ client.company_name if client else client_id }} &nbsp;·&nbsp; {{ client_id }}</div>
   </div>
 
-  <!-- 1. BRANDING -->
+  <!-- 1. BRANDING & WIDGET COLOR -->
   <div class="card">
     <div class="card-header open" onclick="tc(this)">
       <div class="card-icon" style="background:var(--gold-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg></div>
-      <div class="card-text"><h2>Branding</h2><p>Company name, logo and colour</p></div>
+      <div class="card-text"><h2>Branding</h2><p>Company name, logo, and chat widget colour</p></div>
       <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
     </div>
     <div class="card-body open">
@@ -292,7 +292,7 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
           <label>Company Name</label>
           <input type="text" id="company_name" placeholder="Acme Corp"
             value="{{ branding.get('branding', {}).get('company_name', client.company_name if client else '') }}"
-            oninput="up()">
+            oninput="up(); console.log('[Customize] company_name changed:', this.value)">
         </div>
         <div class="field">
           <label>Tagline</label>
@@ -301,16 +301,20 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
             oninput="up()">
         </div>
       </div>
+
       <div class="field">
-        <label>Brand Colour</label>
+        <label>Widget Colour</label>
         <div class="color-row">
-          <input type="color" id="cpick" value="{{ branding.get('branding', {}).get('primary_color', '#B8924A') }}" oninput="syncC(this.value)">
+          <input type="color" id="cpick"
+            value="{{ branding.get('branding', {}).get('primary_color', '#B8924A') }}"
+            oninput="syncC(this.value)">
           <input type="text" id="primary_color" placeholder="#B8924A"
             value="{{ branding.get('branding', {}).get('primary_color', '#B8924A') }}"
             oninput="syncCT(this.value)">
         </div>
-        <p class="hint">Applied to the chat header, send button and quick-reply chips.</p>
+        <p class="hint">Applies to the chat header, send button, quick-reply chips, and user message bubbles — all in one click.</p>
       </div>
+
       <div class="field">
         <label>Company Logo</label>
         <div class="upload-zone" id="logoZone" onclick="document.getElementById('logoFile').click()">
@@ -328,7 +332,7 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
   <div class="card">
     <div class="card-header open" onclick="tc(this)">
       <div class="card-icon" style="background:#eff6ff;"><svg viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
-      <div class="card-text"><h2>Bot Appearance</h2><p>Name, avatar and messages</p></div>
+      <div class="card-text"><h2>Bot Appearance</h2><p>Name, avatar image, and messages</p></div>
       <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
     </div>
     <div class="card-body open">
@@ -336,50 +340,37 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
         <div class="field">
           <label>Bot Name</label>
           <input type="text" id="bot_name" placeholder="Assistant"
-            value="{{ branding.get('bot_settings', {}).get('bot_name', '') }}" oninput="up()">
+            value="{{ branding.get('bot_settings', {}).get('bot_name', '') }}"
+            oninput="up(); console.log('[Customize] bot_name:', this.value)">
         </div>
         <div class="field">
-          <label>Bot Avatar</label>
-          <!-- Toggle tabs -->
-          <div style="display:flex;background:var(--panel);border-radius:8px;padding:3px;gap:2px;margin-bottom:8px;width:fit-content;">
-            <button type="button" id="avTabEmoji" onclick="setAvTab('emoji')"
-              style="padding:5px 13px;border-radius:6px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;background:var(--white);color:var(--dark);box-shadow:0 1px 3px rgba(0,0,0,0.08);transition:all 0.15s;">
-              Emoji
-            </button>
-            <button type="button" id="avTabImage" onclick="setAvTab('image')"
-              style="padding:5px 13px;border-radius:6px;font-size:12px;font-weight:600;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;background:transparent;color:var(--sub);transition:all 0.15s;">
-              Image
-            </button>
-          </div>
-          <!-- Emoji input -->
-          <div id="avEmojiPane">
-            <input type="text" id="bot_avatar" placeholder="🤖"
-              value="{{ branding.get('bot_settings', {}).get('bot_avatar', '🤖') }}"
-              oninput="up()" style="font-size:17px;">
-            <p class="hint">Paste any emoji — shown as the bot's avatar.</p>
-          </div>
-          <!-- Image upload -->
-          <div id="avImagePane" style="display:none;">
-            <div class="upload-zone" id="avZone" onclick="document.getElementById('avFile').click()"
-              style="display:flex;align-items:center;gap:12px;text-align:left;padding:12px 14px;">
-              <input type="file" id="avFile" accept="image/*" onchange="handleAvatar(event)" style="display:none;">
-              <div id="avImgPreview" style="width:44px;height:44px;border-radius:11px;overflow:hidden;background:var(--gold-lt);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                <svg id="avUploadIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--sub)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                <img id="avImgEl" style="display:none;width:100%;height:100%;object-fit:cover;" alt="">
-              </div>
-              <div>
-                <div style="font-size:13px;font-weight:600;color:var(--dark);" id="avFileName">Click to upload image</div>
-                <div style="font-size:11px;color:var(--sub);margin-top:2px;">PNG, JPG, SVG · max 1 MB · square recommended</div>
-              </div>
+          <label>Bot Avatar Image</label>
+          <div class="upload-zone" id="avZone"
+            onclick="document.getElementById('avFile').click()"
+            style="display:flex;align-items:center;gap:12px;text-align:left;padding:12px 14px;">
+            <input type="file" id="avFile" accept="image/*" onchange="handleAvatar(event)" style="display:none;">
+            <div id="avImgPreview" style="width:44px;height:44px;border-radius:11px;overflow:hidden;
+              background:var(--gold-lt);border:1px solid var(--border);
+              display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg id="avUploadIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--sub)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              <img id="avImgEl" style="display:none;width:100%;height:100%;object-fit:cover;" alt="">
             </div>
-            <p class="hint" style="margin-top:6px;">Image overrides the emoji. Remove to revert to emoji.</p>
-            <button type="button" onclick="clearAvatar()"
-              style="margin-top:6px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--danger);background:var(--danger-lt);border:none;border-radius:7px;cursor:pointer;font-family:'DM Sans',sans-serif;display:none;" id="avClearBtn">
-              Remove image
-            </button>
+            <div>
+              <div style="font-size:13px;font-weight:600;color:var(--dark);" id="avFileName">Click to upload image</div>
+              <div style="font-size:11px;color:var(--sub);margin-top:2px;">PNG, JPG, SVG · max 1 MB · square crop recommended</div>
+            </div>
           </div>
+          <p class="hint" style="margin-top:6px;">Shown in the chat header and next to every bot message.</p>
+          <button type="button" onclick="clearAvatar()"
+            style="margin-top:6px;padding:5px 12px;font-size:12px;font-weight:600;
+              color:var(--danger);background:var(--danger-lt);border:none;
+              border-radius:7px;cursor:pointer;font-family:'DM Sans',sans-serif;display:none;"
+            id="avClearBtn">
+            Remove image
+          </button>
         </div>
       </div>
+
       <div class="field">
         <div class="label-row">
           <label>Welcome Message</label>
@@ -387,13 +378,16 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
         </div>
         <textarea id="welcome_message" maxlength="200"
           placeholder="Hi! I'm here to help. What can I do for you today?"
-          oninput="up(); wcc(this)" rows="3">{{ branding.get('bot_settings', {}).get('welcome_message', '') }}</textarea>
+          oninput="up(); wcc(this); console.log('[Customize] welcome_message changed')"
+          rows="3">{{ branding.get('bot_settings', {}).get('welcome_message', '') }}</textarea>
+        <p class="hint">Appears as the bot's first message. Updates the live preview instantly.</p>
       </div>
+
       <div class="field">
         <label>Fallback Message</label>
         <textarea id="fallback_message" rows="2"
           placeholder="I'm not sure about that. Would you like to speak with the team?">{{ branding.get('bot_settings', {}).get('fallback_message', '') }}</textarea>
-        <p class="hint">Shown when the bot has no matching answer.</p>
+        <p class="hint">Shown when the AI has no matching answer in the knowledge base.</p>
       </div>
     </div>
   </div>
@@ -402,16 +396,21 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
   <div class="card">
     <div class="card-header open" onclick="tc(this)">
       <div class="card-icon" style="background:var(--success-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-      <div class="card-text"><h2>Quick Replies</h2><p>Suggested buttons in the chat</p></div>
+      <div class="card-text"><h2>Quick Replies</h2><p>Suggested buttons shown when the chat opens</p></div>
       <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
     </div>
     <div class="card-body open">
       <div class="qr-list" id="qrList"></div>
-      <button class="btn-add" type="button" onclick="addQR()">
+      <button class="btn-add" type="button" onclick="addQR()"
+        style="width:100%;justify-content:center;margin-top:4px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add Quick Reply
       </button>
-      <p class="hint" style="margin-top:7px;">Max 5 · shown as tappable chips when the chat opens.</p>
+      <p class="hint" style="margin-top:8px;">
+        Max 5 chips · tappable when the chat opens.
+        Chips matching lead keywords (e.g. "Contact us", "Book a demo") will
+        instantly open the lead-capture form — no extra setup needed.
+      </p>
     </div>
   </div>
 
@@ -455,7 +454,7 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
         </label>
         <input type="text" id="wl_email_from" placeholder="Acme Support"
           value="{{ client.get('branded_email_from', '') if client else '' }}">
-        <p class="hint">Lead emails arrive as <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 5px;border-radius:3px;">Acme Support &lt;support@lumvi.net&gt;</code> — your name, our infrastructure.</p>
+        <p class="hint">Lead emails arrive as <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 5px;border-radius:3px;">Acme Support &lt;<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="b2c1c7c2c2ddc0c6f2dec7dfc4db9cdcd7c6">[email&#160;protected]</a>&gt;</code> — your name, our infrastructure.</p>
       </div>
 
       <hr class="div">
@@ -641,20 +640,25 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
   <div class="card">
     <div class="card-header open" onclick="tc(this)">
       <div class="card-icon" style="background:var(--cream2);"><svg viewBox="0 0 24 24" fill="none" stroke="var(--mid)" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.36 2 2 0 0 1 3.57 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.54a16 16 0 0 0 5.55 5.55l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 16.92z"/></svg></div>
-      <div class="card-text"><h2>Contact Info</h2><p>Shown when visitors ask for help</p></div>
+      <div class="card-text"><h2>Contact Info</h2><p>Shown in chat when visitors ask "how to contact you"</p></div>
       <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
     </div>
     <div class="card-body open">
+      <div style="padding:10px 13px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);border-radius:9px;margin-bottom:14px;font-size:12.5px;color:var(--gold-dk);line-height:1.6;">
+        <strong>💡 How this works:</strong> When a visitor asks "what's your email?", "how can I contact you?", or similar — the bot reads these fields and replies with the correct details. All fields are optional.
+      </div>
       <div class="field-row">
         <div class="field">
           <label>Email</label>
           <input type="email" id="contact_email" placeholder="hello@company.com"
-            value="{{ branding.get('contact', {}).get('email', '') }}">
+            value="{{ branding.get('contact', {}).get('email', '') }}"
+            oninput="console.log('[Customize] contact_email:', this.value)">
         </div>
         <div class="field">
           <label>Phone</label>
           <input type="text" id="contact_phone" placeholder="+1 555 000 0000"
-            value="{{ branding.get('contact', {}).get('phone', '') }}">
+            value="{{ branding.get('contact', {}).get('phone', '') }}"
+            oninput="console.log('[Customize] contact_phone:', this.value)">
         </div>
       </div>
       <div class="field-row">
@@ -668,6 +672,11 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
           <input type="url" id="contact_website" placeholder="https://company.com"
             value="{{ branding.get('contact', {}).get('website', '') }}">
         </div>
+      </div>
+      <div class="field">
+        <label>Address <span style="font-weight:400;color:var(--sub);text-transform:none;">(optional)</span></label>
+        <input type="text" id="contact_address" placeholder="123 Main St, City, Country"
+          value="{{ branding.get('contact', {}).get('address', '') }}">
       </div>
     </div>
   </div>
@@ -783,108 +792,45 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
 
 <div class="toast" id="toast"></div>
 
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
 const CID  = {{ client_id | tojson }};
 const HWH  = {{ 'true' if has_webhooks else 'false' }};
 const HWL  = {{ 'true' if has_white_label else 'false' }};
 const SQR  = {{ (branding.get('bot_settings', {}).get('quick_replies') or []) | tojson }};
-let   _logo = null, _avatarImg = null, _sim = false;
+const PLAN_TYPE = {{ plan_type | tojson }};
 
-// ── Avatar tab switcher ────────────────────────────────────────────────
-// Pre-populate from saved bot_avatar_url if it's a data URL / https URL
-(function() {
-  const savedAv = {{ (branding.get('bot_settings', {}).get('bot_avatar_url', '') or '') | tojson }};
-  if (savedAv && savedAv.startsWith('data:')) {
-    _avatarImg = savedAv;
-    _showAvatarImage(savedAv);
-    setAvTab('image');
-  } else if (savedAv && (savedAv.startsWith('http://') || savedAv.startsWith('https://'))) {
-    _avatarImg = savedAv;
-    _showAvatarImage(savedAv);
-    setAvTab('image');
-  }
-})();
+let _logo = null, _avatarImg = null, _sim = false;
 
-function setAvTab(tab) {
-  const emojiPane = document.getElementById('avEmojiPane');
-  const imagePane = document.getElementById('avImagePane');
-  const btnEmoji  = document.getElementById('avTabEmoji');
-  const btnImage  = document.getElementById('avTabImage');
-  const isEmoji   = tab === 'emoji';
-  emojiPane.style.display = isEmoji ? '' : 'none';
-  imagePane.style.display = isEmoji ? 'none' : '';
-  btnEmoji.style.background = isEmoji ? 'var(--white)' : 'transparent';
-  btnEmoji.style.color      = isEmoji ? 'var(--dark)'  : 'var(--sub)';
-  btnEmoji.style.boxShadow  = isEmoji ? '0 1px 3px rgba(0,0,0,0.08)' : 'none';
-  btnImage.style.background = isEmoji ? 'transparent' : 'var(--white)';
-  btnImage.style.color      = isEmoji ? 'var(--sub)'  : 'var(--dark)';
-  btnImage.style.boxShadow  = isEmoji ? 'none' : '0 1px 3px rgba(0,0,0,0.08)';
-  if (isEmoji) { _avatarImg = null; }
-  up();
-}
+console.log('[Customize] init | client:', CID, '| plan:', PLAN_TYPE, '| HWL:', HWL, '| HWH:', HWH);
 
-function handleAvatar(e) {
-  const f = e.target.files[0];
-  if (!f) return;
-  if (f.size > 1048576) { toast('Avatar image must be under 1 MB', 'error'); return; }
-  const reader = new FileReader();
-  reader.onload = ev => {
-    _avatarImg = ev.target.result;
-    _showAvatarImage(_avatarImg);
-    document.getElementById('avZone').classList.add('has-file');
-    up();
-  };
-  reader.readAsDataURL(f);
-}
-
-function _showAvatarImage(src) {
-  const img     = document.getElementById('avImgEl');
-  const icon    = document.getElementById('avUploadIcon');
-  const fname   = document.getElementById('avFileName');
-  const clearBtn= document.getElementById('avClearBtn');
-  img.src            = src;
-  img.style.display  = 'block';
-  icon.style.display = 'none';
-  fname.textContent  = 'Image loaded — click to change';
-  if (clearBtn) clearBtn.style.display = 'inline-block';
-}
-
-function clearAvatar() {
-  _avatarImg = null;
-  const img     = document.getElementById('avImgEl');
-  const icon    = document.getElementById('avUploadIcon');
-  const fname   = document.getElementById('avFileName');
-  const clearBtn= document.getElementById('avClearBtn');
-  const zone    = document.getElementById('avZone');
-  const fileInp = document.getElementById('avFile');
-  img.src = ''; img.style.display = 'none';
-  icon.style.display = 'block';
-  fname.textContent  = 'Click to upload image';
-  if (clearBtn) clearBtn.style.display = 'none';
-  zone.classList.remove('has-file');
-  if (fileInp) fileInp.value = '';
-  up();
-}
-
-// Card toggle
+// ── Card toggle ───────────────────────────────────────────────────────
 function tc(h) {
   h.classList.toggle('open');
   h.nextElementSibling.classList.toggle('open');
 }
 
-// Char count
-function wcc(el) { document.getElementById('wc').textContent = el.value.length + ' / 200'; }
+// ── Char count ────────────────────────────────────────────────────────
+function wcc(el) {
+  const n = el.value.length;
+  document.getElementById('wc').textContent = n + ' / 200';
+}
 const wmEl = document.getElementById('welcome_message');
 if (wmEl) wcc(wmEl);
 
-// Colour sync
-function syncC(v) { document.getElementById('primary_color').value = v; up(); }
-function syncCT(v) { if (/^#[0-9A-Fa-f]{6}$/.test(v)) { document.getElementById('cpick').value = v; up(); } }
+// ── Colour sync ───────────────────────────────────────────────────────
+function syncC(v)  { document.getElementById('primary_color').value = v; up(); }
+function syncCT(v) {
+  if (/^#[0-9A-Fa-f]{6}$/.test(v)) {
+    document.getElementById('cpick').value = v;
+    up();
+  }
+}
 
-// Logo
+// ── Company logo upload ───────────────────────────────────────────────
 function handleLogo(e) {
   const f = e.target.files[0];
   if (!f) return;
+  console.log('[Customize] logo selected:', f.name, f.size);
   if (f.size > 2097152) { toast('Logo must be under 2 MB', 'error'); return; }
   const r = new FileReader();
   r.onload = ev => {
@@ -894,12 +840,62 @@ function handleLogo(e) {
     document.getElementById('logoIcon').style.display = 'none';
     document.getElementById('logoFname').textContent = f.name;
     document.getElementById('logoZone').classList.add('has-file');
+    console.log('[Customize] logo loaded, size:', _logo.length);
     up();
   };
+  r.onerror = () => { console.error('[Customize] logo FileReader error'); toast('Failed to read logo file', 'error'); };
   r.readAsDataURL(f);
 }
 
-// Quick replies
+// ── Bot avatar image upload (image only — no emoji tab) ───────────────
+function handleAvatar(e) {
+  const f = e.target.files[0];
+  if (!f) return;
+  console.log('[Customize] avatar selected:', f.name, f.size);
+  if (f.size > 1048576) { toast('Avatar must be under 1 MB', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = ev => {
+    _avatarImg = ev.target.result;
+    _showAvatarImage(_avatarImg);
+    document.getElementById('avZone')?.classList.add('has-file');
+    console.log('[Customize] avatar loaded');
+    up();
+  };
+  reader.onerror = () => { console.error('[Customize] avatar FileReader error'); toast('Failed to read avatar file', 'error'); };
+  reader.readAsDataURL(f);
+}
+
+function _showAvatarImage(src) {
+  const img      = document.getElementById('avImgEl');
+  const icon     = document.getElementById('avUploadIcon');
+  const fname    = document.getElementById('avFileName');
+  const clearBtn = document.getElementById('avClearBtn');
+  if (!img) { console.warn('[Customize] avImgEl not found'); return; }
+  img.src = src; img.style.display = 'block';
+  if (icon)     icon.style.display = 'none';
+  if (fname)    fname.textContent  = 'Image loaded — click to change';
+  if (clearBtn) clearBtn.style.display = 'inline-block';
+}
+
+function clearAvatar() {
+  console.log('[Customize] avatar cleared');
+  _avatarImg = null;
+  const img      = document.getElementById('avImgEl');
+  const icon     = document.getElementById('avUploadIcon');
+  const fname    = document.getElementById('avFileName');
+  const clearBtn = document.getElementById('avClearBtn');
+  const zone     = document.getElementById('avZone');
+  const fileInp  = document.getElementById('avFile');
+  if (img)    { img.src = ''; img.style.display = 'none'; }
+  if (icon)     icon.style.display = 'block';
+  if (fname)    fname.textContent = 'Click to upload image';
+  if (clearBtn) clearBtn.style.display = 'none';
+  if (zone)     zone.classList.remove('has-file');
+  if (fileInp)  fileInp.value = '';
+  up();
+}
+
+// ── Quick replies ─────────────────────────────────────────────────────
 function addQR(v = '') {
   const l = document.getElementById('qrList');
   if (l.children.length >= 5) { toast('Maximum 5 quick replies', 'error'); return; }
@@ -909,42 +905,45 @@ function addQR(v = '') {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>`;
   l.appendChild(d); d.querySelector('input').focus(); up();
+  console.log('[Customize] quick reply added. total:', l.children.length);
 }
 SQR.forEach(r => addQR(r));
 function getQR() { return [...document.querySelectorAll('.qri')].map(i => i.value.trim()).filter(Boolean); }
 
-// Live preview
+// ── Live preview ──────────────────────────────────────────────────────
 function up() {
   const color = document.getElementById('primary_color').value || '#B8924A';
-  const name  = document.getElementById('bot_name').value     || 'Assistant';
-  const emo   = document.getElementById('bot_avatar').value   || '🤖';
-  const wm    = document.getElementById('welcome_message').value || 'Hi! How can I help?';
+  const name  = document.getElementById('bot_name').value      || 'Assistant';
+  // Welcome message: read directly from textarea every time
+  const wmEl2 = document.getElementById('welcome_message');
+  const wm    = (wmEl2 ? wmEl2.value : '') || 'Hi! How can I help?';
   const noFt  = HWL && document.getElementById('remove_branding')?.checked;
   const qrs   = getQR();
 
-  document.getElementById('pH').style.background = color;
+  document.getElementById('pH').style.background    = color;
   document.getElementById('pSend').style.background = color;
-  document.getElementById('pName').textContent = name;
-  document.getElementById('pWelcome').textContent = wm;
-  document.getElementById('pUsr').style.background = color;
+  document.getElementById('pName').textContent       = name;
+  // Bug 7 fix: always sync welcome message to preview
+  document.getElementById('pWelcome').textContent    = wm;
+  document.getElementById('pUsr').style.background   = color;
 
+  // Avatar priority: uploaded image → company logo → default bot icon
   const av = document.getElementById('pAv');
-  // Priority: bot avatar image > company logo > emoji
   if (_avatarImg) {
     av.innerHTML = `<img src="${_avatarImg}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
   } else if (_logo) {
     av.innerHTML = `<img src="${_logo}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
   } else {
-    av.innerHTML = esc(emo);
+    // Default: show a simple robot icon instead of emoji
+    av.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:20px;height:20px;opacity:0.7;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="9" cy="16" r="1" fill="currentColor"/><circle cx="15" cy="16" r="1" fill="currentColor"/></svg>`;
   }
 
+  // Quick reply chips
   document.getElementById('pChips').innerHTML = qrs.map(r =>
     `<span class="qr-chip" style="background:${color}18;color:${color};border-color:${color}44;">${esc(r)}</span>`
   ).join('');
 
   document.getElementById('pFoot').style.display = noFt ? 'none' : '';
-
-  // Embed code — delegated to updateEmbedPreview so domain changes also trigger it
   updateEmbedPreview();
 }
 
@@ -954,30 +953,158 @@ function simConvo() {
   document.getElementById('pRep').style.display  = _sim ? 'block' : 'none';
 }
 
-// Preview tabs
+// ── Preview tabs ──────────────────────────────────────────────────────
 function ptab(t, btn) {
   document.querySelectorAll('.prev-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.getElementById('pChat').style.display  = t === 'chat'  ? '' : 'none';
-  document.getElementById('pEmbed').style.display = t === 'embed' ? '' : 'none';
+  document.getElementById('pChat').style.display   = t === 'chat'  ? '' : 'none';
+  document.getElementById('pEmbed').style.display  = t === 'embed' ? '' : 'none';
 }
 
-// ═══════════════════════════════════════════════════
-// WEBHOOK MANAGER
-// ═══════════════════════════════════════════════════
-const ALL_EVENTS = ['lead_captured','conversation_ended','faq_matched','message_sent'];
-let _webhooks = [];  // {webhook_id, name, url, events[], enabled, signing_secret}
+// ── Embed code preview ────────────────────────────────────────────────
+function updateEmbedPreview() {
+  const domain  = (document.getElementById('wl_domain')?.value || '').trim();
+  const baseUrl = domain ? `https://${domain}` : location.origin;
+  const block   = document.getElementById('embedBlock');
+  if (!block) return;
+  block.innerHTML =
+    `<span style="color:#6B7280;">/* Paste before &lt;/body&gt; */</span>\n\n` +
+    `<span style="color:#60A5FA;">&lt;script&gt;</span>\n` +
+    `(function(){\n  var s=document.createElement('script');\n  s.src='${baseUrl}/static/widget.js';\n  s.setAttribute('data-client-id','${CID}');\n  document.body.appendChild(s);\n})();\n` +
+    `<span style="color:#60A5FA;">&lt;/script&gt;</span>`;
+}
 
-// Sample payloads keyed by event (mirrors backend)
+function copyEmbed() {
+  const domain  = (document.getElementById('wl_domain')?.value || '').trim();
+  const baseUrl = domain ? `https://${domain}` : location.origin;
+  const c = `<script>\n(function(){var s=document.createElement('script');s.src='${baseUrl}/static/widget.js';s.setAttribute('data-client-id','${CID}');document.body.appendChild(s);})();\n<\/script>`;
+  navigator.clipboard.writeText(c).then(() => {
+    toast('Embed code copied', 'success');
+    console.log('[Customize] embed code copied, baseUrl:', baseUrl);
+  });
+}
+
+function toggleTopbarPreview() { updateEmbedPreview(); }
+
+// ── Save — Bug 8: proper confirmation toast + logs ────────────────────
+async function save() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Saving…';
+  console.log('[Customize] save() started for client:', CID);
+
+  let webhookOk = true, wlOk = true;
+
+  if (HWH) {
+    console.log('[Customize] saving webhooks…');
+    webhookOk = await saveWebhooks();
+    console.log('[Customize] webhooks result:', webhookOk);
+  }
+
+  console.log('[Customize] saving white-label settings…');
+  wlOk = await saveWhiteLabel();
+  console.log('[Customize] white-label result:', wlOk);
+
+  const payload = {
+    client_id: CID,
+    branding: {
+      company_name:  document.getElementById('company_name').value.trim(),
+      tagline:       document.getElementById('tagline').value.trim(),
+      primary_color: document.getElementById('primary_color').value.trim() || '#B8924A',
+      ...((_logo) ? {logo: _logo} : {}),
+    },
+    bot_settings: {
+      bot_name:         document.getElementById('bot_name').value.trim(),
+      bot_avatar:       '',          // emoji removed — image only
+      bot_avatar_url:   _avatarImg || '',
+      welcome_message:  document.getElementById('welcome_message').value.trim(),
+      fallback_message: document.getElementById('fallback_message').value.trim(),
+      quick_replies:    getQR(),
+    },
+    contact: {
+      email:   document.getElementById('contact_email').value.trim(),
+      phone:   document.getElementById('contact_phone').value.trim(),
+      hours:   document.getElementById('business_hours').value.trim(),
+      website: document.getElementById('contact_website').value.trim(),
+      address: document.getElementById('contact_address')?.value.trim() || '',
+    },
+    integrations: {},
+    remove_branding: HWL && (document.getElementById('remove_branding')?.checked || false),
+  };
+
+  console.log('[Customize] main payload:', {
+    company: payload.branding.company_name,
+    color: payload.branding.primary_color,
+    bot_name: payload.bot_settings.bot_name,
+    welcome: payload.bot_settings.welcome_message,
+    qr_count: payload.bot_settings.quick_replies.length,
+    has_avatar: !!payload.bot_settings.bot_avatar_url,
+    has_logo: !!payload.branding.logo,
+    contact_email: payload.contact.email,
+  });
+
+  try {
+    const r = await fetch('/api/admin/customize', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    console.log('[Customize] /api/admin/customize response:', d);
+
+    if (d.success) {
+      // Bug 8: clear success confirmation with timestamp
+      const ts = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      toast(`✓ Changes saved at ${ts}`, 'success');
+      document.getElementById('saveInfo').innerHTML =
+        `<span style="color:var(--success);font-weight:600;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+            style="width:12px;height:12px;display:inline-block;vertical-align:middle;margin-right:3px;">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Saved at ${ts}
+        </span>`;
+    } else {
+      console.error('[Customize] save failed:', d.error);
+      toast('Save failed: ' + (d.error || 'Unknown error'), 'error');
+      document.getElementById('saveInfo').textContent = 'Save failed — check console for details';
+    }
+  } catch(err) {
+    console.error('[Customize] network error during save:', err);
+    toast('Network error — please check your connection and retry', 'error');
+    document.getElementById('saveInfo').textContent = 'Network error during save';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Save Changes';
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  const ic = type === 'success'
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  t.innerHTML = ic + msg;
+  t.className = `toast ${type} show`;
+  setTimeout(() => { t.className = 'toast'; }, type === 'success' ? 3500 : 5000);
+}
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ═══════════════════════════════════════════════════════════
+// WEBHOOK MANAGER
+// ═══════════════════════════════════════════════════════════
+const ALL_EVENTS = ['lead_captured','conversation_ended','faq_matched','message_sent'];
+let _webhooks = [];
 const SAMPLE_PAYLOADS = {
-  test:                { event:'test', client_id:CID, timestamp:new Date().toISOString(), data:{ message:'Test delivery from Lumvi', sent_by:'you' } },
-  lead_captured:       { event:'lead_captured', client_id:CID, timestamp:new Date().toISOString(), data:{ name:'Jane Smith', email:'jane@example.com', phone:'+1 555 000 0000', company:'Acme Corp' } },
-  conversation_ended:  { event:'conversation_ended', client_id:CID, timestamp:new Date().toISOString(), data:{ session_id:'sess_abc123', message_count:6, resolved:true, duration_secs:142 } },
-  faq_matched:         { event:'faq_matched', client_id:CID, timestamp:new Date().toISOString(), data:{ question:'What are your hours?', confidence:0.94, method:'ai_smart' } },
-  message_sent:        { event:'message_sent', client_id:CID, timestamp:new Date().toISOString(), data:{ role:'user', content:'Do you offer refunds?' } },
+  test:               { event:'test', client_id:CID, timestamp:new Date().toISOString(), data:{ message:'Test delivery from Lumvi' } },
+  lead_captured:      { event:'lead_captured', client_id:CID, timestamp:new Date().toISOString(), data:{ name:'Jane Smith', email:'jane@example.com', phone:'+1 555 000 0000' } },
+  conversation_ended: { event:'conversation_ended', client_id:CID, timestamp:new Date().toISOString(), data:{ session_id:'sess_abc123', message_count:6, resolved:true } },
+  faq_matched:        { event:'faq_matched', client_id:CID, timestamp:new Date().toISOString(), data:{ question:'What are your hours?', confidence:0.94 } },
+  message_sent:       { event:'message_sent', client_id:CID, timestamp:new Date().toISOString(), data:{ role:'user', content:'Do you offer refunds?' } },
 };
 
-// Load webhooks from backend on init
 async function initWebhooks() {
   if (!HWH) return;
   try {
@@ -994,58 +1121,38 @@ function renderWebhooks() {
   if (!el) return;
   if (!_webhooks.length) {
     el.innerHTML = '<div style="text-align:center;padding:20px 0;color:var(--sub);font-size:13px;">No webhooks yet. Add one below.</div>';
-    updateTestTargetSelect();
-    return;
+    updateTestTargetSelect(); return;
   }
   el.innerHTML = _webhooks.map((wh, i) => whItemHTML(wh, i)).join('');
   updateTestTargetSelect();
 }
 
 function whItemHTML(wh, i) {
-  const maskedSecret = wh.signing_secret
-    ? wh.signing_secret.slice(0,8) + '••••••••••••••••••••••••'
-    : '— not generated yet —';
-  const evtCheckboxes = ALL_EVENTS.map(e =>
-    `<label class="wh-evt">
-      <input type="checkbox" value="${e}" ${(wh.events||[]).includes(e) ? 'checked' : ''} onchange="whEvtChange(${i},this)">
-      ${e}
-    </label>`
+  const maskedSecret = wh.signing_secret ? wh.signing_secret.slice(0,8) + '••••••••••••••••••••••••' : '— not generated yet —';
+  const evtCBs = ALL_EVENTS.map(e =>
+    `<label class="wh-evt"><input type="checkbox" value="${e}" ${(wh.events||[]).includes(e)?'checked':''} onchange="whEvtChange(${i},this)">${e}</label>`
   ).join('');
-
   return `<div class="wh-item" id="whItem-${i}">
     <div class="wh-item-head">
       <input type="text" value="${esc(wh.name||'Webhook '+(i+1))}" placeholder="Webhook name"
         style="flex:1;font-weight:600;font-size:13.5px;border:none;background:transparent;outline:none;color:var(--dark);font-family:'DM Sans',sans-serif;"
         oninput="_webhooks[${i}].name=this.value; updateTestTargetSelect();">
-      <label class="wh-enable-toggle">
-        <input type="checkbox" ${wh.enabled ? 'checked' : ''} onchange="_webhooks[${i}].enabled=this.checked;">
-        Enabled
-      </label>
+      <label class="wh-enable-toggle"><input type="checkbox" ${wh.enabled?'checked':''} onchange="_webhooks[${i}].enabled=this.checked;">Enabled</label>
     </div>
     <div class="wh-item-fields">
-      <div class="field" style="margin:0;">
-        <label>Endpoint URL</label>
-        <input type="url" value="${esc(wh.url||'')}" placeholder="https://hooks.zapier.com/…"
-          oninput="_webhooks[${i}].url=this.value;"
-          style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;font-family:'DM Sans',sans-serif;color:var(--dark);background:var(--cream);outline:none;">
-      </div>
-      <div class="field" style="margin:0;">
-        <label>Events to receive</label>
-        <div class="wh-events">${evtCheckboxes}</div>
-      </div>
-      <div class="field" style="margin:0;">
-        <label>Signing Secret <span style="font-weight:400;color:var(--sub);text-transform:none;">(HMAC-SHA256)</span></label>
+      <div class="field" style="margin:0;"><label>Endpoint URL</label>
+        <input type="url" value="${esc(wh.url||'')}" placeholder="https://hooks.zapier.com/…" oninput="_webhooks[${i}].url=this.value;"
+          style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;font-family:'DM Sans',sans-serif;color:var(--dark);background:var(--cream);outline:none;"></div>
+      <div class="field" style="margin:0;"><label>Events</label><div class="wh-events">${evtCBs}</div></div>
+      <div class="field" style="margin:0;"><label>Signing Secret</label>
         <div class="wh-secret-row">
           <div class="wh-secret-val" id="secretVal-${i}">${esc(maskedSecret)}</div>
           <button class="btn-regen" type="button" onclick="regenSecret(${i},'${esc(wh.webhook_id||'')}')">Regenerate</button>
-        </div>
-        <p class="hint">Add <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 5px;border-radius:3px;">X-Lumvi-Signature</code> header verification in your endpoint.</p>
-      </div>
+        </div></div>
     </div>
     <div class="wh-item-foot">
       <button class="btn-rm-wh" type="button" onclick="removeWebhook(${i})">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-        Remove
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>Remove
       </button>
     </div>
   </div>`;
@@ -1060,26 +1167,19 @@ function whEvtChange(idx, el) {
 
 function addWebhook() {
   if (_webhooks.length >= 10) { toast('Maximum 10 webhooks', 'error'); return; }
-  _webhooks.push({
-    webhook_id: '', name: 'New Webhook', url: '',
-    events: ['lead_captured'], enabled: true, signing_secret: ''
-  });
+  _webhooks.push({ webhook_id:'', name:'New Webhook', url:'', events:['lead_captured'], enabled:true, signing_secret:'' });
   renderWebhooks();
 }
 
-function removeWebhook(i) {
-  _webhooks.splice(i, 1);
-  renderWebhooks();
-}
+function removeWebhook(i) { _webhooks.splice(i,1); renderWebhooks(); }
 
 async function regenSecret(idx, webhookId) {
   if (!webhookId) { toast('Save webhooks first to generate a secret', 'error'); return; }
-  const btn = event.target;
-  btn.textContent = '…'; btn.disabled = true;
+  const btn = event.target; btn.textContent = '…'; btn.disabled = true;
   try {
     const r = await fetch('/api/admin/webhooks/regenerate-secret', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({client_id: CID, webhook_id: webhookId})
+      body: JSON.stringify({client_id:CID, webhook_id:webhookId})
     });
     const d = await r.json();
     if (d.success) {
@@ -1087,8 +1187,8 @@ async function regenSecret(idx, webhookId) {
       const el = document.getElementById(`secretVal-${idx}`);
       if (el) { el.textContent = d.signing_secret; el.classList.add('revealed'); }
       toast('New secret generated', 'success');
-    } else toast(d.error || 'Failed', 'error');
-  } catch { toast('Network error', 'error'); }
+    } else toast(d.error||'Failed','error');
+  } catch { toast('Network error','error'); }
   finally { btn.textContent = 'Regenerate'; btn.disabled = false; }
 }
 
@@ -1096,11 +1196,10 @@ async function saveWebhooks() {
   try {
     const r = await fetch('/api/admin/webhooks', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({client_id: CID, webhooks: _webhooks})
+      body: JSON.stringify({client_id:CID, webhooks:_webhooks})
     });
     const d = await r.json();
     if (d.success) {
-      // Refresh to get generated webhook_ids + secrets from server
       const r2 = await fetch(`/api/admin/webhooks?client_id=${CID}`);
       const d2 = await r2.json();
       if (d2.success) { _webhooks = d2.webhooks; renderWebhooks(); }
@@ -1109,7 +1208,6 @@ async function saveWebhooks() {
   } catch { return false; }
 }
 
-// Test panel
 function updateTestTargetSelect() {
   const sel = document.getElementById('whTestTarget');
   if (!sel) return;
@@ -1122,52 +1220,39 @@ function updateTestTargetSelect() {
 function updatePayloadPreview() {
   const evt = document.getElementById('whTestEvent')?.value || 'test';
   const pre = document.getElementById('whPayloadPreview');
-  if (pre) pre.textContent = JSON.stringify(SAMPLE_PAYLOADS[evt] || SAMPLE_PAYLOADS.test, null, 2);
+  if (pre) pre.textContent = JSON.stringify(SAMPLE_PAYLOADS[evt]||SAMPLE_PAYLOADS.test, null, 2);
 }
 
-if (HWH) {
-  document.getElementById('whTestEvent')?.addEventListener('change', updatePayloadPreview);
-}
+if (HWH) document.getElementById('whTestEvent')?.addEventListener('change', updatePayloadPreview);
 
 async function runTest() {
   const target = document.getElementById('whTestTarget')?.value;
   const event_ = document.getElementById('whTestEvent')?.value || 'test';
-  const wh     = _webhooks.find(w => w.webhook_id === target);
-
+  const wh = _webhooks.find(w => w.webhook_id === target);
   if (!wh || !wh.url) { toast('Select a saved webhook with a URL first', 'error'); return; }
-
   const btn = document.getElementById('whRunBtn');
   btn.disabled = true; btn.innerHTML = '<span style="display:inline-block;width:12px;height:12px;border:2px solid #ccc;border-top-color:var(--dark);border-radius:50%;animation:spin 0.6s linear infinite;vertical-align:middle;margin-right:5px;"></span>Sending…';
-
-  const result = document.getElementById('whTestResult');
-  result.style.display = 'none';
-
+  const result = document.getElementById('whTestResult'); result.style.display = 'none';
   try {
     const r = await fetch('/api/admin/test-webhook', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({client_id: CID, webhook_id: target, webhook_url: wh.url, event_type: event_})
+      body: JSON.stringify({client_id:CID, webhook_id:target, webhook_url:wh.url, event_type:event_})
     });
     const d = await r.json();
     const ok = d.success;
-    const hdr = document.getElementById('whResultHeader');
-    hdr.style.background = ok ? 'var(--success-lt)' : 'var(--danger-lt)';
-    document.getElementById('whResultStatus').innerHTML =
-      `<span style="color:${ok ? 'var(--success)' : 'var(--danger)'};">${ok ? '✓' : '✗'} ${d.message || (d.error||'Failed')}</span>`;
-    document.getElementById('whResultMeta').textContent =
-      d.status_code ? `HTTP ${d.status_code} · ${d.duration_ms}ms` : '';
-    document.getElementById('whResultBody').textContent =
-      d.response_body ? d.response_body.slice(0,400) : (d.error || '');
+    document.getElementById('whResultHeader').style.background = ok ? 'var(--success-lt)' : 'var(--danger-lt)';
+    document.getElementById('whResultStatus').innerHTML = `<span style="color:${ok?'var(--success)':'var(--danger)'};">${ok?'✓':'✗'} ${d.message||(d.error||'Failed')}</span>`;
+    document.getElementById('whResultMeta').textContent = d.status_code ? `HTTP ${d.status_code} · ${d.duration_ms}ms` : '';
+    document.getElementById('whResultBody').textContent = d.response_body ? d.response_body.slice(0,400) : (d.error||'');
     result.style.display = 'block';
     if (ok) loadLogs();
-  } catch(e) {
-    toast('Network error — ' + e.message, 'error');
-  } finally {
+  } catch(e) { toast('Network error — '+e.message,'error'); }
+  finally {
     btn.disabled = false;
     btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;display:inline-block;margin-right:4px;vertical-align:middle;"><polygon points="5 3 19 12 5 21 5 3"/></svg>Send Test';
   }
 }
 
-// Delivery logs
 async function loadLogs() {
   const el = document.getElementById('whLogs');
   if (!el) return;
@@ -1177,205 +1262,78 @@ async function loadLogs() {
     const d = await r.json();
     if (!d.success) { el.innerHTML = `<div style="padding:14px;color:var(--danger);font-size:12.5px;">${esc(d.error||'Error')}</div>`; return; }
     const logs = d.logs || [];
-    if (!logs.length) {
-      el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--sub);font-size:12.5px;">No deliveries yet. Send a test to see logs here.</div>';
-      return;
-    }
+    if (!logs.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--sub);font-size:12.5px;">No deliveries yet.</div>'; return; }
     el.innerHTML = `<div style="background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;">` +
       logs.map(l => {
-        const ok  = l.success;
-        const ts  = l.fired_at ? new Date(l.fired_at).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
-        const dur = l.duration_ms != null ? l.duration_ms + 'ms' : '';
+        const ok = l.success;
+        const ts = l.fired_at ? new Date(l.fired_at).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '—';
         return `<div class="log-row">
           <div class="log-dot ${ok?'ok':'fail'}"></div>
           <div class="log-event">${esc(l.event_type)}</div>
           <div class="log-name">${esc(l.webhook_name||l.webhook_id.slice(0,8)+'…')}</div>
           <div class="log-code ${ok?'ok':'fail'}">${l.status_code||'ERR'}</div>
-          <div class="log-dur">${dur}</div>
+          <div class="log-dur">${l.duration_ms!=null?l.duration_ms+'ms':''}</div>
           <div class="log-time">${ts}</div>
         </div>`;
       }).join('') + '</div>';
-  } catch {
-    el.innerHTML = '<div style="padding:14px;color:var(--danger);font-size:12.5px;">Failed to load logs.</div>';
-  }
+  } catch { el.innerHTML = '<div style="padding:14px;color:var(--danger);font-size:12.5px;">Failed to load logs.</div>'; }
 }
 
-// Save
-async function save() {
-  const btn = document.getElementById('saveBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<div class="spinner"></div> Saving…';
-
-  // Save webhooks first (separate endpoint)
-  if (HWH) await saveWebhooks();
-
-  // Save white-label settings (separate endpoint)
-  await saveWhiteLabel();
-
-  const payload = {
-    client_id: CID,
-    branding: {
-      company_name:  document.getElementById('company_name').value.trim(),
-      tagline:       document.getElementById('tagline').value.trim(),
-      primary_color: document.getElementById('primary_color').value.trim() || '#B8924A',
-      ...((_logo) ? {logo: _logo} : {}),
-    },
-    bot_settings: {
-      bot_name:         document.getElementById('bot_name').value.trim(),
-      bot_avatar:       document.getElementById('bot_avatar').value.trim(),
-      bot_avatar_url:   _avatarImg || '',   // image takes priority in widget; empty = use emoji
-      welcome_message:  document.getElementById('welcome_message').value.trim(),
-      fallback_message: document.getElementById('fallback_message').value.trim(),
-      quick_replies:    getQR(),
-    },
-    contact: {
-      email:   document.getElementById('contact_email').value.trim(),
-      phone:   document.getElementById('contact_phone').value.trim(),
-      hours:   document.getElementById('business_hours').value.trim(),
-      website: document.getElementById('contact_website').value.trim(),
-    },
-    integrations: {},  // webhooks now managed via /api/admin/webhooks
-    remove_branding: HWL && (document.getElementById('remove_branding')?.checked || false),
-  };
-  try {
-    const r = await fetch('/api/admin/customize', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    });
-    const d = await r.json();
-    if (d.success) {
-      toast('Settings saved', 'success');
-      document.getElementById('saveInfo').textContent = 'Saved at ' + new Date().toLocaleTimeString();
-    } else toast(d.error || 'Save failed', 'error');
-  } catch { toast('Network error — please retry', 'error'); }
-  finally {
-    btn.disabled = false;
-    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Save Changes';
-  }
-}
-
-function copyEmbed() {
-  const domain  = (document.getElementById('wl_domain')?.value || '').trim();
-  const baseUrl = domain ? `https://${domain}` : location.origin;
-  const c = `<script>\n(function(){var s=document.createElement('script');s.src='${baseUrl}/static/widget.js';s.setAttribute('data-client-id','${CID}');document.body.appendChild(s);})();\n<\/script>`;
-  navigator.clipboard.writeText(c).then(() => toast('Embed code copied', 'success'));
-}
-
-function toast(msg, type = 'success') {
-  const t = document.getElementById('toast');
-  const ic = type === 'success'
-    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
-    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-  t.innerHTML = ic + msg; t.className = `toast ${type} show`;
-  setTimeout(() => { t.className = 'toast'; }, 3500);
-}
-
-function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-
-// ═══════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 // WHITE-LABEL
-// ═══════════════════════════════════════════════════
-// HWL and HWH are defined above in the constants block
-const PLAN_TYPE  = {{ plan_type | tojson }};
-
-function toggleTopbarPreview() {
-  // When the white-label toggle changes, reload the page topbar
-  // immediately so the agency sees what clients will see.
-  // We do a soft reload only if the toggle state differs from what was saved.
-  updateEmbedPreview();
-}
-
-function updateEmbedPreview() {
-  // Regenerate the embed code in the preview panel using custom domain if set
-  const domain  = (document.getElementById('wl_domain')?.value || '').trim();
-  const baseUrl = domain ? `https://${domain}` : location.origin;
-  const block   = document.getElementById('embedBlock');
-  if (!block) return;
-  block.innerHTML =
-    `<span style="color:#6B7280;">/* Paste before &lt;/body&gt; */</span>\n\n` +
-    `<span style="color:#60A5FA;">&lt;script&gt;</span>\n` +
-    `(function(){\n  var s=document.createElement('script');\n  s.src='${baseUrl}/static/widget.js';\n  s.setAttribute('data-client-id','${CID}');\n  document.body.appendChild(s);\n})();\n` +
-    `<span style="color:#60A5FA;">&lt;/script&gt;</span>`;
-}
-  if (!{{ 'true' if has_webhooks or has_white_label else 'false' }}) return;
-  try {
-    const r = await fetch(`/api/admin/white-label?client_id=${CID}`);
-    const d = await r.json();
-    if (!d.success) return;
-    if (d.custom_widget_domain) {
-      const el = document.getElementById('wl_domain');
-      if (el) el.value = d.custom_widget_domain;
-    }
-    if (d.custom_css) {
-      const el = document.getElementById('wl_css');
-      if (el) el.value = d.custom_css;
-    }
-    if (d.branded_email_from) {
-      const el = document.getElementById('wl_email_from');
-      if (el) el.value = d.branded_email_from;
-    }
-  } catch {}
-}
-
-// Load existing white-label settings on page open
+// ═══════════════════════════════════════════════════════════
 async function initWhiteLabel() {
   if (!HWL && !HWH) return;
+  console.log('[Customize] initWhiteLabel starting…');
   try {
     const r = await fetch(`/api/admin/white-label?client_id=${CID}`);
     const d = await r.json();
-    if (!d.success) return;
+    console.log('[Customize] white-label loaded:', {domain:d.custom_widget_domain, hasCSS:!!d.custom_css, emailFrom:d.branded_email_from});
+    if (!d.success) { console.warn('[Customize] initWhiteLabel not success:', d); return; }
     if (d.custom_widget_domain) {
       const el = document.getElementById('wl_domain');
       if (el) { el.value = d.custom_widget_domain; updateCnameBox(d.custom_widget_domain); }
     }
-    if (d.custom_css) {
-      const el = document.getElementById('wl_css');
-      if (el) el.value = d.custom_css;
-    }
-    if (d.branded_email_from) {
-      const el = document.getElementById('wl_email_from');
-      if (el) el.value = d.branded_email_from;
-    }
-    // Regenerate embed with saved domain
+    if (d.custom_css) { const el = document.getElementById('wl_css'); if (el) el.value = d.custom_css; }
+    if (d.branded_email_from) { const el = document.getElementById('wl_email_from'); if (el) el.value = d.branded_email_from; }
     updateEmbedPreview();
-  } catch {}
+  } catch(e) { console.error('[Customize] initWhiteLabel error:', e); }
 }
 
 async function saveWhiteLabel() {
   const domain    = document.getElementById('wl_domain')?.value.trim()     || '';
   const css       = document.getElementById('wl_css')?.value.trim()        || '';
   const emailFrom = document.getElementById('wl_email_from')?.value.trim() || '';
-  if (!domain && !css && !emailFrom) return true; // nothing to save
+  if (!domain && !css && !emailFrom) { console.log('[Customize] saveWhiteLabel: nothing to save'); return true; }
+  console.log('[Customize] saveWhiteLabel:', {domain, hasCSS:!!css, emailFrom});
   try {
     const r = await fetch('/api/admin/white-label', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ client_id: CID, custom_widget_domain: domain,
-                             custom_css: css, branded_email_from: emailFrom })
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({client_id:CID, custom_widget_domain:domain, custom_css:css, branded_email_from:emailFrom})
     });
     const d = await r.json();
-    if (d.success) {
-      if (d.cname_instructions) {
-        updateCnameBox(domain);
-      }
-      return true;
-    } else {
-      toast(d.error || 'White-label save failed', 'error');
-      return false;
-    }
-  } catch { return false; }
+    console.log('[Customize] saveWhiteLabel response:', d);
+    if (d.success && domain) updateCnameBox(domain);
+    if (!d.success) console.error('[Customize] saveWhiteLabel failed:', d.error);
+    return d.success;
+  } catch(e) { console.error('[Customize] saveWhiteLabel network error:', e); return false; }
 }
 
 function clearDomainStatus() {
   const badge = document.getElementById('domainStatusBadge');
   if (badge) badge.style.display = 'none';
+  updateEmbedPreview();
 }
 
 function updateCnameBox(domain) {
   const box = document.getElementById('cnameInstructions');
   if (!box || !domain) return;
   const parts = domain.split('.');
-  document.getElementById('cnameHost').textContent  = parts[0];
-  document.getElementById('cnameDomain').textContent = domain;
+  const hostEl   = document.getElementById('cnameHost');
+  const domainEl = document.getElementById('cnameDomain');
+  if (hostEl)   hostEl.textContent   = parts[0];
+  if (domainEl) domainEl.textContent = domain;
   box.style.display = 'block';
 }
 
@@ -1384,34 +1342,39 @@ async function verifyDomain() {
   const badge  = document.getElementById('domainStatusBadge');
   const btn    = document.getElementById('verifyDomainBtn');
   if (!domain) { toast('Enter a domain first', 'error'); return; }
+  console.log('[Customize] verifyDomain:', domain);
   btn.textContent = 'Checking…'; btn.disabled = true;
   try {
     const r = await fetch('/api/admin/white-label/verify-domain', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ client_id: CID, domain })
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({client_id:CID, domain})
     });
     const d = await r.json();
+    console.log('[Customize] DNS verify result:', d);
     if (badge) {
-      badge.style.display = 'inline-block';
+      badge.style.display  = 'inline-block';
       badge.style.background = d.pointed ? 'var(--success-lt)' : 'var(--warning-lt)';
       badge.style.color      = d.pointed ? 'var(--success)'    : 'var(--warning)';
-      badge.style.border     = d.pointed
-        ? '1px solid rgba(22,163,74,0.2)'
-        : '1px solid rgba(217,119,6,0.2)';
+      badge.style.border     = d.pointed ? '1px solid rgba(22,163,74,0.2)' : '1px solid rgba(217,119,6,0.2)';
+      badge.style.padding    = '2px 10px';
+      badge.style.borderRadius = '20px';
       badge.textContent = d.message;
     }
     if (d.pointed) updateCnameBox(domain);
-  } catch { toast('DNS check failed', 'error'); }
+  } catch(e) { console.error('[Customize] verifyDomain error:', e); toast('DNS check failed', 'error'); }
   finally { btn.textContent = 'Check DNS'; btn.disabled = false; }
 }
 
-// Agency defaults
+// ═══════════════════════════════════════════════════════════
+// AGENCY DEFAULTS
+// ═══════════════════════════════════════════════════════════
 async function initAgencyDefaults() {
   if (!['agency','enterprise'].includes(PLAN_TYPE)) return;
+  console.log('[Customize] initAgencyDefaults…');
   try {
     const r = await fetch('/api/admin/agency-branding');
     const d = await r.json();
-    if (!d.success) return;
+    if (!d.success) { console.warn('[Customize] agency defaults failed:', d); return; }
     const ab = d.agency_branding;
     const color = ab?.branding?.primary_color;
     if (color) {
@@ -1420,19 +1383,20 @@ async function initAgencyDefaults() {
       if (cp) cp.value = color;
       if (ct) ct.value = color;
     }
-    if (ab?.bot_settings?.bot_name)          document.getElementById('ag_bot_name').value  = ab.bot_settings.bot_name;
-    if (ab?.bot_settings?.welcome_message)    document.getElementById('ag_welcome').value   = ab.bot_settings.welcome_message;
-    if (ab?.branded_email_from)               document.getElementById('ag_email_from').value = ab.branded_email_from;
-  } catch {}
+    if (ab?.bot_settings?.bot_name)       document.getElementById('ag_bot_name').value  = ab.bot_settings.bot_name;
+    if (ab?.bot_settings?.welcome_message) document.getElementById('ag_welcome').value   = ab.bot_settings.welcome_message;
+    if (ab?.branded_email_from)            document.getElementById('ag_email_from').value = ab.branded_email_from;
+    console.log('[Customize] agency defaults loaded');
+  } catch(e) { console.error('[Customize] initAgencyDefaults error:', e); }
 }
 
 async function saveAgencyDefaults() {
   const btn = document.getElementById('agSaveBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<div class="spinner"></div> Saving…';
+  btn.disabled = true; btn.innerHTML = '<div class="spinner"></div> Saving…';
+  console.log('[Customize] saveAgencyDefaults…');
   try {
     const r = await fetch('/api/admin/agency-branding', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
+      method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         branding:     { primary_color: document.getElementById('ag_primary_color').value.trim() },
         bot_settings: {
@@ -1443,9 +1407,33 @@ async function saveAgencyDefaults() {
       })
     });
     const d = await r.json();
+    console.log('[Customize] saveAgencyDefaults response:', d);
     if (d.success) toast('Agency defaults saved — applied to new clients automatically', 'success');
-    else toast(d.error || 'Save failed', 'error');
-  } catch { toast('Network error', 'error'); }
+    else { console.error('[Customize] saveAgencyDefaults failed:', d.error); toast(d.error||'Save failed','error'); }
+  } catch(e) { console.error('[Customize] saveAgencyDefaults network error:', e); toast('Network error','error'); }
   finally {
     btn.disabled = false;
-    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stro
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Save Agency Defaults';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// BOOT — all functions defined, IIFE runs last
+// ═══════════════════════════════════════════════════════════
+(function initAvatarFromSaved() {
+  const savedAv = {{ (branding.get('bot_settings', {}).get('bot_avatar_url', '') or '') | tojson }};
+  console.log('[Customize] saved avatar_url present:', !!savedAv);
+  if (savedAv && (savedAv.startsWith('data:') || savedAv.startsWith('http://') || savedAv.startsWith('https://'))) {
+    _avatarImg = savedAv;
+    _showAvatarImage(savedAv);
+  }
+})();
+
+up();
+initWebhooks();
+initWhiteLabel();
+initAgencyDefaults();
+console.log('[Customize] boot complete');
+</script>
+</body>
+</html>
