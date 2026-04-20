@@ -3980,8 +3980,54 @@ def client_login_required(f):
 
 
 @app.route('/client-dashboard')
+def client_dashboard_router():
+    """
+    Routes to the correct dashboard view:
+    - Agency/admin owner: accessed via ?client_id= from the main dashboard
+    - Client portal user: authenticated via client session
+    """
+    # ── Owner access: logged-in agency/admin user viewing a specific client ──
+    client_id_param = request.args.get('client_id', '').strip()
+    if client_id_param and current_user.is_authenticated:
+        if not models.verify_client_ownership(current_user.id, client_id_param):
+            return "Unauthorized", 403
+        client   = models.get_client_by_id(client_id_param)
+        if not client:
+            return "Client not found", 404
+        leads    = models.get_leads(client_id_param)
+        faqs     = models.get_faqs(client_id_param)
+        articles = models.get_articles(client_id_param)
+        for lead in leads:
+            if lead.get('created_at') and not isinstance(lead['created_at'], str):
+                lead['created_at'] = lead['created_at'].isoformat()
+        branding = {}
+        if client.get('branding_settings'):
+            try:
+                bs = json.loads(client['branding_settings']) if isinstance(client['branding_settings'], str) else client['branding_settings']
+                branding = bs.get('branding', {})
+            except Exception:
+                pass
+        return render_template(
+            'client_dashboard.html',
+            client=client,
+            branding=branding,
+            leads=leads,
+            faqs=faqs,
+            articles=articles,
+            client_user_name=current_user.email,
+            client_user_email=current_user.email,
+            faq_count=len(faqs),
+            lead_count=len(leads),
+            owner_view=True,   # lets the template show an "← Back" link
+        )
+
+    # ── Client portal user: must be authenticated via client session ──
+    return client_dashboard_client()
+
+
+@app.route('/client-dashboard-portal')
 @client_login_required
-def client_dashboard():
+def client_dashboard_client():
     client_id   = session['client_user_client_id']
     client      = models.get_client_by_id(client_id)
     leads       = models.get_leads(client_id)
@@ -4008,7 +4054,8 @@ def client_dashboard():
         client_user_name=session.get('client_user_name'),
         client_user_email=session.get('client_user_email'),
         faq_count=len(faqs),
-        lead_count=len(leads)
+        lead_count=len(leads),
+        owner_view=False,
     )
 
 
