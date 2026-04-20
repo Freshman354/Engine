@@ -34,6 +34,7 @@ app = Flask(__name__)
 from admin_routes import admin_bp
 app.register_blueprint(admin_bp)
 app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev_key_change_this_in_prod")
+app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB max request body
 
 # ── Flask-Mail (password reset emails) ──────────────────────────────
 app.config['MAIL_SERVER']   = os.environ.get('MAIL_SERVER', 'smtp-relay.brevo.com')
@@ -4149,6 +4150,19 @@ def refund_policy():
 # =====================================================================
 # RUN SERVER
 # =====================================================================
+
+@app.errorhandler(413)
+def request_too_large(e):
+    """Triggered when a request body exceeds MAX_CONTENT_LENGTH (8MB)."""
+    app.logger.warning(f"[413] Request too large: {request.path}")
+    if request.path.startswith('/api/'):
+        return jsonify({
+            'success': False,
+            'error': 'Request too large. Avatar images are auto-compressed in the browser — '
+                     'if you see this error please try a smaller file.'
+        }), 413
+    return "Request too large (max 8 MB)", 413
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))

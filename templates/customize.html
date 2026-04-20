@@ -357,7 +357,7 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
             </div>
             <div>
               <div style="font-size:13px;font-weight:600;color:var(--dark);" id="avFileName">Click to upload image</div>
-              <div style="font-size:11px;color:var(--sub);margin-top:2px;">PNG, JPG, SVG · max 1 MB · square crop recommended</div>
+              <div style="font-size:11px;color:var(--sub);margin-top:2px;">PNG, JPG, SVG · max 5 MB · auto-compressed to 120×120px</div>
             </div>
           </div>
           <p class="hint" style="margin-top:6px;">Shown in the chat header and next to every bot message.</p>
@@ -851,17 +851,45 @@ function handleLogo(e) {
 function handleAvatar(e) {
   const f = e.target.files[0];
   if (!f) return;
-  console.log('[Customize] avatar selected:', f.name, f.size);
-  if (f.size > 1048576) { toast('Avatar must be under 1 MB', 'error'); return; }
+  console.log('[Customize] avatar selected:', f.name, 'size:', (f.size/1024).toFixed(1)+'KB');
+  if (f.size > 5 * 1024 * 1024) { toast('Avatar must be under 5 MB', 'error'); return; }
+
   const reader = new FileReader();
   reader.onload = ev => {
-    _avatarImg = ev.target.result;
-    _showAvatarImage(_avatarImg);
-    document.getElementById('avZone')?.classList.add('has-file');
-    console.log('[Customize] avatar loaded');
-    up();
+    // Compress via canvas: resize to 120×120 and JPEG quality 0.75
+    // This brings typical avatars from 500KB–2MB down to ~6–15KB
+    const img = new Image();
+    img.onload = () => {
+      const SIZE = 120;
+      const canvas = document.createElement('canvas');
+      canvas.width = SIZE; canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+
+      // Cover crop — keep the centre of the image
+      const ratio  = Math.min(img.width, img.height);
+      const sx     = (img.width  - ratio) / 2;
+      const sy     = (img.height - ratio) / 2;
+      ctx.drawImage(img, sx, sy, ratio, ratio, 0, 0, SIZE, SIZE);
+
+      const compressed = canvas.toDataURL('image/jpeg', 0.75);
+      const kb = Math.round(compressed.length * 0.75 / 1024);
+      console.log('[Customize] avatar compressed to ~' + kb + 'KB (was ' + Math.round(f.size/1024) + 'KB)');
+
+      _avatarImg = compressed;
+      _showAvatarImage(_avatarImg);
+      document.getElementById('avZone')?.classList.add('has-file');
+      up();
+    };
+    img.onerror = () => {
+      console.error('[Customize] avatar image decode failed');
+      toast('Could not read image file', 'error');
+    };
+    img.src = ev.target.result;
   };
-  reader.onerror = () => { console.error('[Customize] avatar FileReader error'); toast('Failed to read avatar file', 'error'); };
+  reader.onerror = () => {
+    console.error('[Customize] avatar FileReader error');
+    toast('Failed to read avatar file', 'error');
+  };
   reader.readAsDataURL(f);
 }
 
