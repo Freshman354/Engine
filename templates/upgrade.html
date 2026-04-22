@@ -1,731 +1,503 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Upgrade Plan | Lumvi</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --dark-bg: #0f172a;
-            --card-bg: rgba(30, 41, 59, 0.7);
-            --text-main: #f8fafc;
-            --text-muted: #94a3b8;
-            --success: #10b981;
-            --accent: #06b6d4;
-            --agency-color: #a78bfa;
-            --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.5);
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upgrade Plan — Lumvi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
+  --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
+  --gold-glow:rgba(184,146,74,0.25);
+  --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#fff;
+  --success:#16A34A;--success-lt:#F0FDF4;--success-border:rgba(22,163,74,0.2);
+  --danger:#EF4444;
+  --radius:16px;--shadow:0 1px 3px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.04);
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;}
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+/* ── TOPBAR ── */
+.topbar{background:var(--white);border-bottom:1px solid var(--border);padding:0 28px;height:60px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:50;}
+.topbar-brand{display:flex;align-items:center;gap:8px;text-decoration:none;}
+.topbar-brand img{width:30px;height:30px;border-radius:7px;object-fit:cover;}
+.topbar-brand span{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
+.topbar-right{display:flex;gap:8px;align-items:center;}
+.btn-nav{padding:7px 14px;color:var(--sub);border:1px solid var(--border);border-radius:8px;
+  font-size:13px;font-weight:500;text-decoration:none;transition:all 0.15s;}
+.btn-nav:hover{color:var(--dark);border-color:var(--mid);}
+.plan-chip{padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;
+  text-transform:uppercase;letter-spacing:0.05em;background:var(--gold-lt);
+  color:var(--gold-dk);border:1px solid rgba(184,146,74,0.3);}
 
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--dark-bg);
-            color: var(--text-main);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 48px 20px;
-        }
+/* ── PAGE ── */
+.page{max-width:1200px;margin:0 auto;padding:48px 24px 80px;}
+@media(max-width:640px){.page{padding:28px 14px 60px;}}
 
-        /* ── HEADER ── */
-        .header { text-align: center; margin-bottom: 48px; max-width: 700px; }
+/* ── HEADER ── */
+.page-header{text-align:center;margin-bottom:40px;max-width:600px;margin-left:auto;margin-right:auto;}
+.page-header h1{font-family:'Fraunces',serif;font-size:38px;font-weight:800;
+  letter-spacing:-0.5px;line-height:1.15;margin-bottom:12px;}
+.page-header p{font-size:16px;color:var(--mid);line-height:1.65;}
+@media(max-width:640px){.page-header h1{font-size:28px;}}
 
-        .header h1 {
-            font-size: 40px;
-            font-weight: 800;
-            margin-bottom: 12px;
-            letter-spacing: -1px;
-        }
+/* ── BILLING TOGGLE ── */
+.billing-wrap{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:44px;}
+.billing-lbl{font-size:14px;font-weight:600;color:var(--mid);}
+.toggle-switch{position:relative;width:46px;height:26px;cursor:pointer;flex-shrink:0;}
+.toggle-switch input{opacity:0;width:0;height:0;}
+.toggle-track{position:absolute;inset:0;background:var(--panel);border:1.5px solid var(--border);
+  border-radius:100px;transition:all 0.25s;}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:18px;height:18px;
+  background:var(--sub);border-radius:50%;transition:all 0.25s;}
+.toggle-switch input:checked ~ .toggle-track{background:var(--gold);border-color:var(--gold);}
+.toggle-switch input:checked ~ .toggle-thumb{transform:translateX(20px);background:#fff;}
+.save-badge{background:var(--success-lt);border:1px solid var(--success-border);color:var(--success);
+  font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;
+  opacity:0;transform:translateX(-4px);transition:all 0.25s;white-space:nowrap;}
+.save-badge.visible{opacity:1;transform:translateX(0);}
 
-        .header p {
-            font-size: 16px;
-            color: var(--text-muted);
-            font-weight: 300;
-            line-height: 1.6;
-        }
+/* ── PRICING GRID ── */
+.pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px;align-items:start;}
+@media(max-width:1024px){.pricing-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:560px){.pricing-grid{grid-template-columns:1fr;}}
 
-        /* ── BILLING TOGGLE ── */
-        .billing-toggle {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            margin-bottom: 40px;
-        }
+/* ── CARD ── */
+.pricing-card{background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);
+  padding:28px 24px;display:flex;flex-direction:column;position:relative;
+  transition:all 0.22s;box-shadow:var(--shadow);}
+.pricing-card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,0.08);}
+.pricing-card.featured{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold),0 12px 40px var(--gold-glow);
+  transform:scale(1.02);}
+.pricing-card.featured:hover{transform:scale(1.02) translateY(-4px);}
+.popular-badge{position:absolute;top:-1px;left:50%;transform:translateX(-50%);
+  background:var(--gold);color:#fff;font-size:10px;font-weight:800;
+  letter-spacing:0.1em;text-transform:uppercase;padding:4px 14px;
+  border-radius:0 0 10px 10px;white-space:nowrap;}
 
-        .toggle-label { font-size: 14px; color: var(--text-muted); }
+/* ── PLAN INFO ── */
+.plan-name{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;
+  color:var(--sub);margin-bottom:14px;margin-top:6px;}
+.pricing-card.featured .plan-name{color:var(--gold);}
+.price-row{display:flex;align-items:flex-end;gap:2px;margin-bottom:4px;line-height:1;}
+.price-sym{font-size:20px;font-weight:700;color:var(--mid);margin-bottom:8px;}
+.price-amt{font-family:'Fraunces',serif;font-size:54px;font-weight:800;color:var(--dark);
+  letter-spacing:-2px;transition:opacity 0.15s,transform 0.15s;}
+.pricing-card.featured .price-amt{color:var(--gold);}
+.price-per{font-size:13px;color:var(--sub);margin-bottom:4px;}
+.price-annual-note{font-size:12px;color:var(--success);font-weight:600;height:18px;margin-bottom:16px;}
+.plan-desc{font-size:13px;color:var(--sub);line-height:1.55;margin-bottom:20px;
+  padding-bottom:20px;border-bottom:1px solid var(--border);}
 
-        .toggle-switch {
-            position: relative;
-            width: 46px;
-            height: 24px;
-            cursor: pointer;
-        }
+/* ── FEATURES LIST ── */
+.feat-list{list-style:none;display:flex;flex-direction:column;gap:9px;margin-bottom:24px;flex:1;}
+.feat-list li{display:flex;align-items:flex-start;gap:8px;font-size:13.5px;color:var(--mid);line-height:1.45;}
+.feat-check{width:16px;height:16px;border-radius:50%;background:var(--success-lt);
+  border:1.5px solid var(--success-border);display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;margin-top:1px;}
+.feat-check svg{width:9px;height:9px;color:var(--success);}
+.feat-cross{width:16px;height:16px;border-radius:50%;background:var(--panel);
+  border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;margin-top:1px;}
+.feat-cross svg{width:8px;height:8px;color:var(--sub);}
 
-        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+/* ── CTA BUTTONS ── */
+.btn-upgrade{width:100%;padding:12px 20px;border-radius:10px;font-family:'DM Sans',sans-serif;
+  font-size:14px;font-weight:700;cursor:pointer;border:none;transition:all 0.2s;
+  display:flex;align-items:center;justify-content:center;gap:6px;}
+.btn-upgrade svg{width:13px;height:13px;}
+.btn-gold{background:var(--gold);color:#fff;box-shadow:0 2px 8px var(--gold-glow);}
+.btn-gold:hover{background:var(--gold-dk);transform:translateY(-1px);}
+.btn-outline{background:var(--white);color:var(--mid);border:1.5px solid var(--border)!important;}
+.btn-outline:hover{border-color:var(--gold)!important;color:var(--gold-dk);}
+.btn-current{background:var(--panel);color:var(--sub);cursor:default;}
+.btn-current:hover{transform:none;}
 
-        .toggle-track {
-            position: absolute;
-            inset: 0;
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 100px;
-            transition: background 0.3s;
-        }
+/* ── ENTERPRISE STRIP ── */
+.enterprise-strip{
+  background:var(--dark);border-radius:var(--radius);padding:32px 36px;
+  display:flex;align-items:center;justify-content:space-between;gap:24px;
+  flex-wrap:wrap;margin-bottom:32px;
+}
+.ent-left h4{font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:#fff;margin-bottom:6px;}
+.ent-left p{font-size:14px;color:rgba(255,255,255,0.55);line-height:1.5;}
+.ent-feats{display:flex;gap:10px;flex-wrap:wrap;}
+.ent-feat{padding:5px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);
+  border-radius:20px;font-size:12.5px;font-weight:600;color:rgba(255,255,255,0.7);}
+.btn-ent{padding:11px 24px;background:var(--gold);color:#fff;border-radius:10px;
+  font-weight:700;font-size:14px;text-decoration:none;white-space:nowrap;
+  box-shadow:0 2px 8px var(--gold-glow);transition:all 0.2s;display:inline-block;}
+.btn-ent:hover{background:var(--gold-dk);}
 
-        .toggle-thumb {
-            position: absolute;
-            top: 3px; left: 3px;
-            width: 16px; height: 16px;
-            background: var(--text-muted);
-            border-radius: 50%;
-            transition: transform 0.3s, background 0.3s;
-        }
+/* ── FOOTER LINKS ── */
+.footer-links{display:flex;align-items:center;justify-content:center;gap:20px;
+  font-size:13px;color:var(--sub);}
+.footer-links a{color:var(--sub);text-decoration:none;transition:color 0.15s;}
+.footer-links a:hover{color:var(--dark);}
 
-        .toggle-switch input:checked ~ .toggle-track { background: var(--accent); border-color: var(--accent); }
-        .toggle-switch input:checked ~ .toggle-thumb { transform: translateX(22px); background: #0f172a; }
+/* ── PAYMENT MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(28,25,23,0.55);
+  backdrop-filter:blur(5px);z-index:200;align-items:center;justify-content:center;padding:16px;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--white);border:1px solid var(--border);border-radius:20px;
+  padding:32px;max-width:460px;width:100%;
+  box-shadow:0 20px 60px rgba(0,0,0,0.15);animation:slideUp 0.22s ease;position:relative;}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+.modal-close{position:absolute;top:14px;right:16px;width:28px;height:28px;border-radius:7px;
+  background:var(--panel);border:none;font-size:16px;cursor:pointer;color:var(--sub);
+  display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
+.modal-close:hover{background:var(--cream2);color:var(--dark);}
+.modal h2{font-family:'Fraunces',serif;font-size:20px;font-weight:700;text-align:center;margin-bottom:20px;}
+.plan-summary{background:var(--cream);border:1px solid var(--border);border-radius:12px;
+  padding:16px 20px;text-align:center;margin-bottom:20px;}
+.plan-summary p{font-size:13px;color:var(--sub);margin-bottom:4px;}
+.plan-summary .plan-price{font-family:'Fraunces',serif;font-size:32px;font-weight:800;
+  color:var(--gold);letter-spacing:-0.5px;}
+.pay-option{border:1.5px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:12px;
+  transition:border-color 0.15s;}
+.pay-option:hover{border-color:var(--gold);}
+.pay-option h4{font-size:14px;font-weight:700;color:var(--dark);margin-bottom:4px;}
+.pay-option p{font-size:13px;color:var(--sub);margin-bottom:12px;}
+.btn-pay{width:100%;padding:11px;border-radius:10px;font-family:'DM Sans',sans-serif;
+  font-size:14px;font-weight:700;cursor:pointer;transition:all 0.15s;border:none;}
+.btn-pay-gold{background:var(--gold);color:#fff;box-shadow:0 2px 8px var(--gold-glow);}
+.btn-pay-gold:hover{background:var(--gold-dk);}
+.btn-pay-outline{background:var(--white);color:var(--mid);border:1.5px solid var(--border)!important;}
+.btn-pay-outline:hover{border-color:var(--gold)!important;color:var(--gold-dk);}
+.terms-row{display:flex;align-items:flex-start;gap:10px;margin-top:16px;
+  font-size:12.5px;color:var(--sub);line-height:1.5;}
+.terms-row input{flex-shrink:0;margin-top:2px;accent-color:var(--gold);}
+.terms-row a{color:var(--gold-dk);text-decoration:none;font-weight:600;}
+.terms-row a:hover{text-decoration:underline;}
 
-        .save-badge {
-            background: rgba(16,185,129,0.15);
-            border: 1px solid rgba(16,185,129,0.3);
-            color: var(--success);
-            font-size: 12px;
-            font-weight: 600;
-            padding: 3px 10px;
-            border-radius: 100px;
-            opacity: 0;
-            transform: translateX(-4px);
-            transition: opacity 0.3s, transform 0.3s;
-        }
-
-        .save-badge.visible { opacity: 1; transform: translateX(0); }
-
-        /* ── GRID ── */
-        .pricing-grid {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 20px;
-            max-width: 1300px;
-            width: 100%;
-            margin-bottom: 24px;
-            align-items: start;
-        }
-
-        /* ── CARDS ── */
-        .pricing-card {
-            background: var(--card-bg);
-            backdrop-filter: blur(12px);
-            padding: 36px 32px;
-            border-radius: 22px;
-            border: 1px solid rgba(255,255,255,0.1);
-            text-align: left;
-            transition: transform 0.3s ease, border-color 0.3s;
-            position: relative;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .pricing-card:hover { transform: translateY(-6px); border-color: rgba(99,102,241,0.35); }
-
-        .pricing-card.featured {
-            background: rgba(10, 20, 44, 0.95);
-            border: 1.5px solid var(--accent);
-            box-shadow: 0 0 28px rgba(6,182,212,0.18), 0 20px 50px rgba(0,0,0,0.35);
-            transform: scale(1.03);
-        }
-
-        .pricing-card.featured:hover { transform: scale(1.03) translateY(-5px); }
-
-        .pricing-card.agency-card { border-color: rgba(167,139,250,0.2); }
-        .pricing-card.agency-card:hover { border-color: rgba(167,139,250,0.4); }
-
-        .popular-badge {
-            background: var(--accent);
-            color: #0f172a;
-            font-weight: 800;
-            padding: 5px 16px;
-            border-radius: 0 0 10px 10px;
-            position: absolute;
-            top: -1px;
-            left: 50%;
-            transform: translateX(-50%);
-            text-transform: uppercase;
-            font-size: 10px;
-            letter-spacing: 0.1em;
-            white-space: nowrap;
-        }
-
-        /* ── PLAN LABEL ── */
-        .plan-label {
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            color: var(--text-muted);
-            margin-bottom: 14px;
-            margin-top: 10px;
-        }
-
-        .pricing-card.featured .plan-label { color: var(--accent); }
-        .pricing-card.agency-card .plan-label { color: var(--agency-color); }
-
-        /* ── PRICE ── */
-        .price-row {
-            display: flex;
-            align-items: flex-end;
-            gap: 2px;
-            margin-bottom: 4px;
-            line-height: 1;
-        }
-
-        .price-dollar {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--text-muted);
-            margin-bottom: 7px;
-        }
-
-        .pricing-card.featured .price-dollar { color: var(--accent); }
-        .pricing-card.agency-card .price-dollar { color: var(--agency-color); }
-
-        .price-amount {
-            font-size: 54px;
-            font-weight: 800;
-            color: white;
-            letter-spacing: -2.5px;
-            transition: opacity 0.15s, transform 0.15s;
-        }
-
-        .pricing-card.featured .price-amount { color: var(--accent); }
-        .pricing-card.agency-card .price-amount { color: var(--agency-color); }
-
-        .price-period {
-            font-size: 13px;
-            color: var(--text-muted);
-            margin-bottom: 4px;
-            font-weight: 300;
-        }
-
-        .price-annual {
-            font-size: 12px;
-            color: var(--success);
-            font-weight: 500;
-            margin-bottom: 14px;
-            min-height: 18px;
-        }
-
-        .plan-tagline {
-            font-size: 13px;
-            color: var(--text-muted);
-            margin-bottom: 20px;
-            font-weight: 300;
-            line-height: 1.5;
-            min-height: 38px;
-        }
-
-        /* ── FEATURES LIST ── */
-        .features-list { list-style: none; margin-bottom: 28px; flex-grow: 1; }
-
-        .features-list li {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            color: #cbd5e1;
-            font-size: 14px;
-            padding: 9px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .features-list li:last-child { border-bottom: none; }
-
-        .check {
-            width: 17px; height: 17px;
-            border-radius: 50%;
-            background: rgba(16,185,129,0.12);
-            color: var(--success);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 9px; font-weight: 700; flex-shrink: 0;
-        }
-
-        .pricing-card.featured .check { background: rgba(6,182,212,0.12); color: var(--accent); }
-        .pricing-card.agency-card .check { background: rgba(167,139,250,0.12); color: var(--agency-color); }
-
-        /* ── BUTTONS ── */
-        .btn {
-            display: block; width: 100%; padding: 13px;
-            border-radius: 10px; font-weight: 700; text-align: center;
-            text-decoration: none; transition: all 0.2s;
-            font-size: 14px; border: none; cursor: pointer;
-            font-family: 'Inter', sans-serif;
-        }
-
-        .btn-primary {
-            background: var(--accent);
-            color: #0f172a;
-            box-shadow: 0 4px 16px rgba(6,182,212,0.28);
-        }
-        .btn-primary:hover { background: #22d3ee; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(6,182,212,0.4); }
-
-        .btn-secondary {
-            background: transparent; color: white;
-            border: 1px solid rgba(255,255,255,0.2);
-        }
-        .btn-secondary:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.35); }
-
-        .btn-agency {
-            background: transparent;
-            color: var(--agency-color);
-            border: 1px solid rgba(167,139,250,0.3);
-        }
-        .btn-agency:hover { background: rgba(167,139,250,0.08); border-color: var(--agency-color); transform: translateY(-1px); }
-
-        .btn-current {
-            background: rgba(255,255,255,0.06);
-            color: var(--text-muted);
-            cursor: not-allowed;
-            border: 1px solid rgba(255,255,255,0.08);
-        }
-
-        /* ── ENTERPRISE STRIP ── */
-        .enterprise-strip {
-            max-width: 1100px;
-            width: 100%;
-            background: var(--card-bg);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 16px;
-            padding: 22px 28px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            flex-wrap: wrap;
-            margin-bottom: 40px;
-        }
-
-        .enterprise-strip h4 { font-size: 14px; font-weight: 700; color: white; margin-bottom: 3px; }
-        .enterprise-strip p { font-size: 12px; color: var(--text-muted); font-weight: 300; }
-
-        .enterprise-feats { display: flex; gap: 18px; flex-wrap: wrap; }
-
-        .ent-feat {
-            font-size: 12px; color: var(--text-muted);
-            display: flex; align-items: center; gap: 5px;
-        }
-        .ent-feat::before { content: '✓'; color: var(--success); font-weight: 700; }
-
-        .btn-enterprise {
-            background: transparent;
-            border: 1px solid rgba(255,255,255,0.15);
-            color: white; padding: 9px 20px;
-            border-radius: 8px; font-size: 13px; font-weight: 600;
-            text-decoration: none; white-space: nowrap;
-            transition: all 0.2s; flex-shrink: 0;
-        }
-        .btn-enterprise:hover { background: rgba(255,255,255,0.05); }
-
-        /* ── MODAL ── */
-        .payment-modal {
-            display: none; position: fixed; z-index: 10000;
-            left: 0; top: 0; width: 100%; height: 100%;
-            background-color: rgba(15, 23, 42, 0.92);
-            backdrop-filter: blur(6px);
-            overflow-y: auto;
-            animation: fadeIn 0.3s;
-        }
-
-        .payment-modal-content {
-            background: #1e293b;
-            border: 1px solid rgba(255,255,255,0.1);
-            color: white;
-            margin: 5% auto; padding: 40px;
-            border-radius: 22px; max-width: 560px;
-            box-shadow: 0 25px 70px rgba(0,0,0,0.5);
-            position: relative; animation: slideUp 0.35s;
-        }
-
-        .payment-close {
-            position: absolute; right: 24px; top: 22px;
-            font-size: 26px; color: #64748b; cursor: pointer; line-height: 1;
-        }
-        .payment-close:hover { color: white; }
-
-        .modal-plan-summary {
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.08);
-            padding: 16px; border-radius: 12px;
-            text-align: center; margin-bottom: 28px;
-        }
-
-        .modal-plan-summary p { color: #cbd5e1; font-size: 15px; margin-bottom: 4px; }
-
-        .modal-plan-summary .modal-price {
-            font-size: 28px; font-weight: 800; color: var(--accent); margin-top: 4px;
-        }
-
-        .payment-option {
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.08);
-            padding: 18px; border-radius: 12px;
-            margin-bottom: 14px; transition: all 0.3s;
-        }
-
-        .payment-option:hover { border-color: var(--primary); background: rgba(99,102,241,0.08); }
-        .payment-option h4 { color: white; margin-bottom: 6px; font-size: 15px; }
-        .payment-option p { color: #94a3b8; font-size: 13px; margin-bottom: 12px; font-weight: 300; }
-
-        .terms-row {
-            margin-top: 18px; font-size: 13px;
-            color: #94a3b8; display: flex; gap: 10px; align-items: flex-start;
-        }
-
-        .terms-row a { color: var(--primary); text-decoration: none; }
-        .terms-row a:hover { text-decoration: underline; }
-
-        /* ── BACK LINK ── */
-        .back-link { text-align: center; }
-        .back-link a { color: var(--text-muted); text-decoration: none; margin: 0 10px; font-size: 14px; }
-        .back-link a:hover { color: white; }
-
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-        @media (max-width: 1100px) {
-            .pricing-grid { grid-template-columns: repeat(2, 1fr); max-width: 700px; }
-        }
-
-        @media (max-width: 640px) {
-            .pricing-grid { grid-template-columns: 1fr; max-width: 420px; }
-            .pricing-card.featured { transform: none; }
-            .pricing-card.featured:hover { transform: translateY(-5px); }
-            .enterprise-strip { flex-direction: column; }
-        }
-    </style>
+/* ── SPINNER ── */
+.spinner{width:13px;height:13px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;
+  border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
 </head>
 <body>
 
-    <div class="header">
-        <h1>Upgrade Your Plan</h1>
-        <p>7-day free trial on all plans. No credit card required to start. Cancel anytime.</p>
+<!-- TOPBAR -->
+<div class="topbar">
+  <a href="/dashboard" class="topbar-brand">
+    <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi">
+    <span>Lumvi</span>
+  </a>
+  <div class="topbar-right">
+    {% if user and user.plan_type %}
+    <span class="plan-chip">{{ user.plan_type }}</span>
+    {% endif %}
+    <a href="/dashboard" class="btn-nav">← Dashboard</a>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="page-header">
+    <h1>Simple, transparent pricing</h1>
+    <p>Start free, scale as you grow. Every plan includes the full AI chatbot — upgrade for more clients, white-labelling, and agency features.</p>
+  </div>
+
+  <!-- BILLING TOGGLE -->
+  <div class="billing-wrap">
+    <span class="billing-lbl">Monthly</span>
+    <label class="toggle-switch">
+      <input type="checkbox" id="billingToggle" onchange="toggleBilling()">
+      <span class="toggle-track"></span>
+      <span class="toggle-thumb"></span>
+    </label>
+    <span class="billing-lbl">Annual</span>
+    <span class="save-badge" id="saveBadge">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:11px;height:11px;display:inline-block;vertical-align:middle;margin-right:3px;"><polyline points="20 6 9 17 4 12"/></svg>
+      Save 2 months
+    </span>
+  </div>
+
+  <!-- PRICING GRID -->
+  <div class="pricing-grid">
+
+    <!-- SOLO -->
+    <div class="pricing-card">
+      <div class="plan-name">Solo</div>
+      <div class="price-row">
+        <span class="price-sym">$</span>
+        <span class="price-amt" id="solo-price">19</span>
+      </div>
+      <div class="price-per">/month</div>
+      <div class="price-annual-note" id="solo-annual"></div>
+      <p class="plan-desc">Perfect for a single business website. Unlimited AI responses, no message caps.</p>
+      <ul class="feat-list">
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>1 chatbot</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited AI messages</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Full branding & customisation</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Lead capture forms</li>
+        <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">Webhooks / Zapier</span></li>
+        <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">White-label</span></li>
+      </ul>
+      {% if user and user.plan_type == 'solo' %}
+      <button class="btn-upgrade btn-current">Current Plan</button>
+      {% else %}
+      <button class="btn-upgrade btn-outline" onclick="startPayment('solo')">
+        Get Solo
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+      {% endif %}
     </div>
 
-    <!-- Billing Toggle -->
-    <div class="billing-toggle">
-        <span class="toggle-label">Monthly</span>
-        <label class="toggle-switch">
-            <input type="checkbox" id="billingToggle" onchange="toggleBilling()">
-            <div class="toggle-track"></div>
-            <div class="toggle-thumb"></div>
-        </label>
-        <span class="toggle-label">Annual</span>
-        <span class="save-badge" id="saveBadge">2 months free</span>
+    <!-- STARTER -->
+    <div class="pricing-card">
+      <div class="plan-name">Starter</div>
+      <div class="price-row">
+        <span class="price-sym">$</span>
+        <span class="price-amt" id="starter-price">49</span>
+      </div>
+      <div class="price-per">/month</div>
+      <div class="price-annual-note" id="starter-annual"></div>
+      <p class="plan-desc">Run up to 3 client chatbots. Great for small agencies just getting started.</p>
+      <ul class="feat-list">
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>3 chatbots</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>2,000 messages / day</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Full customisation</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Lead capture forms</li>
+        <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">Webhooks / Zapier</span></li>
+        <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">White-label</span></li>
+      </ul>
+      {% if user and user.plan_type == 'starter' %}
+      <button class="btn-upgrade btn-current">Current Plan</button>
+      {% else %}
+      <button class="btn-upgrade btn-outline" onclick="startPayment('starter')">
+        Get Starter
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+      {% endif %}
     </div>
 
-    <div class="pricing-grid">
-
-        <!-- SOLO -->
-        <div class="pricing-card solo-card">
-            <div class="plan-label" style="color:#34d399;">Solo</div>
-            <div class="price-row">
-                <span class="price-dollar" style="color:#34d399;">$</span>
-                <span class="price-amount" id="solo-price" style="color:#34d399;">19</span>
-            </div>
-            <div class="price-period">per month</div>
-            <div class="price-annual" id="solo-annual"></div>
-            <p class="plan-tagline">Perfect for small businesses with one website who want a real AI chatbot.</p>
-
-            <ul class="features-list">
-                <li><span class="check">✓</span> 1 chatbot</li>
-                <li><span class="check">✓</span> Unlimited messages</li>
-                <li><span class="check">✓</span> Unlimited FAQs</li>
-                <li><span class="check">✓</span> Lead capture forms</li>
-                <li><span class="check">✓</span> Custom branding & colors</li>
-                <li><span class="check">✓</span> Analytics dashboard</li>
-                <li><span class="check">✓</span> Embed on any website</li>
-                <li><span class="check">✓</span> Email support</li>
-            </ul>
-
-            {% if user.plan_type == 'solo' %}
-                <button class="btn btn-current">Current Plan</button>
-            {% else %}
-                <button onclick="startPayment('solo')" class="btn" style="background:rgba(52,211,153,0.15);color:#34d399;border:1.5px solid rgba(52,211,153,0.4);">Upgrade to Solo →</button>
-            {% endif %}
-        </div>
-
-        <!-- STARTER -->
-        <div class="pricing-card">
-            <div class="plan-label">Starter</div>
-            <div class="price-row">
-                <span class="price-dollar">$</span>
-                <span class="price-amount" id="starter-price">49</span>
-            </div>
-            <div class="price-period">per month</div>
-            <div class="price-annual" id="starter-annual"></div>
-            <p class="plan-tagline">Automate FAQs and stop answering the same questions manually.</p>
-
-            <ul class="features-list">
-                <li><span class="check">✓</span> 3 chatbots</li>
-                <li><span class="check">✓</span> 2,000 messages/month</li>
-                <li><span class="check">✓</span> Lead capture forms</li>
-                <li><span class="check">✓</span> CSV / PDF knowledge base</li>
-                <li><span class="check">✓</span> Embed on any website</li>
-                <li><span class="check">✓</span> Email support</li>
-            </ul>
-
-            {% if user.plan_type == 'starter' %}
-                <button class="btn btn-current">Current Plan</button>
-            {% else %}
-                <button onclick="startPayment('starter')" class="btn btn-secondary">Upgrade to Starter →</button>
-            {% endif %}
-        </div>
-
-        <!-- PRO (FEATURED) -->
-        <div class="pricing-card featured">
-            <div class="popular-badge">Most Popular</div>
-            <div class="plan-label">Pro</div>
-            <div class="price-row">
-                <span class="price-dollar">$</span>
-                <span class="price-amount" id="pro-price">99</span>
-            </div>
-            <div class="price-period">per month</div>
-            <div class="price-annual" id="pro-annual"></div>
-            <p class="plan-tagline">Capture leads 24/7 and let AI handle the first conversation automatically.</p>
-
-            <ul class="features-list">
-                <li><span class="check">✓</span> 10 chatbots</li>
-                <li><span class="check">✓</span> Unlimited messages</li>
-                <li><span class="check">✓</span> Lead capture + CRM webhooks</li>
-                <li><span class="check">✓</span> Zapier / Make integration</li>
-                <li><span class="check">✓</span> Analytics dashboard</li>
-                <li><span class="check">✓</span> Custom chatbot branding</li>
-                <li><span class="check">✓</span> Priority email support</li>
-            </ul>
-
-            {% if user.plan_type == 'pro' %}
-                <button class="btn btn-current">Current Plan</button>
-            {% else %}
-                <button onclick="startPayment('pro')" class="btn btn-primary">Upgrade to Pro →</button>
-            {% endif %}
-        </div>
-
-        <!-- AGENCY -->
-        <div class="pricing-card agency-card">
-            <div class="plan-label">Agency</div>
-            <div class="price-row">
-                <span class="price-dollar">$</span>
-                <span class="price-amount" id="agency-price">299</span>
-            </div>
-            <div class="price-period">per month</div>
-            <div class="price-annual" id="agency-annual"></div>
-            <p class="plan-tagline">White-label Lumvi under your brand. Keep 100% of the margin.</p>
-
-            <ul class="features-list">
-                <li><span class="check">✓</span> Unlimited chatbots</li>
-                <li><span class="check">✓</span> Unlimited messages</li>
-                <li><span class="check">✓</span> Full white-label (your logo, domain)</li>
-                <li><span class="check">✓</span> Client management portal</li>
-                <li><span class="check">✓</span> Reseller rights — 100% margin</li>
-                <li><span class="check">✓</span> Onboarding call included</li>
-                <li><span class="check">✓</span> Priority phone + email support</li>
-            </ul>
-
-            {% if user.plan_type == 'agency' %}
-                <button class="btn btn-current">Current Plan</button>
-            {% else %}
-                <button onclick="startPayment('agency')" class="btn btn-agency">Upgrade to Agency →</button>
-            {% endif %}
-        </div>
-
+    <!-- PRO — FEATURED -->
+    <div class="pricing-card featured">
+      <div class="popular-badge">Most Popular</div>
+      <div class="plan-name">Pro</div>
+      <div class="price-row">
+        <span class="price-sym" style="color:var(--gold);">$</span>
+        <span class="price-amt" id="pro-price">99</span>
+      </div>
+      <div class="price-per">/month</div>
+      <div class="price-annual-note" id="pro-annual"></div>
+      <p class="plan-desc">The full toolkit. 10 clients, unlimited messages, webhooks, and priority support.</p>
+      <ul class="feat-list">
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>10 chatbots</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited messages</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Webhooks + Zapier / Make</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Advanced analytics</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Priority email support</li>
+        <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">White-label / reseller</span></li>
+      </ul>
+      {% if user and user.plan_type == 'pro' %}
+      <button class="btn-upgrade btn-current">Current Plan</button>
+      {% else %}
+      <button class="btn-upgrade btn-gold" onclick="startPayment('pro')">
+        Upgrade to Pro
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+      {% endif %}
     </div>
 
-    <!-- Enterprise Strip -->
-    <div class="enterprise-strip">
-        <div>
-            <h4>Need something bigger?</h4>
-            <p>Custom contracts, dedicated infrastructure, SLA guarantees, and volume pricing.</p>
-        </div>
-        <div class="enterprise-feats">
-            <span class="ent-feat">Dedicated instance</span>
-            <span class="ent-feat">SLA guarantee</span>
-            <span class="ent-feat">Custom integrations</span>
-            <span class="ent-feat">Volume pricing</span>
-        </div>
-        <a href="/cdn-cgi/l/email-protection#afdcdadfdfc0dddbefc3dac2d9c681c1cadb90dcdacdc5caccdb92eac1dbcadddfddc6dcca8a9d9feac1dedac6ddd6" class="btn-enterprise">Talk to us →</a>
+    <!-- AGENCY -->
+    <div class="pricing-card" style="border-color:rgba(184,146,74,0.25);">
+      <div class="plan-name" style="color:var(--gold);">Agency</div>
+      <div class="price-row">
+        <span class="price-sym" style="color:var(--gold);">$</span>
+        <span class="price-amt" style="color:var(--gold);" id="agency-price">299</span>
+      </div>
+      <div class="price-per">/month</div>
+      <div class="price-annual-note" id="agency-annual"></div>
+      <p class="plan-desc">Unlimited clients, full white-label, and reseller rights. Built for agencies.</p>
+      <ul class="feat-list">
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited chatbots</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited messages</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Full white-label — your brand</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Custom domain per widget</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Reseller rights — 100% margin</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Onboarding call included</li>
+      </ul>
+      {% if user and user.plan_type == 'agency' %}
+      <button class="btn-upgrade btn-current">Current Plan</button>
+      {% else %}
+      <button class="btn-upgrade btn-gold" onclick="startPayment('agency')">
+        Upgrade to Agency
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+      {% endif %}
     </div>
 
-    <!-- Payment Modal -->
-    <div id="paymentModal" class="payment-modal">
-        <div class="payment-modal-content">
-            <span class="payment-close" onclick="closePaymentModal()">&times;</span>
+  </div><!-- /pricing-grid -->
 
-            <h2 style="text-align: center; margin-bottom: 20px; font-size: 22px;">Complete Your Upgrade</h2>
+  <!-- ENTERPRISE STRIP -->
+  <div class="enterprise-strip">
+    <div class="ent-left">
+      <h4>Need something bigger?</h4>
+      <p>Custom contracts, dedicated infrastructure, SLA guarantees, and volume pricing.</p>
+    </div>
+    <div class="ent-feats">
+      <span class="ent-feat">Dedicated instance</span>
+      <span class="ent-feat">SLA guarantee</span>
+      <span class="ent-feat">Custom integrations</span>
+      <span class="ent-feat">Volume pricing</span>
+    </div>
+    <a href="mailto:support@lumvi.net" class="btn-ent">Talk to us →</a>
+  </div>
 
-            <div class="modal-plan-summary">
-                <p>You are upgrading to <strong id="selectedPlanName" style="color: white;">—</strong></p>
-                <div class="modal-price" id="selectedPlanPrice">$0</div>
-            </div>
+  <!-- FOOTER LINKS -->
+  <div class="footer-links">
+    <a href="/dashboard">← Dashboard</a>
+    <a href="/terms">Terms</a>
+    <a href="/privacy-policy">Privacy</a>
+  </div>
 
-            <div class="payment-option">
-                <h4>💳 Pay with Card (Instant)</h4>
-                <p>Secure payment via Flutterwave. All major cards accepted.</p>
-                <button onclick="initiateFlutterwavePayment()" class="btn btn-primary" style="width:100%;">
-                    Pay <span id="cardAmount">$0</span> Securely →
-                </button>
-            </div>
+</div><!-- /page -->
 
-            <div class="payment-option">
-                <h4>🏦 Bank Transfer</h4>
-                <p>Prefer to pay manually? Contact us and we'll send bank details within 1 hour.</p>
-                <button onclick="contactForBankTransfer()" class="btn btn-secondary" style="font-size: 13px; padding: 10px;">
-                    Request Bank Details
-                </button>
-            </div>
+<!-- ── PAYMENT MODAL ── -->
+<div class="modal-overlay" id="paymentModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closePaymentModal()">×</button>
+    <h2>Complete Your Upgrade</h2>
 
-            <div class="terms-row">
-                <input type="checkbox" id="agreeTerms" style="margin-top: 3px; flex-shrink: 0;">
-                <label for="agreeTerms">
-                    I agree to the <a href="/terms" target="_blank">Terms &amp; Conditions</a> and understand the refund policy.
-                </label>
-            </div>
-        </div>
+    <div class="plan-summary">
+      <p>Upgrading to <strong id="selectedPlanName">—</strong></p>
+      <div class="plan-price" id="selectedPlanPrice">$0</div>
     </div>
 
-    <div class="back-link">
-        <a href="/dashboard">← Back to Dashboard</a>
-        <a href="/terms">Terms</a>
-        <a href="/privacy-policy">Privacy</a>
+    <div class="pay-option">
+      <h4>💳 Pay with Card (Instant)</h4>
+      <p>Secure payment via Flutterwave. All major cards accepted.</p>
+      <button class="btn-pay btn-pay-gold" onclick="initiateFlutterwavePayment()">
+        Pay <span id="cardAmount">$0</span> Securely →
+      </button>
     </div>
 
-    <!-- Flutterwave Inline JS SDK -->
-    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://checkout.flutterwave.com/v3.js"></script>
-    <script>
-        // Injected by Flask — never expose secret key here, only public key
-        const FLW_PUBLIC_KEY = '{{ flw_public_key }}';
-        const CURRENT_USER_ID    = {{ user.id }};
-        const CURRENT_USER_EMAIL = '{{ user.email }}';
-        const CURRENT_USER_NAME  = '{{ (user.name or user.email) | e }}';
+    <div class="pay-option">
+      <h4>🏦 Bank Transfer</h4>
+      <p>Prefer to pay manually? We'll send bank details within 1 hour.</p>
+      <button class="btn-pay btn-pay-outline" onclick="contactForBankTransfer()" style="border:1.5px solid var(--border);">
+        Request Bank Details
+      </button>
+    </div>
 
-        let selectedPlan = '';
+    <div class="terms-row">
+      <input type="checkbox" id="agreeTerms">
+      <label for="agreeTerms">
+        I agree to the <a href="/terms" target="_blank">Terms &amp; Conditions</a> and understand the refund policy.
+      </label>
+    </div>
+  </div>
+</div>
 
-        const prices = {
-            solo:    { monthly: 19,  annual: Math.round(19  * 10 / 12), label: 'Solo' },
-            starter: { monthly: 49,  annual: Math.round(49  * 10 / 12), label: 'Starter' },
-            pro:     { monthly: 99,  annual: Math.round(99  * 10 / 12), label: 'Pro' },
-            agency:  { monthly: 299, annual: Math.round(299 * 10 / 12), label: 'Agency' },
-        };
+<!-- Flutterwave SDK -->
+<script src="https://checkout.flutterwave.com/v3.js"></script>
+<script>
+const FLW_PUBLIC_KEY      = '{{ flw_public_key }}';
+const CURRENT_USER_ID     = {{ user.id }};
+const CURRENT_USER_EMAIL  = '{{ user.email }}';
+const CURRENT_USER_NAME   = '{{ (user.name or user.email) | e }}';
 
-        let isAnnual = false;
+let selectedPlan = '';
+let isAnnual     = false;
 
-        function toggleBilling() {
-            isAnnual = document.getElementById('billingToggle').checked;
-            document.getElementById('saveBadge').classList.toggle('visible', isAnnual);
+const prices = {
+  solo:    { monthly: 19,  annual: Math.round(19  * 10 / 12), label: 'Solo'    },
+  starter: { monthly: 49,  annual: Math.round(49  * 10 / 12), label: 'Starter' },
+  pro:     { monthly: 99,  annual: Math.round(99  * 10 / 12), label: 'Pro'     },
+  agency:  { monthly: 299, annual: Math.round(299 * 10 / 12), label: 'Agency'  },
+};
 
-            ['solo', 'starter', 'pro', 'agency'].forEach(function(plan) {
-                const el = document.getElementById(plan + '-price');
-                const annualEl = document.getElementById(plan + '-annual');
+function toggleBilling() {
+  isAnnual = document.getElementById('billingToggle').checked;
+  document.getElementById('saveBadge').classList.toggle('visible', isAnnual);
+  ['solo','starter','pro','agency'].forEach(function(plan) {
+    const el  = document.getElementById(plan + '-price');
+    const aEl = document.getElementById(plan + '-annual');
+    el.style.opacity   = '0';
+    el.style.transform = 'scale(0.85)';
+    setTimeout(function() {
+      el.textContent  = isAnnual ? prices[plan].annual : prices[plan].monthly;
+      aEl.textContent = isAnnual ? '$' + (prices[plan].monthly * 10) + '/yr — 2 months free' : '';
+      el.style.opacity   = '1';
+      el.style.transform = 'scale(1)';
+    }, 150);
+  });
+}
 
-                // Set transition FIRST so the hide is animated
-                el.style.transition = 'opacity 0.15s, transform 0.15s';
-                el.style.opacity = '0';
-                el.style.transform = 'scale(0.85)';
+function startPayment(plan) {
+  selectedPlan = plan;
+  const p      = prices[plan];
+  const amount = isAnnual ? p.monthly * 10 : p.monthly;
+  const period = isAnnual ? '/year' : '/month';
+  document.getElementById('selectedPlanName').textContent  = p.label + ' Plan';
+  document.getElementById('selectedPlanPrice').textContent = '$' + amount + period;
+  document.getElementById('cardAmount').textContent        = '$' + amount;
+  document.getElementById('agreeTerms').checked = false;
+  document.getElementById('paymentModal').classList.add('show');
+  document.body.style.overflow = 'hidden';
+}
 
-                setTimeout(function() {
-                    el.textContent = isAnnual ? prices[plan].annual : prices[plan].monthly;
-                    annualEl.textContent = isAnnual
-                        ? '$' + (prices[plan].monthly * 10) + '/yr — 2 months free'
-                        : '';
-                    el.style.opacity = '1';
-                    el.style.transform = 'scale(1)';
-                }, 150);
-            });
-        }
+function closePaymentModal() {
+  document.getElementById('paymentModal').classList.remove('show');
+  document.body.style.overflow = 'auto';
+}
 
-        function startPayment(plan) {
-            selectedPlan = plan;
-            const planData = prices[plan];
-            const amount = isAnnual ? planData.monthly * 10 : planData.monthly;
-            const periodLabel = isAnnual ? '/year' : '/month';
+document.getElementById('paymentModal').addEventListener('click', function(e) {
+  if (e.target === this) closePaymentModal();
+});
 
-            document.getElementById('selectedPlanName').textContent = planData.label + ' Plan';
-            document.getElementById('selectedPlanPrice').textContent = '$' + amount + periodLabel;
-            document.getElementById('cardAmount').textContent = '$' + amount;
+function initiateFlutterwavePayment() {
+  if (!document.getElementById('agreeTerms').checked) {
+    alert('Please agree to the Terms & Conditions before proceeding.');
+    return;
+  }
+  const p         = prices[selectedPlan];
+  const isAnnNow  = document.getElementById('billingToggle').checked;
+  const amount    = isAnnNow ? p.monthly * 10 : p.monthly;
+  const txRef     = 'lumvi_' + selectedPlan + '_' + CURRENT_USER_ID + '_' + Date.now();
+  if (!FLW_PUBLIC_KEY) {
+    alert('Payment not configured. Please contact support@lumvi.net.');
+    return;
+  }
+  closePaymentModal();
+  FlutterwaveCheckout({
+    public_key:   FLW_PUBLIC_KEY,
+    tx_ref:       txRef,
+    amount:       amount,
+    currency:     'USD',
+    redirect_url: window.location.origin + '/payment/flutterwave/callback',
+    customer:     { email: CURRENT_USER_EMAIL, name: CURRENT_USER_NAME },
+    customizations: {
+      title:       'Lumvi ' + p.label + ' Plan',
+      description: (isAnnNow ? 'Annual' : 'Monthly') + ' subscription',
+      logo:        'https://lumvi.net/static/logo.png'
+    },
+    callback:  function(data) { console.log('FLW payment data:', data); },
+    onclose:   function()     { console.log('FLW modal closed'); }
+  });
+}
 
-            document.getElementById('agreeTerms').checked = false;
-            document.getElementById('paymentModal').style.display = 'block';
-            document.body.style.overflow = 'hidden';
-        }
+function contactForBankTransfer() {
+  const p      = prices[selectedPlan];
+  const amount = isAnnual ? p.monthly * 10 : p.monthly;
+  const subj   = 'Bank Transfer Request — ' + p.label + ' Plan ($' + amount + ')';
+  const body   = 'Hi Lumvi Team,\n\nI would like to pay for the ' + p.label + ' plan via bank transfer.\n\nAmount: $' + amount + (isAnnual ? '/year' : '/month') + '\n\nPlease send me the bank details.\n\nThank you.';
+  window.location.href = 'mailto:support@lumvi.net?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(body);
+}
 
-        function closePaymentModal() {
-            document.getElementById('paymentModal').style.display = 'none';
-            document.body.style.overflow = 'auto';
-        }
-
-        // Called when user clicks "Pay with Card" in the modal
-        function initiateFlutterwavePayment() {
-            if (!document.getElementById('agreeTerms').checked) {
-                alert('Please agree to the Terms & Conditions before proceeding.');
-                return;
-            }
-
-            const planData   = prices[selectedPlan];
-            // Read directly from the toggle so we never get a stale value
-            const isAnnualNow = document.getElementById('billingToggle') 
-                                ? document.getElementById('billingToggle').checked 
-                                : false;
-            const amount     = isAnnualNow ? planData.monthly * 10 : planData.monthly;
-            const txRef      = 'lumvi_' + selectedPlan + '_' + CURRENT_USER_ID + '_' + Date.now();
-
-            if (!FLW_PUBLIC_KEY) {
-                alert('Payment not configured. Please contact support@lumvi.net.');
-                return;
-            }
-
-            closePaymentModal();
-
-            FlutterwaveCheckout({
-                public_key:   FLW_PUBLIC_KEY,
-                tx_ref:       txRef,
-                amount:       amount,
-                currency:     'USD',
-                redirect_url: window.location.origin + '/payment/flutterwave/callback',
-                customer: {
-                    email: CURRENT_USER_EMAIL,
-                    name:  CURRENT_USER_NAME
-                },
-                customizations: {
-                    title:       'Lumvi ' + planData.label + ' Plan',
-                    description: (isAnnualNow ? 'Annual' : 'Monthly') + ' subscription',
-                    logo:        'https://lumvi.net/static/logo.png'
-                },
-                callback: function(data) {
-                    // This fires in-page on success before the redirect
-                    console.log('FLW payment data:', data);
-                },
-                onclose: function() {
-                    console.log('FLW modal closed');
-                }
-            });
-        }
-
-        function contactForBankTransfer() {
-            const planData = prices[selectedPlan];
-            const amount = isAnnual ? planData.monthly * 10 : planData.monthly;
-            const subject = 'Bank Transfer Request — ' + planData.label + ' Plan ($' + amount + ')';
-            const body = 'Hi Lumvi Team,\n\nI would like to pay for the ' + planData.label + ' plan via bank transfer.\n\nAmount: $' + amount + (isAnnual ? '/year' : '/month') + '\n\nPlease send me the bank details.\n\nThank you.';
-            window.location.href = 'mailto:support@lumvi.net?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
-        }
-
-        window.onclick = function(event) {
-            if (event.target === document.getElementById('paymentModal')) {
-                closePaymentModal();
-            }
-        };
-
-        // Auto-open payment modal if user arrived from sales page pricing button
-        (function() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const plan = urlParams.get
+// Auto-open if ?plan= param is in URL
+(function() {
+  const plan = new URLSearchParams(window.location.search).get('plan');
+  if (plan && prices[plan]) startPayment(plan);
+})();
+</script>
+</body>
+</html>
