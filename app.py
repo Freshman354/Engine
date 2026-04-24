@@ -3682,8 +3682,9 @@ def support_page():
 @app.route('/client-portal')
 @login_required
 def client_portal():
-    plan = current_user.plan_type
-    plan_limits = PLAN_LIMITS.get(plan, PLAN_LIMITS['free'])
+    fresh_user  = models.get_user_by_id(current_user.id)
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
 
     if not plan_limits['white_label']:
         return '''<!DOCTYPE html>
@@ -3783,7 +3784,6 @@ p{font-size:14px;color:var(--mid);line-height:1.7;margin-bottom:8px;}
     stats       = models.get_clients_enriched_stats(client_ids) if hasattr(models, 'get_clients_enriched_stats') else {}
     leads_month = models.get_leads_this_month_bulk(client_ids)  if hasattr(models, 'get_leads_this_month_bulk')  else {}
 
-    plan_limits  = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
     daily_limit  = plan_limits['messages_per_day']
     client_limit = plan_limits['clients']
 
