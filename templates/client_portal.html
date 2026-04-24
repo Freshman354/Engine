@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Client Portal — Lumvi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
+  --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
+  --gold-glow:rgba(184,146,74,0.22);
+  --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#fff;
+  --success:#16A34A;--success-lt:#F0FDF4;--success-border:rgba(22,163,74,0.2);
+  --warning:#D97706;--warning-lt:#FFFBEB;
+  --danger:#EF4444;--danger-lt:#FEF2F2;--danger-border:rgba(239,68,68,0.2);
+  --radius:12px;--shadow:0 1px 3px rgba(0,0,0,0.06),0 4px 16px rgba(0,0,0,0.04);
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--white);border-bottom:1px solid var(--border);padding:0 28px;height:60px;
+  display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;
+  box-shadow:0 1px 0 var(--border);}
+.topbar-brand{display:flex;align-items:center;gap:9px;text-decoration:none;}
+.topbar-brand img{width:30px;height:30px;border-radius:7px;object-fit:cover;}
+.topbar-brand span{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.plan-chip{padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:700;
+  text-transform:uppercase;letter-spacing:0.05em;background:var(--gold-lt);
+  color:var(--gold-dk);border:1px solid rgba(184,146,74,0.3);}
+.btn-nav{padding:7px 14px;color:var(--sub);border:1px solid var(--border);border-radius:8px;
+  font-size:13px;font-weight:500;text-decoration:none;transition:all 0.15s;}
+.btn-nav:hover{color:var(--dark);border-color:var(--mid);}
+
+/* ── PAGE ── */
+.page{max-width:1280px;margin:0 auto;padding:32px 24px 80px;}
+@media(max-width:640px){.page{padding:20px 14px 60px;}}
+
+/* ── PAGE HEADER ── */
+.page-hd{display:flex;align-items:flex-start;justify-content:space-between;
+  gap:16px;margin-bottom:28px;flex-wrap:wrap;}
+.page-hd h1{font-family:'Fraunces',serif;font-size:26px;font-weight:700;letter-spacing:-0.3px;}
+.page-hd p{font-size:13.5px;color:var(--sub);margin-top:3px;}
+.page-hd-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;}
+.btn-primary{padding:10px 20px;background:var(--gold);color:#fff;border-radius:var(--radius);
+  border:none;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:700;
+  cursor:pointer;display:inline-flex;align-items:center;gap:7px;
+  box-shadow:0 2px 8px var(--gold-glow);transition:all 0.2s;text-decoration:none;}
+.btn-primary:hover{background:var(--gold-dk);transform:translateY(-1px);}
+.btn-primary svg{width:14px;height:14px;}
+.btn-secondary{padding:9px 16px;background:var(--white);color:var(--mid);
+  border:1.5px solid var(--border);border-radius:var(--radius);font-family:'DM Sans',sans-serif;
+  font-size:13px;font-weight:600;cursor:pointer;display:inline-flex;
+  align-items:center;gap:6px;transition:all 0.15s;text-decoration:none;}
+.btn-secondary:hover{border-color:var(--gold);color:var(--gold-dk);}
+.btn-secondary svg{width:13px;height:13px;}
+
+/* ── STATS GRID ── */
+.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:28px;}
+@media(max-width:1100px){.stats-grid{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:640px){.stats-grid{grid-template-columns:repeat(2,1fr);}}
+.stat-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);
+  padding:18px;box-shadow:var(--shadow);}
+.stat-label{font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;
+  letter-spacing:0.07em;margin-bottom:8px;}
+.stat-value{font-family:'Fraunces',serif;font-size:30px;font-weight:700;
+  color:var(--dark);letter-spacing:-0.5px;line-height:1;}
+.stat-sub{font-size:11.5px;color:var(--sub);margin-top:5px;}
+.stat-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;
+  border-radius:20px;font-size:11px;font-weight:600;background:var(--success-lt);color:var(--success);}
+.stat-badge svg{width:9px;height:9px;}
+
+/* ── TOOLBAR ── */
+.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.search-wrap{position:relative;flex:1;min-width:200px;}
+.search-wrap svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  width:14px;height:14px;color:var(--sub);}
+.search-input{width:100%;padding:9px 12px 9px 32px;border:1.5px solid var(--border);
+  border-radius:var(--radius);font-size:13px;font-family:'DM Sans',sans-serif;
+  background:var(--white);color:var(--dark);outline:none;transition:all 0.2s;}
+.search-input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-lt);}
+.filter-sel{padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius);
+  font-size:13px;font-family:'DM Sans',sans-serif;background:var(--white);
+  color:var(--dark);outline:none;cursor:pointer;}
+.view-toggle{display:flex;background:var(--panel);border-radius:8px;padding:3px;gap:2px;}
+.view-btn{width:32px;height:32px;border:none;border-radius:6px;background:transparent;
+  color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all 0.15s;}
+.view-btn.active{background:var(--white);color:var(--dark);box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+.view-btn svg{width:14px;height:14px;}
+
+/* ── BULK BAR ── */
+.bulk-bar{display:none;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px 14px;background:var(--dark);border-radius:var(--radius);
+  margin-bottom:12px;flex-wrap:wrap;}
+.bulk-bar.show{display:flex;}
+.bulk-info{font-size:13.5px;font-weight:600;color:#fff;}
+.bulk-actions{display:flex;gap:8px;flex-wrap:wrap;}
+.btn-bulk{padding:6px 14px;border-radius:8px;font-size:12.5px;font-weight:700;
+  font-family:'DM Sans',sans-serif;border:none;cursor:pointer;transition:all 0.15s;}
+.btn-bulk-warn{background:var(--warning-lt);color:var(--warning);}
+.btn-bulk-danger{background:var(--danger-lt);color:var(--danger);}
+.btn-bulk-cancel{background:rgba(255,255,255,0.12);color:rgba(255,255,255,0.8);}
+.btn-bulk-cancel:hover{background:rgba(255,255,255,0.2);}
+
+/* ── TABLE VIEW ── */
+.table-wrap{background:var(--white);border:1px solid var(--border);border-radius:16px;
+  overflow:hidden;box-shadow:var(--shadow);}
+.data-table{width:100%;border-collapse:collapse;}
+.data-table th{padding:11px 14px;text-align:left;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:0.07em;color:var(--sub);background:var(--cream);
+  border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap;user-select:none;}
+.data-table th:hover{color:var(--dark);}
+.data-table td{padding:13px 14px;border-bottom:1px solid var(--border);
+  font-size:13.5px;vertical-align:middle;}
+.data-table tbody tr:last-child td{border-bottom:none;}
+.data-table tbody tr:hover{background:#FDFCFA;}
+.data-table tbody tr.suspended td{opacity:0.55;}
+.cb-th,.cb-td{width:40px;padding-right:0!important;}
+@media(max-width:1024px){.data-table .hide-md{display:none;}}
+@media(max-width:768px){.data-table .hide-sm{display:none;}}
+
+/* ── CLIENT NAME CELL ── */
+.client-cell{display:flex;align-items:center;gap:10px;}
+.client-avatar{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;
+  justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;}
+.client-avatar img{width:100%;height:100%;object-fit:cover;}
+.client-name{font-weight:600;color:var(--dark);}
+.client-id{font-family:'DM Mono',monospace;font-size:10.5px;color:var(--sub);margin-top:1px;}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;
+  border-radius:20px;font-size:11.5px;font-weight:700;}
+.badge-active{background:var(--success-lt);color:var(--success);}
+.badge-suspended{background:var(--danger-lt);color:var(--danger);}
+.badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor;}
+
+/* ── USAGE BAR ── */
+.usage-wrap{display:flex;flex-direction:column;gap:3px;min-width:80px;}
+.usage-bar-bg{height:5px;background:var(--panel);border-radius:4px;overflow:hidden;}
+.usage-bar-fill{height:100%;border-radius:4px;transition:width 0.4s;}
+.fill-success{background:var(--success);}
+.fill-warning{background:var(--warning);}
+.fill-danger{background:var(--danger);}
+.usage-label{font-size:10.5px;color:var(--sub);}
+
+/* ── ROW ACTIONS ── */
+.row-actions{display:flex;gap:5px;align-items:center;justify-content:flex-end;}
+.act-btn{width:28px;height:28px;border-radius:7px;border:none;background:transparent;
+  color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
+.act-btn:hover{background:var(--cream2);color:var(--dark);}
+.act-btn.danger:hover{background:var(--danger-lt);color:var(--danger);}
+.act-btn svg{width:13px;height:13px;}
+.act-dropdown{position:relative;}
+.act-menu{display:none;position:absolute;right:0;top:34px;background:var(--white);
+  border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,0.1);min-width:180px;z-index:50;overflow:hidden;}
+.act-menu.show{display:block;}
+.act-menu-item{display:flex;align-items:center;gap:9px;padding:10px 14px;font-size:13px;
+  font-weight:500;color:var(--mid);cursor:pointer;transition:background 0.12s;
+  text-decoration:none;border:none;background:none;width:100%;text-align:left;
+  font-family:'DM Sans',sans-serif;}
+.act-menu-item:hover{background:var(--cream);color:var(--dark);}
+.act-menu-item.danger{color:var(--danger);}
+.act-menu-item.danger:hover{background:var(--danger-lt);}
+.act-menu-item svg{width:13px;height:13px;flex-shrink:0;}
+.act-menu-sep{height:1px;background:var(--border);margin:4px 0;}
+
+/* ── GRID VIEW ── */
+.clients-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;}
+@media(max-width:640px){.clients-grid{grid-template-columns:1fr;}}
+.client-card{background:var(--white);border:1.5px solid var(--border);border-radius:16px;
+  overflow:hidden;box-shadow:var(--shadow);transition:all 0.2s;}
+.client-card:hover{box-shadow:0 8px 32px rgba(0,0,0,0.08);transform:translateY(-2px);}
+.client-card.suspended{opacity:0.6;}
+.card-band{height:5px;}
+.card-body{padding:16px;}
+.card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.card-av-name{display:flex;align-items:center;gap:10px;}
+.card-av{width:40px;height:40px;border-radius:11px;overflow:hidden;display:flex;
+  align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0;}
+.card-av img{width:100%;height:100%;object-fit:cover;}
+.card-name{font-weight:700;font-size:14px;color:var(--dark);}
+.card-sub{font-size:11.5px;color:var(--sub);margin-top:1px;}
+.card-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;}
+.card-stat{text-align:center;padding:8px 4px;background:var(--cream);border-radius:8px;}
+.card-stat-val{font-family:'Fraunces',serif;font-size:18px;font-weight:700;
+  color:var(--dark);line-height:1;}
+.card-stat-lbl{font-size:10px;color:var(--sub);margin-top:2px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.04em;}
+.card-footer{display:flex;align-items:center;justify-content:space-between;
+  border-top:1px solid var(--border);padding-top:10px;}
+.card-ts{font-size:11.5px;color:var(--sub);}
+.card-actions{display:flex;gap:5px;}
+.card-act{padding:5px 10px;border-radius:7px;font-size:12px;font-weight:600;
+  border:1px solid var(--border);background:var(--white);color:var(--mid);
+  cursor:pointer;text-decoration:none;transition:all 0.15s;display:inline-flex;
+  align-items:center;gap:4px;font-family:'DM Sans',sans-serif;}
+.card-act:hover{border-color:var(--gold);color:var(--gold-dk);}
+.card-act svg{width:11px;height:11px;}
+
+/* ── EMPTY STATE ── */
+.empty-state{padding:72px 24px;text-align:center;}
+.empty-icon{width:64px;height:64px;border-radius:18px;background:var(--gold-lt);
+  display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+.empty-icon svg{width:28px;height:28px;color:var(--gold);}
+.empty-state h3{font-family:'Fraunces',serif;font-size:20px;font-weight:700;margin-bottom:8px;}
+.empty-state p{font-size:14px;color:var(--sub);max-width:360px;margin:0 auto 20px;line-height:1.65;}
+
+/* ── MODALS ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(28,25,23,0.55);
+  backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;padding:16px;}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--white);border:1px solid var(--border);border-radius:20px;
+  padding:28px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.15);
+  animation:slideUp 0.22s ease;}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+.modal h2{font-family:'Fraunces',serif;font-size:20px;font-weight:700;margin-bottom:8px;}
+.modal p{font-size:13.5px;color:var(--mid);line-height:1.6;margin-bottom:20px;}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--mid);margin-bottom:5px;
+  text-transform:uppercase;letter-spacing:0.07em;}
+.field input,.field select{width:100%;padding:9px 12px;border:1.5px solid var(--border);
+  border-radius:9px;font-size:13.5px;font-family:'DM Sans',sans-serif;
+  color:var(--dark);background:var(--cream);outline:none;transition:all 0.2s;}
+.field input:focus,.field select:focus{border-color:var(--gold);background:var(--white);
+  box-shadow:0 0 0 3px var(--gold-lt);}
+.hint{font-size:11px;color:var(--sub);margin-top:4px;}
+.modal-danger-icon{width:52px;height:52px;border-radius:14px;background:var(--danger-lt);
+  display:flex;align-items:center;justify-content:center;margin-bottom:14px;}
+.modal-danger-icon svg{width:24px;height:24px;color:var(--danger);}
+.btn-danger{padding:10px 20px;background:var(--danger);color:#fff;border-radius:var(--radius);
+  border:none;font-family:'DM Sans',sans-serif;font-size:13.5px;font-weight:700;cursor:pointer;transition:all 0.15s;}
+.btn-danger:hover{background:#DC2626;}
+.btn-ghost{padding:10px 16px;background:transparent;color:var(--mid);
+  border:1.5px solid var(--border);border-radius:var(--radius);font-family:'DM Sans',sans-serif;
+  font-size:13.5px;font-weight:600;cursor:pointer;transition:all 0.15s;}
+.btn-ghost:hover{border-color:var(--gold);color:var(--gold-dk);}
+
+/* ── EMBED BLOCK ── */
+.embed-block{background:#1C1917;border-radius:10px;padding:14px;font-family:'DM Mono',monospace;
+  font-size:11.5px;color:#D4C4A8;line-height:1.7;white-space:pre-wrap;
+  word-break:break-all;margin-bottom:14px;}
+
+/* ── SPINNER + TOAST ── */
+.spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;
+  border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);
+  padding:11px 18px;border-radius:10px;font-size:13.5px;font-weight:600;color:#fff;
+  z-index:9999;opacity:0;transition:all 0.3s;pointer-events:none;
+  display:flex;align-items:center;gap:7px;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.success{background:var(--success);}
+.toast.error{background:var(--danger);}
+.toast svg{width:14px;height:14px;}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <a href="/dashboard" class="topbar-brand">
+    <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi">
+    <span>Lumvi</span>
+  </a>
+  <div class="topbar-right">
+    <span class="plan-chip">{{ plan_type }}</span>
+    <a href="/dashboard" class="btn-nav">Dashboard</a>
+    <a href="/logout" class="btn-nav">Logout</a>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- PAGE HEADER -->
+  <div class="page-hd">
+    <div>
+      <h1>Client Portal</h1>
+      <p>{{ client_count }} client{{ 's' if client_count != 1 }} · {{ active_clients }} active · your agency command centre</p>
+    </div>
+    <div class="page-hd-actions">
+      <button class="btn-secondary" onclick="openAgencyModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        Agency Branding
+      </button>
+      <button class="btn-primary" onclick="openAddModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Client
+      </button>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Clients</div>
+      <div class="stat-value">{{ client_count }}</div>
+      <div class="stat-sub">{{ active_clients }} active</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Leads</div>
+      <div class="stat-value">{{ total_leads }}</div>
+      <div class="stat-sub">
+        <span class="stat-badge">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
+          {{ leads_this_month }} this month
+        </span>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Conversations</div>
+      <div class="stat-value">{{ total_convos }}</div>
+      <div class="stat-sub">across all clients</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Plan Slots</div>
+      <div class="stat-value">{{ slots_display }}</div>
+      <div class="stat-sub">{{ client_count }} used{% if slots_display != 'Unlimited' %} of {{ slots_display }}{% endif %}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Daily Limit</div>
+      <div class="stat-value" style="font-size:22px;">{{ daily_display }}</div>
+      <div class="stat-sub">messages / day</div>
+    </div>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="search-input" id="searchInput" type="text" placeholder="Search clients…" oninput="filterClients()">
+    </div>
+    <select class="filter-sel" id="statusFilter" onchange="filterClients()">
+      <option value="">All statuses</option>
+      <option value="active">Active</option>
+      <option value="suspended">Suspended</option>
+    </select>
+    <div class="view-toggle">
+      <button class="view-btn active" id="btnTable" onclick="setView('table')" title="Table view">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="9" x2="9" y2="21"/></svg>
+      </button>
+      <button class="view-btn" id="btnGrid" onclick="setView('grid')" title="Grid view">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- BULK BAR -->
+  <div class="bulk-bar" id="bulkBar">
+    <div class="bulk-info"><span id="bulkCount">0</span> clients selected</div>
+    <div class="bulk-actions">
+      <button class="btn-bulk btn-bulk-warn" onclick="bulkAction('suspend')">Suspend All</button>
+      <button class="btn-bulk btn-bulk-warn" onclick="bulkAction('reactivate')">Reactivate All</button>
+      <button class="btn-bulk btn-bulk-danger" onclick="bulkAction('delete')">Delete All</button>
+      <button class="btn-bulk btn-bulk-cancel" onclick="clearSelection()">✕ Cancel</button>
+    </div>
+  </div>
+
+  {% if clients %}
+
+  <!-- TABLE VIEW -->
+  <div id="tableView">
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="cb-th"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+            <th>Client</th>
+            <th class="hide-sm">Status</th>
+            <th class="hide-sm">Leads</th>
+            <th class="hide-md">Conversations</th>
+            <th class="hide-sm">Last Active</th>
+            <th class="hide-md">Usage</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="clientsBody">
+          {% for c in clients %}
+          <tr class="client-row {% if c.is_suspended %}suspended{% endif %}"
+              data-name="{{ c.name | lower }}"
+              data-status="{{ 'suspended' if c.is_suspended else 'active' }}"
+              data-leads="{{ c.leads_count }}"
+              data-convos="{{ c.conversations }}">
+            <td class="cb-td"><input type="checkbox" class="row-cb" value="{{ c.cid }}" onchange="rowCheckChange()"></td>
+            <td>
+              <div class="client-cell">
+                <div class="client-avatar" style="background:{{ c.primary_color }}">
+                  {% if c.bot_avatar_url %}<img src="{{ c.bot_avatar_url }}" alt="">
+                  {% elif c.logo_url %}<img src="{{ c.logo_url }}" alt="">
+                  {% else %}{{ c.name[0] | upper }}{% endif %}
+                </div>
+                <div>
+                  <div class="client-name">{{ c.name }}</div>
+                  <div class="client-id">{{ c.cid }}</div>
+                </div>
+              </div>
+            </td>
+            <td class="hide-sm">
+              {% if c.is_suspended %}
+              <span class="badge badge-suspended"><span class="badge-dot"></span>Suspended</span>
+              {% else %}
+              <span class="badge badge-active"><span class="badge-dot"></span>Active</span>
+              {% endif %}
+            </td>
+            <td class="hide-sm">
+              <div style="font-weight:700;">{{ c.leads_count }}</div>
+              <div style="font-size:11px;color:var(--sub);">+{{ c.leads_month }} this mo.</div>
+            </td>
+            <td class="hide-md" style="font-weight:600;">{{ c.conversations }}</td>
+            <td class="hide-sm" style="color:var(--sub);font-size:13px;">{{ c.last_active_str }}</td>
+            <td class="hide-md">
+              <div class="usage-wrap">
+                <div class="usage-bar-bg">
+                  <div class="usage-bar-fill fill-{{ c.usage_class }}" style="width:{{ c.usage_pct }}%"></div>
+                </div>
+                <div class="usage-label">{{ c.daily_msgs }} msg today</div>
+              </div>
+            </td>
+            <td>
+              <div class="row-actions">
+                <a href="/customize?client_id={{ c.cid }}" class="act-btn" title="Customize">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                </a>
+                <a href="/admin/leads?client_id={{ c.cid }}" class="act-btn" title="Leads">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                </a>
+                <div class="act-dropdown">
+                  <button class="act-btn" onclick="toggleMenu(this)" title="More">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg>
+                  </button>
+                  <div class="act-menu">
+                    <a href="/faq-manager?client_id={{ c.cid }}" class="act-menu-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                      Manage FAQs
+                    </a>
+                    <a href="/article-manager?client_id={{ c.cid }}" class="act-menu-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      Articles
+                    </a>
+                    <a href="/client-dashboard?client_id={{ c.cid }}" class="act-menu-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                      Client Dashboard
+                    </a>
+                    <a href="/widget?client_id={{ c.cid }}" target="_blank" class="act-menu-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                      Preview Widget
+                    </a>
+                    <a href="#" class="act-menu-item" onclick="showEmbedModal('{{ c.cid }}','{{ c.name }}');return false;">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                      Embed Code
+                    </a>
+                    <a href="#" class="act-menu-item" onclick="openCloneModal('{{ c.cid }}','{{ c.name }}');return false;">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                      Clone Client
+                    </a>
+                    <div class="act-menu-sep"></div>
+                    {% if c.is_suspended %}
+                    <button class="act-menu-item" onclick="suspendClient('{{ c.cid }}',false)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 12 14 14"/></svg>
+                      Reactivate
+                    </button>
+                    {% else %}
+                    <button class="act-menu-item danger" onclick="suspendClient('{{ c.cid }}',true)">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+                      Suspend Widget
+                    </button>
+                    {% endif %}
+                    <button class="act-menu-item danger" onclick="openDeleteModal('{{ c.cid }}','{{ c.name }}')">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                      Delete Client
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div style="padding:12px 16px;border-top:1px solid var(--border);font-size:13px;color:var(--sub);" id="pageInfo">
+        Showing all {{ client_count }} clients
+      </div>
+    </div>
+  </div>
+
+  <!-- GRID VIEW -->
+  <div id="gridView" style="display:none;">
+    <div class="clients-grid">
+      {% for c in clients %}
+      <div class="client-card {% if c.is_suspended %}suspended{% endif %}"
+           data-name="{{ c.name | lower }}"
+           data-status="{{ 'suspended' if c.is_suspended else 'active' }}">
+        <div class="card-band" style="background:{{ c.primary_color }}"></div>
+        <div class="card-body">
+          <div class="card-top">
+            <div class="card-av-name">
+              <div class="card-av" style="background:{{ c.primary_color }}">
+                {% if c.bot_avatar_url %}<img src="{{ c.bot_avatar_url }}" alt="">
+                {% elif c.logo_url %}<img src="{{ c.logo_url }}" alt="">
+                {% else %}{{ c.name[0] | upper }}{% endif %}
+              </div>
+              <div>
+                <div class="card-name">{{ c.name }}</div>
+                <div class="card-sub">{{ c.last_active_str }}</div>
+              </div>
+            </div>
+            {% if c.is_suspended %}
+            <span class="badge badge-suspended"><span class="badge-dot"></span>Suspended</span>
+            {% else %}
+            <span class="badge badge-active"><span class="badge-dot"></span>Active</span>
+            {% endif %}
+          </div>
+          <div class="card-stats">
+            <div class="card-stat">
+              <div class="card-stat-val">{{ c.leads_count }}</div>
+              <div class="card-stat-lbl">Leads</div>
+            </div>
+            <div class="card-stat">
+              <div class="card-stat-val">{{ c.conversations }}</div>
+              <div class="card-stat-lbl">Convos</div>
+            </div>
+            <div class="card-stat">
+              <div class="card-stat-val">{{ c.faqs_count }}</div>
+              <div class="card-stat-lbl">FAQs</div>
+            </div>
+          </div>
+          <div class="card-footer">
+            <div class="card-ts">+{{ c.leads_month }} leads this mo.</div>
+            <div class="card-actions">
+              <a href="/customize?client_id={{ c.cid }}" class="card-act">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                Edit
+              </a>
+              <a href="/admin/leads?client_id={{ c.cid }}" class="card-act">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                Leads
+              </a>
+              <div class="act-dropdown">
+                <button class="card-act" onclick="toggleMenu(this)">•••</button>
+                <div class="act-menu">
+                  <a href="/faq-manager?client_id={{ c.cid }}" class="act-menu-item">FAQs</a>
+                  <a href="/article-manager?client_id={{ c.cid }}" class="act-menu-item">Articles</a>
+                  <a href="/client-dashboard?client_id={{ c.cid }}" class="act-menu-item">Dashboard</a>
+                  <a href="/widget?client_id={{ c.cid }}" target="_blank" class="act-menu-item">Preview</a>
+                  <a href="#" class="act-menu-item" onclick="showEmbedModal('{{ c.cid }}','{{ c.name }}');return false;">Embed Code</a>
+                  <a href="#" class="act-menu-item" onclick="openCloneModal('{{ c.cid }}','{{ c.name }}');return false;">Clone</a>
+                  <div class="act-menu-sep"></div>
+                  {% if c.is_suspended %}
+                  <button class="act-menu-item" onclick="suspendClient('{{ c.cid }}',false)">Reactivate</button>
+                  {% else %}
+                  <button class="act-menu-item danger" onclick="suspendClient('{{ c.cid }}',true)">Suspend</button>
+                  {% endif %}
+                  <button class="act-menu-item danger" onclick="openDeleteModal('{{ c.cid }}','{{ c.name }}')">Delete</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% else %}
+  <div class="table-wrap">
+    <div class="empty-state">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      </div>
+      <h3>No clients yet</h3>
+      <p>Add your first client to start managing their AI chatbot, leads, and branding from one place.</p>
+      <button class="btn-primary" onclick="openAddModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Your First Client
+      </button>
+    </div>
+  </div>
+  {% endif %}
+
+</div><!-- /page -->
+
+<!-- ADD CLIENT MODAL -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <h2>Add New Client</h2>
+    <p>Agency branding defaults are applied automatically. Customise everything on the Customize page afterwards.</p>
+    <div class="field">
+      <label>Company Name *</label>
+      <input type="text" id="addName" placeholder="e.g. Acme Law Firm">
+    </div>
+    <div class="field">
+      <label>Industry / Vertical</label>
+      <select id="addVertical">
+        <option value="general">General</option>
+        <option value="law_firm">Law Firm</option>
+        <option value="healthcare">Healthcare / Medical</option>
+        <option value="real_estate">Real Estate</option>
+        <option value="ecommerce">E-commerce / Retail</option>
+        <option value="saas">SaaS / Tech</option>
+        <option value="dental">Dental / Cosmetic</option>
+        <option value="plumber">Plumber / Trades</option>
+        <option value="gym">Gym / Fitness</option>
+      </select>
+    </div>
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn-ghost" onclick="closeModal('addModal')">Cancel</button>
+      <button class="btn-primary" id="addSaveBtn" onclick="addClient()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>
+        Create Client
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- CLONE MODAL -->
+<div class="modal-overlay" id="cloneModal">
+  <div class="modal">
+    <h2>Clone Client</h2>
+    <p id="cloneDesc">Copy all branding and FAQs to a new client.</p>
+    <div class="field">
+      <label>New Client Name *</label>
+      <input type="text" id="cloneName" placeholder="e.g. Acme Law Firm — Branch 2">
+    </div>
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn-ghost" onclick="closeModal('cloneModal')">Cancel</button>
+      <button class="btn-primary" id="cloneSaveBtn" onclick="cloneClient()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Clone
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE MODAL -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <div class="modal-danger-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+    </div>
+    <h2>Delete Client?</h2>
+    <p>This permanently deletes <strong id="deleteName"></strong> and all their conversations, leads, and FAQs. Cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn-danger" id="deleteConfirmBtn" onclick="executeDelete()">Delete Permanently</button>
+    </div>
+  </div>
+</div>
+
+<!-- EMBED MODAL -->
+<div class="modal-overlay" id="embedModal">
+  <div class="modal" style="max-width:540px;">
+    <h2>Embed Code</h2>
+    <p id="embedDesc">Paste this snippet before <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 6px;border-radius:4px;">&lt;/body&gt;</code> on the client's website.</p>
+    <pre class="embed-block" id="embedCode"></pre>
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModal('embedModal')">Close</button>
+      <button class="btn-primary" onclick="copyEmbed()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy Code
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- AGENCY BRANDING MODAL -->
+<div class="modal-overlay" id="agencyModal">
+  <div class="modal">
+    <h2>Agency Defaults</h2>
+    <p>Applied to every new client you create. Override per-client on the Customize page.</p>
+    <div class="field">
+      <label>Default Brand Colour</label>
+      <div style="display:flex;gap:8px;">
+        <input type="color" id="ab_color_pick" value="{{ agency_branding.get('branding', {}).get('primary_color', '#B8924A') }}"
+          oninput="document.getElementById('ab_color_txt').value=this.value"
+          style="width:42px;height:42px;padding:2px;border:1.5px solid var(--border);border-radius:9px;cursor:pointer;background:var(--cream);">
+        <input type="text" id="ab_color_txt" value="{{ agency_branding.get('branding', {}).get('primary_color', '#B8924A') }}"
+          style="flex:1;font-family:'DM Mono',monospace;"
+          oninput="if(/^#[0-9A-Fa-f]{6}$/.test(this.value))document.getElementById('ab_color_pick').value=this.value">
+      </div>
+    </div>
+    <div class="field">
+      <label>Default Bot Name</label>
+      <input type="text" id="ab_bot_name" value="{{ agency_branding.get('bot_settings', {}).get('bot_name', '') }}" placeholder="Support Assistant">
+    </div>
+    <div class="field">
+      <label>Default Welcome Message</label>
+      <input type="text" id="ab_welcome" value="{{ agency_branding.get('bot_settings', {}).get('welcome_message', '') }}" placeholder="Hi! How can I help?">
+    </div>
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn-ghost" onclick="closeModal('agencyModal')">Cancel</button>
+      <button class="btn-primary" id="agSaveBtn" onclick="saveAgencyBranding()">Save Defaults</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let _deleteClientId = null, _cloneClientId = null;
+
+// ── Toast ──────────────────────────────────────────────────────────────
+function toast(msg, type='success') {
+  const t = document.getElementById('toast');
+  const ic = type==='success'
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  t.innerHTML = ic + msg; t.className = `toast ${type} show`;
+  setTimeout(() => t.className='toast', type==='success' ? 3200 : 5000);
+}
+
+// ── Modals ─────────────────────────────────────────────────────────────
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+document.querySelectorAll('.modal-overlay').forEach(o=>{
+  o.addEventListener('click', e => { if(e.target===o) o.classList.remove('show'); });
+});
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape') document.querySelectorAll('.modal-overlay.show').forEach(m=>m.classList.remove('show'));
+});
+
+// ── Dropdowns ──────────────────────────────────────────────────────────
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.act-dropdown'))
+    document.querySelectorAll('.act-menu.show').forEach(m=>m.classList.remove('show'));
+});
+function toggleMenu(btn){
+  const menu = btn.nextElementSibling;
+  const open = menu.classList.contains('show');
+  document.querySelectorAll('.act-menu.show').forEach(m=>m.classList.remove('show'));
+  if(!open) menu.classList.add('show');
+}
+
+// ── View toggle ────────────────────────────────────────────────────────
+function setView(v){
+  document.getElementById('tableView').style.display = v==='table' ? '' : 'none';
+  document.getElementById('gridView').style.display  = v==='grid'  ? '' : 'none';
+  document.getElementById('btnTable').classList.toggle('active', v==='table');
+  document.getElementById('btnGrid').classList.toggle('active',  v==='grid');
+}
+
+// ── Search & filter ────────────────────────────────────────────────────
+function filterClients(){
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const s = document.getElementById('statusFilter').value;
+  let shown = 0;
+  document.querySelectorAll('.client-row').forEach(r=>{
+    const ok = r.dataset.name.includes(q) && (!s || r.dataset.status===s);
+    r.style.display = ok ? '' : 'none';
+    if(ok) shown++;
+  });
+  document.querySelectorAll('.client-card').forEach(c=>{
+    c.style.display = c.dataset.name.includes(q) && (!s||c.dataset.status===s) ? '' : 'none';
+  });
+  document.getElementById('pageInfo').textContent =
+    q||s ? `Showing ${shown} matching clients` : `Showing all ${shown} clients`;
+}
+
+// ── Checkboxes ─────────────────────────────────────────────────────────
+function rowCheckChange(){
+  const checked = [...document.querySelectorAll('.row-cb:checked')];
+  document.getElementById('bulkBar').classList.toggle('show', checked.length>0);
+  document.getElementById('bulkCount').textContent = checked.length;
+  document.getElementById('selectAll').checked =
+    checked.length>0 && checked.length===document.querySelectorAll('.row-cb').length;
+}
+function toggleSelectAll(cb){
+  document.querySelectorAll('.row-cb').forEach(r=>r.checked=cb.checked);
+  rowCheckChange();
+}
+function clearSelection(){
+  document.querySelectorAll('.row-cb').forEach(r=>r.checked=false);
+  document.getElementById('selectAll').checked=false;
+  document.getElementById('bulkBar').classList.remove('show');
+}
+function getSelected(){ return [...document.querySelectorAll('.row-cb:checked')].map(r=>r.value); }
+
+// ── Bulk ───────────────────────────────────────────────────────────────
+async function bulkAction(action){
+  const ids = getSelected();
+  if(!ids.length) return;
+  if(!confirm(`${action} ${ids.length} client(s)?`)) return;
+  const r = await fetch('/api/admin/client/bulk-action',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action,client_ids:ids})
+  });
+  const d = await r.json();
+  if(d.success){ toast(`${d.ok.length} client(s) ${action}d`,'success'); clearSelection(); setTimeout(()=>location.reload(),1200); }
+  else toast(d.error||'Failed','error');
+}
+
+// ── Add client ─────────────────────────────────────────────────────────
+function openAddModal(){ openModal('addModal'); setTimeout(()=>document.getElementById('addName').focus(),120); }
+async function addClient(){
+  const name = document.getElementById('addName').value.trim();
+  if(!name){ toast('Company name required','error'); return; }
+  const btn = document.getElementById('addSaveBtn');
+  btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Creating…';
+  const form = new FormData(); form.append('company_name',name);
+  try{
+    const r = await fetch('/create-client',{method:'POST',body:form});
+    if(r.ok||r.redirected){ toast(`"${name}" created`,'success'); closeModal('addModal'); setTimeout(()=>location.reload(),900); }
+    else toast('Failed to create client','error');
+  }catch{ toast('Network error','error'); }
+  finally{ btn.disabled=false; btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Create Client'; }
+}
+
+// ── Clone ──────────────────────────────────────────────────────────────
+function openCloneModal(cid,name){
+  _cloneClientId=cid;
+  document.getElementById('cloneDesc').textContent=`Copy branding and FAQs from "${name}" to a new client.`;
+  document.getElementById('cloneName').value=name+' — Copy';
+  openModal('cloneModal');
+  setTimeout(()=>{ document.getElementById('cloneName').focus(); document.getElementById('cloneName').select(); },120);
+}
+async function cloneClient(){
+  const newName = document.getElementById('cloneName').value.trim();
+  if(!newName){ toast('New client name required','error'); return; }
+  const btn = document.getElementById('cloneSaveBtn');
+  btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Cloning…';
+  try{
+    const r = await fetch('/api/admin/client/clone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:_cloneClientId,new_name:newName})});
+    const d = await r.json();
+    if(d.success){ toast(d.message||'Client cloned','success'); closeModal('cloneModal'); setTimeout(()=>location.reload(),900); }
+    else toast(d.error||'Clone failed','error');
+  }catch{ toast('Network error','error'); }
+  finally{ btn.disabled=false; btn.innerHTML='Clone'; }
+}
+
+// ── Suspend ────────────────────────────────────────────────────────────
+async function suspendClient(cid,suspend){
+  document.querySelectorAll('.act-menu.show').forEach(m=>m.classList.remove('show'));
+  const r = await fetch('/api/admin/client/suspend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:cid,suspend})});
+  const d = await r.json();
+  if(d.success){ toast(suspend?'Widget suspended':'Widget reactivated','success'); setTimeout(()=>location.reload(),900); }
+  else toast(d.error||'Failed','error');
+}
+
+// ── Delete ─────────────────────────────────────────────────────────────
+function openDeleteModal(cid,name){
+  _deleteClientId=cid;
+  document.getElementById('deleteName').textContent=name;
+  openModal('deleteModal');
+}
+async function executeDelete(){
+  if(!_deleteClientId) return;
+  const btn=document.getElementById('deleteConfirmBtn');
+  btn.disabled=true; btn.textContent='Deleting…';
+  try{
+    const r=await fetch(`/delete-client/${_deleteClientId}`,{method:'DELETE'});
+    const d=await r.json();
+    if(d.success){ toast('Client deleted','success'); closeModal('deleteModal'); setTimeout(()=>location.reload(),900); }
+    else toast(d.error||'Delete failed','error');
+  }catch{ toast('Network error','error'); }
+  finally{ btn.disabled=false; btn.textContent='Delete Permanently'; }
+}
+
+// ── Embed ──────────────────────────────────────────────────────────────
+function showEmbedModal(cid,name){
+  document.getElementById('embedDesc').innerHTML=`Embed code for <strong>${name}</strong>`;
+  document.getElementById('embedCode').textContent=
+    `<script>\n(function(){\n  var s=document.createElement('script');\n  s.src='https://lumvi.net/static/widget.js';\n  s.setAttribute('data-client-id','${cid}');\n  document.body.appendChild(s);\n})();\n<\/script>`;
+  openModal('embedModal');
+}
+function copyEmbed(){
+  navigator.clipboard.writeText(document.getElementById('embedCode').textContent)
+    .then(()=>toast('Embed code copied','success'));
+}
+
+// ── Agency branding ────────────────────────────────────────────────────
+function openAgencyModal(){ openModal('agencyModal'); }
+async function saveAgencyBranding(){
+  const btn=document.getElementById('agSaveBtn');
+  btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Saving…';
+  try{
+    const r=await fetch('/api/admin/agency-branding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({branding:{primary_color:document.getElementById('ab_color_txt').value.trim()},bot_settings:{bot_name:document.getElementById('ab_bot_name').value.trim(),welcome_message:document.getElementById('ab_welcome').value.trim()}})});
+    const d=await r.json();
+    if(d.success){ toast('Agency defaults saved','success'); closeModal('agencyModal'); }
+    else toast(d.error||'Save failed','error');
+  }catch{ toast('Network error','error'); }
+  finally{ btn.disabled=false; btn.innerHTML='Save Defaults'; }
+}
+</script>
+</body>
+</html>

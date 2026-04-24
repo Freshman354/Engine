@@ -361,6 +361,8 @@ try:
         models.migrate_webhooks()
     if hasattr(models, 'migrate_white_label'):
         models.migrate_white_label()
+    if hasattr(models, 'migrate_client_status'):
+        models.migrate_client_status()
     print("✅ Database initialized/migrated successfully!")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
@@ -3685,139 +3687,188 @@ def client_portal():
 
     if not plan_limits['white_label']:
         return '''<!DOCTYPE html>
-<html>
-<head><title>Upgrade Required</title>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upgrade Required — Lumvi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  body{font-family:-apple-system,sans-serif;background:linear-gradient(135deg,#0f172a,#1e1b4b);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
-  .card{background:rgba(30,41,59,.95);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:48px;max-width:480px;text-align:center;color:#f8fafc;}
-  h1{font-size:26px;font-weight:800;margin-bottom:12px;}
-  p{color:#94a3b8;margin-bottom:20px;font-size:15px;}
-  .btn{display:inline-block;padding:13px 28px;border-radius:10px;font-weight:700;text-decoration:none;margin:6px;font-size:14px;}
-  .btn-p{background:#06b6d4;color:#0f172a;}
-  .btn-s{background:transparent;color:#94a3b8;border:1px solid rgba(255,255,255,.15);}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F7F4EF;--gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
+  --gold-glow:rgba(184,146,74,0.22);--dark:#1C1917;--mid:#57534E;--sub:#A8A29E;
+  --border:#E7E2DA;--white:#fff;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;}
+.card{background:var(--white);border:1px solid var(--border);border-radius:20px;
+  padding:48px 40px;max-width:480px;width:100%;text-align:center;
+  box-shadow:0 4px 24px rgba(0,0,0,0.06);}
+.icon{width:64px;height:64px;border-radius:18px;background:var(--gold-lt);
+  display:flex;align-items:center;justify-content:center;margin:0 auto 20px;
+  border:1px solid rgba(184,146,74,0.2);}
+.icon svg{width:28px;height:28px;color:var(--gold);}
+h1{font-family:'Fraunces',serif;font-size:24px;font-weight:800;color:var(--dark);
+  margin-bottom:12px;letter-spacing:-0.3px;}
+p{font-size:14px;color:var(--mid);line-height:1.7;margin-bottom:8px;}
+.features{text-align:left;background:var(--cream);border:1px solid var(--border);
+  border-radius:12px;padding:16px 20px;margin:20px 0;display:flex;flex-direction:column;gap:9px;}
+.feat{display:flex;align-items:center;gap:9px;font-size:13.5px;color:var(--mid);}
+.feat svg{width:15px;height:15px;color:var(--gold);flex-shrink:0;}
+.btn-upgrade{display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  width:100%;padding:13px 24px;background:var(--gold);color:#fff;border-radius:12px;
+  font-weight:700;font-size:14.5px;text-decoration:none;margin-bottom:10px;
+  box-shadow:0 2px 8px var(--gold-glow);transition:all 0.2s;border:none;cursor:pointer;}
+.btn-upgrade:hover{background:var(--gold-dk);transform:translateY(-1px);}
+.btn-back{display:inline-flex;align-items:center;justify-content:center;
+  width:100%;padding:11px 24px;background:transparent;color:var(--sub);
+  border:1.5px solid var(--border);border-radius:12px;font-weight:600;
+  font-size:14px;text-decoration:none;transition:all 0.15s;}
+.btn-back:hover{border-color:var(--mid);color:var(--dark);}
+.price-chip{display:inline-block;padding:3px 12px;background:var(--gold-lt);
+  color:var(--gold-dk);border-radius:20px;font-size:12px;font-weight:700;
+  border:1px solid rgba(184,146,74,0.25);margin-bottom:16px;}
 </style>
 </head>
 <body>
 <div class="card">
+  <div class="icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+  </div>
+  <div class="price-chip">Agency Plan — $299/mo</div>
   <h1>Client Portal</h1>
-  <p>The Client Management Portal is available on the Agency plan ($299/mo).</p>
-  <p>Manage unlimited client chatbots, branding, leads and analytics from one hub.</p>
-  <a href="/upgrade" class="btn btn-p">Upgrade to Agency</a>
-  <a href="/dashboard" class="btn btn-s">Back</a>
+  <p>Manage unlimited client chatbots, branding, leads, and analytics from a single command centre.</p>
+  <div class="features">
+    <div class="feat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      Unlimited client chatbots
+    </div>
+    <div class="feat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      Full white-label — your brand, not Lumvi's
+    </div>
+    <div class="feat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      Custom domain per client widget
+    </div>
+    <div class="feat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      Clone clients, bulk actions, agency defaults
+    </div>
+    <div class="feat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      Webhooks, branded email, priority support
+    </div>
+  </div>
+  <a href="/upgrade" class="btn-upgrade">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><polyline points="18 15 12 9 6 15"/></svg>
+    Upgrade to Agency
+  </a>
+  <a href="/dashboard" class="btn-back">← Back to Dashboard</a>
 </div>
 </body>
 </html>''', 403
 
-    clients = models.get_user_clients(current_user.id)
-    for c in clients:
-        if c.get('branding_settings'):
-            try:
-                c['branding_settings'] = json.loads(c['branding_settings'])
-            except Exception:
-                c['branding_settings'] = {}
+    clients    = models.get_user_clients(current_user.id)
+    client_ids = [c['client_id'] for c in clients]
 
-    # Per-client lead counts
-    client_stats = {}
+    # Bulk stats
+    stats       = models.get_clients_enriched_stats(client_ids) if hasattr(models, 'get_clients_enriched_stats') else {}
+    leads_month = models.get_leads_this_month_bulk(client_ids)  if hasattr(models, 'get_leads_this_month_bulk')  else {}
+
+    plan_limits  = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+    daily_limit  = plan_limits['messages_per_day']
+    client_limit = plan_limits['clients']
+
+    enriched = []
     for c in clients:
         cid = c['client_id']
+        s   = stats.get(cid, {})
+
+        branding = {}
+        bs_raw   = c.get('branding_settings') or '{}'
         try:
-            client_stats[cid] = len(models.get_leads(cid))
+            branding = json.loads(bs_raw) if isinstance(bs_raw, str) else bs_raw
         except Exception:
-            client_stats[cid] = 0
+            branding = {}
 
-    # Build client cards HTML
-    cards_html = ''
-    for c in clients:
-        cid = c['client_id']
-        name = c.get('company_name', 'Unnamed')
-        bs = c.get('branding_settings') or {}
-        color = bs.get('branding', {}).get('primary_color') or c.get('widget_color') or '#667eea'
-        leads = client_stats.get(cid, 0)
-        lead_label = f'{leads} lead{"s" if leads != 1 else ""}'
-        cards_html += (
-            f'<div class="cc"><div class="ch" style="border-left:4px solid {color}">'
-            f'<div class="cn">{name}</div>'
-            f'<div class="cid">{cid}</div>'
-            f'<div class="cm">{lead_label} captured</div></div>'
-            f'<div class="ca">'
-            f'<a href="/customize?client_id={cid}" class="ab">Customize</a>'
-            f'<a href="/faq-manager?client_id={cid}" class="ab">FAQs</a>'
-            f'<a href="/admin/leads?client_id={cid}" class="ab">Leads</a>'
-            f'<a href="/analytics?client_id={cid}" class="ab">Analytics</a>'
-            f'<a href="/widget?client_id={cid}" class="ab" target="_blank">Preview</a>'
-            f'</div>'
-            f'<div class="es"><div class="el">Embed Code</div>'
-            f'<code>&lt;script src="https://lumvi.net/widget.js?client_id={cid}"&gt;&lt;/script&gt;</code>'
-            f'</div></div>'
-        )
+        branding_inner = branding.get('branding', {})
+        bot_settings   = branding.get('bot_settings', {})
+        primary_color  = branding_inner.get('primary_color') or c.get('widget_color') or '#B8924A'
+        logo_url       = branding_inner.get('logo') or branding_inner.get('logo_url') or ''
+        bot_avatar_url = bot_settings.get('bot_avatar_url') or ''
 
-    if not cards_html:
-        cards_html = '<p style="color:#64748b;text-align:center;padding:48px 0">No clients yet. Create your first chatbot from the dashboard.</p>'
+        daily_msgs = s.get('daily_msgs', 0)
+        if daily_limit >= 999999:
+            usage_pct, usage_class = 0, 'success'
+        else:
+            usage_pct   = min(round(daily_msgs / daily_limit * 100), 100)
+            usage_class = 'danger' if usage_pct >= 90 else ('warning' if usage_pct >= 70 else 'success')
 
-    total_leads_all = sum(client_stats.values())
+        last_active = s.get('last_active')
+        if last_active:
+            delta = datetime.utcnow() - last_active.replace(tzinfo=None)
+            if delta.days == 0:   last_active_str = 'Today'
+            elif delta.days == 1: last_active_str = 'Yesterday'
+            elif delta.days < 7:  last_active_str = f'{delta.days}d ago'
+            elif delta.days < 30: last_active_str = f'{delta.days // 7}w ago'
+            else:                 last_active_str = last_active.strftime('%b %d')
+        else:
+            last_active_str = 'No activity'
 
-    return f'''<!DOCTYPE html>
-<html>
-<head><title>Client Portal - Lumvi</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-  *{{box-sizing:border-box;margin:0;padding:0;}}
-  body{{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#0a0f1a;color:#f8fafc;min-height:100vh;}}
-  .topbar{{background:rgba(15,23,42,.95);border-bottom:1px solid rgba(255,255,255,.08);padding:16px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}}
-  .logo{{font-size:20px;font-weight:800;color:#06b6d4;}}
-  .tr{{display:flex;gap:10px;align-items:center;}}
-  .pb{{background:rgba(167,139,250,.15);color:#a78bfa;border:1px solid rgba(167,139,250,.3);padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;}}
-  .nl{{color:#94a3b8;text-decoration:none;font-size:14px;padding:7px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.1);}}
-  .nl:hover{{color:#f8fafc;background:rgba(255,255,255,.05);}}
-  .container{{max-width:1100px;margin:0 auto;padding:40px 24px;}}
-  .ph{{margin-bottom:32px;}}
-  .ph h1{{font-size:28px;font-weight:800;margin-bottom:8px;}}
-  .ph p{{color:#64748b;font-size:15px;}}
-  .sr{{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:36px;}}
-  .sc{{background:rgba(30,41,59,.6);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:20px 24px;}}
-  .sc .l{{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}}
-  .sc .v{{font-size:28px;font-weight:800;}}
-  .cg{{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;}}
-  .cc{{background:rgba(30,41,59,.7);border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden;transition:border-color .2s;}}
-  .cc:hover{{border-color:rgba(6,182,212,.3);}}
-  .ch{{padding:20px 24px;background:rgba(15,23,42,.5);}}
-  .cn{{font-size:17px;font-weight:700;margin-bottom:4px;}}
-  .cid{{font-size:11px;color:#475569;font-family:monospace;margin-bottom:8px;}}
-  .cm{{font-size:13px;color:#64748b;}}
-  .ca{{padding:14px 18px;display:flex;flex-wrap:wrap;gap:7px;border-top:1px solid rgba(255,255,255,.06);}}
-  .ab{{padding:6px 11px;border-radius:7px;font-size:12px;font-weight:600;text-decoration:none;color:#cbd5e1;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);transition:all .15s;}}
-  .ab:hover{{background:rgba(6,182,212,.15);color:#06b6d4;border-color:rgba(6,182,212,.3);}}
-  .es{{padding:12px 18px;border-top:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.2);}}
-  .el{{font-size:11px;color:#475569;margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em;}}
-  .es code{{font-family:monospace;font-size:11px;color:#67e8f9;word-break:break-all;}}
-  @media(max-width:640px){{.sr{{grid-template-columns:1fr;}}.topbar{{padding:12px 16px;}}.container{{padding:24px 16px;}}}}
-</style>
-</head>
-<body>
-<div class="topbar">
-  <div class="logo">Lumvi</div>
-  <div class="tr">
-    <span class="pb">Agency</span>
-    <a href="/dashboard" class="nl">Dashboard</a>
-    <a href="/support" class="nl">Support</a>
-    <a href="/logout" class="nl">Logout</a>
-  </div>
-</div>
-<div class="container">
-  <div class="ph">
-    <h1>Client Management Portal</h1>
-    <p>Manage all your clients chatbots, branding, leads and analytics from one place.</p>
-  </div>
-  <div class="sr">
-    <div class="sc"><div class="l">Total Clients</div><div class="v">{len(clients)}</div></div>
-    <div class="sc"><div class="l">Total Leads</div><div class="v">{total_leads_all}</div></div>
-    <div class="sc"><div class="l">Client Limit</div><div class="v">Unlimited</div></div>
-  </div>
-  <div class="cg">{cards_html}</div>
-</div>
-</body>
-</html>'''
+        is_suspended = bool(c.get('is_suspended', False))
 
+        enriched.append({
+            **c,
+            'cid':            cid,
+            'name':           c.get('company_name', 'Unnamed'),
+            'faqs_count':     s.get('faqs_count', 0),
+            'leads_count':    s.get('leads_count', 0),
+            'leads_month':    leads_month.get(cid, 0),
+            'conversations':  s.get('conversations', 0),
+            'daily_msgs':     daily_msgs,
+            'usage_pct':      usage_pct,
+            'usage_class':    usage_class,
+            'primary_color':  primary_color,
+            'logo_url':       logo_url,
+            'bot_avatar_url': bot_avatar_url,
+            'last_active_str':last_active_str,
+            'is_suspended':   is_suspended,
+        })
+
+    total_leads      = sum(c['leads_count']  for c in enriched)
+    total_convos     = sum(c['conversations'] for c in enriched)
+    active_clients   = sum(1 for c in enriched if not c['is_suspended'])
+    leads_this_month = sum(c['leads_month']  for c in enriched)
+    slots_display    = 'Unlimited' if client_limit >= 999999 else str(client_limit)
+    daily_display    = 'Unlimited' if daily_limit  >= 999999 else str(daily_limit)
+
+    agency_branding = models.get_agency_branding(current_user.id) if hasattr(models, 'get_agency_branding') else {}
+
+    return render_template(
+        'client_portal.html',
+        user             = current_user,
+        plan_type        = plan_type,
+        plan_limits      = plan_limits,
+        clients          = enriched,
+        total_leads      = total_leads,
+        total_convos     = total_convos,
+        active_clients   = active_clients,
+        leads_this_month = leads_this_month,
+        client_count     = len(enriched),
+        slots_display    = slots_display,
+        daily_display    = daily_display,
+        agency_branding  = agency_branding,
+    )
+
+# =====================================================================
 # =====================================================================
 # AGENCY CLIENTS DASHBOARD  (/agency/clients)
 # =====================================================================
@@ -3825,11 +3876,6 @@ def client_portal():
 @app.route('/agency/clients')
 @login_required
 def agency_clients():
-    """
-    Full-featured agency client dashboard.
-    Accessible to pro, agency, enterprise, and admin users.
-    Shows enriched stats, usage bars, and per-client actions.
-    """
     fresh_user = models.get_user_by_id(current_user.id)
     plan_type  = (fresh_user or {}).get('plan_type', current_user.plan_type)
     is_admin   = bool((fresh_user or {}).get('is_admin', False))
@@ -3837,30 +3883,25 @@ def agency_clients():
     allowed_plans = {'pro', 'agency', 'enterprise'}
     if plan_type not in allowed_plans and not is_admin:
         return render_template('agency_clients_upgrade.html',
-                               user=current_user,
-                               plan_type=plan_type), 403
+                               user=current_user, plan_type=plan_type), 403
 
-    # ── Fetch raw clients ──────────────────────────────────────────────
     clients    = models.get_user_clients(current_user.id)
     client_ids = [c['client_id'] for c in clients]
 
-    # ── Bulk stats (one set of queries, not N×4) ───────────────────────
-    stats = models.get_clients_enriched_stats(client_ids)
+    stats       = models.get_clients_enriched_stats(client_ids)
+    leads_month = models.get_leads_this_month_bulk(client_ids) if hasattr(models, 'get_leads_this_month_bulk') else {}
 
-    # ── Plan limits for usage bars ─────────────────────────────────────
     plan_limits   = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
     daily_limit   = plan_limits['messages_per_day']
     client_limit  = plan_limits['clients']
     slots_display = 'Unlimited' if client_limit >= 999999 else str(client_limit)
     daily_display = 'Unlimited' if daily_limit  >= 999999 else str(daily_limit)
 
-    # ── Enrich each client dict ────────────────────────────────────────
     enriched = []
     for client in clients:
         cid = client['client_id']
         s   = stats.get(cid, {})
 
-        # Parse branding
         branding = {}
         bs_raw   = client.get('branding_settings') or '{}'
         try:
@@ -3868,75 +3909,147 @@ def agency_clients():
         except Exception:
             branding = {}
 
-        branding_inner   = branding.get('branding', {})
-        branding_removed = bool(
-            branding_inner.get('remove_branding')
-            or client.get('remove_branding')
-        )
-        primary_color = branding_inner.get('primary_color') or client.get('widget_color') or '#B8924A'
+        branding_inner = branding.get('branding', {})
+        bot_settings   = branding.get('bot_settings', {})
+        primary_color  = branding_inner.get('primary_color') or client.get('widget_color') or '#B8924A'
+        branding_removed = bool(branding_inner.get('remove_branding') or client.get('remove_branding'))
+        logo_url       = branding_inner.get('logo') or branding_inner.get('logo_url') or ''
+        bot_avatar_url = bot_settings.get('bot_avatar_url') or ''
 
-        # Usage bar percentage + status class
         daily_msgs = s.get('daily_msgs', 0)
         if daily_limit >= 999999:
-            usage_pct   = 0
-            usage_class = 'success'
+            usage_pct = 0; usage_class = 'success'
         else:
             usage_pct   = min(round(daily_msgs / daily_limit * 100), 100)
             usage_class = 'danger' if usage_pct >= 90 else ('warning' if usage_pct >= 70 else 'success')
 
-        # Last active — human-friendly
         last_active = s.get('last_active')
         if last_active:
             delta = datetime.utcnow() - last_active.replace(tzinfo=None)
-            if delta.days == 0:
-                last_active_str = 'Today'
-            elif delta.days == 1:
-                last_active_str = 'Yesterday'
-            elif delta.days < 7:
-                last_active_str = f'{delta.days}d ago'
-            elif delta.days < 30:
-                last_active_str = f'{delta.days // 7}w ago'
-            else:
-                last_active_str = last_active.strftime('%b %d')
+            if delta.days == 0:   last_active_str = 'Today'
+            elif delta.days == 1: last_active_str = 'Yesterday'
+            elif delta.days < 7:  last_active_str = f'{delta.days}d ago'
+            elif delta.days < 30: last_active_str = f'{delta.days // 7}w ago'
+            else:                 last_active_str = last_active.strftime('%b %d')
         else:
             last_active_str = 'No activity'
 
+        is_suspended = bool(client.get('is_suspended', False))
+
         enriched.append({
             **client,
-            'cid':               cid,
-            'name':              client.get('company_name', 'Unnamed'),
-            'vertical':          branding.get('vertical', 'general').replace('_', ' ').title(),
-            'faqs_count':        s.get('faqs_count', 0),
-            'leads_count':       s.get('leads_count', 0),
-            'conversations':     s.get('conversations', 0),
-            'daily_msgs':        daily_msgs,
-            'daily_limit':       daily_display,
-            'usage_pct':         usage_pct,
-            'usage_class':       usage_class,
-            'branding_removed':  branding_removed,
-            'primary_color':     primary_color,
-            'last_active_str':   last_active_str,
-            'near_limit':        (not daily_limit >= 999999) and usage_pct >= 80,
+            'cid':              cid,
+            'name':             client.get('company_name', 'Unnamed'),
+            'vertical':         branding.get('vertical', 'general').replace('_', ' ').title(),
+            'faqs_count':       s.get('faqs_count', 0),
+            'leads_count':      s.get('leads_count', 0),
+            'leads_month':      leads_month.get(cid, 0),
+            'conversations':    s.get('conversations', 0),
+            'daily_msgs':       daily_msgs,
+            'daily_limit':      daily_display,
+            'usage_pct':        usage_pct,
+            'usage_class':      usage_class,
+            'branding_removed': branding_removed,
+            'primary_color':    primary_color,
+            'logo_url':         logo_url,
+            'bot_avatar_url':   bot_avatar_url,
+            'last_active_str':  last_active_str,
+            'near_limit':       (not daily_limit >= 999999) and usage_pct >= 80,
+            'is_suspended':     is_suspended,
+            'status':           'Suspended' if is_suspended else 'Active',
         })
 
-    # Totals for summary cards
-    total_leads  = sum(c['leads_count']    for c in enriched)
-    total_convos = sum(c['conversations']  for c in enriched)
-    total_faqs   = sum(c['faqs_count']     for c in enriched)
+    total_leads       = sum(c['leads_count']   for c in enriched)
+    total_convos      = sum(c['conversations']  for c in enriched)
+    total_faqs        = sum(c['faqs_count']     for c in enriched)
+    active_clients    = sum(1 for c in enriched if not c['is_suspended'])
+    leads_this_month  = sum(c['leads_month']    for c in enriched)
+
+    agency_branding = models.get_agency_branding(current_user.id) if hasattr(models, 'get_agency_branding') else {}
 
     return render_template(
         'agency_clients.html',
-        user          = current_user,
-        plan_type     = plan_type,
-        plan_limits   = plan_limits,
-        clients       = enriched,
-        total_leads   = total_leads,
-        total_convos  = total_convos,
-        total_faqs    = total_faqs,
-        slots_display = slots_display,
-        daily_display = daily_display,
-        client_count  = len(enriched),
+        user             = current_user,
+        plan_type        = plan_type,
+        plan_limits      = plan_limits,
+        clients          = enriched,
+        total_leads      = total_leads,
+        total_convos     = total_convos,
+        total_faqs       = total_faqs,
+        active_clients   = active_clients,
+        leads_this_month = leads_this_month,
+        slots_display    = slots_display,
+        daily_display    = daily_display,
+        client_count     = len(enriched),
+        agency_branding  = agency_branding,
     )
+
+
+@app.route('/api/admin/client/suspend', methods=['POST'])
+@login_required
+def toggle_suspend_client():
+    data      = request.json or {}
+    client_id = data.get('client_id', '')
+    suspend   = bool(data.get('suspend', True))
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    ok = models.toggle_client_suspended(client_id, suspend)
+    action = 'suspended' if suspend else 'reactivated'
+    app.logger.info(f"[Agency] client {client_id} {action} by user {current_user.id}")
+    return jsonify({'success': ok, 'suspended': suspend})
+
+
+@app.route('/api/admin/client/clone', methods=['POST'])
+@login_required
+def clone_client_route():
+    data             = request.json or {}
+    source_client_id = data.get('client_id', '')
+    new_name         = data.get('new_name', '').strip()
+    if not source_client_id or not models.verify_client_ownership(current_user.id, source_client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not new_name:
+        return jsonify({'success': False, 'error': 'New client name is required'}), 400
+
+    fresh_user   = models.get_user_by_id(current_user.id)
+    plan_type    = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    plan_limits  = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+    current_count = len(models.get_user_clients(current_user.id))
+    if current_count >= plan_limits['clients']:
+        return jsonify({'success': False, 'error': f'Client limit reached for {plan_type} plan'}), 403
+
+    new_cid = models.clone_client(source_client_id, current_user.id, new_name)
+    if not new_cid:
+        return jsonify({'success': False, 'error': 'Clone failed — please try again'}), 500
+    app.logger.info(f"[Agency] cloned {source_client_id} → {new_cid} by user {current_user.id}")
+    return jsonify({'success': True, 'new_client_id': new_cid, 'message': f'"{new_name}" created successfully'})
+
+
+@app.route('/api/admin/client/bulk-action', methods=['POST'])
+@login_required
+def bulk_client_action():
+    data       = request.json or {}
+    action     = data.get('action', '')
+    client_ids = data.get('client_ids', [])
+    if not client_ids or not isinstance(client_ids, list):
+        return jsonify({'success': False, 'error': 'No clients selected'}), 400
+    results = {'ok': [], 'fail': []}
+    for cid in client_ids:
+        if not models.verify_client_ownership(current_user.id, cid):
+            results['fail'].append(cid); continue
+        try:
+            if action == 'suspend':
+                models.toggle_client_suspended(cid, True);   results['ok'].append(cid)
+            elif action == 'reactivate':
+                models.toggle_client_suspended(cid, False);  results['ok'].append(cid)
+            elif action == 'delete':
+                models.delete_client(cid);                   results['ok'].append(cid)
+            else:
+                results['fail'].append(cid)
+        except Exception as e:
+            app.logger.error(f"[BulkAction] {action} {cid}: {e}")
+            results['fail'].append(cid)
+    app.logger.info(f"[Agency] bulk {action}: ok={results['ok']} fail={results['fail']}")
+    return jsonify({'success': True, **results})
 
 # =====================================================================
 # LEGAL PAGES
@@ -4142,6 +4255,35 @@ def delete_client_user():
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     models.delete_client_user(user_id, client_id)
     return jsonify({'success': True})
+
+
+@app.route('/api/client-users/reset-password', methods=['POST'])
+@login_required
+def reset_client_user_password():
+    """Reset password for a client portal login."""
+    data      = request.get_json() or {}
+    client_id = data.get('client_id', '')
+    user_id   = data.get('user_id')
+    password  = data.get('password', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not password or len(password) < 6:
+        return jsonify({'success': False, 'error': 'Password must be at least 6 characters'}), 400
+    try:
+        from werkzeug.security import generate_password_hash
+        conn, cursor = models.get_db()
+        cursor.execute(
+            'UPDATE client_users SET password_hash = %s WHERE id = %s AND client_id = %s',
+            (generate_password_hash(password), user_id, client_id)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        app.logger.info(f"[ClientUsers] password reset for user {user_id} on client {client_id}")
+        return jsonify({'success': True})
+    except Exception as e:
+        app.logger.error(f"[ClientUsers] reset_password error: {e}")
+        return jsonify({'success': False, 'error': 'Failed to reset password'}), 500
 
 
 @app.route('/manage-client-users')
