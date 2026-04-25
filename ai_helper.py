@@ -244,16 +244,35 @@ class AIHelper:
         # ── Stage 2: Build conversation context ───────────────────────
         context_str = self._build_context(history, client_id, clean)
 
+        # ── Dynamic confidence threshold ──────────────────────────────
+        # Lower the bar for sales/pricing queries so the bot answers rather
+        # than falling back when a user is close to buying.
+        msg_lower      = clean.lower()
+        is_pricing_msg = any(kw in msg_lower for kw in _GLOBAL_PRICING_KW)
+        is_sales_query = intent.get('intent') == 'lead_request' or is_pricing_msg
+        vector_threshold = 0.22 if is_sales_query else 0.28
+        logger.debug(
+            f"[Threshold] sales={is_sales_query} "
+            f"threshold={vector_threshold} intent={intent.get('intent')}"
+        )
+
         # ── Stage 3: Query rewrite ────────────────────────────────────
         search_query = self._rewrite_query(clean, history)
         logger.debug(f"[Stage3/Rewrite] '{clean[:40]}' → '{search_query[:60]}'")
 
-        # ── Stage 4: Embedding search ─────────────────────────────────
-        candidates, vector_scores = self._embedding_search(search_query, faqs, client_id)
+        # ── Stage 4: Embedding search (dynamic threshold) ─────────────
+        candidates, vector_scores = self._embedding_search(
+            search_query, faqs, client_id, threshold=vector_threshold
+        )
         logger.debug(f"[Stage4/Search] hits={len(candidates)} top_vec={vector_scores[0]:.3f if vector_scores else 0}")
 
-        # ── Stage 5: Hybrid rerank ────────────────────────────────────
-        hybrid_ranked, hybrid_scores = self._hybrid_rerank(search_query, candidates, vector_scores)
+        # ── Resolve last active category from history for Stage 5 ─────
+        last_category = self._last_response_category(history)
+
+        # ── Stage 5: Hybrid rerank (with category stickiness) ─────────
+        hybrid_ranked, hybrid_scores = self._hybrid_rerank(
+            search_query, candidates, vector_scores, last_category=last_category
+        )
         logger.debug(f"[Stage5/Hybrid] top_score={hybrid_scores[0]:.3f if hybrid_scores else 0}")
 
         # ── Cache check (keyed on original clean message) ─────────────
@@ -467,13 +486,15 @@ Return ONLY the rewritten query. No explanation, no quotes."""
     # ═══════════════════════════════════════════════════════════════════
 
     def _embedding_search(self, search_query: str, faqs: List[Dict],
-                          client_id: str = None) -> Tuple[List[Dict], List[float]]:
+                          client_id: str = None,
+                          threshold: float = 0.28) -> Tuple[List[Dict], List[float]]:
         """
-        Retrieve top-5 candidates using Gemini cosine similarity.
+        Retrieve top-8 candidates using Gemini cosine similarity.
+        threshold: dynamic — 0.22 for sales/pricing, 0.28 for general queries.
         Search order:
-          1. knowledge_base chunks (preferred — Phase 2 onward)
+          1. knowledge_base chunks (preferred)
           2. Legacy FAQ embeddings (lazy-indexed on first query)
-          3. Keyword overlap fallback (when embedding unavailable)
+          3. Keyword overlap fallback
         """
         if not self.enabled:
             return [], []
@@ -493,7 +514,7 @@ Return ONLY the rewritten query. No explanation, no quotes."""
                             score = _cosine(query_vec, emb)
                         else:
                             score = max(0.0, 0.5 - (len(scored) * 0.05))
-                        if score > 0.28:
+                        if score > threshold:   # dynamic threshold
                             scored.append(({
                                 'id':       chunk.get('kb_id', chunk.get('id', '')),
                                 'kb_id':    chunk.get('kb_id', chunk.get('id', '')),
@@ -504,7 +525,7 @@ Return ONLY the rewritten query. No explanation, no quotes."""
                             }, score))
                     if scored:
                         scored.sort(key=lambda x: x[1], reverse=True)
-                        logger.debug(f"[KB] top={scored[0][1]:.3f} hits={len(scored)}")
+                        logger.debug(f"[KB] threshold={threshold} top={scored[0][1]:.3f} hits={len(scored)}")
                         return [s[0] for s in scored[:8]], [s[1] for s in scored[:8]]
             except Exception as _e:
                 logger.warning(f"[Search] KB error: {_e}")
@@ -530,11 +551,11 @@ Return ONLY the rewritten query. No explanation, no quotes."""
                     scored  = []
                     for fid, emb in stored.items():
                         score = _cosine(query_vec, emb)
-                        if score > 0.28 and fid in faq_idx:
+                        if score > threshold and fid in faq_idx:   # dynamic threshold
                             scored.append((faq_idx[fid], score))
                     scored.sort(key=lambda x: x[1], reverse=True)
                     if scored:
-                        logger.debug(f"[FAQ Embed] top={scored[0][1]:.3f} hits={len(scored)}")
+                        logger.debug(f"[FAQ Embed] threshold={threshold} top={scored[0][1]:.3f} hits={len(scored)}")
                         return [s[0] for s in scored[:8]], [s[1] for s in scored[:8]]
             except Exception as _e:
                 logger.warning(f"[Search] FAQ embed error: {_e}")
@@ -560,20 +581,20 @@ Return ONLY the rewritten query. No explanation, no quotes."""
 
     def _hybrid_rerank(self, search_query: str,
                        candidates: List[Dict],
-                       vector_scores: List[float]
+                       vector_scores: List[float],
+                       last_category: Optional[str] = None
                        ) -> Tuple[List[Dict], List[float]]:
         """
-        Combines the Gemini vector score with a BM25-lite keyword score
-        to surface results that are both semantically similar AND contain
-        the specific terms the user typed.
+        Combines Gemini vector score + BM25-lite keyword score + category stickiness boost.
 
-        This is especially useful for:
-          - Product names ("Pro plan", "Invisalign", "Zapier integration")
-          - Numeric terms ("$99", "48 hours", "3 bedrooms")
-          - Rare proper nouns that embeddings sometimes miss
+        Category stickiness (Enhancement 2):
+          If a chunk's category matches the last successfully answered topic,
+          apply a 15% boost to its hybrid score. This keeps the bot focused on
+          the current thread (e.g. staying in 'Billing' for invoice follow-ups).
 
         Score formula:
           hybrid = 0.65 × vector_score + 0.30 × bm25_score + 0.05 × length_norm
+          hybrid *= 1.15  if chunk.category == last_category  (stickiness boost)
 
         Returns (ranked_candidates, ranked_scores) — both sorted descending.
         """
@@ -581,18 +602,19 @@ Return ONLY the rewritten query. No explanation, no quotes."""
             return [], []
 
         query_tokens = _tokenize(search_query)
-        # Estimate average document length from the candidate set
         all_doc_lengths = []
         for cand in candidates:
             doc_text = (cand.get('question', '') + ' ' + cand.get('answer', cand.get('content', '')))
             all_doc_lengths.append(len(_tokenize(doc_text)))
         avg_doc_len = sum(all_doc_lengths) / max(len(all_doc_lengths), 1)
 
+        # Normalise last_category for comparison
+        active_category = (last_category or '').strip().lower()
+
         scored = []
         for i, cand in enumerate(candidates):
             vec_score = vector_scores[i] if i < len(vector_scores) else 0.0
 
-            # Combine question + answer for BM25 scoring
             doc_text   = (cand.get('question', '') + ' ' + cand.get('answer', cand.get('content', '')))
             doc_tokens = _tokenize(doc_text)
             kw_score   = _bm25_score(
@@ -601,27 +623,70 @@ Return ONLY the rewritten query. No explanation, no quotes."""
                 corpus_size=max(len(candidates), 10)
             )
 
-            # Mild length bonus — longer answers are usually more complete
             doc_len_chars = len(cand.get('answer', cand.get('content', '')))
             length_norm   = min(doc_len_chars / 400.0, 1.0) * 0.05
 
             hybrid = (vec_score * 0.65) + (kw_score * 0.30) + length_norm
 
-            scored.append((cand, hybrid, vec_score, kw_score))
+            # ── Category stickiness boost ──────────────────────────────
+            cand_category = (cand.get('category') or '').strip().lower()
+            sticky        = False
+            if active_category and cand_category and cand_category == active_category:
+                hybrid *= 1.15
+                sticky  = True
+
+            scored.append((cand, hybrid, vec_score, kw_score, sticky))
             logger.debug(
                 f"[Hybrid] '{cand.get('question', '')[:40]}' "
                 f"vec={vec_score:.3f} bm25={kw_score:.3f} hybrid={hybrid:.3f}"
+                f"{' [sticky+15%]' if sticky else ''}"
             )
 
         scored.sort(key=lambda x: x[1], reverse=True)
         logger.info(
             f"[Stage5/Hybrid] top_hybrid={scored[0][1]:.3f} "
             f"vec={scored[0][2]:.3f} bm25={scored[0][3]:.3f} "
-            f"n={len(scored)}"
+            f"sticky={scored[0][4]} active_cat='{active_category}' n={len(scored)}"
         )
-        ranked_cands  = [s[0] for s in scored]
-        ranked_scores = [s[1] for s in scored]
-        return ranked_cands, ranked_scores
+        return [s[0] for s in scored], [s[1] for s in scored]
+
+    def _last_response_category(self, history: List[Dict]) -> Optional[str]:
+        """
+        Scan conversation history (most recent first) to find the category of
+        the last knowledge chunk that was successfully used in a response.
+
+        We store category in assistant messages via a metadata convention:
+        if the message contains '[cat:<Category>]' anywhere, we extract it.
+        Otherwise we fall back to scanning assistant message content for
+        category-like keywords (Billing, Support, Product, etc.).
+
+        Returns None when no active category can be determined.
+        """
+        if not history:
+            return None
+
+        # Known categories from enrich pipeline
+        KNOWN_CATS = {
+            'billing', 'support', 'product', 'policy',
+            'sales', 'technical', 'general',
+        }
+
+        for msg in reversed(history):
+            if msg.get('role') in ('assistant', 'model'):
+                content = msg.get('content', '') or ''
+
+                # Explicit tag written by _rag_generate (see below)
+                tag_match = re.search(r'\[cat:([^\]]+)\]', content)
+                if tag_match:
+                    return tag_match.group(1).strip()
+
+                # Keyword heuristic fallback
+                content_lower = content.lower()
+                for cat in KNOWN_CATS:
+                    if cat in content_lower:
+                        return cat.title()
+
+        return None
 
     # ═══════════════════════════════════════════════════════════════════
     # STAGE 6 — RAG GENERATION
@@ -631,19 +696,23 @@ Return ONLY the rewritten query. No explanation, no quotes."""
                       hybrid_scores: List[float], vertical: str,
                       context_str: str) -> Tuple[str, float, str]:
         """
-        Inject top hybrid-ranked chunks as RAG context and generate
-        a grounded response. Uses top-3 chunks for richer answers.
+        Stage 6: Inject top hybrid-ranked chunks + generate a grounded response.
 
-        The prompt is structured in three layers:
-          1. Universal follow-up inference rules (always injected)
-          2. Conversation context (_build_context output)
-          3. Ranked knowledge chunks + tight generation rules
+        Enhancement 3 — Semantic validation (self-check gate):
+          Before generating the full answer, a single YES/NO prompt asks:
+          "Does the retrieved knowledge contain enough info to answer this?"
+          - YES: confidence = max(math_score, 0.85) — prevents low cosine scores
+                 from incorrectly routing to fallback when content IS relevant.
+          - NO + math_score < 0.35: skip generation, return fallback immediately.
+          - NO + math_score >= 0.35: generate anyway (math says content is close).
+          - API error: continue with math_score unchanged.
 
         Returns (response_text, confidence, method_tag).
         """
         vert_cfg    = self.personalities.get(vertical, self.personalities['general'])
         personality = vert_cfg['tone']
-        top_score   = hybrid_scores[0] if hybrid_scores else 0.5
+        math_score  = hybrid_scores[0] if hybrid_scores else 0.5
+        confidence  = math_score
 
         # Build multi-chunk context — top 3 for richness
         chunks_context = ""
@@ -652,8 +721,43 @@ Return ONLY the rewritten query. No explanation, no quotes."""
             a = chunk.get('answer',   chunk.get('content', ''))
             chunks_context += f"\n[Source {i}]\nQ: {q}\nA: {a}\n"
 
-        is_followup        = '[Follow-up context]' in context_str
-        followup_emphasis  = ""
+        # ── Enhancement 3: Semantic self-check gate ────────────────────
+        try:
+            selfcheck_prompt = (
+                f"You are a retrieval quality judge.\n\n"
+                f"User query: \"{user_message}\"\n\n"
+                f"Retrieved knowledge:\n{chunks_context.strip()}\n\n"
+                f"Does the retrieved knowledge contain enough specific information "
+                f"to answer the user query accurately?\n\n"
+                f"Reply with a single word: YES or NO"
+            )
+            check_resp  = self.model.generate_content(selfcheck_prompt)
+            verdict     = check_resp.text.strip().upper().split()[0]
+            semantic_ok = (verdict == 'YES')
+
+            if semantic_ok:
+                confidence = max(math_score, 0.85)
+                logger.info(
+                    f"[SelfCheck] YES — confidence boosted "
+                    f"math={math_score:.3f} → final={confidence:.3f}"
+                )
+            else:
+                if math_score < 0.35:
+                    logger.info(
+                        f"[SelfCheck] NO + low math ({math_score:.3f}) → fallback"
+                    )
+                    answer = hybrid_ranked[0].get('answer', hybrid_ranked[0].get('content', ''))
+                    return self._make_fallback(answer), math_score * 0.5, 'selfcheck_fallback'
+                else:
+                    logger.info(
+                        f"[SelfCheck] NO but math OK ({math_score:.3f}) → generating"
+                    )
+        except Exception as _sce:
+            logger.debug(f"[SelfCheck] non-critical error ({_sce}), using math_score")
+
+        # ── Build full generation prompt ──────────────────────────────
+        is_followup       = '[Follow-up context]' in context_str
+        followup_emphasis = ""
         if is_followup:
             followup_emphasis = (
                 "\n[CONFIRMED FOLLOW-UP] The current message is a continuation. "
@@ -698,12 +802,12 @@ Return ONLY the response text."""
             response_text = response.text.strip()
             if not response_text or len(response_text) < 10:
                 fallback = hybrid_ranked[0].get('answer', hybrid_ranked[0].get('content', ''))
-                return fallback, top_score, 'rag_fallback'
-            return response_text, top_score, 'rag_pipeline'
+                return fallback, confidence, 'rag_fallback'
+            return response_text, confidence, 'rag_pipeline'
         except Exception as e:
-            logger.error(f"[RAG] Gemini error: {e}")
+            logger.error(f"[RAG] Gemini generation error: {e}")
             answer = hybrid_ranked[0].get('answer', hybrid_ranked[0].get('content', ''))
-            return self._make_fallback(answer), top_score * 0.7, 'rag_static'
+            return self._make_fallback(answer), confidence * 0.7, 'rag_static'
 
     # ═══════════════════════════════════════════════════════════════════
     # STAGE 7 — RESPONSE POLISH (NEW)
