@@ -1,22 +1,31 @@
 """
-AI Helper — Phase 2: Full RAG Pipeline
-Pipeline: Preprocessing → Intent → Embedding Search → Reranking
-          → RAG Injection → Generation → Guardrails → Caching
+AI Helper — Phase 3: Advanced 6-Stage RAG Pipeline
+====================================================
+Stage 1  _rewrite_query      → Gemini rewrites the user message into a
+                                standalone search query using conversation history
+Stage 2  _embedding_search   → Retrieves top candidates using Gemini embeddings
+Stage 3  _hybrid_rerank      → Combines vector score + BM25-lite keyword score
+Stage 4  _rag_generate       → Injects top hybrid-ranked chunks and generates answer
+Stage 5  _polish_response    → Final LLM pass for tone match + clean formatting
+Stage 6  generate_response   → Orchestrates all stages; preserves lead detection,
+                                conversation memory, and summarisation
 
-Also preserved from Phase 1:
+Preserved from Phase 2:
   - 15-message conversation memory
-  - Conversation summarisation every 6 messages
-  - Detailed structured logging
-  - Response cache (in-process dict)
-  - find_best_faq / generate_human_like_response kept as fallbacks
+  - Summarisation every 6 messages
+  - Personality / vertical system
+  - Lead detection (3-tier keyword → AI)
+  - Pure-Python cosine + BM25-lite (no numpy / scipy)
+  - Response cache
+  - enrich_and_chunk / find_best_faq / index_faqs compat
 """
 
 import google.generativeai as genai
 import json
 import logging
 import re
-import hashlib
 import math
+import hashlib
 import uuid
 from typing import List, Dict, Tuple, Optional
 
@@ -35,10 +44,10 @@ _GLOBAL_PRICING_KW = [
     'subscription', 'buy', 'quote', 'invoice', 'billing',
 ]
 
-# ── Embedding via Gemini text-embedding-004 ───────────────────────────
-# Zero memory overhead — uses the same google-generativeai package already installed.
-# Free tier: 1,500 requests/min, 1M tokens/min — well within Lumvi's needs.
-# No sentence-transformers, no PyTorch, no RAM spike on startup.
+
+# ─────────────────────────────────────────────────────────────────────
+# Pure-Python math helpers
+# ─────────────────────────────────────────────────────────────────────
 
 def _cosine(a: list, b: list) -> float:
     """Pure-Python cosine similarity — no numpy required."""
@@ -48,69 +57,130 @@ def _cosine(a: list, b: list) -> float:
     return dot / (mag_a * mag_b) if mag_a and mag_b else 0.0
 
 
+def _bm25_score(query_tokens: List[str], doc_tokens: List[str],
+                avg_doc_len: float = 40.0,
+                k1: float = 1.5, b: float = 0.75,
+                corpus_size: int = 100) -> float:
+    """
+    BM25-lite: a pure-Python, single-document BM25 approximation.
+    No corpus pre-indexing needed — IDF is estimated using corpus_size.
+    Returns a normalised score in [0, 1].
+    """
+    if not query_tokens or not doc_tokens:
+        return 0.0
+
+    doc_len  = len(doc_tokens)
+    tf_map   = {}
+    for tok in doc_tokens:
+        tf_map[tok] = tf_map.get(tok, 0) + 1
+
+    score = 0.0
+    for term in query_tokens:
+        tf = tf_map.get(term, 0)
+        if tf == 0:
+            continue
+        # IDF approximation: assume term appears in ~10% of docs
+        df  = max(1, corpus_size // 10)
+        idf = math.log((corpus_size - df + 0.5) / (df + 0.5) + 1)
+        numerator   = tf * (k1 + 1)
+        denominator = tf + k1 * (1 - b + b * doc_len / avg_doc_len)
+        score      += idf * (numerator / denominator)
+
+    # Normalise to [0, 1] using a soft cap of 10 as a practical maximum BM25 score
+    return min(score / 10.0, 1.0)
+
+
+def _tokenize(text: str) -> List[str]:
+    """Lowercase word tokeniser — strips punctuation, returns word list."""
+    return re.findall(r'\b[a-z]{2,}\b', text.lower())
+
+
 def _embed(text: str, task: str = 'retrieval_document') -> list:
     """
     Embed text using Gemini text-embedding-004.
     task: 'retrieval_document' for FAQs/chunks, 'retrieval_query' for user messages.
-    Returns [] on any failure — callers degrade gracefully.
+    Returns [] on failure — callers degrade gracefully.
     """
     if not text or not text.strip():
         return []
     try:
         result = genai.embed_content(
             model='models/text-embedding-004',
-            content=text.strip()[:2048],   # API hard limit
+            content=text.strip()[:2048],
             task_type=task,
         )
         return result['embedding']
     except Exception as _e:
-        logger.debug(f"[_embed] API error: {_e}")
+        logger.debug(f"[_embed] error: {_e}")
         return []
 
 
+# ─────────────────────────────────────────────────────────────────────
+# AIHelper — Phase 3
+# ─────────────────────────────────────────────────────────────────────
+
 class AIHelper:
-    """Lumvi AI Helper — Phase 2 Full RAG Pipeline."""
+    """Lumvi AI Helper — Phase 3: 6-Stage Advanced RAG Pipeline."""
 
     def __init__(self, api_key: str, model_name: str = 'gemini-2.0-flash'):
         self.api_key    = api_key
         self.model_name = model_name
         self.enabled    = bool(api_key and api_key.strip())
 
-        # Per-vertical config: tone + domain-specific lead/pricing keywords
         self.personalities = {
             'general': {
-                'tone':           "warm, friendly, and helpful — like a knowledgeable colleague",
-                'lead_keywords':  ['demo', 'speak to someone', 'contact me', 'call me', 'book a call', 'human', 'agent', 'talk to sales'],
+                'tone':             "warm, friendly, and helpful — like a knowledgeable colleague",
+                'polish_hint':      "Keep it conversational and approachable. Use plain English.",
+                'lead_keywords':    ['demo', 'speak to someone', 'contact me', 'call me',
+                                     'book a call', 'human', 'agent', 'talk to sales'],
                 'pricing_keywords': _GLOBAL_PRICING_KW,
             },
             'real_estate': {
-                'tone':           "enthusiastic, reassuring, and professional — make buying/renting feel exciting",
-                'lead_keywords':  ['viewing', 'appointment', 'book a tour', 'schedule', 'visit the property', 'speak to agent'],
+                'tone':             "enthusiastic, reassuring, and professional — make buying/renting feel exciting",
+                'polish_hint':      "Use upbeat, encouraging language. Mention next steps naturally.",
+                'lead_keywords':    ['viewing', 'appointment', 'book a tour', 'schedule',
+                                     'visit the property', 'speak to agent'],
                 'pricing_keywords': _GLOBAL_PRICING_KW + ['rent', 'mortgage', 'deposit'],
             },
             'saas': {
-                'tone':           "patient, clear, and solution-oriented — great at explaining features",
-                'lead_keywords':  ['demo', 'trial', 'onboarding', 'integration', 'speak to sales', 'account manager'],
+                'tone':             "patient, clear, and solution-oriented — great at explaining features",
+                'polish_hint':      "Be technically precise. Use bullet points when listing 3+ features.",
+                'lead_keywords':    ['demo', 'trial', 'onboarding', 'integration',
+                                     'speak to sales', 'account manager'],
                 'pricing_keywords': _GLOBAL_PRICING_KW + ['monthly fee', 'annual plan', 'seats'],
             },
             'ecommerce': {
-                'tone':           "fast, friendly, and shopper-focused — keep it quick and helpful",
-                'lead_keywords':  ['order status', 'return', 'refund', 'speak to support'],
+                'tone':             "fast, friendly, and shopper-focused — keep it quick and helpful",
+                'polish_hint':      "Short sentences. Get to the point fast. Always end with a CTA if relevant.",
+                'lead_keywords':    ['order status', 'return', 'refund', 'speak to support'],
                 'pricing_keywords': _GLOBAL_PRICING_KW + ['shipping cost', 'discount', 'promo'],
             },
             'healthcare': {
-                'tone':           "calm, empathetic, and professional — never give medical advice",
-                'lead_keywords':  ['appointment', 'booking', 'schedule', 'consultation', 'see a doctor'],
+                'tone':             "calm, empathetic, and professional — never give medical advice",
+                'polish_hint':      "Warm but careful tone. Never diagnose. Direct to professionals when needed.",
+                'lead_keywords':    ['appointment', 'booking', 'schedule', 'consultation', 'see a doctor'],
                 'pricing_keywords': _GLOBAL_PRICING_KW + ['consultation fee', 'insurance'],
             },
             'law_firm': {
-                'tone':           "formal, precise, trustworthy, and cautious — excellent at intake",
-                'lead_keywords':  ['consultation', 'case review', 'speak to lawyer', 'legal advice'],
+                'tone':             "formal, precise, trustworthy, and cautious — excellent at intake",
+                'polish_hint':      "Formal register. Never give legal advice. Use passive voice sparingly.",
+                'lead_keywords':    ['consultation', 'case review', 'speak to lawyer', 'legal advice'],
                 'pricing_keywords': _GLOBAL_PRICING_KW + ['retainer', 'hourly rate', 'flat fee'],
+            },
+            'dental': {
+                'tone':             "friendly, reassuring, and professional — make patients feel at ease",
+                'polish_hint':      "Reassure first, inform second. Avoid clinical jargon unless asked.",
+                'lead_keywords':    ['appointment', 'booking', 'consultation', 'see a dentist'],
+                'pricing_keywords': _GLOBAL_PRICING_KW + ['treatment cost', 'insurance', 'payment plan'],
+            },
+            'gym': {
+                'tone':             "energetic, motivating, and supportive — like a great personal trainer",
+                'polish_hint':      "High energy, positive framing. Use active verbs.",
+                'lead_keywords':    ['membership', 'sign up', 'trial', 'class', 'book a session'],
+                'pricing_keywords': _GLOBAL_PRICING_KW + ['membership fee', 'monthly', 'annual'],
             },
         }
 
-        # In-process response cache {md5_key: response_text}
         self._response_cache: Dict[str, str] = {}
 
         if self.enabled:
@@ -118,8 +188,8 @@ class AIHelper:
                 genai.configure(api_key=api_key)
                 self.model = genai.GenerativeModel(model_name)
                 logger.info(
-                    f"✅ AI Helper Phase 2 ready | model={model_name} | "
-                    f"embed=gemini-text-embedding-004 | cache=ON | rag=ON"
+                    f"✅ AI Helper Phase 3 ready | model={model_name} | "
+                    f"embed=text-embedding-004 | pipeline=6-stage | hybrid_rank=ON"
                 )
             except Exception as e:
                 logger.error(f"[AIHelper.__init__] Gemini init failed: {e}")
@@ -137,27 +207,28 @@ class AIHelper:
                           client_id: str = None,
                           lead_triggers: List[str] = None) -> Dict:
         """
-        Full RAG pipeline. Returns:
-          {'response': str, 'method': str, 'confidence': float, 'is_lead': bool}
-        Steps:
-          1. Input preprocessing
-          2. Intent detection (vertical-aware)
-          3. Embedding search → top-5 candidates
-          4. Reranking
-          5. RAG context injection + LLM generation
-          6. Guardrails
-          7. Cache write
+        6-Stage RAG pipeline:
+          1. Preprocessing + intent detection (lead short-circuit)
+          2. Build conversation context
+          3. Query rewrite  → standalone search query
+          4. Embedding search → raw candidates + vector scores
+          5. Hybrid rerank → BM25-lite + vector combined score
+          6. RAG generation → grounded LLM answer
+          7. Response polish → tone + formatting pass
+          8. Guardrails + cache
         """
         if not user_message or not user_message.strip():
             return {'response': "How can I help you today?", 'method': 'empty',
                     'confidence': 1.0, 'is_lead': False}
 
-        # ── 1. Preprocessing ───────────────────────────────────────────
-        clean = self._preprocess(user_message)
+        history = conversation_history or []
 
-        # ── 2. Intent detection ────────────────────────────────────────
+        # ── Stage 1a: Preprocess ──────────────────────────────────────
+        clean  = self._preprocess(user_message)
+        logger.debug(f"[Pipeline] start | msg='{clean[:60]}' | vertical={vertical}")
+
+        # ── Stage 1b: Intent detection (lead short-circuit) ───────────
         intent = self.detect_intent(clean, lead_triggers or [], vertical)
-
         if intent.get('is_lead') and intent.get('confidence', 0) >= 0.65:
             logger.info(
                 f"[Lead] client={client_id} vertical={vertical} "
@@ -170,64 +241,72 @@ class AIHelper:
                 'is_lead':    True,
             }
 
-        # ── 3. Conversation context (built BEFORE search so it can enrich query) ──
-        context_str = self._build_context(conversation_history, client_id, clean)
+        # ── Stage 2: Build conversation context ───────────────────────
+        context_str = self._build_context(history, client_id, clean)
 
-        # ── 4. Embedding search — use enriched query for follow-ups ────
-        # For referential messages ("how about pro?") the enriched query
-        # borrows topic keywords from history so the embedding score stays high.
-        search_query = self._resolve_query(clean, conversation_history or [])
-        candidates, scores = self._embedding_search(search_query, faqs, client_id)
+        # ── Stage 3: Query rewrite ────────────────────────────────────
+        search_query = self._rewrite_query(clean, history)
+        logger.debug(f"[Stage3/Rewrite] '{clean[:40]}' → '{search_query[:60]}'")
 
-        # ── 5. Reranking ────────────────────────────────────────────────
-        reranked = self._rerank(search_query, candidates, scores)
+        # ── Stage 4: Embedding search ─────────────────────────────────
+        candidates, vector_scores = self._embedding_search(search_query, faqs, client_id)
+        logger.debug(f"[Stage4/Search] hits={len(candidates)} top_vec={vector_scores[0]:.3f if vector_scores else 0}")
 
-        # ── Cache check (keyed on original clean message, not enriched query) ──
-        top_id    = str(reranked[0]['kb_id']) if reranked else ''
+        # ── Stage 5: Hybrid rerank ────────────────────────────────────
+        hybrid_ranked, hybrid_scores = self._hybrid_rerank(search_query, candidates, vector_scores)
+        logger.debug(f"[Stage5/Hybrid] top_score={hybrid_scores[0]:.3f if hybrid_scores else 0}")
+
+        # ── Cache check (keyed on original clean message) ─────────────
+        top_id    = str(hybrid_ranked[0].get('kb_id', hybrid_ranked[0].get('id', ''))) if hybrid_ranked else ''
         cache_key = self._cache_key(clean, top_id, vertical)
         if cache_key in self._response_cache:
             logger.debug(f"[Cache HIT] key={cache_key[:10]}…")
             return {
                 'response':   self._response_cache[cache_key],
                 'method':     'cache',
-                'confidence': scores[0] if scores else 0.8,
+                'confidence': hybrid_scores[0] if hybrid_scores else 0.8,
                 'is_lead':    False,
             }
 
-        # ── 6. LLM generation ─────────────────────────────────────────
-        if reranked and self.enabled:
-            response_text, confidence, method = self._rag_generate(
-                clean, reranked, scores, vertical, context_str
+        # ── Stage 6: RAG generation ───────────────────────────────────
+        if hybrid_ranked and self.enabled:
+            raw_text, confidence, method = self._rag_generate(
+                clean, hybrid_ranked, hybrid_scores, vertical, context_str
             )
         elif self.enabled:
-            # No embedding hit — let Gemini answer with whatever FAQs exist
-            # (even zero FAQs — context_str + personality is enough)
-            response_text = self._vertical_fallback(clean, faqs[:12], vertical, context_str)
-            confidence, method = 0.35, 'vertical_fallback'
+            raw_text   = self._vertical_fallback(clean, faqs[:12], vertical, context_str)
+            confidence = 0.35
+            method     = 'vertical_fallback'
         else:
-            response_text = self._make_fallback(faqs[0].get('answer', '') if faqs else '')
-            confidence, method = 0.0, 'static_fallback'
+            raw_text   = self._make_fallback(faqs[0].get('answer', '') if faqs else '')
+            confidence = 0.0
+            method     = 'static_fallback'
 
-        # ── 7. Guardrails ──────────────────────────────────────────────
-        response_text = self._guardrails(response_text, reranked)
+        # ── Stage 7: Response polish ──────────────────────────────────
+        if self.enabled and confidence > 0.3 and method not in ('cache', 'static_fallback'):
+            polished = self._polish_response(raw_text, vertical, clean)
+        else:
+            polished = raw_text
 
-        # ── Write cache ────────────────────────────────────────────────
+        # ── Stage 8: Guardrails + cache write ─────────────────────────
+        final = self._guardrails(polished, hybrid_ranked)
+
         if confidence > 0.4:
-            self._response_cache[cache_key] = response_text
+            self._response_cache[cache_key] = final
 
         logger.info(
-            f"[Chat] method={method} confidence={confidence:.2f} "
+            f"[Pipeline] done | method={method} conf={confidence:.2f} "
             f"top_chunk={top_id[:12] if top_id else 'none'} vertical={vertical}"
         )
         return {
-            'response':   response_text,
+            'response':   final,
             'method':     method,
             'confidence': confidence,
             'is_lead':    False,
         }
 
     # ═══════════════════════════════════════════════════════════════════
-    # 1. PREPROCESSING
+    # STAGE 1 — PREPROCESSING
     # ═══════════════════════════════════════════════════════════════════
 
     def _preprocess(self, text: str) -> str:
@@ -236,7 +315,7 @@ class AIHelper:
         return text
 
     # ═══════════════════════════════════════════════════════════════════
-    # 2. INTENT DETECTION
+    # STAGE 1b — INTENT DETECTION
     # ═══════════════════════════════════════════════════════════════════
 
     def detect_intent(self, user_message: str, lead_triggers: List[str],
@@ -244,16 +323,16 @@ class AIHelper:
         """
         Three-tier intent detection:
           Tier 1 — Simple intents (greeting/gratitude/bye): free keyword match
-          Tier 2 — Keyword lead scoring (strong + pricing + custom)
-          Tier 3 — Gemini confirmation for borderline scores
+          Tier 2 — Keyword lead scoring (strong + pricing + custom triggers)
+          Tier 3 — Gemini confirmation for borderline scores (2.5 ≤ score < 5)
         """
         msg      = user_message.lower().strip()
         vert_cfg = self.personalities.get(vertical, self.personalities['general'])
 
         # Tier 1 — Zero-cost simple intents
-        for intent, keywords in _SIMPLE_INTENTS.items():
+        for intent_name, keywords in _SIMPLE_INTENTS.items():
             if any(msg == k or msg.startswith(k) for k in keywords):
-                return {'intent': intent, 'is_lead': False, 'confidence': 0.97, 'score': 0}
+                return {'intent': intent_name, 'is_lead': False, 'confidence': 0.97, 'score': 0}
 
         # Tier 2 — Lead keyword scoring
         score   = 0.0
@@ -283,10 +362,12 @@ class AIHelper:
         # Tier 3 — Borderline AI confirmation
         if self.enabled and 2.5 <= score < 5.0:
             try:
-                prompt = f"""Is this a lead request (user wants human contact, a demo, or to buy)?
-Message: "{user_message}"
-Triggers: {', '.join(lead_triggers)}
-Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
+                prompt = (
+                    f'Is this a lead request (user wants human contact, a demo, or to buy)?\n'
+                    f'Message: "{user_message}"\n'
+                    f'Triggers: {", ".join(lead_triggers)}\n'
+                    f'Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}'
+                )
                 resp   = self.model.generate_content(prompt)
                 result = self._parse_json(resp.text)
                 if result:
@@ -302,27 +383,108 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
         return {'intent': 'question', 'is_lead': False, 'score': score, 'confidence': 0.6}
 
     # ═══════════════════════════════════════════════════════════════════
-    # 3. EMBEDDING SEARCH
+    # STAGE 3 — QUERY REWRITE (NEW)
     # ═══════════════════════════════════════════════════════════════════
 
-    def _embedding_search(self, user_message: str, faqs: List[Dict],
+    def _rewrite_query(self, user_message: str,
+                       conversation_history: List[Dict]) -> str:
+        """
+        Turn the user's message into a standalone, self-contained search query
+        by incorporating conversation context via a fast Gemini call.
+
+        Examples:
+          history:  "what's the pro plan cost?" → "$99/month"
+          message:  "how about the agency one?"
+          rewrite:  "What is the price of the agency plan?"
+
+          history:  "do you do same-day appointments?"
+          message:  "and weekends?"
+          rewrite:  "Are same-day appointments available on weekends?"
+
+        Falls back to _resolve_query (keyword enrichment) on any error,
+        so this stage never blocks the pipeline.
+        """
+        # Skip rewrite for long standalone messages — already fully specified
+        word_count = len(user_message.split())
+        if word_count >= 10 and not self._is_followup(user_message, conversation_history):
+            logger.debug(f"[Rewrite] skipped (standalone, {word_count} words)")
+            return user_message
+
+        # No history = nothing to rewrite
+        if not conversation_history:
+            return user_message
+
+        # Build a compact conversation snippet (last 6 turns max)
+        recent = conversation_history[-6:]
+        turns  = []
+        for m in recent:
+            role    = 'User'      if m.get('role') == 'user' else 'Assistant'
+            content = m.get('content', '').strip()
+            if content:
+                turns.append(f"  {role}: {content[:150]}")
+        if not turns:
+            return user_message
+
+        convo_snippet = "\n".join(turns)
+
+        if not self.enabled:
+            return self._resolve_query(user_message, conversation_history)
+
+        try:
+            prompt = f"""You are a search query optimizer.
+
+Given this conversation:
+{convo_snippet}
+
+The user's latest message is: "{user_message}"
+
+Rewrite this message into a single, complete, standalone search query that:
+- Contains all necessary context from the conversation
+- Is specific enough to retrieve the right information
+- Is phrased as a clear question or search phrase
+- Is 5–15 words long
+- Contains NO filler like "I want to know" or "Can you tell me"
+
+Return ONLY the rewritten query. No explanation, no quotes."""
+
+            response   = self.model.generate_content(prompt)
+            rewritten  = response.text.strip().strip('"\'')
+
+            # Sanity checks — fall back if the model returned something odd
+            if not rewritten or len(rewritten) < 5 or len(rewritten) > 200:
+                raise ValueError(f"bad rewrite length: {len(rewritten)}")
+            if rewritten.lower().startswith(('i ', 'can you', 'please', 'could you')):
+                raise ValueError("rewrite starts with filler")
+
+            return rewritten
+
+        except Exception as e:
+            logger.debug(f"[Rewrite] Gemini failed ({e}), using keyword enrichment")
+            return self._resolve_query(user_message, conversation_history)
+
+    # ═══════════════════════════════════════════════════════════════════
+    # STAGE 4 — EMBEDDING SEARCH
+    # ═══════════════════════════════════════════════════════════════════
+
+    def _embedding_search(self, search_query: str, faqs: List[Dict],
                           client_id: str = None) -> Tuple[List[Dict], List[float]]:
         """
         Retrieve top-5 candidates using Gemini cosine similarity.
-        Search order: knowledge_base chunks → legacy FAQ embeddings → keyword overlap.
+        Search order:
+          1. knowledge_base chunks (preferred — Phase 2 onward)
+          2. Legacy FAQ embeddings (lazy-indexed on first query)
+          3. Keyword overlap fallback (when embedding unavailable)
         """
         if not self.enabled:
             return [], []
 
-        # Embed the user query (retrieval_query task type for better accuracy)
-        query_vec = _embed(user_message, task='retrieval_query')
+        query_vec = _embed(search_query, task='retrieval_query')
 
-        # ── Try knowledge_base first (Phase 2 preferred source) ────────
+        # ── 1. knowledge_base chunks ───────────────────────────────────
         if client_id and query_vec:
             try:
                 import models as _m
-                # Pass query_vec so the model function can rank by cosine similarity
-                kb_chunks = _m.get_relevant_knowledge(client_id, query_vec, limit=5)
+                kb_chunks = _m.get_relevant_knowledge(client_id, query_vec, limit=8)
                 if kb_chunks:
                     scored = []
                     for chunk in kb_chunks:
@@ -330,9 +492,8 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
                         if emb:
                             score = _cosine(query_vec, emb)
                         else:
-                            # Chunk returned without embedding — use positional rank score
                             score = max(0.0, 0.5 - (len(scored) * 0.05))
-                        if score > 0.30:   # lowered from 0.38 — catches more valid hits
+                        if score > 0.28:
                             scored.append(({
                                 'id':       chunk.get('kb_id', chunk.get('id', '')),
                                 'kb_id':    chunk.get('kb_id', chunk.get('id', '')),
@@ -343,19 +504,18 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
                             }, score))
                     if scored:
                         scored.sort(key=lambda x: x[1], reverse=True)
-                        logger.debug(f"[KB Search] top_score={scored[0][1]:.3f} hits={len(scored)}")
-                        return [s[0] for s in scored[:5]], [s[1] for s in scored[:5]]
+                        logger.debug(f"[KB] top={scored[0][1]:.3f} hits={len(scored)}")
+                        return [s[0] for s in scored[:8]], [s[1] for s in scored[:8]]
             except Exception as _e:
-                logger.warning(f"[_embedding_search] KB error: {_e}")
+                logger.warning(f"[Search] KB error: {_e}")
 
-        # ── Fall back to legacy FAQ embeddings ──────────────────────────
+        # ── 2. Legacy FAQ embeddings ───────────────────────────────────
         if not faqs:
             return [], []
 
         if client_id and query_vec:
             try:
                 import models as _m
-                # Lazy-index any FAQs not yet embedded
                 stored = {e['faq_id']: e['embedding'] for e in _m.get_faq_embeddings(client_id)}
                 for faq in faqs:
                     fid = str(faq.get('id', ''))
@@ -370,169 +530,165 @@ Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}"""
                     scored  = []
                     for fid, emb in stored.items():
                         score = _cosine(query_vec, emb)
-                        if score > 0.30 and fid in faq_idx:   # lowered from 0.38
+                        if score > 0.28 and fid in faq_idx:
                             scored.append((faq_idx[fid], score))
                     scored.sort(key=lambda x: x[1], reverse=True)
                     if scored:
                         logger.debug(f"[FAQ Embed] top={scored[0][1]:.3f} hits={len(scored)}")
-                        return [s[0] for s in scored[:5]], [s[1] for s in scored[:5]]
+                        return [s[0] for s in scored[:8]], [s[1] for s in scored[:8]]
             except Exception as _e:
-                logger.warning(f"[_embedding_search] FAQ embed error: {_e}")
+                logger.warning(f"[Search] FAQ embed error: {_e}")
 
-        # ── Keyword overlap — also used when query_vec is empty ─────────
-        q_words = set(user_message.lower().split())
+        # ── 3. Keyword overlap fallback ────────────────────────────────
+        q_words = set(search_query.lower().split())
         scored  = []
         for faq in faqs:
             combined = (faq.get('question', '') + ' ' + faq.get('answer', '')).lower()
-            fq_words  = set(combined.split())
-            overlap   = len(q_words & fq_words)
+            overlap  = len(q_words & set(combined.split())) / max(len(q_words), 1)
             if overlap > 0:
-                scored.append((faq, overlap / max(len(q_words), 1)))
+                scored.append((faq, overlap))
         scored.sort(key=lambda x: x[1], reverse=True)
         if scored:
-            logger.debug(f"[Keyword Search] hits={len(scored)} top_score={scored[0][1]:.3f}")
-            return [s[0] for s in scored[:5]], [s[1] for s in scored[:5]]
+            logger.debug(f"[Keyword] hits={len(scored)} top={scored[0][1]:.3f}")
+            return [s[0] for s in scored[:8]], [s[1] for s in scored[:8]]
 
         return [], []
 
     # ═══════════════════════════════════════════════════════════════════
-    # 4. RERANKING
+    # STAGE 5 — HYBRID RERANK (NEW — replaces _rerank)
     # ═══════════════════════════════════════════════════════════════════
 
-    def _rerank(self, user_message: str, candidates: List[Dict],
-                scores: List[float]) -> List[Dict]:
+    def _hybrid_rerank(self, search_query: str,
+                       candidates: List[Dict],
+                       vector_scores: List[float]
+                       ) -> Tuple[List[Dict], List[float]]:
         """
-        Lightweight reranking: combines embedding score + keyword overlap + answer length.
-        Returns reranked list (same objects, new order).
+        Combines the Gemini vector score with a BM25-lite keyword score
+        to surface results that are both semantically similar AND contain
+        the specific terms the user typed.
+
+        This is especially useful for:
+          - Product names ("Pro plan", "Invisalign", "Zapier integration")
+          - Numeric terms ("$99", "48 hours", "3 bedrooms")
+          - Rare proper nouns that embeddings sometimes miss
+
+        Score formula:
+          hybrid = 0.65 × vector_score + 0.30 × bm25_score + 0.05 × length_norm
+
+        Returns (ranked_candidates, ranked_scores) — both sorted descending.
         """
         if not candidates:
-            return []
+            return [], []
 
-        q_words = set(user_message.lower().split())
-        reranked = []
+        query_tokens = _tokenize(search_query)
+        # Estimate average document length from the candidate set
+        all_doc_lengths = []
+        for cand in candidates:
+            doc_text = (cand.get('question', '') + ' ' + cand.get('answer', cand.get('content', '')))
+            all_doc_lengths.append(len(_tokenize(doc_text)))
+        avg_doc_len = sum(all_doc_lengths) / max(len(all_doc_lengths), 1)
 
-        for i, faq in enumerate(candidates):
-            embed_score = scores[i] if i < len(scores) else 0.0
-            fq_words    = set(faq.get('question', '').lower().split())
-            overlap     = len(q_words & fq_words) / max(len(q_words), 1)
-            length_norm = min(len(faq.get('answer', '')) / 300, 1.0) * 0.05
-            final_score = (embed_score * 0.75) + (overlap * 0.20) + length_norm
-            reranked.append((faq, final_score))
+        scored = []
+        for i, cand in enumerate(candidates):
+            vec_score = vector_scores[i] if i < len(vector_scores) else 0.0
 
-        reranked.sort(key=lambda x: x[1], reverse=True)
-        logger.debug(f"[Rerank] top_score={reranked[0][1]:.3f} candidates={len(reranked)}")
-        return [r[0] for r in reranked]
+            # Combine question + answer for BM25 scoring
+            doc_text   = (cand.get('question', '') + ' ' + cand.get('answer', cand.get('content', '')))
+            doc_tokens = _tokenize(doc_text)
+            kw_score   = _bm25_score(
+                query_tokens, doc_tokens,
+                avg_doc_len=avg_doc_len,
+                corpus_size=max(len(candidates), 10)
+            )
+
+            # Mild length bonus — longer answers are usually more complete
+            doc_len_chars = len(cand.get('answer', cand.get('content', '')))
+            length_norm   = min(doc_len_chars / 400.0, 1.0) * 0.05
+
+            hybrid = (vec_score * 0.65) + (kw_score * 0.30) + length_norm
+
+            scored.append((cand, hybrid, vec_score, kw_score))
+            logger.debug(
+                f"[Hybrid] '{cand.get('question', '')[:40]}' "
+                f"vec={vec_score:.3f} bm25={kw_score:.3f} hybrid={hybrid:.3f}"
+            )
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        logger.info(
+            f"[Stage5/Hybrid] top_hybrid={scored[0][1]:.3f} "
+            f"vec={scored[0][2]:.3f} bm25={scored[0][3]:.3f} "
+            f"n={len(scored)}"
+        )
+        ranked_cands  = [s[0] for s in scored]
+        ranked_scores = [s[1] for s in scored]
+        return ranked_cands, ranked_scores
 
     # ═══════════════════════════════════════════════════════════════════
-    # 5. RAG GENERATION
+    # STAGE 6 — RAG GENERATION
     # ═══════════════════════════════════════════════════════════════════
 
-    def _rag_generate(self, user_message: str, reranked: List[Dict],
-                      scores: List[float], vertical: str,
+    def _rag_generate(self, user_message: str, hybrid_ranked: List[Dict],
+                      hybrid_scores: List[float], vertical: str,
                       context_str: str) -> Tuple[str, float, str]:
         """
-        Inject top chunks as RAG context and generate a grounded response.
+        Inject top hybrid-ranked chunks as RAG context and generate
+        a grounded response. Uses top-3 chunks for richer answers.
+
         The prompt is structured in three layers:
-          1. Universal follow-up inference rules (always present, covers every vertical)
-          2. Conversation context built by _build_context
-          3. Retrieved knowledge chunks + tightly scoped instructions
+          1. Universal follow-up inference rules (always injected)
+          2. Conversation context (_build_context output)
+          3. Ranked knowledge chunks + tight generation rules
 
         Returns (response_text, confidence, method_tag).
         """
         vert_cfg    = self.personalities.get(vertical, self.personalities['general'])
         personality = vert_cfg['tone']
-        top_score   = scores[0] if scores else 0.5
+        top_score   = hybrid_scores[0] if hybrid_scores else 0.5
 
-        # Build multi-chunk context (top 3 for richer grounding)
+        # Build multi-chunk context — top 3 for richness
         chunks_context = ""
-        for i, chunk in enumerate(reranked[:3], 1):
-            chunks_context += (
-                f"\n[Source {i}]\n"
-                f"Title: {chunk.get('question', chunk.get('title', ''))}\n"
-                f"Content: {chunk.get('answer', chunk.get('content', ''))}\n"
+        for i, chunk in enumerate(hybrid_ranked[:3], 1):
+            q = chunk.get('question', chunk.get('title', ''))
+            a = chunk.get('answer',   chunk.get('content', ''))
+            chunks_context += f"\n[Source {i}]\nQ: {q}\nA: {a}\n"
+
+        is_followup        = '[Follow-up context]' in context_str
+        followup_emphasis  = ""
+        if is_followup:
+            followup_emphasis = (
+                "\n[CONFIRMED FOLLOW-UP] The current message is a continuation. "
+                "Resolve the full intent from the conversation thread above, "
+                "then answer it strictly from the retrieved knowledge.\n"
             )
 
-        is_followup = '[Follow-up context]' in context_str
-
-        # ── Universal follow-up inference rules ───────────────────────
-        # Always injected — cheap insurance even when is_followup is False,
-        # because the model should always be ready to handle referential phrasing.
         followup_rules = """
-╔══════════════════════════════════════════════════════════════════════╗
-║  FOLLOW-UP & REFERENTIAL QUESTION RULES  (read before answering)   ║
-╠══════════════════════════════════════════════════════════════════════╣
-║                                                                      ║
-║  This assistant is embedded on websites across many industries:      ║
-║  SaaS platforms, law firms, dental clinics, e-commerce stores,       ║
-║  restaurants, real estate agencies, gyms, plumbers, and more.        ║
-║  Users ALWAYS speak in conversational shorthand. Short or vague      ║
-║  messages are almost NEVER standalone questions — they are           ║
-║  continuations of the previous topic.                                ║
-║                                                                      ║
-║  FOLLOW-UP PATTERNS you will encounter in every vertical:           ║
-║                                                                      ║
-║  Pricing / plans:                                                    ║
-║    "how about the pro plan?"  "and agency?"  "same for enterprise?"  ║
-║    "what does that one cost?" "how much is it?"  "the yearly price?" ║
-║                                                                      ║
-║  Features / inclusions:                                              ║
-║    "what's included?"  "what are the features?"  "does it have X?"   ║
-║    "is that covered?"  "what does that come with?"                   ║
-║                                                                      ║
-║  Services / appointments / hours:                                    ║
-║    "and their Saturday hours?"  "do they also do X?"                 ║
-║    "how long does that take?"  "is it available on weekends?"        ║
-║                                                                      ║
-║  Comparisons:                                                        ║
-║    "which is better?"  "what's the difference?"  "vs the other one?" ║
-║    "is the pro worth it over starter?"                               ║
-║                                                                      ║
-║  Contact / location:                                                 ║
-║    "and their number?"  "where are they located?"  "email address?"  ║
-║                                                                      ║
-║  Generic continuations:                                              ║
-║    "what about X?"  "same question for Y"  "the Z one?"              ║
-║    "tell me more"  "go on"  "and that one?"  "is that right?"        ║
-║                                                                      ║
-║  HOW TO RESOLVE INTENT:                                              ║
-║  1. Read [Conversation so far] to identify the active topic.        ║
-║  2. Apply the current short message to that topic.                   ║
-║  3. Answer directly from the retrieved knowledge below.             ║
-║                                                                      ║
-║  ABSOLUTE RULES:                                                     ║
-║  ✗ NEVER say "I'm not sure what you mean" when history is present.  ║
-║  ✗ NEVER say "Could you clarify?" when a reasonable read exists.    ║
-║  ✗ NEVER say "I don't know" just because the message is short.      ║
-║  ✓ If the entity or topic can be named from history, answer it.     ║
-║  ✓ Only say you can't help when the knowledge truly has no answer.  ║
-╚══════════════════════════════════════════════════════════════════════╝"""
+╔══════════════════════════════════════════════════════════════════╗
+║  FOLLOW-UP & REFERENTIAL RULES (read before generating)        ║
+╠══════════════════════════════════════════════════════════════════╣
+║  Short/vague messages are almost always continuations.          ║
+║  Read [Conversation so far] to identify the active topic,      ║
+║  map the current message onto that topic, then answer from     ║
+║  the retrieved sources below. Never ask for clarification       ║
+║  when a reasonable interpretation exists in history.           ║
+║  NEVER say "I don't know" when history provides context.       ║
+╚══════════════════════════════════════════════════════════════════╝"""
 
-        # Extra emphasis block only shown when follow-up is positively detected
-        followup_emphasis = ""
-        if is_followup:
-            followup_emphasis = """
-[CONFIRMED FOLLOW-UP] The message below is flagged as a direct continuation.
-The [Follow-up context] section above names the preceding question explicitly.
-Do NOT treat the current message in isolation — combine it with that context
-to reconstruct the full intent, then answer it from the knowledge provided."""
-
-        prompt = f"""You are a {personality} customer support assistant having a real, flowing conversation.
+        prompt = f"""You are a {personality} customer support assistant.
 {followup_rules}
 {followup_emphasis}
 {context_str}
 
 Current message: "{user_message}"
 
-Retrieved knowledge (answer ONLY from what is here):
+Retrieved knowledge (ONLY use facts from here — never invent):
 {chunks_context.strip()}
 
-Response rules:
-- Infer the full question from context when the current message is short or referential.
-- Ground every fact in the retrieved knowledge above — never invent details.
-- Natural and warm tone: 1–3 sentences, contractions welcome (I'm, it's, you'd, they're).
-- A short bullet list is fine only when listing 3+ distinct items — otherwise prose.
-- Do NOT hedge, ask for clarification, or offer to escalate unless the knowledge
-  genuinely cannot answer the inferred question.
+Rules:
+- Ground every fact in the retrieved knowledge above.
+- Infer full intent from context for short or referential messages.
+- Natural tone: 1–3 sentences. Contractions welcome.
+- Use a bullet list only when listing 3+ distinct items; otherwise prose.
+- Do NOT hedge, ask to clarify, or offer to escalate unless knowledge genuinely lacks the answer.
 - No markdown headers, no preamble, no sign-off.
 
 Return ONLY the response text."""
@@ -540,24 +696,118 @@ Return ONLY the response text."""
         try:
             response      = self.model.generate_content(prompt)
             response_text = response.text.strip()
-
             if not response_text or len(response_text) < 10:
-                return reranked[0].get('answer', reranked[0].get('content', '')), top_score, 'rag_fallback'
-
+                fallback = hybrid_ranked[0].get('answer', hybrid_ranked[0].get('content', ''))
+                return fallback, top_score, 'rag_fallback'
             return response_text, top_score, 'rag_pipeline'
+        except Exception as e:
+            logger.error(f"[RAG] Gemini error: {e}")
+            answer = hybrid_ranked[0].get('answer', hybrid_ranked[0].get('content', ''))
+            return self._make_fallback(answer), top_score * 0.7, 'rag_static'
+
+    # ═══════════════════════════════════════════════════════════════════
+    # STAGE 7 — RESPONSE POLISH (NEW)
+    # ═══════════════════════════════════════════════════════════════════
+
+    def _polish_response(self, raw_text: str, vertical: str,
+                         user_message: str) -> str:
+        """
+        A final lightweight LLM pass that:
+          1. Adjusts tone to match the vertical personality
+          2. Cleans up formatting (removes stray markdown, fixes bullet style)
+          3. Ensures the response feels natural and appropriately sized
+
+        This is deliberately cheap — the model only sees the raw answer
+        and a short instruction set. It never has access to the knowledge
+        chunks so it cannot hallucinate new facts.
+
+        Falls back to raw_text on any error.
+        """
+        if not raw_text or not raw_text.strip():
+            return raw_text
+
+        vert_cfg     = self.personalities.get(vertical, self.personalities['general'])
+        polish_hint  = vert_cfg.get('polish_hint', "Keep it conversational and approachable.")
+        personality  = vert_cfg['tone']
+
+        # Skip polish for very short responses — already clean enough
+        if len(raw_text.split()) <= 12:
+            return raw_text
+
+        try:
+            prompt = f"""You are a tone and formatting editor for a {personality} customer support chatbot.
+
+Polish the following draft response WITHOUT changing any facts.
+
+Editing rules:
+1. Tone: {polish_hint}
+2. Length: Keep it 1–3 sentences unless the original uses bullet points for 3+ items.
+3. Bullets: Use them only if the draft already has 3+ list items; otherwise convert to prose.
+4. Format: Remove any markdown headers (#, ##), bold (**text**), or excessive punctuation.
+5. Contractions: Use natural contractions (I'm, it's, we're, you'd).
+6. Do NOT add new facts, examples, or caveats not in the original.
+7. Return ONLY the polished response — no explanation, no quotes around it.
+
+Draft response:
+{raw_text}
+
+User's original message (for tone context only): "{user_message[:100]}"
+
+Polished response:"""
+
+            response = self.model.generate_content(prompt)
+            polished = response.text.strip()
+
+            # Sanity checks — reject if the polish makes it too different
+            if not polished or len(polished) < 8:
+                return raw_text
+            # Don't let polish dramatically expand the response
+            if len(polished) > len(raw_text) * 2.5:
+                logger.debug("[Polish] rejected: response grew too much")
+                return raw_text
+
+            logger.debug(
+                f"[Stage7/Polish] raw={len(raw_text)}ch → polished={len(polished)}ch"
+            )
+            return polished
 
         except Exception as e:
-            logger.error(f"[_rag_generate] Gemini error: {e}")
-            answer = reranked[0].get('answer', reranked[0].get('content', ''))
-            return self._make_fallback(answer), top_score * 0.7, 'rag_static'
+            logger.debug(f"[Polish] Gemini error (non-critical): {e}")
+            return raw_text
+
+    # ═══════════════════════════════════════════════════════════════════
+    # GUARDRAILS
+    # ═══════════════════════════════════════════════════════════════════
+
+    def _guardrails(self, response_text: str, candidates: List[Dict]) -> str:
+        """
+        Post-generation quality checks:
+        - Too short / empty → safe fallback
+        - Contains "I don't know" with no candidates → safe fallback
+        - Excessive length (> 600 chars) → trim to first 2 sentences
+        """
+        if not response_text or len(response_text) < 8:
+            return "I'm not sure about that. Would you like me to connect you with the team?"
+
+        if "i don't know" in response_text.lower() and not candidates:
+            return "I'm not sure about that. Would you like me to connect you with the team?"
+
+        if len(response_text) > 600:
+            sentences     = re.split(r'(?<=[.!?])\s+', response_text)
+            response_text = ' '.join(sentences[:2])
+
+        return response_text
+
+    # ═══════════════════════════════════════════════════════════════════
+    # VERTICAL FALLBACK
+    # ═══════════════════════════════════════════════════════════════════
 
     def _vertical_fallback(self, user_message: str, faqs: List[Dict],
                            vertical: str, context_str: str) -> str:
-        """Fallback when no strong embedding hit — uses knowledge context loosely."""
+        """Fallback when no strong embedding hit — loosely uses available FAQs."""
         vert_cfg    = self.personalities.get(vertical, self.personalities['general'])
         personality = vert_cfg['tone']
 
-        # Build a light context from top FAQs
         faq_context = "\n".join([
             f"- {f.get('question', '')}: {f.get('answer', '')[:120]}"
             for f in faqs[:8]
@@ -580,84 +830,22 @@ Sound friendly and human. Return ONLY the response text."""
             text     = response.text.strip()
             return text if len(text) > 10 else "I'm happy to help! Could you tell me a bit more about what you're looking for?"
         except Exception as e:
-            logger.error(f"[_vertical_fallback] error: {e}")
+            logger.error(f"[VerticalFallback] error: {e}")
             return "I'm not sure I have the exact answer. Would you like me to connect you with the team?"
 
     # ═══════════════════════════════════════════════════════════════════
-    # 6. GUARDRAILS
+    # FOLLOW-UP DETECTION & KEYWORD ENRICHMENT (Phase 2 preserved)
     # ═══════════════════════════════════════════════════════════════════
 
-    def _guardrails(self, response_text: str, candidates: List[Dict]) -> str:
-        """
-        Post-generation quality checks:
-        - Too short / empty → safe fallback
-        - Contains "I don't know" without a candidate → safe fallback
-        - Excessive length (>500 chars) → keep first 2 sentences
-        """
-        if not response_text or len(response_text) < 10:
-            return "I'm not sure about that. Would you like me to connect you with the team?"
-
-        if "i don't know" in response_text.lower() and not candidates:
-            return "I'm not sure about that. Would you like me to connect you with the team?"
-
-        if len(response_text) > 500:
-            # Keep first 2 sentences
-            sentences = re.split(r'(?<=[.!?])\s+', response_text)
-            response_text = ' '.join(sentences[:2])
-
-        return response_text
-
-    # ═══════════════════════════════════════════════════════════════════
-    # FOLLOW-UP DETECTION & QUERY ENRICHMENT
-    # ═══════════════════════════════════════════════════════════════════
-
-    # Phrases that almost always mean the message is continuing a prior topic
     _FOLLOWUP_STARTERS = (
         'how about', 'what about', 'and the ', 'and a ', 'and an ',
-        'what are the ', 'what are its ', "what's the ", "what's its ",
-        'tell me about the ', 'how much is the ', 'how much does the ',
-        'what does the ', 'what is the ', 'is the ', 'does the ',
-        'how about the ', 'same for ', 'same question for ', 'and for ',
+        'what are the ', "what's the ", "what's its ", 'tell me about the ',
+        'how much is the ', 'how much does the ', 'what does the ',
+        'what is the ', 'is the ', 'does the ', 'how about the ',
+        'same for ', 'same question for ', 'and for ',
         'the ', 'that one', 'this one', 'the same ',
     )
 
-    def _is_followup(self, message: str, history: List[Dict]) -> bool:
-        """
-        Returns True when the current message is likely a referential follow-up
-        that needs conversation history to resolve intent.
-
-        Triggers on:
-          - Messages starting with known continuation phrases
-          - Very short messages (≤ 6 words) when a substantive prior answer exists
-        """
-        if not history:
-            return False
-
-        msg = message.strip().lower()
-
-        # Explicit continuation openers
-        for starter in self._FOLLOWUP_STARTERS:
-            if msg.startswith(starter):
-                return True
-
-        # Short message + prior assistant answer exists → likely a follow-up
-        words = msg.split()
-        if len(words) <= 6:
-            # Ignore pure greetings / acknowledgements
-            GREETINGS = {'hi', 'hello', 'hey', 'thanks', 'thank', 'ok', 'okay',
-                         'great', 'cool', 'bye', 'goodbye', 'yes', 'no', 'sure'}
-            if not GREETINGS.issuperset(set(words)):
-                last_bot = next(
-                    (m.get('content', '') for m in reversed(history)
-                     if m.get('role') != 'user'),
-                    None
-                )
-                if last_bot and len(last_bot) > 40:
-                    return True
-
-        return False
-
-    # Stop words excluded when extracting topic keywords from history
     _TOPIC_STOPS = {
         'what', 'how', 'is', 'are', 'the', 'a', 'an', 'do', 'does', 'can',
         'could', 'would', 'should', 'tell', 'me', 'about', 'much', 'many',
@@ -668,27 +856,34 @@ Sound friendly and human. Return ONLY the response text."""
         'more', 'than', 'some', 'any', 'all', 'one', 'two', 'three',
     }
 
+    def _is_followup(self, message: str, history: List[Dict]) -> bool:
+        if not history:
+            return False
+        msg = message.strip().lower()
+        for starter in self._FOLLOWUP_STARTERS:
+            if msg.startswith(starter):
+                return True
+        words = msg.split()
+        if len(words) <= 6:
+            GREETINGS = {'hi', 'hello', 'hey', 'thanks', 'thank', 'ok', 'okay',
+                         'great', 'cool', 'bye', 'goodbye', 'yes', 'no', 'sure'}
+            if not GREETINGS.issuperset(set(words)):
+                last_bot = next(
+                    (m.get('content', '') for m in reversed(history)
+                     if m.get('role') != 'user'), None
+                )
+                if last_bot and len(last_bot) > 40:
+                    return True
+        return False
+
     def _resolve_query(self, message: str, history: List[Dict]) -> str:
         """
-        For referential follow-up messages, builds an enriched search query
-        by borrowing topic keywords from the previous conversation turns.
-
-        Examples:
-          history: "how much is the starter plan?" + answer
-          message: "how about the pro plan?"
-          → "how about the pro plan? pro plan pricing starter"
-
-          history: "what features does the pro plan have?" + answer
-          message: "and the agency one?"
-          → "and the agency one? agency plan features pro"
-
-        The enriched query is used ONLY for embedding search — the LLM always
-        receives the original clean message.
+        Keyword enrichment fallback for when _rewrite_query is unavailable.
+        Borrows topic terms from the last 2 user messages.
         """
         if not self._is_followup(message, history):
-            return message   # not a follow-up — use message as-is
-  
-        # Collect keywords from the last 2 user messages in history
+            return message
+
         recent_user = [
             m.get('content', '').strip()
             for m in (history or [])[-6:]
@@ -698,17 +893,12 @@ Sound friendly and human. Return ONLY the response text."""
         topic_words: List[str] = []
         for past_msg in recent_user[-2:]:
             words = re.findall(r'\b[a-z]{3,}\b', past_msg.lower())
-            topic_words.extend(
-                w for w in words if w not in self._TOPIC_STOPS
-            )
+            topic_words.extend(w for w in words if w not in self._TOPIC_STOPS)
 
-        # Also get keywords from the current message
         current_kws = [
             w for w in re.findall(r'\b[a-z]{3,}\b', message.lower())
             if w not in self._TOPIC_STOPS
         ]
-
-        # Append only the *new* topic words (not already in current_kws)
         current_set  = set(current_kws)
         extra_topics = []
         seen: set    = set()
@@ -727,25 +917,18 @@ Sound friendly and human. Return ONLY the response text."""
         return enriched
 
     # ═══════════════════════════════════════════════════════════════════
-    # CONVERSATION CONTEXT
+    # CONVERSATION CONTEXT (Phase 2 preserved)
     # ═══════════════════════════════════════════════════════════════════
 
     def _build_context(self, conversation_history: List[Dict],
                        client_id: str = None,
                        current_message: str = None) -> str:
         """
-        Build a rich prompt context from:
-          1. Stored conversation summary (earlier context from DB)
-          2. Last 8 turns as an explicit structured dialogue
-          3. A follow-up annotation block when the current message is referential
-
-        The explicit structure is critical for follow-up handling: the LLM
-        sees not just raw turns but a labelled conversation thread and an
-        explicit flag when the current message depends on prior context.
+        Builds the conversation context block passed into prompts.
+        Includes: earlier summary (DB) + last 8 turns + follow-up annotation.
         """
         parts = []
 
-        # ── 1. Earlier summary from DB ────────────────────────────────
         if client_id:
             try:
                 import models as _m
@@ -755,50 +938,40 @@ Sound friendly and human. Return ONLY the response text."""
             except Exception:
                 pass
 
-        # ── 2. Recent turns as structured dialogue ────────────────────
         if conversation_history:
-            recent = conversation_history[-8:]   # last 8 turns — tighter than 15
-
+            recent     = conversation_history[-8:]
             turns_lines = []
             for m in recent:
                 role    = 'User' if m.get('role') == 'user' else 'Assistant'
                 content = m.get('content', '').strip()
                 if not content:
                     continue
-                # Truncate long assistant answers to keep prompt lean
                 if role == 'Assistant' and len(content) > 220:
                     content = content[:220] + '…'
                 turns_lines.append(f"  {role}: {content}")
-
             if turns_lines:
                 parts.append("[Conversation so far]\n" + "\n".join(turns_lines))
 
-            # ── 3. Follow-up annotation ───────────────────────────────
             if current_message:
                 recent_user_msgs = [
                     m.get('content', '').strip()
                     for m in recent
                     if m.get('role') == 'user' and m.get('content')
                 ]
-
                 if self._is_followup(current_message, conversation_history) and recent_user_msgs:
-                    # Surface the most recent prior question explicitly so the
-                    # LLM has no ambiguity about what topic is being continued.
                     prev_question = recent_user_msgs[-1]
                     parts.append(
                         "[Follow-up context]\n"
-                        f"The user's current message (\"{current_message}\") is a follow-up "
-                        f"or continuation.\n"
-                        f"Their immediately preceding question was: \"{prev_question}\"\n"
-                        f"Infer what they are now asking from the conversation thread above "
-                        f"and answer it directly."
+                        f"The user's current message (\"{current_message}\") is a follow-up.\n"
+                        f"Their preceding question was: \"{prev_question}\"\n"
+                        f"Infer what they are now asking and answer it directly."
                     )
 
         return "\n\n".join(parts) if parts else ""
 
     def maybe_summarise(self, client_id: str,
                         conversation_history: List[Dict]) -> None:
-        """Summarise every 6 messages and store in DB. Non-blocking."""
+        """Summarise every 6 messages and store to DB. Non-blocking."""
         if not self.enabled or not conversation_history or not client_id:
             return
         if len(conversation_history) % 6 != 0:
@@ -809,12 +982,11 @@ Sound friendly and human. Return ONLY the response text."""
                 f"{'User' if m.get('role') == 'user' else 'Assistant'}: {m.get('content', '')}"
                 for m in window if m.get('content')
             ])
-            prompt = f"""Summarise this support conversation in 1–2 concise sentences.
-Focus on what the user needed and what was resolved.
-
-{turns}
-
-Return ONLY the summary."""
+            prompt = (
+                "Summarise this support conversation in 1–2 concise sentences. "
+                "Focus on what the user needed and what was resolved.\n\n"
+                f"{turns}\n\nReturn ONLY the summary."
+            )
             response = self.model.generate_content(prompt)
             summary  = response.text.strip()
             if summary and len(summary) > 10:
@@ -825,26 +997,15 @@ Return ONLY the summary."""
             logger.debug(f"[maybe_summarise] non-critical: {e}")
 
     # ═══════════════════════════════════════════════════════════════════
-    # SMART UPLOAD PIPELINE
+    # SMART UPLOAD PIPELINE (Phase 2 preserved)
     # ═══════════════════════════════════════════════════════════════════
 
     def enrich_and_chunk(self, raw_items: List[Dict],
                          client_id: str) -> List[Dict]:
-        """
-        AI enrichment pipeline for uploaded content.
-        Input:  list of {question, answer, category} (from CSV/PDF/Excel parser)
-        Output: list of knowledge_base chunks ready for save_knowledge_chunks()
-
-        Steps per item:
-          1. Quality check (skip very short/empty)
-          2. AI enrichment: generate tags + improved title
-          3. Deduplication check (cosine vs existing embeddings)
-          4. Embed + build chunk dict
-        """
+        """AI enrichment pipeline for uploaded content — unchanged from Phase 2."""
         if not raw_items:
             return []
 
-        # Load existing embeddings for dedup
         existing_embeddings: List[Dict] = []
         if client_id and self.enabled:
             try:
@@ -853,61 +1014,53 @@ Return ONLY the summary."""
             except Exception:
                 pass
 
-        chunks = []
-        seen_embeddings: List[list] = [e['embedding'] for e in existing_embeddings]
+        chunks          = []
+        seen_embeddings = [e['embedding'] for e in existing_embeddings]
 
         for item in raw_items:
             question = (item.get('question') or '').strip()
             answer   = (item.get('answer')   or '').strip()
-
-            # Quality gate
             if not question or not answer or len(answer) < 10:
                 continue
 
-            # Chunk long answers (>800 chars → split into ≤400-char chunks)
             content_chunks = self._split_content(answer)
 
             for idx, chunk_text in enumerate(content_chunks):
                 chunk_id = str(uuid.uuid4())
 
-                # AI enrichment (title + tags) — only first chunk gets full AI pass
                 if self.enabled and idx == 0:
                     tags, ai_category = self._ai_enrich(question, chunk_text)
                 else:
                     tags        = self._extract_tags(question)
                     ai_category = item.get('category', 'General')
 
-                # Embed (document task type for stored content)
                 embed_text = f"{question} {chunk_text}"
                 embedding  = _embed(embed_text, task='retrieval_document')
 
-                # Deduplication — skip if cosine > 0.92 with existing
                 if embedding and seen_embeddings:
                     max_sim = max((_cosine(embedding, ex) for ex in seen_embeddings), default=0.0)
                     if max_sim > 0.92:
-                        logger.debug(f"[Dedup] skipped chunk (sim={max_sim:.3f}): {question[:50]}")
+                        logger.debug(f"[Dedup] skipped (sim={max_sim:.3f}): {question[:50]}")
                         continue
 
-                # Quality score heuristic
                 quality = self._quality_score(question, chunk_text)
 
                 chunk = {
-                    'kb_id':    chunk_id,
-                    'title':    question if idx == 0 else f"{question} (part {idx + 1})",
-                    'content':  chunk_text,
-                    'type':     item.get('type', 'faq'),
-                    'category': ai_category,
-                    'tags':     tags,
+                    'kb_id':     chunk_id,
+                    'title':     question if idx == 0 else f"{question} (part {idx + 1})",
+                    'content':   chunk_text,
+                    'type':      item.get('type', 'faq'),
+                    'category':  ai_category,
+                    'tags':      tags,
                     'embedding': embedding,
-                    'metadata': {
-                        'source':        item.get('source', 'upload'),
-                        'original_q':    question,
-                        'chunk_index':   idx,
-                        'total_chunks':  len(content_chunks),
+                    'metadata':  {
+                        'source':       item.get('source', 'upload'),
+                        'original_q':   question,
+                        'chunk_index':  idx,
+                        'total_chunks': len(content_chunks),
                     },
-                    'quality':  quality,
+                    'quality':   quality,
                 }
-
                 chunks.append(chunk)
                 if embedding:
                     seen_embeddings.append(embedding)
@@ -916,7 +1069,6 @@ Return ONLY the summary."""
         return chunks
 
     def _split_content(self, text: str, max_len: int = 400) -> List[str]:
-        """Split long text into sentence-aware chunks."""
         if len(text) <= max_len:
             return [text]
         sentences = re.split(r'(?<=[.!?])\s+', text)
@@ -934,19 +1086,15 @@ Return ONLY the summary."""
         return chunks if chunks else [text[:max_len]]
 
     def _ai_enrich(self, question: str, answer: str) -> Tuple[List[str], str]:
-        """Use Gemini to generate tags and category. Returns (tags, category)."""
         if not self.enabled:
             return self._extract_tags(question), 'General'
         try:
-            prompt = f"""Given this FAQ:
-Q: {question}
-A: {answer[:200]}
-
-Return ONLY valid JSON:
-{{"tags": ["tag1", "tag2", "tag3"], "category": "Billing"}}
-
-tags: 2–5 short keyword tags
-category: one of General | Billing | Support | Product | Policy | Sales | Technical"""
+            prompt = (
+                f"Given this FAQ:\nQ: {question}\nA: {answer[:200]}\n\n"
+                f'Return ONLY valid JSON:\n{{"tags": ["tag1", "tag2"], "category": "Billing"}}\n\n'
+                f"tags: 2–5 short keyword tags\n"
+                f"category: one of General | Billing | Support | Product | Policy | Sales | Technical"
+            )
             response = self.model.generate_content(prompt)
             result   = self._parse_json(response.text)
             if result:
@@ -956,36 +1104,30 @@ category: one of General | Billing | Support | Product | Policy | Sales | Techni
         return self._extract_tags(question), 'General'
 
     def _extract_tags(self, text: str) -> List[str]:
-        """Simple keyword extraction for tags when AI is unavailable."""
-        stop = {'a', 'an', 'the', 'is', 'are', 'do', 'does', 'can', 'i', 'you',
-                'we', 'my', 'your', 'what', 'how', 'when', 'where', 'why', 'to', 'of'}
+        stop  = {'a', 'an', 'the', 'is', 'are', 'do', 'does', 'can', 'i', 'you',
+                 'we', 'my', 'your', 'what', 'how', 'when', 'where', 'why', 'to', 'of'}
         words = re.findall(r'\b[a-z]{3,}\b', text.lower())
         return list(dict.fromkeys(w for w in words if w not in stop))[:5]
 
     def _quality_score(self, question: str, answer: str) -> float:
-        """Heuristic quality score 0.0–1.0 based on length and completeness."""
         score = 0.5
-        if len(question) > 15:
-            score += 0.15
-        if len(answer) > 50:
-            score += 0.15
-        if answer.endswith(('.', '!', '?')):
-            score += 0.1
-        if '?' in question:
-            score += 0.1
+        if len(question) > 15: score += 0.15
+        if len(answer)   > 50: score += 0.15
+        if answer.endswith(('.', '!', '?')): score += 0.1
+        if '?' in question:                  score += 0.1
         return min(score, 1.0)
 
     # ═══════════════════════════════════════════════════════════════════
-    # BACKWARD-COMPAT: Phase 1 methods (still used by analytics/admin)
+    # BACKWARD-COMPAT: Phase 1 / Phase 2 methods (admin / analytics)
     # ═══════════════════════════════════════════════════════════════════
 
     def find_best_faq(self, user_message: str, faqs: List[Dict],
                       client_id: str = None) -> Tuple[Optional[Dict], float]:
-        """Phase 1 compat — delegates to embedding search + rerank."""
-        candidates, scores = self._embedding_search(user_message, faqs, client_id)
-        reranked            = self._rerank(user_message, candidates, scores)
-        if reranked and scores:
-            return reranked[0], scores[0]
+        """Phase 1 compat — delegates to embedding search + hybrid rerank."""
+        candidates, vector_scores = self._embedding_search(user_message, faqs, client_id)
+        ranked, scores            = self._hybrid_rerank(user_message, candidates, vector_scores)
+        if ranked and scores:
+            return ranked[0], scores[0]
         return None, 0.0
 
     def index_faqs(self, faqs: List[Dict], client_id: str) -> int:
