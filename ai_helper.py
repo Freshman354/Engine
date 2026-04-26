@@ -219,7 +219,7 @@ class AIHelper:
         """
         if not user_message or not user_message.strip():
             return {'response': "How can I help you today?", 'method': 'empty',
-                    'confidence': 1.0, 'is_lead': False}
+                    'confidence': 1.0, 'is_lead': False, 'lead_metadata': None}
 
         history = conversation_history or []
 
@@ -234,11 +234,24 @@ class AIHelper:
                 f"[Lead] client={client_id} vertical={vertical} "
                 f"score={intent.get('score', 0):.1f} conf={intent['confidence']:.2f}"
             )
+
+            # ── Smart lead extraction + contextual nudge ───────────────
+            lead_meta = self._extract_lead_info(clean, history)
+            logger.info(
+                f"[LeadMeta] name={lead_meta.get('name')} "
+                f"email={lead_meta.get('email')} "
+                f"phone={lead_meta.get('phone')} "
+                f"topic={lead_meta.get('interest_topic')}"
+            )
+
+            nudge = self._build_lead_nudge(lead_meta, vertical, clean)
+
             return {
-                'response':   "I'd be happy to connect you with our team! What's the best way to reach you?",
-                'method':     'lead_detection',
-                'confidence': intent['confidence'],
-                'is_lead':    True,
+                'response':      nudge,
+                'method':        'lead_detection',
+                'confidence':    intent['confidence'],
+                'is_lead':       True,
+                'lead_metadata': lead_meta,   # ← saved directly to PostgreSQL by caller
             }
 
         # ── Stage 2: Build conversation context ───────────────────────
@@ -281,10 +294,11 @@ class AIHelper:
         if cache_key in self._response_cache:
             logger.debug(f"[Cache HIT] key={cache_key[:10]}…")
             return {
-                'response':   self._response_cache[cache_key],
-                'method':     'cache',
-                'confidence': hybrid_scores[0] if hybrid_scores else 0.8,
-                'is_lead':    False,
+                'response':      self._response_cache[cache_key],
+                'method':        'cache',
+                'confidence':    hybrid_scores[0] if hybrid_scores else 0.8,
+                'is_lead':       False,
+                'lead_metadata': None,
             }
 
         # ── Stage 6: RAG generation ───────────────────────────────────
@@ -318,10 +332,11 @@ class AIHelper:
             f"top_chunk={top_id[:12] if top_id else 'none'} vertical={vertical}"
         )
         return {
-            'response':   final,
-            'method':     method,
-            'confidence': confidence,
-            'is_lead':    False,
+            'response':      final,
+            'method':        method,
+            'confidence':    confidence,
+            'is_lead':       False,
+            'lead_metadata': None,
         }
 
     # ═══════════════════════════════════════════════════════════════════
@@ -402,8 +417,190 @@ class AIHelper:
         return {'intent': 'question', 'is_lead': False, 'score': score, 'confidence': 0.6}
 
     # ═══════════════════════════════════════════════════════════════════
-    # STAGE 3 — QUERY REWRITE (NEW)
+    # SMART LEAD INFO EXTRACTION
     # ═══════════════════════════════════════════════════════════════════
+
+    def _extract_lead_info(self, user_message: str,
+                           conversation_history: List[Dict]) -> Dict:
+        """
+        Scan the current message AND conversation history for any lead data
+        the user has already shared. Returns a dict with four fields:
+
+            {
+              "name":           "Sarah Johnson" | null,
+              "email":          "sarah@company.com" | null,
+              "phone":          "+1 555 000 0000" | null,
+              "interest_topic": "Agency plan pricing" | null
+            }
+
+        Strategy:
+          Pass 1 — Pure-Python regex over the message + last 8 history turns.
+                   Fast, free, works for clearly formatted data (emails, phones).
+          Pass 2 — Gemini extraction for everything Pass 1 missed
+                   (names buried in prose, implied interests, informal phone formats).
+
+        Never raises — always returns a dict (fields may be None).
+        Falls back to whatever Pass 1 found if Gemini is unavailable or fails.
+        """
+        # Collect text to scan: current message + last 8 turns
+        history     = conversation_history or []
+        recent_turns = [
+            m.get('content', '').strip()
+            for m in history[-8:]
+            if m.get('content')
+        ]
+        all_text = ' '.join(recent_turns + [user_message])
+
+        # ── Pass 1: Regex extraction ───────────────────────────────────
+        extracted: Dict = {'name': None, 'email': None, 'phone': None, 'interest_topic': None}
+
+        # Email — unambiguous
+        email_match = re.search(
+            r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b', all_text
+        )
+        if email_match:
+            extracted['email'] = email_match.group(0)
+
+        # Phone — international and local formats
+        phone_match = re.search(
+            r'(\+?[\d][\d\s\-().]{7,14}\d)', all_text
+        )
+        if phone_match:
+            candidate = re.sub(r'[\s\-().]', '', phone_match.group(1))
+            if 7 <= len(candidate) <= 15:
+                extracted['phone'] = phone_match.group(1).strip()
+
+        # Name — "my name is X" / "I'm X" / "this is X" patterns
+        name_match = re.search(
+            r"(?:my name is|i(?:'?m| am)|this is|call me)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
+            all_text, re.IGNORECASE
+        )
+        if name_match:
+            extracted['name'] = name_match.group(1).strip().title()
+
+        logger.debug(f"[LeadExtract] Pass1 → {extracted}")
+
+        # ── Pass 2: Gemini extraction for the rest ─────────────────────
+        if not self.enabled:
+            return extracted
+
+        # Only call Gemini if something is still missing
+        still_missing = [k for k, v in extracted.items() if v is None]
+        if not still_missing:
+            return extracted
+
+        # Build a compact conversation snippet for context
+        convo_snippet = '\n'.join([
+            f"  {'User' if m.get('role') == 'user' else 'Bot'}: {m.get('content', '')[:150]}"
+            for m in history[-6:]
+            if m.get('content')
+        ] + [f"  User: {user_message}"])
+
+        prompt = f"""You are a lead data extractor. Analyze the conversation below and extract contact information the user has shared.
+
+Conversation:
+{convo_snippet}
+
+Extract the following fields if present in the conversation. Use null (not "null") if absent.
+
+Return ONLY valid JSON — no explanation, no markdown:
+{{
+  "name":           <string or null>,
+  "email":          <string or null>,
+  "phone":          <string or null>,
+  "interest_topic": <short phrase describing what the user wants, or null>
+}}
+
+Rules:
+- name: The user's real name (not a username). Infer from greetings like "I'm Sarah" or "My name is John".
+- email: A valid email address. Must contain @.
+- phone: A phone number in any format. Include country code if given.
+- interest_topic: 3–8 words summarising what the user wants (e.g. "Agency plan pricing", "Book a dental appointment").
+- Do NOT invent information. Only extract what the user actually said."""
+
+        try:
+            resp   = self.model.generate_content(prompt)
+            result = self._parse_json(resp.text)
+            if result and isinstance(result, dict):
+                # Merge: Gemini fills in what Pass 1 missed; Pass 1 values win on conflict
+                for field in ('name', 'email', 'phone', 'interest_topic'):
+                    ai_val = result.get(field)
+                    if ai_val and ai_val not in ('null', 'None', '') and extracted[field] is None:
+                        extracted[field] = str(ai_val).strip()
+                logger.info(
+                    f"[LeadExtract] Pass2 merge → "
+                    f"name={extracted['name']} email={extracted['email']} "
+                    f"phone={extracted['phone']} topic={extracted['interest_topic']}"
+                )
+        except Exception as e:
+            logger.debug(f"[LeadExtract] Gemini pass failed (non-critical): {e}")
+
+        return extracted
+
+    def _build_lead_nudge(self, lead_meta: Dict, vertical: str,
+                          user_message: str) -> str:
+        """
+        Build a personalised, contextual nudge that:
+          1. Acknowledges what we already know (name / topic)
+          2. Asks for the single most important missing piece of info
+             Priority: email > name > phone
+
+        Pure-Python — no Gemini call. Tone shaped by vertical personality.
+        """
+        name  = lead_meta.get('name')
+        email = lead_meta.get('email')
+        phone = lead_meta.get('phone')
+        topic = lead_meta.get('interest_topic')
+
+        # ── Greeting ──────────────────────────────────────────────────
+        parts = []
+        if name:
+            parts.append(f"Thanks, {name.split()[0]}!")
+        if topic:
+            parts.append(f"Happy to help with your {topic.lower()} inquiry.")
+        elif not name:
+            parts.append("I'd love to help with that!")
+        greeting = ' '.join(parts)
+
+        # ── Vertical action phrases ────────────────────────────────────
+        action_phrases = {
+            'real_estate': "have one of our agents reach out",
+            'saas':        "have our team send you the details",
+            'ecommerce':   "get you sorted quickly",
+            'healthcare':  "have someone from our team follow up",
+            'law_firm':    "arrange a confidential consultation",
+            'dental':      "book you in with our team",
+            'gym':         "get you set up with a trial",
+            'general':     "have our team reach out",
+        }
+        action = action_phrases.get(vertical, action_phrases['general'])
+
+        # ── Priority nudge: email > name > phone > all present ─────────
+        if not email:
+            nudge = (
+                f"{greeting} To {action}, "
+                f"what's the best email address to reach you at?"
+            )
+        elif not name:
+            nudge = (
+                f"{greeting} Just so we can personalise things — "
+                f"what's your name?"
+            )
+        elif not phone:
+            nudge = (
+                f"{greeting} Our team will be in touch at {email}. "
+                f"Would you also like to share a phone number for a faster response?"
+            )
+        else:
+            nudge = (
+                f"{greeting} Perfect — our team will be in touch at {email} very soon!"
+            )
+
+        logger.debug(
+            f"[Nudge] vertical={vertical} name={bool(name)} "
+            f"email={bool(email)} phone={bool(phone)} → '{nudge[:60]}…'"
+        )
+        return nudge
 
     def _rewrite_query(self, user_message: str,
                        conversation_history: List[Dict]) -> str:
