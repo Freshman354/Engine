@@ -414,7 +414,62 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
     </div>
   </div>
 
-  <!-- 4. WHITE-LABEL & CUSTOM DOMAIN (merged) -->
+  <!-- 4. LEAD COLLECTION QUESTIONS -->
+  <div class="card">
+    <div class="card-header open" onclick="tc(this)">
+      <div class="card-icon" style="background:#FEF2F2;"><svg viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+      <div class="card-text"><h2>Lead Collection</h2><p>Customise the questions asked when capturing visitor details</p></div>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    </div>
+    <div class="card-body open">
+      <div style="padding:10px 13px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);border-radius:9px;margin-bottom:14px;font-size:12.5px;color:var(--gold-dk);line-height:1.6;">
+        <strong>💡 How this works:</strong> When a visitor triggers lead capture, the bot asks these four questions in order.
+        The first two (name and email) are always required. Steps 3 and 4 are the ones you can customise.
+      </div>
+
+      <!-- Step 1 — Name (fixed) -->
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:6px;">
+          Step 1 — Name
+          <span style="padding:1px 8px;background:var(--panel);color:var(--sub);border-radius:20px;font-size:10px;font-weight:600;text-transform:uppercase;">Fixed</span>
+        </label>
+        <input type="text" value="What's your name?" disabled
+          style="opacity:0.55;cursor:not-allowed;background:var(--panel);">
+      </div>
+
+      <!-- Step 2 — Email (fixed) -->
+      <div class="field">
+        <label style="display:flex;align-items:center;gap:6px;">
+          Step 2 — Email
+          <span style="padding:1px 8px;background:var(--panel);color:var(--sub);border-radius:20px;font-size:10px;font-weight:600;text-transform:uppercase;">Fixed</span>
+        </label>
+        <input type="text" value="What's your email address?" disabled
+          style="opacity:0.55;cursor:not-allowed;background:var(--panel);">
+      </div>
+
+      <!-- Step 3 — Phone (editable) -->
+      <div class="field">
+        <label>Step 3 — Phone Question</label>
+        <input type="text" id="lead_q3" maxlength="120"
+          placeholder="What's the best number to reach you? (Type 'skip' to skip)"
+          value="{{ branding.get('bot_settings', {}).get('lead_q3', '') }}"
+          oninput="console.log('[Customize] lead_q3:', this.value)">
+        <p class="hint">Shown as the third question. Leave blank to use the default.</p>
+      </div>
+
+      <!-- Step 4 — Message (editable) -->
+      <div class="field">
+        <label>Step 4 — Message Question</label>
+        <input type="text" id="lead_q4" maxlength="160"
+          placeholder="Type your message or question so the team knows how to help you:"
+          value="{{ branding.get('bot_settings', {}).get('lead_q4', '') }}"
+          oninput="console.log('[Customize] lead_q4:', this.value)">
+        <p class="hint">Shown as the final step. Leave blank to use the default.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. WHITE-LABEL & CUSTOM DOMAIN (merged) -->
   <div class="card">
     <div class="card-header open" onclick="tc(this)">
       <div class="card-icon" style="background:#f0fdf4;">
@@ -1048,6 +1103,8 @@ async function save() {
       welcome_message:  document.getElementById('welcome_message').value.trim(),
       fallback_message: document.getElementById('fallback_message').value.trim(),
       quick_replies:    getQR(),
+      lead_q3:          document.getElementById('lead_q3')?.value.trim() || '',
+      lead_q4:          document.getElementById('lead_q4')?.value.trim() || '',
     },
     contact: {
       email:   document.getElementById('contact_email').value.trim(),

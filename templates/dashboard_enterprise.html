@@ -108,6 +108,46 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .btn-xs-locked{background:var(--panel);color:var(--sub);cursor:not-allowed;}
 .btn-xs-delete{background:var(--danger-lt);color:var(--danger);}
 .btn-xs-delete:hover{background:#fecaca;}
+/* ── CLIENT DASHBOARD PANEL ── */
+.cdash-overlay{display:none;position:fixed;inset:0;background:rgba(28,25,23,0.45);backdrop-filter:blur(3px);z-index:300;}
+.cdash-overlay.show{display:block;}
+.cdash-panel{position:fixed;top:0;right:0;bottom:0;width:min(520px,100vw);background:var(--white);
+  border-left:1px solid var(--border);box-shadow:-12px 0 40px rgba(0,0,0,0.1);z-index:301;
+  display:flex;flex-direction:column;transform:translateX(100%);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1);}
+.cdash-panel.show{transform:translateX(0);}
+.cdash-head{padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.cdash-head-left{display:flex;align-items:center;gap:10px;}
+.cdash-client-av{width:38px;height:38px;border-radius:10px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:var(--gold-dk);}
+.cdash-client-name{font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--dark);}
+.cdash-client-id{font-family:'DM Mono',monospace;font-size:11px;color:var(--sub);margin-top:1px;}
+.cdash-close{width:28px;height:28px;border-radius:7px;background:var(--panel);border:none;font-size:16px;cursor:pointer;color:var(--sub);display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
+.cdash-close:hover{background:var(--cream2);color:var(--dark);}
+.cdash-body{flex:1;overflow-y:auto;padding:20px 24px;}
+.cdash-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px;}
+.cdash-stat{background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:12px 14px;text-align:center;}
+.cdash-stat-val{font-family:'Fraunces',serif;font-size:24px;font-weight:700;color:var(--dark);line-height:1;}
+.cdash-stat-lbl{font-size:10.5px;color:var(--sub);margin-top:3px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;}
+.cdash-section{margin-bottom:20px;}
+.cdash-section-title{font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px;}
+.cdash-links{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.cdash-link{display:flex;align-items:center;gap:8px;padding:10px 13px;background:var(--cream);border:1px solid var(--border);border-radius:10px;font-size:13px;font-weight:600;color:var(--mid);text-decoration:none;transition:all 0.15s;}
+.cdash-link:hover{border-color:var(--gold);color:var(--gold-dk);background:var(--gold-lt);}
+.cdash-link svg{width:14px;height:14px;flex-shrink:0;}
+.cdash-footer{padding:16px 24px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:8px;}
+.cdash-footer-btn{flex:1;padding:10px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:all 0.15s;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px;}
+.cdash-footer-btn.gold{background:var(--gold);color:#fff;box-shadow:0 2px 8px var(--gold-glow);}
+.cdash-footer-btn.gold:hover{background:var(--gold-dk);}
+.cdash-footer-btn.outline{background:var(--white);color:var(--mid);border:1.5px solid var(--border);}
+.cdash-footer-btn.outline:hover{border-color:var(--gold);color:var(--gold-dk);}
+.cdash-footer-btn svg{width:13px;height:13px;}
+.cdash-leads-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;}
+.cdash-lead-row{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--cream);border:1px solid var(--border);border-radius:8px;font-size:12.5px;}
+.cdash-lead-name{font-weight:600;color:var(--dark);}
+.cdash-lead-email{color:var(--sub);font-family:'DM Mono',monospace;font-size:11px;}
+.cdash-lead-date{font-size:11px;color:var(--sub);}
+.cdash-loading{text-align:center;padding:40px;color:var(--sub);font-size:13px;}
+.cdash-spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;margin-bottom:8px;}
+@keyframes spin{to{transform:rotate(360deg);}}
 .empty-state{text-align:center;padding:60px 20px;}
 .empty-icon-box{width:60px;height:60px;background:var(--gold-lt);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
 .empty-icon-box svg{width:26px;height:26px;color:var(--gold);}
@@ -335,7 +375,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                             <div class="table-actions">
                                 <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>FAQs</a>
                                 <a href="/article-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>Articles</a>
-                                {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<a href="/client-dashboard?client_id={{ client.client_id }}" class="btn-xs btn-xs-logins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</a>{% endif %}
+                                {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<button onclick="openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="btn-xs btn-xs-logins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</button>{% endif %}
                                 <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Embed</button>
                                 {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Analytics</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Analytics</button>{% endif %}
                                 {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>Theme</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Theme</button>{% endif %}
@@ -357,7 +397,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                     <div class="client-card-actions">
                         <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">FAQs</a>
                         <a href="/article-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">Articles</a>
-                        {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<a href="/client-dashboard?client_id={{ client.client_id }}" class="btn-xs btn-xs-logins">Dashboard</a>{% endif %}
+                        {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<button onclick="openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="btn-xs btn-xs-logins">Dashboard</button>{% endif %}
                         <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed">Embed</button>
                         {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics">Analytics</a>{% endif %}
                         {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme">Theme</a>{% endif %}
@@ -467,6 +507,144 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
     function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} show`;setTimeout(()=>{t.className='toast';},3500);}
     document.addEventListener('click',function(e){if(e.target===document.getElementById('embedModal'))closeEmbedModal();if(e.target===document.getElementById('new-client-modal'))closeModal();if(e.target===document.getElementById('delete-modal'))closeDeleteModal();});
     document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeEmbedModal();closeModal();closeDeleteModal();closeSidebar();}});
+</script>
+<!-- ── CLIENT DASHBOARD SLIDE PANEL ── -->
+<div class="cdash-overlay" id="cdashOverlay" onclick="closeClientDashPanel()"></div>
+<div class="cdash-panel" id="cdashPanel">
+  <div class="cdash-head">
+    <div class="cdash-head-left">
+      <div class="cdash-client-av" id="cdashAv">—</div>
+      <div>
+        <div class="cdash-client-name" id="cdashName">Client</div>
+        <div class="cdash-client-id" id="cdashId"></div>
+      </div>
+    </div>
+    <button class="cdash-close" onclick="closeClientDashPanel()">×</button>
+  </div>
+  <div class="cdash-body" id="cdashBody">
+    <div class="cdash-loading">
+      <div class="cdash-spinner"></div><br>Loading…
+    </div>
+  </div>
+  <div class="cdash-footer">
+    <a class="cdash-footer-btn outline" id="cdashFullLink" href="#" target="_blank">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      Open Full Dashboard
+    </a>
+    <a class="cdash-footer-btn gold" id="cdashCustomizeLink" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+      Customize Bot
+    </a>
+  </div>
+</div>
+
+<script>
+let _cdashCid = null;
+
+function openClientDashPanel(cid, name) {
+  _cdashCid = cid;
+  document.getElementById('cdashAv').textContent   = (name || '?')[0].toUpperCase();
+  document.getElementById('cdashName').textContent = name || cid;
+  document.getElementById('cdashId').textContent   = cid;
+  document.getElementById('cdashFullLink').href      = `/client-dashboard?client_id=${cid}`;
+  document.getElementById('cdashCustomizeLink').href = `/customize?client_id=${cid}`;
+  document.getElementById('cdashBody').innerHTML = `<div class="cdash-loading"><div class="cdash-spinner"></div><br>Loading…</div>`;
+  document.getElementById('cdashOverlay').classList.add('show');
+  document.getElementById('cdashPanel').classList.add('show');
+  document.body.style.overflow = 'hidden';
+  loadCdashData(cid, name);
+}
+
+function closeClientDashPanel() {
+  document.getElementById('cdashOverlay').classList.remove('show');
+  document.getElementById('cdashPanel').classList.remove('show');
+  document.body.style.overflow = 'auto';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeClientDashPanel();
+});
+
+async function loadCdashData(cid, name) {
+  try {
+    const [leadsR, statsR] = await Promise.all([
+      fetch(`/api/admin/leads?client_id=${cid}`),
+      fetch(`/api/config?client_id=${cid}`),
+    ]);
+    const leads = leadsR.ok ? await leadsR.json() : {leads: []};
+    const stats = statsR.ok ? await statsR.json() : {config: {}};
+
+    const leadList = leads.leads || [];
+    const cfg      = stats.config  || {};
+    const faqs     = cfg.faqs_count ?? '—';
+    const msgs     = cfg.daily_msgs ?? '—';
+
+    const leadsHtml = leadList.length
+      ? leadList.slice(0, 8).map(l => `
+          <div class="cdash-lead-row">
+            <div>
+              <div class="cdash-lead-name">${esc(l.name || 'Unknown')}</div>
+              <div class="cdash-lead-email">${esc(l.email || '—')}</div>
+            </div>
+            <div class="cdash-lead-date">${fmtDate(l.created_at)}</div>
+          </div>`).join('')
+      : `<div style="text-align:center;padding:20px;color:var(--sub);font-size:13px;">No leads yet</div>`;
+
+    document.getElementById('cdashBody').innerHTML = `
+      <div class="cdash-stats">
+        <div class="cdash-stat"><div class="cdash-stat-val">${leadList.length}</div><div class="cdash-stat-lbl">Leads</div></div>
+        <div class="cdash-stat"><div class="cdash-stat-val">${faqs}</div><div class="cdash-stat-lbl">FAQs</div></div>
+        <div class="cdash-stat"><div class="cdash-stat-val">${msgs}</div><div class="cdash-stat-lbl">Today</div></div>
+      </div>
+      <div class="cdash-section">
+        <div class="cdash-section-title">Quick Links</div>
+        <div class="cdash-links">
+          <a href="/admin/leads?client_id=${cid}" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            View Leads
+          </a>
+          <a href="/faq-manager?client_id=${cid}" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/></svg>
+            Manage FAQs
+          </a>
+          <a href="/article-manager?client_id=${cid}" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+            Articles
+          </a>
+          <a href="/analytics?client_id=${cid}" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Analytics
+          </a>
+          <a href="/widget?client_id=${cid}" target="_blank" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Preview Widget
+          </a>
+          <a href="/manage-client-users?client_id=${cid}" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Portal Logins
+          </a>
+        </div>
+      </div>
+      <div class="cdash-section">
+        <div class="cdash-section-title">Recent Leads</div>
+        <div class="cdash-leads-list">${leadsHtml}</div>
+      </div>`;
+  } catch(e) {
+    console.error('[CdashPanel] load error:', e);
+    document.getElementById('cdashBody').innerHTML =
+      `<div style="text-align:center;padding:40px;color:var(--danger);font-size:13px;">Failed to load — <a href="/client-dashboard?client_id=${_cdashCid}" style="color:var(--gold);">open full dashboard</a></div>`;
+  }
+}
+
+function fmtDate(str) {
+  if (!str) return '—';
+  const d = new Date(str);
+  return isNaN(d) ? str.substring(0,10) : d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 </script>
 </body>
 </html>

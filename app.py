@@ -1617,6 +1617,8 @@ def widget():
             'custom_css':       '',
             'contact':          {},
             'lead_triggers':    ['contact', 'sales', 'demo', 'speak', 'talk', 'human', 'agent'],
+            'lead_q3':          '',
+            'lead_q4':          '',
         }
     else:
         client = dict(client)
@@ -1632,6 +1634,8 @@ def widget():
         client['welcome_message']  = bot_settings.get('welcome_message') or client.get('welcome_message') or 'Hi! How can I help you today?'
         client['fallback_message'] = bot_settings.get('fallback_message') or ''
         client['quick_replies']    = [r for r in (bot_settings.get('quick_replies') or []) if r and str(r).strip()]
+        client['lead_q3']          = bot_settings.get('lead_q3', '').strip()
+        client['lead_q4']          = bot_settings.get('lead_q4', '').strip()
         client['widget_color']     = branding.get('primary_color')       or client.get('widget_color') or '#B8924A'
         client['remove_branding']  = branding.get('remove_branding',     client.get('remove_branding', 0))
         client['logo_url']         = branding.get('logo')               or branding.get('logo_url') or ''
