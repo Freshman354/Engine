@@ -56,6 +56,40 @@ _GLOBAL_PRICING_KW = [
     'subscription', 'buy', 'quote', 'invoice', 'billing',
 ]
 
+# ── Action / Tool Engine keyword maps ────────────────────────────────
+# Pure keyword matching — zero LLM calls. Ordered from most specific
+# to least specific so "pricing pdf" wins over bare "pricing".
+_ACTION_KEYWORDS: Dict[str, List[str]] = {
+    'pricing_request': [
+        'send pricing', 'pricing pdf', 'email me pricing',
+        'email the pricing', 'send me pricing', 'pricing details',
+        'get pricing', 'share pricing',
+    ],
+    'demo_request': [
+        'book a demo', 'schedule a demo', 'request a demo',
+        'arrange a demo', 'try it', 'show me', 'see a demo',
+        'want a demo', 'demo please', 'demo',
+    ],
+    'meeting_request': [
+        'schedule a call', 'book a call', 'set up a call',
+        'arrange a call', 'have a meeting', 'book a meeting',
+        'schedule a meeting', 'call me', 'schedule', 'meeting',
+    ],
+    'contact_request': [
+        'contact sales', 'talk to sales', 'speak to sales',
+        'reach sales', 'contact someone', 'speak to a person',
+        'talk to a human', 'human agent', 'real person',
+    ],
+}
+
+# Human-friendly labels for each action (used in response messages)
+_ACTION_LABELS: Dict[str, str] = {
+    'demo_request':    'demo',
+    'meeting_request': 'call',
+    'pricing_request': 'pricing details',
+    'contact_request': 'conversation with our team',
+}
+
 
 # Hard limit: only score the top N candidates retrieved from DB.
 # Prevents CPU redlining when the knowledge base has thousands of entries.
@@ -234,13 +268,36 @@ class AIHelper:
         """
         if not user_message or not user_message.strip():
             return {'response': "How can I help you today?", 'method': 'empty',
-                    'confidence': 1.0, 'is_lead': False, 'lead_metadata': None}
+                    'confidence': 1.0, 'is_lead': False, 'lead_metadata': None, 'action': None}
 
         history = conversation_history or []
 
         # ── Preprocess ────────────────────────────────────────────────
         clean = self._preprocess(user_message)
         logger.debug(f"[Pipeline] start | msg='{clean[:60]}' | vertical={vertical}")
+
+        # ── ACTION ENGINE (Step 3) — runs before RAG, zero LLM cost ───
+        # If the user's message maps to a concrete action (demo, meeting,
+        # pricing, contact), handle it immediately and skip the RAG pipeline.
+        action_intent = self.detect_action_intent(clean)
+        if action_intent.get('action'):
+            # Scan history for already-known email / name (Step 4 — anti-repetition)
+            quick_meta   = self._extract_lead_info(clean, history)
+            user_context = {
+                'email':    quick_meta.get('email'),
+                'name':     quick_meta.get('name'),
+                'vertical': vertical,
+            }
+            action_result = self.handle_detected_action(action_intent['action'], user_context)
+            logger.info(f"[Action] short-circuiting RAG | action={action_intent['action']}")
+            return {
+                'response':      action_result['message'],
+                'method':        f"action:{action_intent['action']}",
+                'confidence':    1.0,
+                'is_lead':       action_intent['action'] in ('demo_request', 'meeting_request', 'contact_request'),
+                'lead_metadata': quick_meta,
+                'action':        action_result,   # full structured payload for caller
+            }
 
         # ── Keyword intent detection (zero cost) ──────────────────────
         intent = self.detect_intent(clean, lead_triggers or [], vertical)
@@ -305,6 +362,7 @@ class AIHelper:
                 'confidence':    hybrid_scores[0] if hybrid_scores else 0.8,
                 'is_lead':       False,
                 'lead_metadata': None,
+                'action':        None,
             }
 
         # ── Build conversation context string ─────────────────────────
@@ -345,6 +403,7 @@ class AIHelper:
             'confidence':    confidence,
             'is_lead':       False,
             'lead_metadata': None,
+            'action':        None,
         }
 
     # ═══════════════════════════════════════════════════════════════════
@@ -358,6 +417,113 @@ class AIHelper:
 
     # ═══════════════════════════════════════════════════════════════════
     # STAGE 1b — INTENT DETECTION
+    # ═══════════════════════════════════════════════════════════════════
+
+    # ═══════════════════════════════════════════════════════════════════
+    # ACTION / TOOL ENGINE  (Steps 1 & 2)
+    # ═══════════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def detect_action_intent(message: str) -> Dict:
+        """
+        Step 1 — Keyword-based action detection. Zero LLM calls.
+
+        Scans the lowercased message against _ACTION_KEYWORDS in specificity
+        order (most specific phrases first so "pricing pdf" wins over "demo").
+
+        Returns:
+            {'action': 'demo_request'}   — when an action is matched
+            {'action': None}             — when nothing matches
+        """
+        msg = message.lower().strip()
+        for action, keywords in _ACTION_KEYWORDS.items():
+            for kw in keywords:                 # keywords already ordered specific→broad
+                if kw in msg:
+                    logger.info(f"[Action] detected='{action}' via keyword='{kw}'")
+                    return {'action': action}
+        return {'action': None}
+
+    @staticmethod
+    def handle_detected_action(action: str, user_context: Dict) -> Dict:
+        """
+        Step 2 — Return a structured action response.
+
+        user_context keys (all optional):
+            email    — str | None   already-known email from conversation history
+            name     — str | None   already-known name
+            vertical — str          current bot vertical (for tone)
+
+        Steps 4 integration — Email gate:
+            For action types that need follow-up (demo, meeting, contact),
+            if email is not yet known the response asks for it instead of
+            confirming the action. This prevents asking twice if the user
+            already shared their email.
+
+        Returns a structured dict; the caller decides how to surface it.
+        """
+        email    = (user_context.get('email') or '').strip()
+        name     = (user_context.get('name')  or '').strip()
+        vertical = user_context.get('vertical', 'general')
+        label    = _ACTION_LABELS.get(action, 'request')
+
+        # Personalise greeting if we have the user's name
+        greeting = f"Thanks, {name.split()[0]}! " if name else "Great! "
+
+        # Actions that need a human follow-up — gate on email
+        NEEDS_EMAIL = {'demo_request', 'meeting_request', 'contact_request'}
+
+        if action == 'pricing_request':
+            # Pricing can be fulfilled without collecting a lead first
+            response_msg = (
+                f"{greeting}I'd be happy to send over the pricing details. "
+                f"What's the best email address to send them to?"
+                if not email else
+                f"{greeting}I'll send the pricing details to {email} right away!"
+            )
+
+        elif action in NEEDS_EMAIL and not email:
+            # Email gate — politely ask before confirming the action
+            response_msg = (
+                f"{greeting}I can arrange a {label} for you. "
+                f"Could you share your email address so our team can reach you?"
+            )
+
+        elif action == 'demo_request':
+            response_msg = (
+                f"{greeting}I've noted your demo request. "
+                f"Our team will reach out to {email} within one business day to confirm the time."
+            )
+
+        elif action == 'meeting_request':
+            response_msg = (
+                f"{greeting}I've logged your meeting request. "
+                f"Someone from our team will contact you at {email} to schedule a convenient time."
+            )
+
+        elif action == 'contact_request':
+            response_msg = (
+                f"{greeting}I'll connect you with our team. "
+                f"They'll reach out to {email} shortly."
+            )
+
+        else:
+            response_msg = (
+                f"{greeting}I've received your {label} request and our team will be in touch soon!"
+            )
+
+        logger.info(
+            f"[ActionHandler] action={action} has_email={bool(email)} "
+            f"vertical={vertical} → '{response_msg[:60]}…'"
+        )
+
+        return {
+            'type':    'action',
+            'action':  action,
+            'message': response_msg,
+        }
+
+    # ═══════════════════════════════════════════════════════════════════
+    # STAGE 1b — INTENT DETECTION (lead capture)
     # ═══════════════════════════════════════════════════════════════════
 
     def detect_intent(self, user_message: str, lead_triggers: List[str],
