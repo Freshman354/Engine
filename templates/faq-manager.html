@@ -719,6 +719,9 @@ body {
     let editingIndex = -1;
     let faqLimit = 999;
     let selectedFile = null;
+    // Fix 4a: pagination — show 50 at a time, Load More to reveal the rest
+    const PAGE_SIZE = 50;
+    let _visibleCount = PAGE_SIZE;
 
     window.onload = function() { loadFAQs(); };
 
@@ -730,6 +733,7 @@ body {
             const data = await res.json();
             if (data.success) {
                 currentFAQs = data.faqs || [];
+                _visibleCount = PAGE_SIZE;   // reset pagination on fresh load
                 document.getElementById('faq-search').value = '';
                 document.getElementById('search-clear').style.display = 'none';
                 document.getElementById('search-results-count').style.display = 'none';
@@ -748,9 +752,12 @@ body {
 
     // ── RENDER ────────────────────────────────────────────────────
     function renderFAQs(faqs) {
-        const list = faqs !== undefined ? faqs : currentFAQs;
+        const list      = faqs !== undefined ? faqs : currentFAQs;
         const container = document.getElementById('faq-list');
+
         if (list.length === 0) {
+            // Reset visible count on empty state
+            _visibleCount = PAGE_SIZE;
             const q = document.getElementById('faq-search').value.trim();
             container.innerHTML = q
                 ? `<div class="empty-wrap">
@@ -766,9 +773,19 @@ body {
                    </div>`;
             return;
         }
-        container.innerHTML = list.map((faq, i) => {
+
+        // Determine how many to show (pagination window)
+        const visible = list.slice(0, _visibleCount);
+        const remaining = list.length - _visibleCount;
+
+        container.innerHTML = visible.map((faq, i) => {
             const realIndex = faqs !== undefined ? currentFAQs.indexOf(faq) : i;
-            const triggers = (faq.triggers || []).map(t => `<span class="keyword-tag">${escapeHtml(t)}</span>`).join('');
+            // Fix 4b: strip whitespace from each keyword individually before rendering
+            const triggers  = (faq.triggers || [])
+                .map(t => sanitizeInput(t))
+                .filter(Boolean)
+                .map(t => `<span class="keyword-tag">${escapeHtml(t)}</span>`)
+                .join('');
             return `
             <div class="faq-item">
                 <div class="faq-row">
@@ -784,21 +801,61 @@ body {
                 </div>
             </div>`;
         }).join('');
+
+        // Append Load More button if more items exist
+        if (remaining > 0) {
+            const loadMoreBtn = document.createElement('div');
+            loadMoreBtn.style.cssText = 'text-align:center;padding:20px 0 8px;';
+            loadMoreBtn.innerHTML = `
+                <button class="btn btn-outline" onclick="_loadMore()" style="min-width:180px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                    Load ${Math.min(remaining, PAGE_SIZE)} more
+                    <span style="color:var(--sub);font-weight:400;"> (${remaining} remaining)</span>
+                </button>`;
+            container.appendChild(loadMoreBtn);
+        }
+    }
+
+    function _loadMore() {
+        _visibleCount += PAGE_SIZE;
+        // Re-run the active filter so Load More respects current search
+        const q = document.getElementById('faq-search').value.trim().toLowerCase();
+        if (q) {
+            const filtered = currentFAQs.filter(f => {
+                const kw = (f.triggers || []).join(' ').toLowerCase();
+                return f.question.toLowerCase().includes(q)
+                    || f.answer.toLowerCase().includes(q)
+                    || kw.includes(q);
+            });
+            renderFAQs(filtered);
+        } else {
+            renderFAQs();
+        }
     }
 
     // ── SEARCH ────────────────────────────────────────────────────
+    // Debounce: prevents the UI from re-rendering on every keystroke.
+    // The search only fires 300ms after the user stops typing.
+    let _searchTimer = null;
     function filterFAQs() {
-        const q = document.getElementById('faq-search').value.trim().toLowerCase();
+        clearTimeout(_searchTimer);
+        _searchTimer = setTimeout(_doFilter, 300);
+    }
+
+    function _doFilter() {
+        const q = sanitizeInput(document.getElementById('faq-search').value).trim().toLowerCase();
         const clearBtn = document.getElementById('search-clear');
-        const countEl = document.getElementById('search-results-count');
+        const countEl  = document.getElementById('search-results-count');
         clearBtn.style.display = q ? 'block' : 'none';
         if (!q) { countEl.style.display = 'none'; renderFAQs(); return; }
         const filtered = currentFAQs.filter(f => {
             const kw = (f.triggers || []).join(' ').toLowerCase();
-            return f.question.toLowerCase().includes(q) || f.answer.toLowerCase().includes(q) || kw.includes(q);
+            return f.question.toLowerCase().includes(q)
+                || f.answer.toLowerCase().includes(q)
+                || kw.includes(q);
         });
-        countEl.style.display = 'block';
-        countEl.textContent = `${filtered.length} of ${currentFAQs.length} FAQs match "${q}"`;
+        countEl.style.display  = 'block';
+        countEl.textContent    = `${filtered.length} of ${currentFAQs.length} FAQs match "${q}"`;
         renderFAQs(filtered);
     }
 
@@ -815,6 +872,7 @@ body {
         document.getElementById('faq-form').reset();
         document.getElementById('faq-id').value = '';
         editingIndex = -1;
+        _markClean();
         document.getElementById('faq-modal').style.display = 'flex';
         setTimeout(() => document.getElementById('faq-question').focus(), 100);
     }
@@ -832,15 +890,30 @@ body {
         }
         document.getElementById('faq-triggers').value = Array.isArray(triggers) ? triggers.join(', ') : '';
         editingIndex = index;
+        _markClean();
         document.getElementById('faq-modal').style.display = 'flex';
         setTimeout(() => document.getElementById('faq-question').focus(), 100);
     }
 
+    // Mark modal dirty whenever the user types in it
+    ['faq-question', 'faq-answer', 'faq-triggers'].forEach(id => {
+        document.getElementById(id)?.addEventListener('input', _markDirty);
+    });
+
     document.getElementById('faq-form').addEventListener('submit', async function(e) {
         e.preventDefault();
-        const question = document.getElementById('faq-question').value.trim();
-        const answer   = document.getElementById('faq-answer').value.trim();
-        const triggers = document.getElementById('faq-triggers').value.split(',').map(t => t.trim()).filter(Boolean);
+        // Sanitize all inputs before sending to the API
+        const question = sanitizeInput(document.getElementById('faq-question').value);
+        const answer   = sanitizeInput(document.getElementById('faq-answer').value);
+        // Fix 4b: strip whitespace from each keyword individually
+        const triggers = document.getElementById('faq-triggers').value
+            .split(',')
+            .map(t => sanitizeInput(t))
+            .filter(Boolean);
+
+        if (!question) { showError('Question cannot be empty.'); return; }
+        if (!answer)   { showError('Answer cannot be empty.'); return; }
+
         const newFAQ = {
             id: editingIndex >= 0 ? currentFAQs[editingIndex].id : `faq_${Date.now()}`,
             question, answer, triggers
@@ -857,6 +930,7 @@ body {
             const data = await res.json();
             if (data.success) {
                 currentFAQs = updated;
+                _markClean();           // clear dirty flag on successful save
                 renderFAQs();
                 closeModal();
                 showSuccess(editingIndex >= 0 ? 'FAQ updated successfully.' : 'FAQ added successfully.');
@@ -880,7 +954,7 @@ body {
         } catch { showError(); }
     }
 
-    function closeModal() { document.getElementById('faq-modal').style.display = 'none'; }
+    function closeModal() { _markClean(); document.getElementById('faq-modal').style.display = 'none'; }
 
     // ── DELETE ALL ────────────────────────────────────────────────
     function showDeleteAllModal() {
@@ -982,41 +1056,124 @@ body {
     function handleFileSelect(event) {
         const file = event.target.files[0];
         if (!file) return;
-        if (file.size > 10 * 1024 * 1024) { showError('File too large. Maximum size is 10 MB.'); return; }
+
+        // Fix 3: client-side type check before anything goes to the server
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (!['csv', 'json'].includes(ext)) {
+            showError('Invalid file type. Please upload a .csv or .json file.');
+            document.getElementById('faq-file-input').value = '';
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            showError('File too large. Maximum size is 10 MB.');
+            return;
+        }
         selectedFile = file;
         const nameEl = document.getElementById('selected-file-name');
         nameEl.textContent = file.name; nameEl.style.display = 'block';
         document.getElementById('upload-submit-btn').disabled = false;
     }
 
+    async function _validateUploadFile(file) {
+        /**
+         * Client-side validation before sending to server.
+         * Returns { ok: true } or { ok: false, error: 'Row N: ...' }
+         */
+        const ext  = file.name.split('.').pop().toLowerCase();
+        const text = await file.text();
+
+        if (ext === 'json') {
+            let rows;
+            try { rows = JSON.parse(text); }
+            catch { return { ok: false, error: 'Invalid JSON — could not parse the file.' }; }
+            if (!Array.isArray(rows)) return { ok: false, error: 'JSON must be an array of objects.' };
+            for (let i = 0; i < rows.length; i++) {
+                const r = rows[i];
+                const q = r.question || r.Question || r.q || r.Q;
+                const a = r.answer   || r.Answer   || r.a || r.A;
+                if (!q) return { ok: false, error: `Row ${i + 1}: missing "question" field.` };
+                if (!a) return { ok: false, error: `Row ${i + 1}: missing "answer" field.` };
+            }
+            return { ok: true, count: rows.length };
+        }
+
+        if (ext === 'csv') {
+            const lines  = text.split(/\r?\n/).filter(l => l.trim());
+            if (lines.length < 2) return { ok: false, error: 'CSV is empty or has no data rows.' };
+            const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
+            const qIdx    = headers.findIndex(h => h === 'question');
+            const aIdx    = headers.findIndex(h => h === 'answer');
+            if (qIdx === -1) return { ok: false, error: 'CSV is missing a "Question" header column.' };
+            if (aIdx === -1) return { ok: false, error: 'CSV is missing an "Answer" header column.' };
+            for (let i = 1; i < lines.length; i++) {
+                // Basic CSV cell split (handles simple quoted fields)
+                const cells = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g) || [];
+                const clean = cells.map(c => c.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
+                if (!clean[qIdx]) return { ok: false, error: `Row ${i + 1}: Question is empty.` };
+                if (!clean[aIdx]) return { ok: false, error: `Row ${i + 1}: Answer is empty.` };
+            }
+            return { ok: true, count: lines.length - 1 };
+        }
+
+        return { ok: true };
+    }
+
     async function startUpload() {
         if (!selectedFile) return;
-        document.getElementById('progress-area').style.display = 'block';
-        document.getElementById('progress-fill').style.width = '30%';
-        document.getElementById('progress-status').textContent = 'Uploading…';
-        document.getElementById('upload-submit-btn').disabled = true;
+        const progressArea  = document.getElementById('progress-area');
+        const progressFill  = document.getElementById('progress-fill');
+        const progressStatus = document.getElementById('progress-status');
+        const submitBtn     = document.getElementById('upload-submit-btn');
+
+        progressArea.style.display   = 'block';
+        progressFill.style.width     = '15%';
+        progressStatus.textContent   = 'Validating file…';
+        progressStatus.style.color   = '';
+        submitBtn.disabled           = true;
+
+        // Fix 3: client-side validation before touching the network
+        const validation = await _validateUploadFile(selectedFile);
+        if (!validation.ok) {
+            progressFill.style.width   = '100%';
+            progressFill.style.background = 'var(--danger)';
+            progressStatus.textContent   = `❌ ${validation.error}`;
+            progressStatus.style.color   = 'var(--danger)';
+            submitBtn.disabled           = false;
+            showError(validation.error);
+            return;
+        }
+
+        progressFill.style.width   = '40%';
+        progressStatus.textContent = `Uploading ${validation.count || ''} FAQs…`;
+        progressFill.style.background = '';
+
         const formData = new FormData();
         formData.append('file', selectedFile);
         formData.append('client_id', CLIENT_ID);
         try {
-            document.getElementById('progress-fill').style.width = '60%';
-            document.getElementById('progress-status').textContent = 'Processing FAQs…';
-            const res = await fetch('/api/faq/upload', { method: 'POST', body: formData });
-            document.getElementById('progress-fill').style.width = '100%';
+            progressFill.style.width   = '70%';
+            progressStatus.textContent = 'Processing on server…';
+            const res  = await fetch('/api/faq/upload', { method: 'POST', body: formData });
+            progressFill.style.width   = '100%';
             const data = await res.json();
             if (data.success) {
-                document.getElementById('progress-status').textContent = data.message;
-                document.getElementById('progress-status').style.color = 'var(--success)';
+                progressStatus.textContent = data.message;
+                progressStatus.style.color = 'var(--success)';
                 setTimeout(() => { closeUploadModal(); loadFAQs(); showSuccess(data.message); }, 1200);
             } else {
-                document.getElementById('progress-status').textContent = data.error;
-                document.getElementById('progress-status').style.color = 'var(--danger)';
-                document.getElementById('upload-submit-btn').disabled = false;
+                // Show the server's specific error (may include row number from server-side parsing)
+                const errMsg = data.error || 'Upload failed — please check the file format.';
+                progressStatus.textContent = `❌ ${errMsg}`;
+                progressStatus.style.color = 'var(--danger)';
+                submitBtn.disabled = false;
+                showError(errMsg);
             }
         } catch {
-            document.getElementById('progress-status').textContent = 'Upload failed. Please try again.';
-            document.getElementById('progress-status').style.color = 'var(--danger)';
-            document.getElementById('upload-submit-btn').disabled = false;
+            const errMsg = 'Network error — upload failed. Please try again.';
+            progressStatus.textContent = errMsg;
+            progressStatus.style.color = 'var(--danger)';
+            submitBtn.disabled = false;
+            showError(errMsg);
         }
     }
 
@@ -1061,6 +1218,33 @@ body {
         d.textContent = text;
         return d.innerHTML;
     }
+
+    /**
+     * sanitizeInput — strips HTML tags and trims whitespace.
+     * Use before any user input is sent to the API or inserted into the DOM.
+     * Prevents HTML injection while keeping all plain-text content intact.
+     */
+    function sanitizeInput(str) {
+        if (typeof str !== 'string') return '';
+        // Strip HTML tags, collapse extra whitespace
+        return str.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    }
+
+    // ── UNSAVED-CHANGES GUARD ─────────────────────────────────────
+    // Warn the user if they attempt to navigate away while the modal is open
+    // and has unsaved content.
+    let _modalDirty = false;
+
+    function _markDirty()  { _modalDirty = true; }
+    function _markClean()  { _modalDirty = false; }
+
+    window.addEventListener('beforeunload', function(e) {
+        if (!_modalDirty) return;
+        const msg = 'You have unsaved changes. Leave anyway?';
+        e.preventDefault();
+        e.returnValue = msg;
+        return msg;
+    });
 
     // ── CLOSE ON BACKDROP / ESC ───────────────────────────────────
     document.addEventListener('click', function(e) {
