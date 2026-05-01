@@ -1415,6 +1415,7 @@ def dashboard():
 
     # Always re-fetch user from DB so plan badge is never stale after an upgrade
     fresh_user = models.get_user_by_id(current_user.id)
+    plan_type = fresh_user.get('plan_type', 'free') if fresh_user else current_user.plan_type
 
     # ── Active enforcement: downgrade if grace period ended ──────────
     if fresh_user and not fresh_user.get('is_admin'):
