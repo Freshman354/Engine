@@ -253,7 +253,53 @@ def migrate_white_label():
         conn.close()
 
 
-def migrate_faqs_table():
+def migrate_client_status():
+    """
+    Add `is_suspended` boolean to clients table.
+    Safe — uses IF NOT EXISTS.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT FALSE"
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("✅ migrate_client_status complete")
+    except Exception as e:
+        print(f"⚠️  migrate_client_status: {e}")
+
+
+def migrate_onboarding():
+    """Add onboarding_completed column to users table. Safe — uses IF NOT EXISTS."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT FALSE"
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("✅ migrate_onboarding complete")
+    except Exception as e:
+        print(f"⚠️  migrate_onboarding: {e}")
+
+
+def mark_onboarding_complete(user_id: int) -> None:
+    """Mark user's onboarding as done — prevents wizard from re-appearing."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "UPDATE users SET onboarding_completed = TRUE WHERE id = %s",
+            (user_id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[mark_onboarding_complete] {e}")
     """
     Idempotent migration for the faqs table.
     Adds all columns needed for Phase 2 RAG.
@@ -671,19 +717,35 @@ def set_subscription_expiry(user_id):
 
 def downgrade_expired_users():
     """
-    Downgrade all non-admin paid users whose grace period has ended.
-    Returns count of users downgraded.
-    Called by the APScheduler every 24 hours.
+    Downgrade all non-admin paid users whose subscription has expired.
+
+    Two conditions trigger a downgrade:
+      A) grace_period_ends_at IS NOT NULL AND grace_period_ends_at < NOW()
+         → normal path: grace period has elapsed
+      B) subscription_expires_at IS NOT NULL AND subscription_expires_at < NOW()
+         AND grace_period_ends_at IS NULL
+         → legacy path: users who signed up before the grace column existed,
+           or whose grace was never set. They get downgraded immediately when
+           subscription_expires_at passes.
+
+    Admin users (is_admin = TRUE) are always skipped.
+    Returns list of user dicts that were downgraded.
     """
     conn, cursor = get_db()
     try:
-        # Fetch who will be downgraded so we can log them
         cursor.execute(
             '''SELECT id, email, plan_type FROM users
                WHERE plan_type NOT IN ('free', 'enterprise')
-                 AND is_admin IS NOT TRUE
-                 AND grace_period_ends_at IS NOT NULL
-                 AND grace_period_ends_at < NOW()'''
+                 AND (is_admin IS NOT TRUE)
+                 AND (
+                   -- Normal: grace period has passed
+                   (grace_period_ends_at IS NOT NULL AND grace_period_ends_at < NOW())
+                   OR
+                   -- Legacy: no grace set but subscription has expired
+                   (grace_period_ends_at IS NULL
+                    AND subscription_expires_at IS NOT NULL
+                    AND subscription_expires_at < NOW())
+                 )'''
         )
         to_downgrade = cursor.fetchall()
 
@@ -694,9 +756,14 @@ def downgrade_expired_users():
                        subscription_expires_at = NULL,
                        grace_period_ends_at    = NULL
                    WHERE plan_type NOT IN ('free', 'enterprise')
-                     AND is_admin IS NOT TRUE
-                     AND grace_period_ends_at IS NOT NULL
-                     AND grace_period_ends_at < NOW()'''
+                     AND (is_admin IS NOT TRUE)
+                     AND (
+                       (grace_period_ends_at IS NOT NULL AND grace_period_ends_at < NOW())
+                       OR
+                       (grace_period_ends_at IS NULL
+                        AND subscription_expires_at IS NOT NULL
+                        AND subscription_expires_at < NOW())
+                     )'''
             )
             conn.commit()
 
@@ -1161,6 +1228,107 @@ def delete_client(client_id):
     finally:
         cursor.close()
         conn.close()
+
+
+def toggle_client_suspended(client_id: str, suspend: bool) -> bool:
+    """Set is_suspended for a client. Returns True on success."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "UPDATE clients SET is_suspended = %s WHERE client_id = %s",
+            (suspend, client_id)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[toggle_client_suspended] {e}")
+        return False
+
+
+def clone_client(source_client_id: str, user_id: int, new_name: str) -> str | None:
+    """
+    Clone a client: copies branding_settings and all FAQs to a new client.
+    Returns the new client_id or None on failure.
+    """
+    import re as _re
+    try:
+        conn, cursor = get_db()
+
+        # Fetch source
+        cursor.execute('SELECT * FROM clients WHERE client_id = %s', (source_client_id,))
+        source = cursor.fetchone()
+        if not source:
+            cursor.close(); conn.close()
+            return None
+
+        # Create new client_id
+        slug       = _re.sub(r'[^a-z0-9-]', '', new_name.lower().replace(' ', '-'))
+        new_cid    = f"{slug}-{secrets.token_hex(4)}"
+        bs         = source.get('branding_settings') or '{}'
+
+        cursor.execute(
+            '''INSERT INTO clients
+                   (user_id, client_id, company_name, branding_settings,
+                    widget_color, welcome_message, remove_branding)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)''',
+            (user_id, new_cid, new_name, bs,
+             source.get('widget_color'), source.get('welcome_message'),
+             source.get('remove_branding', False))
+        )
+
+        # Clone FAQs
+        cursor.execute('SELECT * FROM faqs WHERE client_id = %s', (source_client_id,))
+        faqs = cursor.fetchall()
+        for faq in faqs:
+            new_faq_id = f"faq-{secrets.token_hex(4)}"
+            cursor.execute(
+                '''INSERT INTO faqs
+                       (client_id, faq_id, question, answer, triggers, category,
+                        quality_score, tags, is_active)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+                (new_cid, new_faq_id,
+                 faq.get('question', ''), faq.get('answer', ''),
+                 faq.get('triggers', '[]'), faq.get('category', 'General'),
+                 faq.get('quality_score', 0.0), faq.get('tags', '[]'), True)
+            )
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return new_cid
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[clone_client] {e}")
+        return None
+
+
+def get_leads_this_month_bulk(client_ids: list) -> dict:
+    """Return leads captured this calendar month, keyed by client_id."""
+    if not client_ids:
+        return {}
+    result = {cid: 0 for cid in client_ids}
+    try:
+        conn, cursor = get_db()
+        from datetime import datetime as _dt
+        first_of_month = _dt.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        cursor.execute(
+            """SELECT client_id, COUNT(*) AS cnt
+               FROM leads
+               WHERE client_id = ANY(%s) AND created_at >= %s
+               GROUP BY client_id""",
+            (client_ids, first_of_month)
+        )
+        for row in cursor.fetchall():
+            result[row['client_id']] = int(row['cnt'])
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_leads_this_month_bulk] {e}")
+    return result
 
 
 # =====================================================================

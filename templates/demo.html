@@ -3,515 +3,907 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Interactive Demo — Lumvi</title>
+<title>Lumvi — White-Label AI Chatbots for Digital Agencies</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,400;1,9..144,600&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
+/* ── Reset ── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-:root{
-  --cream:#F7F4EF;
-  --cream2:#F0EBE1;
-  --panel:#EDEAE3;
-  --gold:#B8924A;
-  --gold-lt:rgba(184,146,74,0.12);
-  --gold-lt2:rgba(184,146,74,0.07);
-  --gold-dk:#9A7A3A;
-  --gold-glow:rgba(184,146,74,0.22);
-  --dark:#1C1917;
-  --mid:#57534E;
-  --sub:#A8A29E;
-  --border:#E7E2DA;
-  --white:#fff;
-  --success:#16A34A;
-  --success-lt:#F0FDF4;
-  --success-border:rgba(22,163,74,0.2);
-}
 html{scroll-behavior:smooth;}
-body{
-  font-family:'DM Sans',sans-serif;
-  background:var(--cream);
-  color:var(--dark);
-  min-height:100vh;
-  overflow-x:hidden;
+:root{
+  --cream:#F7F4EF;--cream2:#F0EBE1;--cream3:#EBE3D6;
+  --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
+  --gold-glow:rgba(184,146,74,0.25);
+  --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#fff;
+  --success:#16A34A;--success-lt:#F0FDF4;
+  --r:16px;--shadow:0 2px 6px rgba(0,0,0,0.06),0 8px 28px rgba(0,0,0,0.04);
 }
-
-/* Subtle dot pattern */
-body::before{
-  content:'';
-  position:fixed;inset:0;
-  background-image:radial-gradient(circle, rgba(184,146,74,0.06) 1px, transparent 1px);
-  background-size:40px 40px;
-  pointer-events:none;z-index:0;
-}
-
-/* Radial glow */
-.bg-glow{
-  position:fixed;border-radius:50%;
-  filter:blur(120px);pointer-events:none;z-index:0;
-}
-.bg-glow-1{
-  width:700px;height:700px;
-  background:radial-gradient(circle,rgba(184,146,74,0.1) 0%,transparent 70%);
-  top:-200px;left:-150px;
-}
-.bg-glow-2{
-  width:500px;height:500px;
-  background:radial-gradient(circle,rgba(154,122,58,0.08) 0%,transparent 70%);
-  bottom:-100px;right:-100px;
-}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);line-height:1.6;overflow-x:hidden;}
+h1,h2,h3,h4{font-family:'Fraunces',serif;line-height:1.15;letter-spacing:-0.02em;}
+a{text-decoration:none;color:inherit;}
+img{max-width:100%;}
 
 /* ── NAV ── */
-nav{
-  position:sticky;top:0;z-index:100;
-  background:rgba(247,244,239,0.92);
-  backdrop-filter:blur(16px);
-  border-bottom:1px solid var(--border);
-  padding:0 32px;height:62px;
+nav{position:fixed;top:0;left:0;right:0;z-index:200;padding:0 28px;height:66px;
   display:flex;align-items:center;justify-content:space-between;
-}
-.nav-brand{display:flex;align-items:center;gap:10px;text-decoration:none;}
-.nav-logo-img{width:36px;height:36px;border-radius:10px;object-fit:cover;border:1.5px solid rgba(184,146,74,0.3);}
-.nav-logo-text{font-family:'Fraunces',serif;font-size:18px;font-weight:700;color:var(--dark);}
-.nav-right{display:flex;align-items:center;gap:6px;}
-.nav-link{padding:7px 14px;color:var(--mid);border-radius:8px;font-size:13.5px;font-weight:500;text-decoration:none;transition:all 0.15s;}
-.nav-link:hover{background:var(--cream2);color:var(--dark);}
-.nav-cta{padding:8px 18px;background:var(--gold);color:#fff;border-radius:9px;font-size:13.5px;font-weight:700;text-decoration:none;transition:all 0.2s;box-shadow:0 2px 8px var(--gold-glow);}
-.nav-cta:hover{background:var(--gold-dk);transform:translateY(-1px);}
-@media(max-width:640px){.nav-link{display:none;}}
+  background:rgba(247,244,239,0.85);backdrop-filter:blur(14px);
+  border-bottom:1px solid transparent;transition:border-color 0.3s,box-shadow 0.3s;}
+nav.scrolled{border-color:var(--border);box-shadow:0 1px 0 var(--border);}
+.nav-brand{display:flex;align-items:center;gap:9px;}
+.nav-logo{width:30px;height:30px;background:var(--gold);border-radius:9px;
+  display:flex;align-items:center;justify-content:center;}
+.nav-logo svg{width:16px;height:16px;stroke:#fff;stroke-width:2;fill:none;}
+.nav-name{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
+.nav-links{display:flex;align-items:center;gap:8px;}
+.nav-link{padding:7px 14px;font-size:13.5px;font-weight:500;color:var(--mid);border-radius:9px;transition:all 0.15s;}
+.nav-link:hover{color:var(--dark);background:var(--cream2);}
+.nav-cta{padding:8px 20px;background:var(--dark);color:#fff;border-radius:10px;
+  font-size:13.5px;font-weight:700;transition:all 0.2s;white-space:nowrap;}
+.nav-cta:hover{background:var(--gold);}
+@media(max-width:640px){.nav-links{display:none;}.nav-cta{font-size:12.5px;padding:7px 14px;}}
 
-/* ── PAGE ── */
-.page{
-  position:relative;z-index:1;
-  max-width:1100px;margin:0 auto;
-  padding:72px 24px 96px;
-}
+/* ── SECTION SPACING ── */
+section{padding:100px 28px;}
+.container{max-width:1140px;margin:0 auto;}
+.tag{display:inline-flex;align-items:center;gap:6px;padding:4px 14px;
+  background:var(--gold-lt);border:1px solid rgba(184,146,74,0.25);color:var(--gold-dk);
+  border-radius:30px;font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;margin-bottom:18px;}
+.tag-dot{width:5px;height:5px;border-radius:50%;background:var(--gold);}
 
-/* ── HEADER ── */
-.demo-header{text-align:center;margin-bottom:72px;}
-.eyebrow{
-  display:inline-flex;align-items:center;gap:7px;
-  font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;
-  color:var(--gold-dk);
-  background:var(--gold-lt);border:1px solid rgba(184,146,74,0.25);
-  border-radius:30px;padding:5px 16px;margin-bottom:20px;
-}
-.eyebrow svg{width:12px;height:12px;}
-.demo-header h1{
-  font-family:'Fraunces',serif;
-  font-size:clamp(32px,5vw,56px);
-  font-weight:800;letter-spacing:-1.5px;
-  line-height:1.12;margin-bottom:16px;
-  color:var(--dark);
-}
-.demo-header h1 em{font-style:normal;color:var(--gold);}
-.demo-header p{font-size:18px;color:var(--mid);max-width:480px;margin:0 auto;line-height:1.65;font-weight:300;}
+/* ── HERO ── */
+#hero{padding:148px 28px 100px;text-align:center;position:relative;overflow:hidden;}
+.hero-glow{position:absolute;top:-100px;left:50%;transform:translateX(-50%);
+  width:900px;height:700px;border-radius:50%;
+  background:radial-gradient(ellipse at center,rgba(184,146,74,0.1) 0%,transparent 70%);
+  pointer-events:none;}
+.hero-h1{font-size:clamp(44px,7vw,80px);font-weight:800;color:var(--dark);
+  max-width:860px;margin:0 auto 22px;
+  background:linear-gradient(135deg, var(--dark) 0%, #57534E 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.hero-em{font-style:italic;color:var(--gold);-webkit-text-fill-color:var(--gold);}
+.hero-sub{font-size:18px;color:var(--mid);max-width:560px;margin:0 auto 40px;line-height:1.7;}
+.hero-ctas{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;}
+.btn-primary{padding:14px 28px;background:var(--gold);color:#fff;border-radius:12px;
+  font-size:15px;font-weight:700;display:inline-flex;align-items:center;gap:7px;
+  box-shadow:0 4px 20px var(--gold-glow);transition:all 0.2s;border:none;cursor:pointer;}
+.btn-primary:hover{background:var(--gold-dk);transform:translateY(-2px);box-shadow:0 6px 28px var(--gold-glow);}
+.btn-primary svg{width:15px;height:15px;}
+.btn-ghost{padding:13px 26px;background:var(--white);color:var(--dark);border-radius:12px;
+  font-size:15px;font-weight:700;border:1.5px solid var(--border);
+  display:inline-flex;align-items:center;gap:7px;transition:all 0.2s;cursor:pointer;}
+.btn-ghost:hover{border-color:var(--gold);color:var(--gold-dk);}
+.hero-proof{margin-top:52px;display:flex;align-items:center;justify-content:center;gap:24px;flex-wrap:wrap;}
+.proof-item{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--sub);}
+.proof-item svg{width:14px;height:14px;color:var(--success);}
+.hero-screenshot{margin-top:64px;position:relative;max-width:960px;margin-left:auto;margin-right:auto;}
+.hero-screenshot-inner{background:var(--white);border:1px solid var(--border);border-radius:20px;
+  overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,0.1),0 4px 16px rgba(0,0,0,0.05);}
+.ss-topbar{padding:14px 18px;background:var(--cream2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;}
+.ss-dot{width:10px;height:10px;border-radius:50%;}
+.ss-d1{background:#FC5F57;}.ss-d2{background:#FEBC2F;}.ss-d3{background:#27C840;}
+.ss-url{flex:1;margin:0 12px;padding:5px 12px;background:var(--cream);border-radius:7px;
+  font-size:12px;font-family:'DM Mono',monospace;color:var(--sub);text-align:left;}
+.ss-body{padding:28px;display:grid;grid-template-columns:1fr 340px;gap:24px;align-items:start;}
+.ss-dash{background:var(--cream);border-radius:12px;padding:18px;}
+.ss-dash-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--sub);margin-bottom:12px;}
+.ss-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;}
+.ss-stat{background:var(--white);border-radius:9px;padding:12px;border:1px solid var(--border);}
+.ss-stat-val{font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--dark);}
+.ss-stat-lbl{font-size:10.5px;color:var(--sub);margin-top:2px;}
+.ss-clients{display:flex;flex-direction:column;gap:7px;}
+.ss-client{display:flex;align-items:center;gap:9px;padding:8px 10px;background:var(--white);border-radius:8px;border:1px solid var(--border);}
+.ss-client-av{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:11px;font-weight:700;color:#fff;}
+.ss-client-name{font-size:12px;font-weight:600;color:var(--dark);}
+.ss-client-status{margin-left:auto;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:var(--success-lt);color:var(--success);}
+.ss-widget{background:var(--white);border-radius:14px;overflow:hidden;border:1px solid var(--border);}
+.sw-header{padding:14px 16px;background:var(--gold);display:flex;align-items:center;gap:10px;}
+.sw-av{width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;}
+.sw-av svg{width:18px;height:18px;stroke:#fff;stroke-width:1.5;fill:none;}
+.sw-title{font-size:14px;font-weight:700;color:#fff;}
+.sw-sub{font-size:11px;color:rgba(255,255,255,0.7);margin-top:1px;}
+.sw-body{padding:14px;background:var(--cream);}
+.sw-msg{display:flex;gap:8px;margin-bottom:8px;}
+.sw-msg-av{width:24px;height:24px;border-radius:50%;background:var(--gold);flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.sw-msg-av svg{width:12px;height:12px;stroke:#fff;stroke-width:1.5;fill:none;}
+.sw-bubble{padding:8px 12px;border-radius:10px;background:var(--white);font-size:12px;color:var(--dark);box-shadow:0 1px 3px rgba(0,0,0,0.06);max-width:200px;}
+.sw-bubble-user{background:var(--gold);color:#fff;margin-left:auto;}
+.sw-input{margin-top:8px;display:flex;gap:7px;padding:0 2px;}
+.sw-input-field{flex:1;padding:7px 11px;border-radius:8px;background:var(--white);border:1px solid var(--border);font-size:11.5px;color:var(--sub);}
+.sw-send{width:30px;height:30px;background:var(--gold);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.sw-send svg{width:13px;height:13px;stroke:#fff;stroke-width:2;fill:none;}
 
-/* ── STEPS ── */
-.steps-container{display:grid;gap:20px;margin-bottom:64px;}
+/* ── WHAT IS LUMVI ── */
+#what{background:var(--white);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.what-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;}
+.what-eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--gold);margin-bottom:12px;}
+.what-h2{font-size:clamp(34px,4vw,48px);font-weight:700;margin-bottom:20px;color:var(--dark);}
+.what-p{font-size:16px;color:var(--mid);line-height:1.75;margin-bottom:28px;}
+.what-list{display:flex;flex-direction:column;gap:13px;}
+.what-item{display:flex;align-items:flex-start;gap:12px;font-size:14.5px;color:var(--mid);}
+.what-check{width:20px;height:20px;border-radius:6px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+.what-check svg{width:10px;height:10px;stroke:var(--gold-dk);stroke-width:3;}
+.what-visual{position:relative;}
+.what-card{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:28px;box-shadow:var(--shadow);}
+.wc-header{display:flex;align-items:center;gap:12px;margin-bottom:20px;}
+.wc-icon{width:44px;height:44px;border-radius:12px;background:var(--gold-lt);display:flex;align-items:center;justify-content:center;}
+.wc-icon svg{width:20px;height:20px;stroke:var(--gold);stroke-width:1.5;fill:none;}
+.wc-title{font-family:'Fraunces',serif;font-size:16px;font-weight:700;}
+.wc-sub{font-size:12px;color:var(--sub);}
+.wc-row{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:9px;background:var(--cream);margin-bottom:7px;font-size:13px;}
+.wc-badge{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;}
+.badge-active{background:var(--success-lt);color:var(--success);}
+.badge-new{background:var(--gold-lt);color:var(--gold-dk);}
 
-.step{
-  background:var(--white);
-  border:1px solid var(--border);
-  border-radius:20px;padding:40px;
-  display:grid;grid-template-columns:1fr 1fr;
-  gap:44px;align-items:center;
-  transition:box-shadow 0.2s,border-color 0.2s;
-}
-.step:hover{
-  box-shadow:0 12px 40px rgba(0,0,0,0.07);
-  border-color:rgba(184,146,74,0.3);
-}
+/* ── REVENUE MODEL ── */
+#revenue{background:var(--dark);color:#fff;}
+.rev-tag{background:rgba(184,146,74,0.15);border-color:rgba(184,146,74,0.3);color:#D4A85A;}
+.rev-h2{font-size:clamp(36px,4.5vw,54px);font-weight:800;color:#fff;max-width:640px;margin-bottom:16px;}
+.rev-sub{font-size:17px;color:rgba(255,255,255,0.55);max-width:520px;margin-bottom:56px;line-height:1.7;}
+.rev-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}
+.rev-card{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:28px;}
+.rev-num{font-family:'Fraunces',serif;font-size:48px;font-weight:800;color:var(--gold);line-height:1;margin-bottom:8px;}
+.rev-label{font-size:13.5px;font-weight:700;color:#fff;margin-bottom:8px;}
+.rev-desc{font-size:13px;color:rgba(255,255,255,0.5);line-height:1.6;}
+.rev-calc{margin-top:56px;background:rgba(184,146,74,0.1);border:1px solid rgba(184,146,74,0.25);border-radius:20px;padding:32px;}
+.rev-calc-h{font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:#fff;margin-bottom:6px;}
+.rev-calc-sub{font-size:14px;color:rgba(255,255,255,0.5);margin-bottom:24px;}
+.rev-calc-row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.07);font-size:14px;}
+.rev-calc-row:last-child{border-bottom:none;padding-bottom:0;}
+.rev-calc-lbl{color:rgba(255,255,255,0.6);}
+.rev-calc-val{font-weight:700;color:#fff;}
+.rev-calc-val.gold{color:var(--gold);font-size:20px;font-family:'Fraunces',serif;}
+.rev-calc-val.success{color:#4ADE80;}
 
-.step.reverse .step-content{order:2;}
-.step.reverse .step-visual{order:1;}
+/* ── HOW IT WORKS ── */
+#how{background:var(--cream);}
+.how-h2{font-size:clamp(34px,4vw,50px);font-weight:800;text-align:center;max-width:540px;margin:0 auto 12px;}
+.how-sub{text-align:center;font-size:16px;color:var(--mid);max-width:420px;margin:0 auto 64px;}
+.how-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;position:relative;}
+.how-steps::before{content:'';position:absolute;top:28px;left:calc(16.67% + 14px);right:calc(16.67% + 14px);height:1px;background:linear-gradient(to right,var(--gold),var(--border),var(--gold));z-index:0;}
+.step-card{background:var(--white);border:1.5px solid var(--border);border-radius:20px;padding:28px;position:relative;z-index:1;transition:all 0.2s;}
+.step-card:hover{border-color:var(--gold);box-shadow:0 12px 40px var(--gold-glow);}
+.step-num{width:52px;height:52px;border-radius:50%;background:var(--dark);color:#fff;font-family:'Fraunces',serif;font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-bottom:20px;box-shadow:0 4px 14px rgba(28,25,23,0.2);}
+.step-card:hover .step-num{background:var(--gold);}
+.step-h{font-size:18px;font-weight:700;margin-bottom:8px;}
+.step-p{font-size:14px;color:var(--mid);line-height:1.65;}
 
-.step-number{
-  width:44px;height:44px;
-  background:var(--gold);border-radius:14px;
-  font-family:'Fraunces',serif;
-  font-size:20px;font-weight:800;color:#fff;
-  display:flex;align-items:center;justify-content:center;
-  margin-bottom:18px;
-  box-shadow:0 6px 18px var(--gold-glow);
-}
-.step-content h2{
-  font-family:'Fraunces',serif;
-  font-size:24px;font-weight:700;
-  color:var(--dark);margin-bottom:10px;
-  letter-spacing:-0.3px;line-height:1.25;
-}
-.step-content>p{font-size:14.5px;color:var(--mid);line-height:1.7;margin-bottom:18px;font-weight:300;}
+/* ── LIVE DEMO ── */
+#demo{background:var(--white);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.demo-header{text-align:center;margin-bottom:48px;}
+.demo-h2{font-size:clamp(34px,4vw,50px);font-weight:800;margin-bottom:12px;}
+.demo-sub{font-size:16px;color:var(--mid);max-width:520px;margin:0 auto;}
+.demo-tabs{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:40px;flex-wrap:wrap;}
+.demo-tab{padding:8px 18px;border-radius:30px;font-size:13.5px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--cream);color:var(--mid);transition:all 0.15s;}
+.demo-tab.active,.demo-tab:hover{background:var(--dark);color:#fff;border-color:var(--dark);}
+.demo-tab.active{background:var(--gold);border-color:var(--gold);}
+.demo-stage{display:grid;grid-template-columns:1fr 380px;gap:40px;align-items:start;}
+.demo-info{padding-top:20px;}
+.demo-vertical-name{font-family:'Fraunces',serif;font-size:26px;font-weight:700;margin-bottom:8px;}
+.demo-vertical-desc{font-size:14px;color:var(--mid);line-height:1.65;margin-bottom:24px;}
+.demo-features{display:flex;flex-direction:column;gap:10px;}
+.demo-feat{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:var(--mid);padding:10px 12px;background:var(--cream);border-radius:10px;}
+.demo-feat svg{width:15px;height:15px;stroke:var(--gold);stroke-width:2;flex-shrink:0;margin-top:1px;}
+.demo-widget-wrap{position:sticky;top:90px;}
+.demo-widget-frame{border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.1);border:1px solid var(--border);}
+.dw-bar{height:6px;background:var(--gold);}
+.dw-header{padding:16px 18px;background:var(--gold);display:flex;align-items:center;gap:11px;}
+.dw-av{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.dw-av svg,.dw-av img{width:22px;height:22px;}
+.dw-name{font-size:15px;font-weight:700;color:#fff;}
+.dw-status{font-size:11.5px;color:rgba(255,255,255,0.7);margin-top:1px;}
+.dw-body{background:var(--cream);padding:16px;min-height:300px;}
+.chat-msg{display:flex;gap:9px;margin-bottom:10px;}
+.chat-av{width:28px;height:28px;border-radius:50%;background:var(--gold);flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:2px;}
+.chat-av svg{width:14px;height:14px;stroke:#fff;stroke-width:1.5;fill:none;}
+.chat-bub{background:var(--white);border-radius:12px;padding:10px 13px;font-size:12.5px;color:var(--dark);max-width:220px;line-height:1.5;box-shadow:0 1px 3px rgba(0,0,0,0.06);}
+.chat-bub-user{background:var(--gold);color:#fff;margin-left:auto;max-width:180px;border-radius:12px;padding:10px 13px;font-size:12.5px;}
+.dw-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 12px 38px;}
+.dw-chip{padding:5px 12px;background:rgba(184,146,74,0.12);border:1px solid rgba(184,146,74,0.25);border-radius:20px;font-size:11px;font-weight:600;color:var(--gold-dk);cursor:pointer;transition:all 0.15s;}
+.dw-chip:hover{background:var(--gold);color:#fff;}
+.dw-input-row{display:flex;gap:7px;padding:12px;background:var(--white);border-top:1px solid var(--border);}
+.dw-input{flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:12.5px;font-family:'DM Sans',sans-serif;color:var(--dark);outline:none;}
+.dw-input:focus{border-color:var(--gold);}
+.dw-send{width:36px;height:36px;background:var(--gold);border-radius:9px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.dw-send svg{width:14px;height:14px;stroke:#fff;stroke-width:2;fill:none;}
+.demo-typing{display:flex;align-items:center;gap:4px;padding:8px 12px;background:var(--white);border-radius:12px;width:56px;}
+.td{width:6px;height:6px;border-radius:50%;background:var(--sub);animation:bounce 1.2s ease-in-out infinite;}
+.td:nth-child(2){animation-delay:0.2s;}.td:nth-child(3){animation-delay:0.4s;}
+@keyframes bounce{0%,80%,100%{transform:translateY(0);}40%{transform:translateY(-5px);}}
 
-.feature-list{list-style:none;}
-.feature-list li{
-  padding:9px 0 9px 26px;position:relative;
-  color:var(--mid);font-size:14px;
-  border-bottom:1px solid var(--border);
-}
-.feature-list li:last-child{border-bottom:none;}
-.feature-list li::before{
-  content:'✓';position:absolute;left:0;
-  color:var(--gold);font-weight:700;font-size:13px;
-}
+/* ── WHITE-LABEL ── */
+#whitelabel{background:var(--cream);}
+.wl-header{text-align:center;margin-bottom:60px;}
+.wl-h2{font-size:clamp(34px,4vw,50px);font-weight:800;margin-bottom:12px;}
+.wl-sub{font-size:16px;color:var(--mid);max-width:500px;margin:0 auto;}
+.wl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+.wl-card{background:var(--white);border:1.5px solid var(--border);border-radius:20px;padding:28px;transition:all 0.2s;}
+.wl-card:hover{border-color:var(--gold);box-shadow:0 8px 30px var(--gold-glow);}
+.wl-icon{width:48px;height:48px;border-radius:14px;background:var(--gold-lt);display:flex;align-items:center;justify-content:center;margin-bottom:16px;}
+.wl-icon svg{width:22px;height:22px;stroke:var(--gold);stroke-width:1.5;fill:none;}
+.wl-h3{font-size:17px;font-weight:700;margin-bottom:8px;}
+.wl-p{font-size:13.5px;color:var(--mid);line-height:1.65;}
+.wl-domain-preview{margin-top:12px;padding:8px 12px;background:var(--cream);border-radius:8px;font-family:'DM Mono',monospace;font-size:12px;color:var(--gold-dk);}
 
-/* ── VISUAL / MOCKUP ── */
-.step-visual{
-  background:var(--cream);border:1px solid var(--border);
-  border-radius:14px;padding:4px;
-}
-.mockup{
-  background:var(--white);border-radius:11px;
-  overflow:hidden;border:1px solid var(--border);
-}
-.mockup-bar{
-  display:flex;align-items:center;gap:6px;
-  padding:11px 14px;border-bottom:1px solid var(--border);
-  background:var(--cream);
-}
-.dot{width:9px;height:9px;border-radius:50%;}
-.dot-r{background:#ff5f57;} .dot-y{background:#ffbd2e;} .dot-g{background:#28ca41;}
-.mockup-title{
-  flex:1;text-align:center;font-size:10.5px;
-  color:var(--sub);font-weight:600;
-  margin-right:30px;text-transform:uppercase;letter-spacing:0.06em;
-}
-.mockup-body{padding:18px;}
+/* ── CUSTOMIZATION SHOWCASE ── */
+#showcase{background:var(--white);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.sc-header{text-align:center;margin-bottom:56px;}
+.sc-h2{font-size:clamp(34px,4vw,50px);font-weight:800;margin-bottom:12px;}
+.sc-sub{font-size:16px;color:var(--mid);max-width:480px;margin:0 auto;}
+.sc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+.sc-card{background:var(--cream);border-radius:16px;padding:20px;border:1.5px solid var(--border);}
+.sc-card-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--sub);margin-bottom:12px;}
+.color-swatches{display:flex;gap:8px;}
+.swatch{width:32px;height:32px;border-radius:8px;cursor:pointer;border:2px solid transparent;transition:all 0.15s;}
+.swatch.active{border-color:var(--dark);box-shadow:0 0 0 2px #fff inset;}
+.avatar-options{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;}
+.avatar-opt{width:100%;aspect-ratio:1;border-radius:10px;background:var(--white);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;}
+.avatar-opt.active,.avatar-opt:hover{border-color:var(--gold);}
+.avatar-opt span{font-size:20px;}
+.welcome-preview{background:var(--white);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--dark);line-height:1.5;border:1px solid var(--border);}
+.qr-preview{display:flex;flex-direction:column;gap:5px;}
+.qr-chip-preview{padding:5px 11px;border-radius:20px;font-size:11.5px;font-weight:600;background:var(--white);border:1.5px solid var(--border);width:fit-content;color:var(--mid);}
 
-/* Step 1 fields */
-.field-row{
-  background:var(--cream);border:1px solid var(--border);
-  border-radius:9px;padding:10px 13px;margin-bottom:8px;
-  font-size:13px;color:var(--mid);
-  display:flex;align-items:center;gap:10px;
-}
-.field-row:last-child{margin-bottom:0;}
-.field-label{color:var(--sub);font-size:10.5px;width:88px;flex-shrink:0;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;}
-.field-val{color:var(--dark);font-weight:600;flex:1;font-size:12.5px;}
-.color-swatch{width:18px;height:18px;border-radius:5px;background:var(--gold);flex-shrink:0;border:1px solid rgba(184,146,74,0.3);}
+/* ── SOCIAL PROOF ── */
+#proof{background:var(--cream);}
+.proof-header{text-align:center;margin-bottom:56px;}
+.proof-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+.proof-card{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:28px;box-shadow:var(--shadow);}
+.proof-stars{display:flex;gap:3px;margin-bottom:14px;}
+.proof-star{width:16px;height:16px;color:var(--gold);}
+.proof-quote{font-size:14.5px;color:var(--mid);line-height:1.7;margin-bottom:20px;font-style:italic;}
+.proof-author{display:flex;align-items:center;gap:10px;}
+.proof-av{width:38px;height:38px;border-radius:50%;background:var(--gold-lt);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:14px;font-weight:700;color:var(--gold-dk);}
+.proof-name{font-weight:700;font-size:13.5px;color:var(--dark);}
+.proof-role{font-size:12px;color:var(--sub);}
 
-/* Step 2 upload */
-.drop-zone{
-  border:2px dashed rgba(184,146,74,0.35);
-  border-radius:10px;padding:26px 20px;text-align:center;
-  background:var(--gold-lt2);margin-bottom:12px;
-}
-.drop-icon{font-size:34px;margin-bottom:8px;}
-.drop-text{font-size:12.5px;color:var(--mid);margin-bottom:3px;font-weight:500;}
-.drop-sub{font-size:11px;color:var(--sub);}
-.success-banner{
-  background:var(--success-lt);border:1px solid var(--success-border);
-  border-radius:9px;padding:10px 14px;font-size:12.5px;
-  color:var(--success);display:flex;align-items:center;gap:8px;font-weight:600;
-}
+/* ── FINAL CTA ── */
+#cta{background:var(--dark);padding:120px 28px;}
+.cta-inner{text-align:center;max-width:680px;margin:0 auto;}
+.cta-h2{font-size:clamp(40px,5vw,64px);font-weight:800;color:#fff;margin-bottom:16px;line-height:1.1;}
+.cta-em{color:var(--gold);font-style:italic;}
+.cta-sub{font-size:17px;color:rgba(255,255,255,0.55);margin-bottom:40px;line-height:1.7;}
+.cta-btns{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin-bottom:24px;}
+.btn-cta-primary{padding:16px 32px;background:var(--gold);color:#fff;border-radius:12px;font-size:15.5px;font-weight:700;box-shadow:0 4px 20px var(--gold-glow);transition:all 0.2s;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}
+.btn-cta-primary:hover{background:#C9A35B;transform:translateY(-2px);}
+.btn-cta-ghost{padding:15px 28px;background:rgba(255,255,255,0.08);color:#fff;border-radius:12px;font-size:15px;font-weight:700;border:1.5px solid rgba(255,255,255,0.15);transition:all 0.2s;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}
+.btn-cta-ghost:hover{background:rgba(255,255,255,0.14);}
+.cta-note{font-size:13px;color:rgba(255,255,255,0.35);}
 
-/* Step 3 code */
-.code-block{
-  background:#1C1917;border-radius:10px;padding:16px;
-  font-family:'DM Mono',monospace;font-size:11px;
-  color:#D4C4A8;line-height:1.75;margin-bottom:12px;
-}
-.kw{color:#B8924A;} .str{color:#A3C4A8;} .tag{color:#C8B89A;}
-.copy-btn{
-  width:100%;padding:11px;
-  background:var(--gold);color:#fff;border:none;
-  border-radius:9px;font-weight:700;font-size:13.5px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;gap:6px;
-  box-shadow:0 4px 14px var(--gold-glow);
-  transition:all 0.2s;font-family:'DM Sans',sans-serif;
-}
-.copy-btn:hover{background:var(--gold-dk);transform:translateY(-1px);}
-.copy-btn svg{width:14px;height:14px;}
+/* ── FOOTER ── */
+footer{background:var(--dark);border-top:1px solid rgba(255,255,255,0.06);padding:32px 28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
+.footer-brand{display:flex;align-items:center;gap:8px;}
+.footer-brand-name{font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:rgba(255,255,255,0.6);}
+.footer-links{display:flex;gap:20px;}
+.footer-link{font-size:13px;color:rgba(255,255,255,0.35);transition:color 0.15s;}
+.footer-link:hover{color:rgba(255,255,255,0.7);}
+.footer-copy{font-size:12px;color:rgba(255,255,255,0.25);}
 
-/* Step 4 chat */
-.chat-preview{border-radius:10px;overflow:hidden;border:1px solid var(--border);}
-.chat-preview-header{
-  background:var(--gold);padding:13px 16px;
-  display:flex;align-items:center;gap:10px;
-}
-.chat-header-icon{
-  width:30px;height:30px;border-radius:9px;
-  background:rgba(255,255,255,0.2);
-  display:flex;align-items:center;justify-content:center;font-size:14px;
-}
-.chat-header-name{font-size:13.5px;font-weight:700;color:#fff;}
-.chat-header-status{font-size:10.5px;color:rgba(255,255,255,0.8);display:flex;align-items:center;gap:4px;margin-top:2px;}
-.online-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 5px #4ade80;animation:blink 2s infinite;}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
-.chat-messages{background:var(--cream);padding:14px;display:flex;flex-direction:column;gap:10px;}
-.chat-msg{display:flex;gap:8px;align-items:flex-start;}
-.chat-msg.user{flex-direction:row-reverse;}
-.chat-bubble{max-width:78%;padding:9px 12px;border-radius:12px;font-size:12.5px;line-height:1.55;}
-.bubble-bot{background:var(--white);border:1px solid var(--border);border-bottom-left-radius:4px;color:var(--dark);}
-.bubble-user{background:var(--gold);color:#fff;border-bottom-right-radius:4px;box-shadow:0 4px 12px var(--gold-glow);}
-.bot-icon{width:26px;height:26px;border-radius:8px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.25);display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;}
-.chat-input-row{background:var(--white);border-top:1px solid var(--border);padding:10px 12px;display:flex;gap:8px;align-items:center;}
-.chat-input-fake{flex:1;background:var(--cream);border:1.5px solid var(--border);border-radius:20px;padding:8px 14px;font-size:12px;color:var(--sub);font-family:'DM Sans',sans-serif;}
-.chat-send{width:32px;height:32px;border-radius:9px;background:var(--gold);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 10px var(--gold-glow);flex-shrink:0;}
-.chat-send svg{width:13px;height:13px;color:#fff;}
+/* ── UTILITIES ── */
+.text-center{text-align:center;}
+.mb-4{margin-bottom:4px;}
+.mt-auto{margin-top:auto;}
 
-/* Live callout */
-.live-callout{
-  background:var(--gold-lt2);border:1px solid rgba(184,146,74,0.2);
-  border-radius:14px;padding:20px;margin-top:20px;
-}
-.live-callout h3{
-  font-family:'Fraunces',serif;
-  color:var(--gold-dk);font-size:15px;font-weight:700;margin-bottom:6px;
-}
-.live-callout p{font-size:13px;color:var(--mid);line-height:1.6;font-weight:300;}
-.float-emoji{text-align:center;font-size:40px;margin-top:12px;animation:floaty 3s ease-in-out infinite;}
-@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+/* ── ANIMATIONS ── */
+.fade-up{opacity:0;transform:translateY(30px);transition:opacity 0.65s ease,transform 0.65s ease;}
+.fade-up.visible{opacity:1;transform:translateY(0);}
+.fade-delay-1{transition-delay:0.1s;}
+.fade-delay-2{transition-delay:0.2s;}
+.fade-delay-3{transition-delay:0.3s;}
 
-/* ── CTA ── */
-.cta-section{
-  background:var(--white);border:1px solid var(--border);
-  border-radius:20px;padding:60px 40px;text-align:center;
-  box-shadow:0 4px 32px rgba(0,0,0,0.06);
-  background:radial-gradient(ellipse 800px 400px at 50% 110%, rgba(184,146,74,0.07) 0%, transparent 70%),var(--white);
+/* ── RESPONSIVE ── */
+@media(max-width:900px){
+  .ss-body{grid-template-columns:1fr;}.ss-widget{display:none;}
+  .what-grid{grid-template-columns:1fr;gap:40px;}
+  .rev-grid{grid-template-columns:1fr 1fr;}
+  .how-steps{grid-template-columns:1fr;}.how-steps::before{display:none;}
+  .demo-stage{grid-template-columns:1fr;}
+  .wl-grid{grid-template-columns:1fr 1fr;}
+  .sc-grid{grid-template-columns:1fr 1fr;}
+  .proof-grid{grid-template-columns:1fr;}
 }
-.cta-section h2{
-  font-family:'Fraunces',serif;
-  font-size:clamp(28px,4vw,40px);
-  font-weight:800;letter-spacing:-0.8px;
-  margin-bottom:12px;color:var(--dark);
-}
-.cta-section>p{font-size:16px;color:var(--mid);margin-bottom:32px;font-weight:300;}
-.btn-row{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;}
-.btn{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:14px 28px;border-radius:10px;
-  font-weight:700;font-size:14.5px;
-  text-decoration:none;transition:all 0.2s;
-  font-family:'DM Sans',sans-serif;cursor:pointer;border:none;
-}
-.btn-primary{background:var(--gold);color:#fff;box-shadow:0 4px 18px var(--gold-glow);}
-.btn-primary:hover{background:var(--gold-dk);transform:translateY(-2px);box-shadow:0 8px 28px rgba(184,146,74,0.35);}
-.btn-secondary{background:transparent;color:var(--mid);border:1.5px solid var(--border);}
-.btn-secondary:hover{border-color:var(--gold);color:var(--gold-dk);background:var(--gold-lt);}
-.cta-fine{margin-top:20px;font-size:12.5px;color:var(--sub);}
-
-@media(max-width:768px){
-  .step{grid-template-columns:1fr;padding:28px 20px;gap:24px;}
-  .step.reverse .step-content,.step.reverse .step-visual{order:unset;}
-  .page{padding:44px 16px 64px;}
-  .cta-section{padding:44px 22px;}
+@media(max-width:640px){
+  section{padding:72px 18px;}
+  .rev-grid{grid-template-columns:1fr;}
+  .wl-grid{grid-template-columns:1fr;}
+  .sc-grid{grid-template-columns:1fr 1fr;}
+  .hero-proof{flex-direction:column;gap:10px;}
+  .demo-tabs{gap:6px;}
+  .demo-tab{font-size:12px;padding:7px 14px;}
 }
 </style>
 </head>
 <body>
 
-<div class="bg-glow bg-glow-1"></div>
-<div class="bg-glow bg-glow-2"></div>
-
-<!-- NAV -->
-<nav>
-  <a href="/" class="nav-brand">
-    <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi" class="nav-logo-img">
-    <span class="nav-logo-text">Lumvi</span>
+<!-- ══════════════════════ NAV ══════════════════════ -->
+<nav id="nav">
+  <a href="#" class="nav-brand">
+    <div class="nav-logo">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    </div>
+    <span class="nav-name">Lumvi</span>
   </a>
-  <div class="nav-right">
-    <a href="/sales" class="nav-link">Features</a>
-    <a href="/sales#pricing" class="nav-link">Pricing</a>
-    <a href="/login" class="nav-link">Log in</a>
-    <a href="/signup" class="nav-cta">Start free →</a>
+  <div class="nav-links">
+    <a href="#what" class="nav-link">Features</a>
+    <a href="#revenue" class="nav-link">Pricing</a>
+    <a href="#demo" class="nav-link">Live Demo</a>
+    <a href="#whitelabel" class="nav-link">White-Label</a>
   </div>
+  <a href="/register" class="nav-cta">Start Free Trial →</a>
 </nav>
 
-<div class="page">
-
-  <!-- HEADER -->
-  <div class="demo-header">
-    <div class="eyebrow">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-      Interactive Walkthrough
+<!-- ══════════════════════ HERO ══════════════════════ -->
+<section id="hero">
+  <div class="container">
+    <div class="hero-glow"></div>
+    <div class="tag fade-up"><span class="tag-dot"></span>Built for Digital Agencies</div>
+    <h1 class="hero-h1 fade-up fade-delay-1">The AI Chatbot You Can<br><em class="hero-em">Resell as Your Own</em></h1>
+    <p class="hero-sub fade-up fade-delay-2">Build smart, white-labeled AI chatbots powered by Claude. Brand them as yours. Charge your clients $299–$999/mo and keep 100% of the margin.</p>
+    <div class="hero-ctas fade-up fade-delay-3">
+      <a href="/register" class="btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Start Free Trial
+      </a>
+      <a href="/demo" class="btn-ghost">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Book a 10-min Demo
+      </a>
     </div>
-    <h1>See <em>Lumvi</em> in Action</h1>
-    <p>Launch your own AI chatbot in under 5 minutes — no code, no hassle.</p>
+    <div class="hero-proof fade-up fade-delay-3">
+      <div class="proof-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>No coding required</div>
+      <div class="proof-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>White-label from day one</div>
+      <div class="proof-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Clients live in under 30 minutes</div>
+      <div class="proof-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>Cancel any time</div>
+    </div>
+
+    <!-- Dashboard Preview -->
+    <div class="hero-screenshot fade-up">
+      <div class="hero-screenshot-inner">
+        <div class="ss-topbar">
+          <div class="ss-dot ss-d1"></div><div class="ss-dot ss-d2"></div><div class="ss-dot ss-d3"></div>
+          <div class="ss-url">app.youragency.com / dashboard</div>
+        </div>
+        <div class="ss-body">
+          <div class="ss-dash">
+            <div class="ss-dash-h">Agency Overview</div>
+            <div class="ss-stats">
+              <div class="ss-stat"><div class="ss-stat-val">12</div><div class="ss-stat-lbl">Active Clients</div></div>
+              <div class="ss-stat"><div class="ss-stat-val">1,847</div><div class="ss-stat-lbl">Leads Captured</div></div>
+              <div class="ss-stat"><div class="ss-stat-val">$4,380</div><div class="ss-stat-lbl">Monthly Revenue</div></div>
+              <div class="ss-stat"><div class="ss-stat-val">98.7%</div><div class="ss-stat-lbl">AI Resolved</div></div>
+            </div>
+            <div class="ss-dash-h">Recent Clients</div>
+            <div class="ss-clients">
+              <div class="ss-client"><div class="ss-client-av" style="background:#B8924A;">AC</div><div class="ss-client-name">Acme Law Group</div><div class="ss-client-status">Active</div></div>
+              <div class="ss-client"><div class="ss-client-av" style="background:#16A34A;">DV</div><div class="ss-client-name">Denver Dental Co.</div><div class="ss-client-status">Active</div></div>
+              <div class="ss-client"><div class="ss-client-av" style="background:#0284C7;">PP</div><div class="ss-client-name">Premier Properties</div><div class="ss-client-status">Active</div></div>
+            </div>
+          </div>
+          <div class="ss-widget">
+            <div class="sw-header">
+              <div class="sw-av"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+              <div><div class="sw-title">Acme Law Assistant</div><div class="sw-sub">Typically replies instantly</div></div>
+            </div>
+            <div class="sw-body">
+              <div class="sw-msg"><div class="sw-msg-av"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="sw-bubble">Hello! Welcome to Acme Law Group. How can I assist you today?</div></div>
+              <div class="sw-msg" style="flex-direction:row-reverse;"><div class="sw-bubble sw-bubble-user">I need help with a contract dispute</div></div>
+              <div class="sw-msg"><div class="sw-msg-av"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="sw-bubble">I can help with that. Our attorneys specialize in contract disputes. Would you like to schedule a free consultation?</div></div>
+            </div>
+            <div class="sw-input">
+              <div class="sw-input-field">Type a message…</div>
+              <div class="sw-send"><svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
+</section>
 
-  <div class="steps-container">
-
-    <!-- Step 1 -->
-    <div class="step">
-      <div class="step-content">
-        <div class="step-number">1</div>
-        <h2>Sign Up &amp; Create Your Chatbot</h2>
-        <p>Start with a free account — no credit card required. Create your first branded chatbot in seconds.</p>
-        <ul class="feature-list">
-          <li>Email signup in 30 seconds</li>
-          <li>Auto-generated client ID</li>
-          <li>Choose your brand colours</li>
-          <li>Customise welcome message</li>
-        </ul>
+<!-- ══════════════════════ WHAT IS LUMVI ══════════════════════ -->
+<section id="what">
+  <div class="container">
+    <div class="what-grid">
+      <div class="fade-up">
+        <div class="what-eyebrow">What is Lumvi?</div>
+        <h2 class="what-h2">Your Agency's Secret Weapon for Recurring Revenue</h2>
+        <p class="what-p">Lumvi is a white-label AI chatbot platform built specifically for digital agencies. You get a fully-featured, Claude-powered AI assistant that you can customize, brand as your own, and resell to every client in your portfolio.</p>
+        <div class="what-list">
+          <div class="what-item"><div class="what-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>Industry-aware AI trained on 12+ verticals (law, dental, real estate, SaaS…)</div>
+          <div class="what-item"><div class="what-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>Advanced RAG pipeline with conversation memory and smart lead scoring</div>
+          <div class="what-item"><div class="what-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>Fully white-labeled — your brand, your domain, your emails</div>
+          <div class="what-item"><div class="what-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>One-click embed on any website with a 2-line script tag</div>
+          <div class="what-item"><div class="what-check"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>Built-in lead management, webhooks, analytics, and client dashboards</div>
+        </div>
       </div>
-      <div class="step-visual">
-        <div class="mockup">
-          <div class="mockup-bar">
-            <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-            <div class="mockup-title">New Bot Setup</div>
+      <div class="what-visual fade-up fade-delay-2">
+        <div class="what-card">
+          <div class="wc-header">
+            <div class="wc-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+            <div><div class="wc-title">Client Management Portal</div><div class="wc-sub">Branded as your agency</div></div>
           </div>
-          <div class="mockup-body">
-            <div class="field-row"><span class="field-label">Company</span><span class="field-val">Your Business</span></div>
-            <div class="field-row"><span class="field-label">Brand colour</span><div class="color-swatch"></div><span class="field-val">#B8924A</span></div>
-            <div class="field-row"><span class="field-label">Welcome msg</span><span class="field-val">Hi! How can I help? 👋</span></div>
-            <div class="field-row"><span class="field-label">Bot name</span><span class="field-val">Support Assistant</span></div>
-          </div>
+          <div class="wc-row"><span>Premier Real Estate</span><span class="wc-badge badge-active">Active · 342 leads</span></div>
+          <div class="wc-row"><span>City Dental Clinic</span><span class="wc-badge badge-active">Active · 89 leads</span></div>
+          <div class="wc-row"><span>Wilson Law Group</span><span class="wc-badge badge-new">New · Setup</span></div>
+          <div class="wc-row"><span>FitZone Gym</span><span class="wc-badge badge-active">Active · 127 leads</span></div>
         </div>
       </div>
     </div>
-
-    <!-- Step 2 -->
-    <div class="step reverse">
-      <div class="step-content">
-        <div class="step-number">2</div>
-        <h2>Add Your FAQs</h2>
-        <p>Upload questions and answers via CSV, Excel, or PDF. Our AI auto-generates keyword triggers instantly.</p>
-        <ul class="feature-list">
-          <li>Upload 100+ FAQs from CSV / Excel</li>
-          <li>Auto-extract from PDF documents</li>
-          <li>AI-powered keyword generation</li>
-          <li>Bulk edit and organise</li>
-        </ul>
-      </div>
-      <div class="step-visual">
-        <div class="mockup">
-          <div class="mockup-bar">
-            <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-            <div class="mockup-title">FAQ Manager</div>
-          </div>
-          <div class="mockup-body">
-            <div class="drop-zone">
-              <div class="drop-icon">📁</div>
-              <div class="drop-text">Drop CSV, Excel, or PDF here</div>
-              <div class="drop-sub">or click to browse files</div>
-            </div>
-            <div class="success-banner">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg>
-              47 FAQs imported successfully
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Step 3 -->
-    <div class="step">
-      <div class="step-content">
-        <div class="step-number">3</div>
-        <h2>Copy &amp; Embed</h2>
-        <p>Get your one-line embed code and paste it anywhere. Works with WordPress, Shopify, Wix, or custom HTML.</p>
-        <ul class="feature-list">
-          <li>One-line embed code</li>
-          <li>Works on any website platform</li>
-          <li>Mobile responsive by default</li>
-          <li>No coding required</li>
-        </ul>
-      </div>
-      <div class="step-visual">
-        <div class="mockup">
-          <div class="mockup-bar">
-            <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-            <div class="mockup-title">Embed Code</div>
-          </div>
-          <div class="mockup-body">
-            <div class="code-block"><span class="tag">&lt;script&gt;</span><br>
-&nbsp;<span class="kw">var</span> s = document.<span class="kw">createElement</span>(<span class="str">'script'</span>);<br>
-&nbsp;s.src = <span class="str">'https://lumvi.net/widget.js'</span>;<br>
-&nbsp;s.<span class="kw">setAttribute</span>(<span class="str">'data-client-id'</span>, <span class="str">'your-id'</span>);<br>
-&nbsp;document.body.<span class="kw">appendChild</span>(s);<br>
-<span class="tag">&lt;/script&gt;</span></div>
-            <button class="copy-btn" onclick="copyCode(this)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              Copy Embed Code
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Step 4 -->
-    <div class="step reverse">
-      <div class="step-content">
-        <div class="step-number">4</div>
-        <h2>Watch It Work!</h2>
-        <p>Your chatbot goes live instantly. Visitors ask questions 24/7 and you capture leads automatically — no babysitting needed.</p>
-        <div class="live-callout">
-          <h3>👉 Try It Now</h3>
-          <p>Click the chat button in the bottom-right corner of this page to test a live Lumvi demo bot!</p>
-          <div class="float-emoji">💬</div>
-        </div>
-      </div>
-      <div class="step-visual">
-        <div class="mockup">
-          <div class="mockup-bar">
-            <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
-            <div class="mockup-title">Live Chat Widget</div>
-          </div>
-          <div class="chat-preview">
-            <div class="chat-preview-header">
-              <div class="chat-header-icon">🤖</div>
-              <div>
-                <div class="chat-header-name">Support Assistant</div>
-                <div class="chat-header-status"><div class="online-dot"></div>Online · replies instantly</div>
-              </div>
-            </div>
-            <div class="chat-messages">
-              <div class="chat-msg">
-                <div class="bot-icon">🤖</div>
-                <div class="chat-bubble bubble-bot">Hi! 👋 How can I help you today?</div>
-              </div>
-              <div class="chat-msg user">
-                <div class="chat-bubble bubble-user">What are your prices?</div>
-              </div>
-              <div class="chat-msg">
-                <div class="bot-icon">🤖</div>
-                <div class="chat-bubble bubble-bot">Plans start at $19/mo. Want me to walk you through what's included?</div>
-              </div>
-            </div>
-            <div class="chat-input-row">
-              <input class="chat-input-fake" placeholder="Type a message…" readonly>
-              <button class="chat-send">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
   </div>
+</section>
 
-  <!-- CTA -->
-  <div class="cta-section">
-    <h2>Ready to Launch Your Chatbot?</h2>
-    <p>Join businesses using Lumvi to automate support and capture more leads — free for 7 days.</p>
-    <div class="btn-row">
-      <a href="/signup" class="btn btn-primary">Start Free Trial →</a>
-      <a href="/sales#pricing" class="btn btn-secondary">View Pricing</a>
+<!-- ══════════════════════ REVENUE MODEL ══════════════════════ -->
+<section id="revenue">
+  <div class="container">
+    <div class="tag rev-tag fade-up"><span class="tag-dot"></span>The Revenue Model</div>
+    <h2 class="rev-h2 fade-up">Make More From Every Client You Already Have</h2>
+    <p class="rev-sub fade-up">Add a new recurring revenue stream to your agency without adding headcount. Lumvi is your productized AI service.</p>
+    <div class="rev-grid fade-up">
+      <div class="rev-card">
+        <div class="rev-num">$99</div>
+        <div class="rev-label">Your Lumvi plan</div>
+        <div class="rev-desc">Manage unlimited client chatbots. All the AI, analytics, and white-label features included.</div>
+      </div>
+      <div class="rev-card" style="border-color:rgba(184,146,74,0.3);">
+        <div class="rev-num">$299<span style="font-size:22px;color:rgba(255,255,255,0.4);">/client</span></div>
+        <div class="rev-label">What you charge clients</div>
+        <div class="rev-desc">Position it as a premium "AI-powered chatbot service" under your brand. Most agencies charge $299–$999/mo per client.</div>
+      </div>
+      <div class="rev-card">
+        <div class="rev-num" style="color:#4ADE80;">$3,500<span style="font-size:22px;color:rgba(255,255,255,0.4);">/mo</span></div>
+        <div class="rev-label">Revenue from 12 clients</div>
+        <div class="rev-desc">12 clients at $299/mo = $3,588/mo. Your cost: $99/mo. Net profit: $3,489 every single month.</div>
+      </div>
     </div>
-    <p class="cta-fine">No credit card required · 7-day free trial · Cancel anytime</p>
+    <div class="rev-calc fade-up">
+      <div class="rev-calc-h">Revenue Calculator</div>
+      <div class="rev-calc-sub">Based on 12 clients at $299/month</div>
+      <div class="rev-calc-row"><span class="rev-calc-lbl">Monthly client revenue</span><span class="rev-calc-val">12 × $299 = $3,588</span></div>
+      <div class="rev-calc-row"><span class="rev-calc-lbl">Your Lumvi subscription</span><span class="rev-calc-val" style="color:rgba(255,255,255,0.5);">− $99</span></div>
+      <div class="rev-calc-row"><span class="rev-calc-lbl" style="color:#fff;font-weight:700;">Net monthly profit</span><span class="rev-calc-val success">$3,489 / month</span></div>
+      <div class="rev-calc-row"><span class="rev-calc-lbl" style="color:#fff;font-weight:700;">Annual profit</span><span class="rev-calc-val gold">$41,868 / year</span></div>
+    </div>
   </div>
+</section>
 
-</div>
+<!-- ══════════════════════ HOW IT WORKS ══════════════════════ -->
+<section id="how">
+  <div class="container">
+    <div class="tag fade-up" style="margin:0 auto 18px;display:table;"><span class="tag-dot"></span>Simple Setup</div>
+    <h2 class="how-h2 fade-up">Three Steps to Your First Paying Client</h2>
+    <p class="how-sub fade-up">From signup to live chatbot on your client's website in under 30 minutes. No dev team, no API wrangling.</p>
+    <div class="how-steps">
+      <div class="step-card fade-up">
+        <div class="step-num">1</div>
+        <h3 class="step-h">Create & Train Your Chatbot</h3>
+        <p class="step-p">Choose a vertical (law, dental, real estate…). Upload FAQs, a knowledge base, or just describe the business. Lumvi's RAG engine handles the rest.</p>
+      </div>
+      <div class="step-card fade-up fade-delay-1">
+        <div class="step-num">2</div>
+        <h3 class="step-h">Brand It Completely as Your Own</h3>
+        <p class="step-p">Upload your logo and your client's logo. Set custom colors. Remove all Lumvi branding. Point a custom domain like chat.clientname.com. It's 100% yours.</p>
+      </div>
+      <div class="step-card fade-up fade-delay-2">
+        <div class="step-num">3</div>
+        <h3 class="step-h">Embed & Start Earning</h3>
+        <p class="step-p">Paste a 2-line script tag on the client's website. Leads start flowing into your dashboard. Invoice the client. Repeat across your entire book of business.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
-<!-- Live demo widget -->
+<!-- ══════════════════════ LIVE DEMO ══════════════════════ -->
+<section id="demo">
+  <div class="container">
+    <div class="demo-header fade-up">
+      <div class="tag" style="margin:0 auto 16px;display:table;"><span class="tag-dot"></span>Live Interactive Demo</div>
+      <h2 class="demo-h2">See the Bot in Action — Across Every Vertical</h2>
+      <p class="demo-sub">Switch between industries and watch how Lumvi adapts its personality, tone, and knowledge base in real time.</p>
+    </div>
+    <div class="demo-tabs fade-up">
+      <button class="demo-tab active" onclick="switchDemo('realestate',this)">🏠 Real Estate</button>
+      <button class="demo-tab" onclick="switchDemo('lawfirm',this)">⚖️ Law Firm</button>
+      <button class="demo-tab" onclick="switchDemo('dental',this)">🦷 Dental</button>
+      <button class="demo-tab" onclick="switchDemo('saas',this)">💻 SaaS</button>
+      <button class="demo-tab" onclick="switchDemo('ecommerce',this)">🛍️ E-Commerce</button>
+    </div>
+    <div class="demo-stage fade-up">
+      <div class="demo-info">
+        <div class="demo-vertical-name" id="demoTitle">Premier Properties</div>
+        <div class="demo-vertical-desc" id="demoDesc">A real estate chatbot that qualifies leads, answers questions about listings, and books property viewings — all without a human agent needing to be available 24/7.</div>
+        <div class="demo-features" id="demoFeatures">
+          <div class="demo-feat"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Qualifies buyers vs renters automatically</div>
+          <div class="demo-feat"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Books property viewing appointments</div>
+          <div class="demo-feat"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Answers price, area, and availability questions</div>
+          <div class="demo-feat"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>Captures lead contact details seamlessly</div>
+        </div>
+      </div>
+      <div class="demo-widget-wrap">
+        <div class="demo-widget-frame" id="demoWidget">
+          <div class="dw-header">
+            <div class="dw-av"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
+            <div><div class="dw-name" id="widgetName">Premier Properties</div><div class="dw-status">AI Assistant · Always Online</div></div>
+          </div>
+          <div class="dw-body" id="demoMessages">
+            <div class="chat-msg">
+              <div class="chat-av"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+              <div class="chat-bub" id="demoWelcome">Hi! Looking to buy, rent, or just exploring? I can help with listings, pricing, and viewings.</div>
+            </div>
+          </div>
+          <div class="dw-chips" id="demoChips">
+            <span class="dw-chip">View listings</span>
+            <span class="dw-chip">Book a viewing</span>
+            <span class="dw-chip">Pricing info</span>
+          </div>
+          <div class="dw-input-row">
+            <input class="dw-input" id="demoInput" type="text" placeholder="Ask a question…">
+            <button class="dw-send" onclick="sendDemoMsg()"><svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Embed note -->
+    <div style="margin-top:48px;background:var(--cream);border:1px solid var(--border);border-radius:16px;padding:24px 28px;" class="fade-up">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--sub);margin-bottom:10px;">Embedding is 2 lines of code</div>
+      <pre style="background:#1C1917;color:#D4C4A8;padding:16px 20px;border-radius:10px;font-family:'DM Mono',monospace;font-size:13px;overflow-x:auto;"><code>&lt;script src="https://lumvi.net/static/widget.js"
+        data-client-id="<span style="color:#B8924A;">YOUR_CLIENT_ID</span>"&gt;&lt;/script&gt;</code></pre>
+      <p style="font-size:13px;color:var(--sub);margin-top:10px;">Paste before <code style="font-family:'DM Mono',monospace;font-size:12px;background:var(--cream2);padding:1px 6px;border-radius:4px;">&lt;/body&gt;</code> on any website. Supports WordPress, Webflow, Shopify, Squarespace, raw HTML — anything.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ WHITE-LABEL ══════════════════════ -->
+<section id="whitelabel">
+  <div class="container">
+    <div class="wl-header fade-up">
+      <div class="tag" style="margin:0 auto 16px;display:table;"><span class="tag-dot"></span>Deep White-Label</div>
+      <h2 class="wl-h2">Your Clients Will Never Know It's Lumvi</h2>
+      <p class="wl-sub">Every touchpoint — the widget, the emails, the client portal — carries your brand, not ours.</p>
+    </div>
+    <div class="wl-grid">
+      <div class="wl-card fade-up">
+        <div class="wl-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+        <h3 class="wl-h3">Custom Domain</h3>
+        <p class="wl-p">Point chat.clientname.com or ai.youragency.com directly to Lumvi's infrastructure. Your CNAME, your brand.</p>
+        <div class="wl-domain-preview">ai.youragency.com/widget.js</div>
+      </div>
+      <div class="wl-card fade-up fade-delay-1">
+        <div class="wl-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg></div>
+        <h3 class="wl-h3">Full Visual Branding</h3>
+        <p class="wl-p">Upload your logo and your client's logo. Set primary colors, bot avatar, welcome message, and widget style. Every client looks unique.</p>
+      </div>
+      <div class="wl-card fade-up fade-delay-2">
+        <div class="wl-icon"><svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12"/></svg></div>
+        <h3 class="wl-h3">Branded Email Notifications</h3>
+        <p class="wl-p">Lead alert emails arrive from <em>notifications@youragency.com</em> — not Lumvi. Your clients see your brand at every touchpoint.</p>
+      </div>
+      <div class="wl-card fade-up">
+        <div class="wl-icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <h3 class="wl-h3">Agency Client Portal</h3>
+        <p class="wl-p">Give each client a branded read-only portal to view their leads, FAQs, and analytics. They log in through your domain.</p>
+      </div>
+      <div class="wl-card fade-up fade-delay-1">
+        <div class="wl-icon"><svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+        <h3 class="wl-h3">Remove All Lumvi Branding</h3>
+        <p class="wl-p">The "Powered by Lumvi" footer badge? Gone. On Agency and Enterprise plans, your chatbots are 100% unbranded. Pure white-label.</p>
+      </div>
+      <div class="wl-card fade-up fade-delay-2">
+        <div class="wl-icon"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <h3 class="wl-h3">Webhooks & Integrations</h3>
+        <p class="wl-p">Connect leads to Zapier, Make, or your CRM via webhooks. Every lead capture can trigger any workflow you already use.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ CUSTOMIZATION SHOWCASE ══════════════════════ -->
+<section id="showcase">
+  <div class="container">
+    <div class="sc-header fade-up">
+      <div class="tag" style="margin:0 auto 16px;display:table;"><span class="tag-dot"></span>Customization</div>
+      <h2 class="sc-h2">Every Bot Looks Exactly How You Want</h2>
+      <p class="sc-sub">Colors, avatar, welcome message, quick-reply chips — every detail is yours to control for every client.</p>
+    </div>
+    <div class="sc-grid fade-up">
+      <div class="sc-card">
+        <div class="sc-card-label">Widget Color</div>
+        <div class="color-swatches">
+          <div class="swatch active" style="background:#B8924A;"></div>
+          <div class="swatch" style="background:#2563EB;"></div>
+          <div class="swatch" style="background:#16A34A;"></div>
+          <div class="swatch" style="background:#DC2626;"></div>
+          <div class="swatch" style="background:#7C3AED;"></div>
+          <div class="swatch" style="background:#0891B2;"></div>
+        </div>
+        <div style="margin-top:14px;padding:9px 12px;background:var(--white);border-radius:9px;font-size:12px;font-family:'DM Mono',monospace;color:var(--mid);border:1px solid var(--border);">#B8924A</div>
+      </div>
+      <div class="sc-card">
+        <div class="sc-card-label">Bot Avatar</div>
+        <div class="avatar-options">
+          <div class="avatar-opt active"><span>🤖</span></div>
+          <div class="avatar-opt"><span>💬</span></div>
+          <div class="avatar-opt"><span>🏠</span></div>
+          <div class="avatar-opt"><span>⚖️</span></div>
+          <div class="avatar-opt"><span>🦷</span></div>
+          <div class="avatar-opt" style="background:var(--gold-lt);border-color:var(--gold);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="sc-card">
+        <div class="sc-card-label">Welcome Message</div>
+        <div class="welcome-preview">"Hi! I'm the Acme Law assistant. Are you looking for help with a contract, dispute, or general inquiry?"</div>
+        <div style="margin-top:8px;font-size:11.5px;color:var(--sub);">Editable per client · up to 200 chars</div>
+      </div>
+      <div class="sc-card">
+        <div class="sc-card-label">Quick Replies</div>
+        <div class="qr-preview">
+          <div class="qr-chip-preview">📅 Book a viewing</div>
+          <div class="qr-chip-preview">💰 View pricing</div>
+          <div class="qr-chip-preview">📞 Contact agent</div>
+          <div class="qr-chip-preview">🔑 What areas?</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ SOCIAL PROOF ══════════════════════ -->
+<section id="proof">
+  <div class="container">
+    <div class="proof-header fade-up">
+      <div class="tag" style="margin:0 auto 16px;display:table;"><span class="tag-dot"></span>What Agencies Say</div>
+      <h2 style="font-family:'Fraunces',serif;font-size:clamp(34px,4vw,48px);font-weight:800;margin-bottom:12px;">Agencies Love the Margin</h2>
+    </div>
+    <div class="proof-grid">
+      <div class="proof-card fade-up">
+        <div class="proof-stars">⭐⭐⭐⭐⭐</div>
+        <p class="proof-quote">"I added 8 clients in the first month. We position it as a premium AI service and charge $399/mo per client. The ROI on the Lumvi subscription is insane."</p>
+        <div class="proof-author"><div class="proof-av">MK</div><div><div class="proof-name">Marcus K.</div><div class="proof-role">Founder, Apex Digital Agency</div></div></div>
+      </div>
+      <div class="proof-card fade-up fade-delay-1">
+        <div class="proof-stars">⭐⭐⭐⭐⭐</div>
+        <p class="proof-quote">"Our dental clients love it. One clinic told us it handled 73 new patient inquiries in the first week. They would never cancel now — that's pure recurring revenue for us."</p>
+        <div class="proof-author"><div class="proof-av">SR</div><div><div class="proof-name">Sarah R.</div><div class="proof-role">MD, Bright Agency Group</div></div></div>
+      </div>
+      <div class="proof-card fade-up fade-delay-2">
+        <div class="proof-stars">⭐⭐⭐⭐⭐</div>
+        <p class="proof-quote">"The white-label is seamless. My clients have no idea it's Lumvi — they think I built custom AI. The brand control is everything. Custom domain, my logo, my emails."</p>
+        <div class="proof-author"><div class="proof-av">TJ</div><div><div class="proof-name">Tom J.</div><div class="proof-role">CEO, Coastal Web Solutions</div></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ FINAL CTA ══════════════════════ -->
+<section id="cta">
+  <div class="container">
+    <div class="cta-inner">
+      <div class="tag rev-tag fade-up" style="margin:0 auto 20px;display:table;"><span class="tag-dot"></span>Start Today</div>
+      <h2 class="cta-h2 fade-up">Your First Client Could Be <em class="cta-em">Live This Week</em></h2>
+      <p class="cta-sub fade-up">No setup fees. No long-term contract. Start your free trial and have a fully branded AI chatbot running on your client's website in under 30 minutes.</p>
+      <div class="cta-btns fade-up">
+        <a href="/register" class="btn-cta-primary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Start Free Trial — No Card Needed
+        </a>
+        <a href="/demo" class="btn-cta-ghost">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Book a 10-min Demo
+        </a>
+      </div>
+      <p class="cta-note fade-up">7-day free trial · Cancel any time · Your clients live in &lt;30 min</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ FOOTER ══════════════════════ -->
+<footer>
+  <div class="footer-brand">
+    <div class="nav-logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg></div>
+    <span class="footer-brand-name">Lumvi</span>
+  </div>
+  <div class="footer-links">
+    <a href="/terms" class="footer-link">Terms</a>
+    <a href="/privacy-policy" class="footer-link">Privacy</a>
+    <a href="/contact" class="footer-link">Contact</a>
+    <a href="/upgrade" class="footer-link">Pricing</a>
+  </div>
+  <div class="footer-copy">© 2026 Lumvi. All rights reserved.</div>
+</footer>
+
 <script>
-(function(){
-  var s = document.createElement('script');
-  s.src = 'https://lumvi.net/static/widget.js';
-  s.setAttribute('data-client-id','demo');
-  document.body.appendChild(s);
-})();
+// ── NAV scroll effect ──────────────────────────────────────────────
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 20);
+}, {passive:true});
 
-function copyCode(btn) {
-  const code = `<script>\n(function(){\n  var s=document.createElement('script');\n  s.src='https://lumvi.net/widget.js';\n  s.setAttribute('data-client-id','your-id');\n  document.body.appendChild(s);\n})();\n<\/script>`;
-  navigator.clipboard.writeText(code).then(() => {
-    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg> Copied!';
-    setTimeout(() => {
-      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copy Embed Code';
-    }, 2000);
+// ── Scroll-triggered fade-up ──────────────────────────────────────
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, {threshold: 0.1, rootMargin: '0px 0px -40px 0px'});
+document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+// ── DEMO vertical data ────────────────────────────────────────────
+const verticals = {
+  realestate: {
+    name: 'Premier Properties',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>',
+    color: '#B8924A',
+    welcome: "Hi! Looking to buy, rent, or just exploring? I can help with listings, pricing, and viewings.",
+    chips: ['View listings','Book a viewing','Pricing info'],
+    title: 'Premier Properties',
+    desc: 'A real estate chatbot that qualifies leads, answers questions about listings, and books property viewings — all without a human agent.',
+    features: ['Qualifies buyers vs renters automatically','Books property viewing appointments','Answers price, area, and availability questions','Captures lead contact details seamlessly'],
+  },
+  lawfirm: {
+    name: 'Wilson Law Group',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/></svg>',
+    color: '#1C3A5E',
+    welcome: "Welcome to Wilson Law Group. I can help with consultations, case information, or connect you with our team.",
+    chips: ['Book consultation','Practice areas','Emergency contact'],
+    title: 'Wilson Law Group',
+    desc: 'A law firm intake bot that captures new case enquiries, explains practice areas, and books consultations — 24/7.',
+    features: ['Screens and qualifies new client inquiries','Books free 30-minute consultations','Explains practice areas and fees','Routes urgent matters appropriately'],
+  },
+  dental: {
+    name: 'City Smile Dental',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>',
+    color: '#0891B2',
+    welcome: "Hi there! I'm the City Smile Dental assistant. Need to book an appointment or have a question about our treatments?",
+    chips: ['Book appointment','Teeth whitening','Emergency dental'],
+    title: 'City Smile Dental',
+    desc: 'A dental clinic bot that books appointments, answers treatment questions, and reassures anxious patients — before they even pick up the phone.',
+    features: ['Books new patient appointments instantly','Answers questions about treatments and pricing','Sends post-appointment care reminders','Handles after-hours enquiries automatically'],
+  },
+  saas: {
+    name: 'Stackflow Support',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+    color: '#7C3AED',
+    welcome: "Hey! 👋 Need help with Stackflow? I can help with setup, billing, integrations, or technical questions.",
+    chips: ['Start free trial','View pricing','API docs'],
+    title: 'Stackflow SaaS',
+    desc: 'A SaaS support bot that handles tier-1 support, product questions, and trial conversions — so your team focuses on complex tickets.',
+    features: ['Answers product and feature questions instantly','Guides new users through onboarding steps','Handles billing and upgrade enquiries','Escalates complex issues to human support'],
+  },
+  ecommerce: {
+    name: 'Luna Boutique',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>',
+    color: '#BE185D',
+    welcome: "Welcome to Luna Boutique! 🛍️ Can I help you find something, track an order, or answer a question?",
+    chips: ['Track my order','Returns policy','New arrivals'],
+    title: 'Luna Boutique',
+    desc: 'An e-commerce assistant that handles order tracking, returns, product questions, and upsells — reducing support volume by 60%.',
+    features: ['Handles order tracking and status updates','Explains returns and refunds policy clearly','Recommends products based on preferences','Reduces support ticket volume by 60%+'],
+  },
+};
+
+let currentVertical = 'realestate';
+let demoConvo = [];
+
+function switchDemo(key, btn) {
+  currentVertical = key;
+  document.querySelectorAll('.demo-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const v = verticals[key];
+  document.getElementById('demoTitle').textContent   = v.title;
+  document.getElementById('demoDesc').textContent    = v.desc;
+  document.getElementById('widgetName').textContent  = v.name;
+  document.getElementById('demoWelcome').textContent = v.welcome;
+  document.getElementById('demoFeatures').innerHTML  = v.features.map(f => `<div class="demo-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>${f}</div>`).join('');
+  document.querySelector('.dw-header').style.background = v.color;
+  document.querySelector('.dw-av').innerHTML = v.icon;
+  document.getElementById('demoChips').innerHTML = v.chips.map(c => `<span class="dw-chip">${c}</span>`).join('');
+  // Reset messages
+  document.getElementById('demoMessages').innerHTML = `
+    <div class="chat-msg">
+      <div class="chat-av">${v.icon}</div>
+      <div class="chat-bub" id="demoWelcome">${v.welcome}</div>
+    </div>`;
+  document.querySelectorAll('.dw-send,.dw-chip').forEach(el => {
+    el.style.background = v.color;
+  });
+  document.querySelectorAll('.dw-chip').forEach(c => {
+    c.style.color = v.color === '#1C3A5E' || v.color === '#7C3AED' || v.color === '#BE185D' ? v.color : 'var(--gold-dk)';
+    c.style.borderColor = v.color + '44';
+    c.style.background  = v.color + '18';
   });
 }
+
+function sendDemoMsg() {
+  const input = document.getElementById('demoInput');
+  const msg   = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  const msgs = document.getElementById('demoMessages');
+  const v    = verticals[currentVertical];
+  // Add user message
+  msgs.innerHTML += `<div class="chat-msg" style="flex-direction:row-reverse;"><div class="chat-bub" style="background:${v.color};color:#fff;">${esc(msg)}</div></div>`;
+  // Typing indicator
+  const typingId = 'typing_' + Date.now();
+  msgs.innerHTML += `<div class="chat-msg" id="${typingId}"><div class="chat-av">${v.icon}</div><div class="demo-typing"><div class="td"></div><div class="td"></div><div class="td"></div></div></div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+  // Simulate response
+  setTimeout(() => {
+    document.getElementById(typingId)?.remove();
+    const reply = getDemoReply(msg, currentVertical);
+    msgs.innerHTML += `<div class="chat-msg"><div class="chat-av">${v.icon}</div><div class="chat-bub">${reply}</div></div>`;
+    msgs.scrollTop = msgs.scrollHeight;
+  }, 1200);
+}
+
+function getDemoReply(msg, vertical) {
+  const m = msg.toLowerCase();
+  const replies = {
+    realestate: {
+      default: "Great question! Our agents are available to discuss that. Could I get your name and email to arrange a callback or viewing?",
+      price:   "Our current listings range from $280K to $1.2M depending on the area. Would you like me to narrow it down by budget or location?",
+      book:    "I'd be happy to book a viewing! Which property are you interested in, and what dates work best for you?",
+    },
+    lawfirm: {
+      default: "Thank you for reaching out. Our attorneys can advise on that. Would you like to book a free 30-minute consultation?",
+      cost:    "Our fees vary by case type. Contract disputes typically start at a $500 consultation. Personal injury cases are handled on contingency.",
+      consult: "We have availability this week. Can I take your name and email to confirm a 30-minute consultation slot?",
+    },
+    dental: {
+      default: "Happy to help! Our team can answer that in detail. Would you like to book an appointment or speak with our receptionist?",
+      price:   "Teeth whitening starts at $299 for in-chair treatment. We also offer flexible payment plans. Would you like to book a consultation?",
+      book:    "We have openings this week! What's your name and preferred contact number so we can confirm your appointment?",
+    },
+    saas: {
+      default: "Good question! Here's how that works in Stackflow… You can find the full details in our docs, or I can walk you through it.",
+      price:   "Our Pro plan is $49/mo for unlimited seats, and Enterprise starts at $199/mo with custom SLAs. Want me to compare them for you?",
+      trial:   "Absolutely! You can start a 7-day free trial right now — no credit card required. Just click 'Start Free Trial' above.",
+    },
+    ecommerce: {
+      default: "Let me help with that! For specific order questions, I'll need your order number. What's the 6-digit code from your confirmation email?",
+      return:  "Our returns policy is 30 days from delivery. Items must be unworn with tags attached. Would you like to start a return?",
+      track:   "I can look that up! What's your order number? It starts with #LB and you'll find it in your confirmation email.",
+    },
+  };
+  const set = replies[vertical];
+  if (!set) return "Thanks for your message! Let me connect you with our team for the best answer.";
+  if (m.includes('price') || m.includes('cost') || m.includes('how much') || m.includes('fee')) return set.price || set.default;
+  if (m.includes('book') || m.includes('appointment') || m.includes('schedule') || m.includes('visit')) return set.book || set.consult || set.default;
+  if (m.includes('trial') || m.includes('free') || m.includes('start')) return set.trial || set.default;
+  if (m.includes('return') || m.includes('refund') || m.includes('policy')) return set.return || set.default;
+  if (m.includes('track') || m.includes('order') || m.includes('status')) return set.track || set.default;
+  return set.default;
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Wire send on Enter
+document.getElementById('demoInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') sendDemoMsg();
+});
+
+// Wire chip clicks
+document.getElementById('demoChips').addEventListener('click', e => {
+  const chip = e.target.closest('.dw-chip');
+  if (!chip) return;
+  document.getElementById('demoInput').value = chip.textContent;
+  sendDemoMsg();
+});
+
+// Swatch demo interaction
+document.querySelectorAll('.swatch').forEach(sw => {
+  sw.addEventListener('click', function() {
+    document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+// Avatar demo interaction
+document.querySelectorAll('.avatar-opt').forEach(av => {
+  av.addEventListener('click', function() {
+    document.querySelectorAll('.avatar-opt').forEach(a => a.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
 </script>
 </body>
 </html>

@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Get Started — Lumvi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
+  --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;--gold-glow:rgba(184,146,74,0.22);
+  --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#fff;
+  --success:#16A34A;--success-lt:#F0FDF4;
+  --danger:#EF4444;
+  --radius:14px;--shadow:0 2px 8px rgba(0,0,0,0.06),0 8px 28px rgba(0,0,0,0.05);
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;
+  display:flex;flex-direction:column;}
+
+/* ── TOP STRIP ── */
+.top-strip{background:var(--white);border-bottom:1px solid var(--border);padding:0 28px;height:58px;
+  display:flex;align-items:center;justify-content:space-between;}
+.brand{display:flex;align-items:center;gap:8px;text-decoration:none;}
+.brand-icon{width:30px;height:30px;background:var(--gold);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;}
+.brand-icon svg{width:15px;height:15px;stroke:#fff;stroke-width:2;fill:none;}
+.brand-name{font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--dark);}
+.skip-btn{font-size:13px;color:var(--sub);cursor:pointer;padding:6px 12px;border-radius:8px;
+  border:1px solid var(--border);background:var(--white);transition:all 0.15s;}
+.skip-btn:hover{color:var(--dark);border-color:var(--mid);}
+
+/* ── PROGRESS BAR ── */
+.progress-wrap{background:var(--white);border-bottom:1px solid var(--border);padding:20px 28px 0;}
+.progress-top{display:flex;align-items:center;justify-content:space-between;max-width:680px;margin:0 auto 14px;}
+.progress-label{font-size:12.5px;font-weight:600;color:var(--sub);}
+.progress-label span{color:var(--dark);}
+.steps-dots{display:flex;align-items:center;gap:0;}
+.step-dot{width:28px;height:28px;border-radius:50%;border:2px solid var(--border);background:var(--white);
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;
+  color:var(--sub);transition:all 0.25s;position:relative;z-index:1;}
+.step-dot.done{background:var(--success);border-color:var(--success);color:#fff;}
+.step-dot.active{background:var(--gold);border-color:var(--gold);color:#fff;
+  box-shadow:0 0 0 4px var(--gold-lt);}
+.step-connector{width:52px;height:2px;background:var(--border);transition:background 0.25s;}
+.step-connector.done{background:var(--success);}
+.progress-bar-track{height:3px;background:var(--panel);border-radius:2px;max-width:680px;margin:0 auto;}
+.progress-bar-fill{height:100%;background:var(--gold);border-radius:2px;transition:width 0.4s ease;}
+
+/* ── MAIN LAYOUT ── */
+.wizard-body{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:40px 20px 60px;}
+.wizard-container{width:100%;max-width:680px;}
+
+/* ── STEP PANELS ── */
+.step-panel{display:none;}
+.step-panel.active{display:block;animation:fadeIn 0.25s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+.step-eyebrow{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.09em;
+  color:var(--gold);margin-bottom:8px;}
+.step-h{font-family:'Fraunces',serif;font-size:28px;font-weight:700;color:var(--dark);
+  margin-bottom:8px;letter-spacing:-0.3px;}
+.step-sub{font-size:15px;color:var(--mid);line-height:1.65;margin-bottom:28px;}
+
+/* ── CARDS & FIELDS ── */
+.card{background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);
+  padding:24px;box-shadow:var(--shadow);margin-bottom:16px;}
+.field{margin-bottom:18px;}
+.field:last-child{margin-bottom:0;}
+.field label{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase;
+  letter-spacing:0.07em;color:var(--mid);margin-bottom:6px;}
+.field input,.field textarea,.field select{
+  width:100%;padding:11px 14px;border:1.5px solid var(--border);border-radius:10px;
+  font-size:14px;font-family:'DM Sans',sans-serif;color:var(--dark);background:var(--cream);
+  outline:none;transition:all 0.2s;}
+.field input:focus,.field textarea:focus,.field select:focus{
+  border-color:var(--gold);background:var(--white);box-shadow:0 0 0 3px var(--gold-lt);}
+.field textarea{resize:vertical;min-height:80px;line-height:1.5;}
+.hint{font-size:12px;color:var(--sub);margin-top:5px;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+
+/* ── VERTICAL PICKER ── */
+.vertical-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+@media(max-width:500px){.vertical-grid{grid-template-columns:repeat(2,1fr);}}
+.vertical-card{border:1.5px solid var(--border);border-radius:12px;padding:16px 14px;
+  cursor:pointer;transition:all 0.18s;text-align:center;background:var(--white);}
+.vertical-card:hover{border-color:var(--gold);background:var(--gold-lt);}
+.vertical-card.selected{border-color:var(--gold);background:var(--gold-lt);
+  box-shadow:0 0 0 3px var(--gold-lt);}
+.vc-icon{font-size:28px;margin-bottom:7px;line-height:1;}
+.vc-name{font-size:13px;font-weight:700;color:var(--dark);}
+.vc-desc{font-size:11px;color:var(--sub);margin-top:3px;line-height:1.4;}
+
+/* ── COLOR PICKER ROW ── */
+.color-row{display:flex;align-items:center;gap:10px;}
+.color-swatch-pick{width:44px;height:44px;border-radius:10px;border:2px solid var(--border);
+  cursor:pointer;padding:2px;background:transparent;}
+.color-text{flex:1;font-family:'DM Mono',monospace;}
+
+/* ── FAQ EDITOR ── */
+.faq-list-edit{display:flex;flex-direction:column;gap:10px;margin-bottom:12px;}
+.faq-item-edit{background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:14px;}
+.faq-item-edit-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.faq-q-edit{font-weight:600;font-size:13.5px;color:var(--dark);flex:1;line-height:1.4;}
+.faq-a-edit{font-size:12.5px;color:var(--mid);margin-top:5px;line-height:1.5;}
+.faq-badge{padding:2px 8px;background:var(--gold-lt);color:var(--gold-dk);border-radius:20px;
+  font-size:10.5px;font-weight:700;flex-shrink:0;}
+.btn-rm-faq{width:24px;height:24px;border-radius:6px;border:none;background:transparent;
+  color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:all 0.15s;}
+.btn-rm-faq:hover{background:var(--danger);color:#fff;}
+.btn-rm-faq svg{width:12px;height:12px;}
+.btn-add-faq{width:100%;padding:10px;border:1.5px dashed var(--border);border-radius:10px;
+  background:transparent;color:var(--sub);font-size:13px;font-weight:600;cursor:pointer;
+  font-family:'DM Sans',sans-serif;transition:all 0.15s;display:flex;align-items:center;
+  justify-content:center;gap:6px;}
+.btn-add-faq:hover{border-color:var(--gold);color:var(--gold-dk);background:var(--gold-lt);}
+
+/* ── LIVE PREVIEW ── */
+.preview-wrap{position:sticky;top:24px;display:none;}
+.preview-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;
+  color:var(--sub);margin-bottom:10px;}
+.widget-preview{border-radius:16px;overflow:hidden;border:1px solid var(--border);
+  box-shadow:0 12px 40px rgba(0,0,0,0.1);max-width:280px;margin:0 auto;}
+.wp-header{padding:14px 16px;display:flex;align-items:center;gap:10px;transition:background 0.3s;}
+.wp-av{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.2);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;}
+.wp-name{font-size:14px;font-weight:700;color:#fff;}
+.wp-status{font-size:11px;color:rgba(255,255,255,0.65);}
+.wp-body{background:var(--cream);padding:14px;min-height:130px;}
+.wp-bubble{background:var(--white);border-radius:12px;padding:10px 13px;font-size:12.5px;
+  color:var(--dark);line-height:1.5;box-shadow:0 1px 4px rgba(0,0,0,0.06);max-width:220px;}
+.wp-input-row{display:flex;gap:7px;padding:10px;background:var(--white);border-top:1px solid var(--border);}
+.wp-input-field{flex:1;padding:8px 11px;border:1.5px solid var(--border);border-radius:8px;
+  font-size:12px;font-family:'DM Sans',sans-serif;color:var(--dark);}
+.wp-send-btn{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;
+  justify-content:center;border:none;cursor:pointer;flex-shrink:0;transition:background 0.3s;}
+.wp-send-btn svg{width:13px;height:13px;stroke:#fff;stroke-width:2;fill:none;}
+
+/* ── EMBED CODE BLOCK ── */
+.embed-block{background:#1C1917;border-radius:12px;padding:16px 18px;
+  font-family:'DM Mono',monospace;font-size:12.5px;color:#D4C4A8;line-height:1.7;
+  white-space:pre-wrap;word-break:break-all;position:relative;margin-bottom:14px;}
+.copy-btn{position:absolute;top:10px;right:10px;padding:5px 12px;background:rgba(255,255,255,0.12);
+  color:rgba(255,255,255,0.7);border:1px solid rgba(255,255,255,0.15);border-radius:7px;
+  font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;}
+.copy-btn:hover{background:rgba(255,255,255,0.2);}
+
+/* ── SUCCESS PANEL ── */
+.success-icon{width:72px;height:72px;border-radius:20px;background:var(--success-lt);
+  display:flex;align-items:center;justify-content:center;margin:0 auto 20px;}
+.success-icon svg{width:32px;height:32px;stroke:var(--success);stroke-width:2;fill:none;}
+.success-links{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px;}
+.success-link{display:flex;align-items:center;gap:10px;padding:14px 16px;
+  background:var(--cream);border:1.5px solid var(--border);border-radius:12px;
+  text-decoration:none;color:var(--mid);font-size:13.5px;font-weight:600;transition:all 0.15s;}
+.success-link:hover{border-color:var(--gold);color:var(--gold-dk);}
+.success-link svg{width:16px;height:16px;stroke:currentColor;stroke-width:2;fill:none;flex-shrink:0;}
+
+/* ── NAVIGATION BUTTONS ── */
+.nav-btns{display:flex;align-items:center;justify-content:space-between;margin-top:24px;}
+.btn-back{padding:10px 20px;background:var(--white);color:var(--mid);border:1.5px solid var(--border);
+  border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;
+  transition:all 0.15s;display:flex;align-items:center;gap:6px;}
+.btn-back:hover{border-color:var(--mid);color:var(--dark);}
+.btn-next{padding:12px 28px;background:var(--gold);color:#fff;border-radius:10px;
+  font-size:14.5px;font-weight:700;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;
+  box-shadow:0 3px 12px var(--gold-glow);transition:all 0.2s;display:flex;align-items:center;gap:7px;}
+.btn-next:hover{background:var(--gold-dk);transform:translateY(-1px);}
+.btn-next:disabled{opacity:0.5;cursor:not-allowed;transform:none;}
+.btn-next svg{width:14px;height:14px;}
+.btn-next.wide{width:100%;justify-content:center;}
+
+/* ── SPINNER ── */
+.spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,0.35);
+  border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);
+  padding:11px 18px;border-radius:10px;font-size:13.5px;font-weight:600;color:#fff;
+  z-index:9999;opacity:0;transition:all 0.3s;pointer-events:none;
+  display:flex;align-items:center;gap:7px;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.success{background:var(--success);}
+.toast.error{background:var(--danger);}
+
+@media(max-width:640px){
+  .field-row{grid-template-columns:1fr;}
+  .success-links{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP STRIP -->
+<div class="top-strip">
+  <a href="/dashboard" class="brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    </div>
+    <span class="brand-name">Lumvi</span>
+  </a>
+  <button class="skip-btn" onclick="skipOnboarding()">Skip setup</button>
+</div>
+
+<!-- PROGRESS BAR -->
+<div class="progress-wrap">
+  <div class="progress-top">
+    <div class="progress-label">Step <span id="stepLabel">1</span> of 5</div>
+    <div class="steps-dots">
+      <div class="step-dot active" id="dot1">1</div>
+      <div class="step-connector" id="con1"></div>
+      <div class="step-dot" id="dot2">2</div>
+      <div class="step-connector" id="con2"></div>
+      <div class="step-dot" id="dot3">3</div>
+      <div class="step-connector" id="con3"></div>
+      <div class="step-dot" id="dot4">4</div>
+      <div class="step-connector" id="con4"></div>
+      <div class="step-dot" id="dot5">5</div>
+    </div>
+  </div>
+  <div class="progress-bar-track">
+    <div class="progress-bar-fill" id="progressFill" style="width:20%"></div>
+  </div>
+</div>
+
+<!-- WIZARD BODY -->
+<div class="wizard-body">
+<div class="wizard-container">
+
+  <!-- ══ STEP 1: WELCOME ══ -->
+  <div class="step-panel active" id="step1">
+    <div class="step-eyebrow">Welcome to Lumvi</div>
+    <h2 class="step-h">Let's get you to your first chatbot 🚀</h2>
+    <p class="step-sub">This takes less than 8 minutes. We'll create your first AI chatbot, brand it for your client, and give you the embed code. Ready?</p>
+
+    <div class="card">
+      <div class="field">
+        <label>Your Agency Name</label>
+        <input type="text" id="agencyName" placeholder="e.g. Apex Digital Agency"
+          oninput="updatePreviewName(this.value)">
+        <p class="hint">This is how Lumvi refers to your agency internally.</p>
+      </div>
+      <div class="field">
+        <label>Your First Client's Company Name</label>
+        <input type="text" id="clientName" placeholder="e.g. Acme Law Firm"
+          oninput="updatePreviewClient(this.value)">
+        <p class="hint">You can add more clients after setup. Start with one.</p>
+      </div>
+    </div>
+
+    <div class="nav-btns">
+      <div></div>
+      <button class="btn-next" onclick="goToStep(2)">
+        Let's Go
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ STEP 2: VERTICAL ══ -->
+  <div class="step-panel" id="step2">
+    <div class="step-eyebrow">Step 2 of 5</div>
+    <h2 class="step-h">What kind of business is your client?</h2>
+    <p class="step-sub">Lumvi tailors the AI's tone, FAQs, and lead capture to match the industry. Pick the closest match.</p>
+
+    <div class="vertical-grid" id="verticalGrid">
+      <!-- Populated by JS -->
+    </div>
+    <p class="hint" style="margin-top:12px;">We'll pre-load relevant sample FAQs based on your selection.</p>
+
+    <div class="nav-btns">
+      <button class="btn-back" onclick="goToStep(1)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        Back
+      </button>
+      <button class="btn-next" id="nextStep2" onclick="goToStep(3)" disabled>
+        Continue
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ STEP 3: BRANDING ══ -->
+  <div class="step-panel" id="step3">
+    <div class="step-eyebrow">Step 3 of 5</div>
+    <h2 class="step-h">Brand the chatbot</h2>
+    <p class="step-sub">Customise how the widget looks on your client's website. It will appear completely as your client's own assistant.</p>
+
+    <div class="card">
+      <div class="field-row">
+        <div class="field">
+          <label>Bot Name</label>
+          <input type="text" id="botName" placeholder="e.g. Acme Assistant"
+            oninput="updatePreview()">
+        </div>
+        <div class="field">
+          <label>Widget Color</label>
+          <div class="color-row">
+            <input type="color" class="color-swatch-pick" id="colorPick" value="#B8924A"
+              oninput="syncColor(this.value)">
+            <input type="text" class="field color-text" id="colorText" value="#B8924A"
+              oninput="syncColorText(this.value)"
+              style="margin:0;padding:10px 12px;border-radius:10px;">
+          </div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Welcome Message</label>
+        <textarea id="welcomeMsg" rows="2"
+          placeholder="Hi! I'm here to help. What can I do for you today?"
+          oninput="updatePreview()"></textarea>
+        <p class="hint">The first message visitors see when they open the chat.</p>
+      </div>
+    </div>
+
+    <!-- Live Preview -->
+    <div style="margin-top:4px;">
+      <div class="preview-label">Live Preview</div>
+      <div class="widget-preview">
+        <div class="wp-header" id="wpHeader" style="background:#B8924A;">
+          <div class="wp-av" id="wpAv">🤖</div>
+          <div>
+            <div class="wp-name" id="wpName">Acme Assistant</div>
+            <div class="wp-status">Typically replies instantly</div>
+          </div>
+        </div>
+        <div class="wp-body">
+          <div class="wp-bubble" id="wpBubble">Hi! I'm here to help. What can I do for you today?</div>
+        </div>
+        <div class="wp-input-row">
+          <div class="wp-input-field" style="color:var(--sub);">Type a message…</div>
+          <div class="wp-send-btn" id="wpSend" style="background:#B8924A;">
+            <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-btns">
+      <button class="btn-back" onclick="goToStep(2)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        Back
+      </button>
+      <button class="btn-next" onclick="goToStep(4)">
+        Looks Good
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ STEP 4: FAQs ══ -->
+  <div class="step-panel" id="step4">
+    <div class="step-eyebrow">Step 4 of 5</div>
+    <h2 class="step-h">Review your starter FAQs</h2>
+    <p class="step-sub">We've pre-loaded <span id="faqCountLabel">8</span> sample FAQs based on the industry you selected. Edit, remove, or add your own — you can always add more later.</p>
+
+    <div class="card">
+      <div class="faq-list-edit" id="faqEditList">
+        <!-- populated by JS -->
+      </div>
+      <button class="btn-add-faq" onclick="addCustomFaq()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add a FAQ
+      </button>
+    </div>
+
+    <div class="nav-btns">
+      <button class="btn-back" onclick="goToStep(3)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+        Back
+      </button>
+      <button class="btn-next" id="createBtn" onclick="createClient()">
+        Create Chatbot
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ══ STEP 5: EMBED & DONE ══ -->
+  <div class="step-panel" id="step5">
+    <div style="text-align:center;margin-bottom:28px;">
+      <div class="success-icon">
+        <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="step-eyebrow" style="text-align:center;">You're all set!</div>
+      <h2 class="step-h" style="text-align:center;">Your chatbot is live 🎉</h2>
+      <p class="step-sub" style="text-align:center;">Paste this code on your client's website and the chatbot appears instantly. You can customise everything further from the dashboard.</p>
+    </div>
+
+    <div class="card">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--sub);margin-bottom:10px;">
+        Paste before &lt;/body&gt; on your client's website
+      </div>
+      <div class="embed-block" id="embedCodeBlock">
+        <button class="copy-btn" onclick="copyEmbed()">Copy</button>
+        <span id="embedCode"></span>
+      </div>
+      <p style="font-size:12.5px;color:var(--sub);">Works with WordPress, Webflow, Shopify, Squarespace, Wix, and any raw HTML site.</p>
+    </div>
+
+    <div class="success-links">
+      <a href="/dashboard" class="success-link">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Go to Dashboard
+      </a>
+      <a class="success-link" id="customizeLink" href="#">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        Customise Further
+      </a>
+      <a class="success-link" id="faqLink" href="#">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Add More FAQs
+      </a>
+      <a class="success-link" id="leadsLink" href="#">
+        <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        View Leads
+      </a>
+    </div>
+  </div>
+
+</div><!-- /wizard-container -->
+</div><!-- /wizard-body -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────
+let currentStep    = 1;
+let selectedVertical = null;
+let createdClientId  = null;
+let faqs             = [];
+
+const TOTAL_STEPS = 5;
+
+// ── Vertical definitions ─────────────────────────────────────────────
+const VERTICALS = {
+  general:     { icon:'💬', name:'General Business', desc:'Any business type' },
+  law_firm:    { icon:'⚖️', name:'Law Firm',         desc:'Legal services' },
+  dental:      { icon:'🦷', name:'Dental Clinic',    desc:'Dental & cosmetic' },
+  real_estate: { icon:'🏠', name:'Real Estate',      desc:'Properties & sales' },
+  healthcare:  { icon:'🏥', name:'Healthcare',       desc:'Medical & clinics' },
+  ecommerce:   { icon:'🛍️', name:'E-Commerce',      desc:'Online retail' },
+  saas:        { icon:'💻', name:'SaaS / Tech',      desc:'Software products' },
+  gym:         { icon:'💪', name:'Gym / Fitness',    desc:'Health & wellness' },
+  plumber:     { icon:'🔧', name:'Trades / Plumber', desc:'Home services' },
+};
+
+// ── Sample FAQs per vertical ─────────────────────────────────────────
+const SAMPLE_FAQS = {
+  general: [
+    { q: 'What are your business hours?',              a: 'We are open Monday to Friday, 9am–6pm. Feel free to leave a message outside these hours and we'll get back to you.' },
+    { q: 'How can I get in touch?',                    a: 'You can reach us via email, phone, or by filling out the contact form on our website.' },
+    { q: 'Do you offer a free consultation?',         a: 'Yes! We offer a free 30-minute initial consultation. Book one directly through our website.' },
+    { q: 'Where are you located?',                     a: 'We serve clients nationwide, with our main office based in the city centre.' },
+  ],
+  law_firm: [
+    { q: 'What areas of law do you specialise in?',   a: 'We specialise in contract disputes, personal injury, employment law, and property law.' },
+    { q: 'How much does a consultation cost?',         a: 'We offer a free 30-minute initial consultation. Our hourly rates start from £150/hr depending on the case type.' },
+    { q: 'How long does a case typically take?',       a: 'Case timelines vary significantly. Simple matters may be resolved in weeks; complex litigation can take years. We\'ll give you a realistic estimate at your consultation.' },
+    { q: 'Can I speak to a lawyer today?',             a: 'Yes — book a same-day consultation via our website or call us directly. Urgent matters are always prioritised.' },
+    { q: 'Do you work on a no-win, no-fee basis?',    a: 'We offer no-win, no-fee arrangements for personal injury and employment cases. Ask us at your consultation.' },
+  ],
+  dental: [
+    { q: 'How do I book an appointment?',              a: 'You can book online via our website, call us on the number above, or ask me right now and I'll take your details.' },
+    { q: 'Do you accept NHS patients?',                a: 'We are currently accepting NHS patients for routine check-ups. Private treatments are also available with flexible payment plans.' },
+    { q: 'How much does teeth whitening cost?',        a: 'Our professional teeth whitening starts from £299 for in-chair treatment and £199 for a take-home kit.' },
+    { q: 'What should I do in a dental emergency?',   a: 'Call us immediately. We reserve slots each day for dental emergencies. If outside hours, call 111.' },
+    { q: 'Do you offer payment plans?',                a: 'Yes — we partner with Denplan and offer 0% finance on treatments over £500. Ask our receptionist for details.' },
+  ],
+  real_estate: [
+    { q: 'How do I book a property viewing?',         a: 'I can arrange a viewing for you right now — just share your name, email, and preferred times.' },
+    { q: 'What are your fees for selling my home?',   a: 'Our commission is 1.2% + VAT for sole agency, with no upfront fees. We only charge when we sell.' },
+    { q: 'How long does it take to sell a property?', a: 'Average time to sale in our area is 8–12 weeks from listing to completion, though this varies by market.' },
+    { q: 'Do you help with mortgages?',               a: 'Yes — we work with independent mortgage advisors who can compare deals from over 90 lenders. Free to use.' },
+    { q: 'What areas do you cover?',                  a: 'We cover the local area and surrounding suburbs. Contact us to confirm your specific postcode.' },
+  ],
+  healthcare: [
+    { q: 'How do I register as a patient?',           a: 'You can register online or visit our reception with ID and proof of address. We welcome new patients.' },
+    { q: 'Can I book an appointment online?',          a: 'Yes — use our online booking system or call reception. Same-day appointments are available for urgent concerns.' },
+    { q: 'What should I bring to my appointment?',    a: 'Please bring your ID, insurance details if applicable, and a list of any current medications.' },
+    { q: 'Do you offer home visit services?',          a: 'Home visits are available for patients who are unable to travel. Please call to arrange and confirm eligibility.' },
+  ],
+  ecommerce: [
+    { q: 'How long does delivery take?',               a: 'Standard delivery is 3–5 working days. Express delivery (1–2 days) is available at checkout.' },
+    { q: 'What is your returns policy?',               a: 'We offer a 30-day hassle-free return policy. Items must be unused with original packaging. Return shipping is free.' },
+    { q: 'Can I track my order?',                      a: 'Yes — you\'ll receive a tracking link by email once your order ships. Tracking updates in real time.' },
+    { q: 'Do you offer international shipping?',       a: 'We ship to over 40 countries. International delivery times vary from 7–21 days.' },
+    { q: 'How do I apply a discount code?',            a: 'Enter your code in the "Discount Code" box at checkout before completing your payment.' },
+  ],
+  saas: [
+    { q: 'Is there a free trial?',                     a: 'Yes — 14-day free trial, no credit card required. Access all features immediately upon sign-up.' },
+    { q: 'How much does it cost?',                     a: 'Plans start at $19/mo for Solo, $99/mo for Pro, and $299/mo for Agency. Annual plans save 2 months.' },
+    { q: 'Can I cancel at any time?',                  a: 'Absolutely — cancel with one click from your account settings. No contracts, no cancellation fees.' },
+    { q: 'Do you offer customer support?',             a: 'Yes — live chat support on all plans, plus priority email support and an onboarding call on Pro and above.' },
+    { q: 'Is my data secure?',                         a: 'Yes — all data is encrypted at rest and in transit. We are GDPR compliant and data is never sold to third parties.' },
+  ],
+  gym: [
+    { q: 'What are your membership options?',          a: 'We offer monthly (no contract) and annual memberships. Monthly starts at £35/mo, annual from £299/yr.' },
+    { q: 'Can I try before I join?',                   a: 'Yes — we offer a free 3-day trial pass. Visit reception or book through our website.' },
+    { q: 'What classes do you offer?',                 a: 'We run 40+ weekly classes including HIIT, yoga, spin, pilates, and boxing. Full schedule on our website.' },
+    { q: 'Do you have personal trainers?',             a: 'Yes — all our PTs are fully qualified. Sessions start from £40/hr. Book a free fitness consultation first.' },
+  ],
+  plumber: [
+    { q: 'Do you offer emergency call-outs?',          a: 'Yes — 24/7 emergency call-outs available. We aim to be with you within 60 minutes in the local area.' },
+    { q: 'What are your call-out charges?',            a: 'Standard call-out is £75. Emergency (out-of-hours) call-out is £120. Labour is charged additionally at £65/hr.' },
+    { q: 'Are you Gas Safe registered?',               a: 'Yes — all our engineers are Gas Safe registered. Registration number available on request.' },
+    { q: 'Do you offer a guarantee on your work?',    a: 'Yes — all work is guaranteed for 12 months. If anything we\'ve fixed fails, we\'ll return at no charge.' },
+  ],
+};
+
+// ── Init ──────────────────────────────────────────────────────────────
+(function init() {
+  // Render vertical cards
+  const grid = document.getElementById('verticalGrid');
+  grid.innerHTML = Object.entries(VERTICALS).map(([key, v]) => `
+    <div class="vertical-card" data-key="${key}" onclick="selectVertical('${key}')">
+      <div class="vc-icon">${v.icon}</div>
+      <div class="vc-name">${v.name}</div>
+      <div class="vc-desc">${v.desc}</div>
+    </div>`).join('');
+})();
+
+// ── Step navigation ───────────────────────────────────────────────────
+function goToStep(n) {
+  // Validation on step 1
+  if (currentStep === 1 && n > 1) {
+    const clientName = document.getElementById('clientName').value.trim();
+    if (!clientName) {
+      toast("Please enter your client's company name to continue.", 'error');
+      document.getElementById('clientName').focus();
+      return;
+    }
+  }
+  // Validation on step 2
+  if (currentStep === 2 && n > 2 && !selectedVertical) {
+    toast('Please select an industry to continue.', 'error');
+    return;
+  }
+  // Moving to step 4: populate FAQs
+  if (n === 4) populateFaqEditor();
+  // Update panels
+  document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`step${n}`).classList.add('active');
+  // Update dots
+  for (let i = 1; i <= TOTAL_STEPS; i++) {
+    const dot = document.getElementById(`dot${i}`);
+    dot.classList.remove('done', 'active');
+    if (i < n)       dot.classList.add('done'), dot.innerHTML = '✓';
+    else if (i === n) dot.classList.add('active'), dot.textContent = i;
+    else             dot.textContent = i;
+    if (i < TOTAL_STEPS) {
+      const con = document.getElementById(`con${i}`);
+      con.classList.toggle('done', i < n);
+    }
+  }
+  document.getElementById('stepLabel').textContent  = n;
+  document.getElementById('progressFill').style.width = `${(n / TOTAL_STEPS) * 100}%`;
+  currentStep = n;
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// ── Vertical selection ────────────────────────────────────────────────
+function selectVertical(key) {
+  selectedVertical = key;
+  document.querySelectorAll('.vertical-card').forEach(c => c.classList.remove('selected'));
+  document.querySelector(`[data-key="${key}"]`).classList.add('selected');
+  document.getElementById('nextStep2').disabled = false;
+  // Set a default bot name based on vertical + client name
+  const clientName = document.getElementById('clientName').value.trim() || 'Your Client';
+  const name = `${clientName} ${VERTICALS[key].name} Assistant`;
+  document.getElementById('botName').value = name;
+  updatePreview();
+}
+
+// ── Branding preview ──────────────────────────────────────────────────
+function syncColor(v) {
+  document.getElementById('colorText').value = v;
+  applyColor(v);
+}
+function syncColorText(v) {
+  if (/^#[0-9A-Fa-f]{6}$/.test(v)) {
+    document.getElementById('colorPick').value = v;
+    applyColor(v);
+  }
+}
+function applyColor(c) {
+  document.getElementById('wpHeader').style.background = c;
+  document.getElementById('wpSend').style.background   = c;
+}
+function updatePreview() {
+  const name = document.getElementById('botName').value.trim() || 'Assistant';
+  const msg  = document.getElementById('welcomeMsg').value.trim() || 'Hi! How can I help you today?';
+  document.getElementById('wpName').textContent   = name;
+  document.getElementById('wpBubble').textContent = msg;
+}
+function updatePreviewName(v)   { /* agency name — no preview needed */ }
+function updatePreviewClient(v) { /* used in bot name suggestion on vertical pick */ }
+
+// ── FAQ editor ────────────────────────────────────────────────────────
+function populateFaqEditor() {
+  const vertical = selectedVertical || 'general';
+  faqs = (SAMPLE_FAQS[vertical] || SAMPLE_FAQS.general).map((f, i) => ({
+    id:       `faq_pre_${i}`,
+    question: f.q,
+    answer:   f.a,
+  }));
+  document.getElementById('faqCountLabel').textContent = faqs.length;
+  renderFaqEditor();
+}
+
+function renderFaqEditor() {
+  const list = document.getElementById('faqEditList');
+  list.innerHTML = faqs.map((f, i) => `
+    <div class="faq-item-edit" id="faqEdit_${i}">
+      <div class="faq-item-edit-top">
+        <div style="flex:1;">
+          <div class="faq-q-edit">${esc(f.question)}</div>
+          <div class="faq-a-edit">${esc(f.answer.slice(0,100))}${f.answer.length>100?'…':''}</div>
+        </div>
+        <button class="btn-rm-faq" onclick="removeFaq(${i})" title="Remove">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+function removeFaq(i) {
+  faqs.splice(i, 1);
+  renderFaqEditor();
+}
+
+function addCustomFaq() {
+  const q = prompt('Question:');
+  if (!q) return;
+  const a = prompt('Answer:');
+  if (!a) return;
+  faqs.push({ id: `faq_custom_${Date.now()}`, question: q.trim(), answer: a.trim() });
+  renderFaqEditor();
+}
+
+// ── Create client (Step 4 → 5) ────────────────────────────────────────
+async function createClient() {
+  const btn        = document.getElementById('createBtn');
+  const clientName = document.getElementById('clientName').value.trim();
+  const botName    = document.getElementById('botName').value.trim() || clientName + ' Assistant';
+  const color      = document.getElementById('colorPick').value;
+  const welcomeMsg = document.getElementById('welcomeMsg').value.trim() || 'Hi! How can I help?';
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Creating…';
+  console.log('[Onboarding] Creating client:', clientName, '| vertical:', selectedVertical);
+
+  try {
+    // Step A — create the client record
+    const formData = new FormData();
+    formData.append('company_name', clientName);
+    const createRes = await fetch('/create-client', { method:'POST', body:formData });
+    const createData = await createRes.json();
+    if (!createData.success) {
+      toast(createData.error || 'Failed to create client — please try again.', 'error');
+      console.error('[Onboarding] create-client failed:', createData);
+      btn.disabled = false; btn.innerHTML = 'Create Chatbot <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+      return;
+    }
+
+    createdClientId = createData.client_id;
+    console.log('[Onboarding] Client created:', createdClientId);
+
+    // Step B — save branding
+    const brandingPayload = {
+      client_id: createdClientId,
+      branding:  { company_name:clientName, primary_color:color },
+      bot_settings: { bot_name:botName, welcome_message:welcomeMsg, quick_replies:[] },
+      contact:   {},
+      integrations: {},
+    };
+    const brandRes = await fetch('/api/admin/customize', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(brandingPayload)
+    });
+    const brandData = await brandRes.json();
+    console.log('[Onboarding] Branding saved:', brandData.success);
+
+    // Step C — save FAQs
+    const faqPayload = { client_id:createdClientId, faqs };
+    const faqRes = await fetch('/api/faqs', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(faqPayload)
+    });
+    const faqData = await faqRes.json();
+    console.log('[Onboarding] FAQs saved:', faqData.success, '| count:', faqs.length);
+
+    // Step D — mark onboarding complete
+    await fetch('/api/onboarding/complete', { method:'POST' });
+
+    // Step E — show success screen
+    showSuccessStep(createdClientId);
+
+  } catch(err) {
+    console.error('[Onboarding] Unexpected error:', err);
+    toast('Something went wrong. Please try again.', 'error');
+    btn.disabled = false;
+    btn.innerHTML = 'Create Chatbot <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+  }
+}
+
+function showSuccessStep(clientId) {
+  const embedCode = `<script>\n(function(){\n  var s=document.createElement('script');\n  s.src='https://lumvi.net/static/widget.js';\n  s.setAttribute('data-client-id','${clientId}');\n  document.body.appendChild(s);\n})();\n<\/script>`;
+  document.getElementById('embedCode').textContent     = embedCode;
+  document.getElementById('customizeLink').href        = `/customize?client_id=${clientId}`;
+  document.getElementById('faqLink').href              = `/faq-manager?client_id=${clientId}`;
+  document.getElementById('leadsLink').href            = `/admin/leads?client_id=${clientId}`;
+  goToStep(5);
+}
+
+function copyEmbed() {
+  const code = document.getElementById('embedCode').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    toast('Embed code copied to clipboard!', 'success');
+    document.querySelector('.copy-btn').textContent = 'Copied ✓';
+    setTimeout(() => document.querySelector('.copy-btn').textContent = 'Copy', 2500);
+  });
+}
+
+// ── Skip onboarding ───────────────────────────────────────────────────
+async function skipOnboarding() {
+  await fetch('/api/onboarding/skip', { method:'POST' });
+  window.location.href = '/dashboard';
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────
+function toast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.innerHTML = msg; t.className = `toast ${type} show`;
+  setTimeout(() => t.className='toast', type==='success'?3200:5000);
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

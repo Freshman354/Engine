@@ -170,34 +170,55 @@ configure({
 # grace period has ended. Uses APScheduler (in-process, no extra
 # services needed on Render).
 # =====================================================================
+# =====================================================================
+# SUBSCRIPTION ENFORCEMENT
+# =====================================================================
+# WHY WE DON'T USE APScheduler ON RENDER:
+#   Render dynos can be restarted or put to sleep at any time.
+#   An in-process APScheduler dies with the dyno and never fires again
+#   until the next restart — which is why users weren't being downgraded.
+#
+# APPROACH:
+#   1. Run enforce_subscriptions() once on every startup (catches anything
+#      that was missed since the last restart).
+#   2. Expose a POST /cron/enforce-subscriptions endpoint secured by a
+#      secret token. Point UptimeRobot (free) or Render Cron to hit it
+#      daily. This is dyno-restart-safe because the HTTP request wakes
+#      the dyno and runs the logic.
+# =====================================================================
+
 def enforce_subscriptions():
     """
-    Called every 24 hours. Downgrades any user whose grace period
-    has ended. Also handles mid-trial cancellations.
+    Downgrade all non-admin users whose grace period has ended.
+    Safe to call multiple times — SQL WHERE clause is idempotent.
     """
     try:
-        from datetime import datetime as _dt
-        now = _dt.utcnow()
-        print(f"[Scheduler] enforce_subscriptions running at {now.isoformat()}")
-
+        now = datetime.utcnow()
+        app.logger.info(f"[Scheduler] enforce_subscriptions running at {now.isoformat()}")
         downgraded = models.downgrade_expired_users()
-
         if downgraded:
             for u in downgraded:
-                print(f"[Scheduler] Downgraded user {u['id']} ({u.get('email')}) "
-                      f"from {u.get('plan_type')} → free")
-            print(f"[Scheduler] Total downgraded: {len(downgraded)}")
+                app.logger.info(
+                    f"[Scheduler] Downgraded user {u['id']} ({u.get('email')}) "
+                    f"from {u.get('plan_type')} → free"
+                )
+            app.logger.info(f"[Scheduler] Total downgraded: {len(downgraded)}")
         else:
-            print("[Scheduler] No users to downgrade.")
-
+            app.logger.info("[Scheduler] No users to downgrade.")
+        return downgraded
     except Exception as e:
-        print(f"[Scheduler] Error in enforce_subscriptions: {e}")
+        app.logger.error(f"[Scheduler] enforce_subscriptions error: {e}")
+        return []
 
 
+# ── Run once on startup (catches missed downgrades after any restart) ──
+import threading as _threading
+_threading.Timer(8.0, enforce_subscriptions).start()
+
+# ── Also keep APScheduler as a belt-and-suspenders backup ─────────────
 try:
     from apscheduler.schedulers.background import BackgroundScheduler  # type: ignore
     from apscheduler.triggers.interval import IntervalTrigger           # type: ignore
-
     _scheduler = BackgroundScheduler(daemon=True)
     _scheduler.add_job(
         func=enforce_subscriptions,
@@ -208,32 +229,9 @@ try:
         misfire_grace_time=3600
     )
     _scheduler.start()
-    print("✅ Subscription scheduler started (APScheduler) — runs every 24 hours.")
-
-    # Run once on startup to catch any missed downgrades
-    import threading as _threading
-    _threading.Timer(10.0, enforce_subscriptions).start()
-
+    app.logger.info("✅ APScheduler started — runs every 24h as backup to cron endpoint.")
 except ImportError:
-    # APScheduler not installed — fall back to a simple threading loop.
-    # This still enforces subscriptions every 24 hours without any extra packages.
-    import threading as _threading
-
-    def _schedule_loop():
-        import time
-        time.sleep(15)                  # short delay so app finishes starting up
-        enforce_subscriptions()         # run once on startup
-        while True:
-            time.sleep(24 * 60 * 60)   # sleep 24 hours
-            enforce_subscriptions()
-
-    _t = _threading.Thread(target=_schedule_loop, daemon=True, name='subscription-enforcer')
-    _t.start()
-    print("✅ Subscription enforcer started (threading fallback) — runs every 24 hours.")
-    print("   Install APScheduler for more robust scheduling: pip install APScheduler")
-
-except Exception as _e:
-    print(f"⚠️ Scheduler failed to start: {_e}")
+    app.logger.warning("[Scheduler] APScheduler not installed — relying on cron endpoint + startup run.")
 
 
 USE_AI = Config.USE_AI
@@ -363,6 +361,8 @@ try:
         models.migrate_white_label()
     if hasattr(models, 'migrate_client_status'):
         models.migrate_client_status()
+    if hasattr(models, 'migrate_onboarding'):
+        models.migrate_onboarding()
     print("✅ Database initialized/migrated successfully!")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
@@ -1424,7 +1424,14 @@ def dashboard():
             fresh_user = models.get_user_by_id(fresh_user['id'])  # re-fetch after downgrade
             app.logger.info(f"[Dashboard] Auto-downgraded user {fresh_user['id']} to free.")
 
-    plan_type = fresh_user['plan_type'] if fresh_user else current_user.plan_type
+    # ── Onboarding redirect for new users ─────────────────────────────
+    # Fresh users who haven't completed onboarding and have no clients yet
+    # go straight to the guided wizard instead of a blank dashboard.
+    if (fresh_user and
+            not fresh_user.get('onboarding_completed') and
+            not fresh_user.get('is_admin') and
+            len(clients) == 0):
+        return redirect(url_for('onboarding'))
     plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
     client_limit = plan_limits['clients']
     client_count = len(clients)
@@ -1450,6 +1457,46 @@ def dashboard():
         sub_expires_at=sub_info.get('expires_at'),
         sub_grace_ends_at=sub_info.get('grace_ends_at')
     )
+
+
+@app.route('/onboarding')
+@login_required
+def onboarding():
+    """
+    Guided setup wizard for new agency owners.
+    Redirects to dashboard if onboarding is already complete.
+    """
+    fresh_user = models.get_user_by_id(current_user.id)
+    if fresh_user and fresh_user.get('onboarding_completed'):
+        return redirect(url_for('dashboard'))
+    plan_type = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    return render_template('onboarding.html',
+                           user=current_user,
+                           plan_type=plan_type)
+
+
+@app.route('/api/onboarding/complete', methods=['POST'])
+@login_required
+def onboarding_complete():
+    """
+    Called by the wizard on final step.
+    Marks onboarding done so the user never sees the wizard again.
+    """
+    try:
+        models.mark_onboarding_complete(current_user.id)
+        app.logger.info(f"[Onboarding] User {current_user.id} completed onboarding.")
+        return jsonify({'success': True, 'redirect': url_for('dashboard')})
+    except Exception as e:
+        app.logger.error(f"[Onboarding] complete error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/onboarding/skip', methods=['POST'])
+@login_required
+def onboarding_skip():
+    """Let the user skip the wizard and go straight to the dashboard."""
+    models.mark_onboarding_complete(current_user.id)
+    return jsonify({'success': True, 'redirect': url_for('dashboard')})
 
 
 @app.route('/create-client', methods=['POST'])
@@ -4317,6 +4364,7 @@ def admin_enforce_subscriptions():
         return jsonify({'success': False, 'error': 'Admin only'}), 403
     try:
         downgraded = models.downgrade_expired_users()
+        app.logger.info(f"[Admin] manual downgrade run: {len(downgraded)} users")
         return jsonify({
             'success': True,
             'downgraded_count': len(downgraded),
@@ -4324,6 +4372,51 @@ def admin_enforce_subscriptions():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/cron/enforce-subscriptions', methods=['GET', 'POST'])
+def cron_enforce_subscriptions():
+    """
+    Dyno-restart-safe cron endpoint.
+
+    Point any external HTTP pinger here — free options:
+      • UptimeRobot (free tier) — set a monitor to GET this URL every 24h
+      • Render Cron Jobs (paid) — add a cron job calling this URL
+      • cron-job.org (free)   — schedule a daily POST
+
+    Secured by CRON_SECRET env var. Set it in Render dashboard to any
+    random string (e.g. openssl rand -hex 32).
+
+    Usage:
+      GET /cron/enforce-subscriptions?secret=YOUR_CRON_SECRET
+      POST /cron/enforce-subscriptions  (body: {"secret": "YOUR_CRON_SECRET"})
+    """
+    cron_secret = os.environ.get('CRON_SECRET', '').strip()
+
+    # If no secret is configured, lock it down completely
+    if not cron_secret:
+        app.logger.error("[Cron] CRON_SECRET env var not set — endpoint disabled for safety.")
+        return jsonify({'error': 'Cron not configured'}), 503
+
+    # Accept secret from query param (GET) or JSON body (POST)
+    provided = (
+        request.args.get('secret', '') or
+        (request.get_json(silent=True) or {}).get('secret', '')
+    )
+
+    if provided != cron_secret:
+        app.logger.warning(f"[Cron] Unauthorized attempt from {request.remote_addr}")
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    # Run enforcement
+    downgraded = enforce_subscriptions()
+    return jsonify({
+        'success': True,
+        'ran_at':  datetime.utcnow().isoformat(),
+        'downgraded_count': len(downgraded),
+        'downgraded': [{'id': u['id'], 'email': u.get('email'),
+                        'was': u.get('plan_type')} for u in downgraded],
+    })
 
 
 @app.route('/terms')
