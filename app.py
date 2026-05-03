@@ -1507,110 +1507,41 @@ def create_client():
         company_name = request.form.get('company_name')
 
         if not company_name:
-            return jsonify({'success': False, 'error': 'Company name is required'}), 400
+            return jsonify({
+                'success': False,
+                'error': 'Company name is required'
+            }), 400
 
+        # Get user + plan
         user = models.get_user_by_id(current_user.id)
-        plan_type = user['plan_type']
+        plan_type = user.get('plan_type', 'free')
+
         current_clients = models.get_user_clients(current_user.id)
         client_count = len(current_clients)
+
         plan_limit = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])['clients']
 
-        # ---- Readable limit labels per plan ----
-        plan_upgrade_hints = {
-            'free':    'Solo: 1 chatbot $19/mo | Starter: 3 chatbots | Pro: 10 chatbots | Agency: Unlimited',
-            'solo':    'Starter: 3 chatbots | Pro: 10 chatbots | Agency: Unlimited',
-            'starter': 'Pro: 10 chatbots | Agency: Unlimited',
-            'pro':     'Agency: Unlimited chatbots at $299/mo',
-        }
-        upgrade_hint = plan_upgrade_hints.get(plan_type, 'Upgrade to add more chatbots')
-
+        # Enforce limit
         if client_count >= plan_limit:
-            return f'''
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Plan Limit Reached</title>
-                <style>
-                    body {{
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                        background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
-                        min-height: 100vh;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        padding: 20px;
-                    }}
-                    .container {{
-                        background: rgba(30, 41, 59, 0.9);
-                        border: 1px solid rgba(255,255,255,0.1);
-                        border-radius: 20px;
-                        padding: 48px;
-                        max-width: 500px;
-                        text-align: center;
-                        color: #f8fafc;
-                        box-shadow: 0 25px 60px rgba(0,0,0,0.4);
-                    }}
-                    h1 {{ font-size: 28px; font-weight: 800; margin-bottom: 16px; color: white; }}
-                    p {{ color: #94a3b8; margin-bottom: 20px; line-height: 1.6; font-size: 15px; }}
-                    .plan-info {{
-                        background: rgba(251, 191, 36, 0.1);
-                        border: 1px solid rgba(251, 191, 36, 0.3);
-                        border-radius: 10px;
-                        padding: 16px;
-                        margin-bottom: 24px;
-                        color: #fbbf24;
-                        font-size: 14px;
-                        line-height: 1.7;
-                    }}
-                    .plan-info strong {{ color: #fde68a; }}
-                    .hint {{ font-size: 13px; color: #64748b; margin-bottom: 28px; }}
-                    .btn {{
-                        display: inline-block;
-                        padding: 13px 28px;
-                        border-radius: 10px;
-                        font-weight: 700;
-                        text-decoration: none;
-                        margin: 6px;
-                        font-size: 14px;
-                        transition: all 0.2s;
-                    }}
-                    .btn-primary {{
-                        background: #06b6d4;
-                        color: #0f172a;
-                    }}
-                    .btn-secondary {{
-                        background: transparent;
-                        color: #94a3b8;
-                        border: 1px solid rgba(255,255,255,0.15);
-                    }}
-                </style>
-            </head>
-            <body>
-                <div class="container">
-                    <h1>⚠️ Chatbot Limit Reached</h1>
-                    <p>You've reached the maximum number of chatbots for your current plan.</p>
+            return jsonify({
+                'success': False,
+                'error': 'Plan limit reached. Upgrade to create more chatbots.'
+            }), 403
 
-                    <div class="plan-info">
-                        <strong>Current Plan:</strong> {plan_type.title()}<br>
-                        <strong>Chatbots:</strong> {client_count} / {plan_limit if plan_limit < 999999 else "Unlimited"}<br>
-                        <strong>Status:</strong> Limit Reached
-                    </div>
-
-                    <p class="hint">{upgrade_hint}</p>
-
-                    <a href="/upgrade" class="btn btn-primary">Upgrade Plan →</a>
-                    <a href="/dashboard" class="btn btn-secondary">← Back to Dashboard</a>
-                </div>
-            </body>
-            </html>
-            ''', 403
-
+        # Create client
         client_id = models.create_client(current_user.id, company_name)
-        return redirect(url_for('dashboard'))
+
+        return jsonify({
+            'success': True,
+            'client_id': client_id
+        })
 
     except Exception as e:
         app.logger.error(f'Error creating client: {e}')
-        return redirect(url_for('dashboard'))
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 @app.route('/')
