@@ -1415,7 +1415,6 @@ def dashboard():
 
     # Always re-fetch user from DB so plan badge is never stale after an upgrade
     fresh_user = models.get_user_by_id(current_user.id)
-    plan_type = fresh_user.get('plan_type', 'free') if fresh_user else current_user.plan_type
 
     # ── Active enforcement: downgrade if grace period ended ──────────
     if fresh_user and not fresh_user.get('is_admin'):
@@ -1433,6 +1432,8 @@ def dashboard():
             not fresh_user.get('is_admin') and
             len(clients) == 0):
         return redirect(url_for('onboarding'))
+
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
     plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
     client_limit = plan_limits['clients']
     client_count = len(clients)
@@ -1507,41 +1508,84 @@ def create_client():
         company_name = request.form.get('company_name')
 
         if not company_name:
-            return jsonify({
-                'success': False,
-                'error': 'Company name is required'
-            }), 400
+            return jsonify({'success': False, 'error': 'Company name is required'}), 400
 
-        # Get user + plan
         user = models.get_user_by_id(current_user.id)
-        plan_type = user.get('plan_type', 'free')
-
+        plan_type = user['plan_type']
         current_clients = models.get_user_clients(current_user.id)
         client_count = len(current_clients)
-
         plan_limit = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])['clients']
 
-        # Enforce limit
+        # ---- Readable limit labels per plan ----
+        plan_upgrade_hints = {
+            'free':    'Solo: 1 chatbot $19/mo | Starter: 3 chatbots | Pro: 10 chatbots | Agency: Unlimited',
+            'solo':    'Starter: 3 chatbots | Pro: 10 chatbots | Agency: Unlimited',
+            'starter': 'Pro: 10 chatbots | Agency: Unlimited',
+            'pro':     'Agency: Unlimited chatbots at $299/mo',
+        }
+        upgrade_hint = plan_upgrade_hints.get(plan_type, 'Upgrade to add more chatbots')
+
         if client_count >= plan_limit:
-            return jsonify({
-                'success': False,
-                'error': 'Plan limit reached. Upgrade to create more chatbots.'
-            }), 403
+            # Return JSON if called from the onboarding wizard (XHR/JSON request)
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
+               request.headers.get('Accept', '').startswith('application/json'):
+                return jsonify({
+                    'success': False,
+                    'error': f'Plan limit reached. You can have {plan_limit} chatbot{"s" if plan_limit != 1 else ""} on your {plan_type} plan. Upgrade to add more.',
+                    'upgrade_url': '/upgrade'
+                }), 403
+            # Legacy HTML fallback for direct form submissions
+            return f'''<!DOCTYPE html>
+<html>
+<head><title>Plan Limit Reached</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0;}}
+body{{font-family:'DM Sans',sans-serif;background:#F7F4EF;min-height:100vh;
+  display:flex;align-items:center;justify-content:center;padding:20px;}}
+.card{{background:#fff;border:1px solid #E7E2DA;border-radius:20px;padding:48px;
+  max-width:480px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.06);}}
+h1{{font-family:'Fraunces',serif;font-size:26px;font-weight:800;color:#1C1917;margin-bottom:12px;}}
+p{{color:#57534E;margin-bottom:16px;line-height:1.65;font-size:15px;}}
+.info{{background:rgba(184,146,74,0.1);border:1px solid rgba(184,146,74,0.25);
+  border-radius:12px;padding:16px;margin-bottom:20px;color:#9A7A3A;font-size:13.5px;line-height:1.7;}}
+.btn{{display:inline-block;padding:12px 24px;border-radius:10px;font-weight:700;
+  text-decoration:none;margin:5px;font-size:14px;transition:all 0.2s;}}
+.btn-gold{{background:#B8924A;color:#fff;}}
+.btn-gold:hover{{background:#9A7A3A;}}
+.btn-ghost{{background:transparent;color:#57534E;border:1.5px solid #E7E2DA;}}
+</style></head>
+<body>
+<div class="card">
+  <h1>Chatbot Limit Reached</h1>
+  <p>You've reached the maximum number of chatbots for your current plan.</p>
+  <div class="info">
+    <strong>Plan:</strong> {plan_type.title()}<br>
+    <strong>Chatbots:</strong> {client_count} / {plan_limit if plan_limit < 999999 else "Unlimited"}<br>
+    <strong>Status:</strong> Limit Reached
+  </div>
+  <p style="font-size:13px;color:#A8A29E;">{upgrade_hint}</p>
+  <a href="/upgrade" class="btn btn-gold">Upgrade Plan →</a>
+  <a href="/dashboard" class="btn btn-ghost">← Back</a>
+</div>
+</body></html>''', 403
 
-        # Create client
         client_id = models.create_client(current_user.id, company_name)
+        app.logger.info(f"[CreateClient] Created {client_id} for user {current_user.id}")
 
-        return jsonify({
-            'success': True,
-            'client_id': client_id
-        })
+        # Return JSON if the request came from the onboarding wizard (XHR),
+        # otherwise redirect to dashboard for the legacy form-submit flow.
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
+           request.headers.get('Accept', '').startswith('application/json'):
+            return jsonify({'success': True, 'client_id': client_id})
+        return redirect(url_for('dashboard'))
 
     except Exception as e:
         app.logger.error(f'Error creating client: {e}')
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
+           request.headers.get('Accept', '').startswith('application/json'):
+            return jsonify({'success': False, 'error': str(e)}), 500
+        return redirect(url_for('dashboard'))
 
 
 @app.route('/')
@@ -2373,7 +2417,66 @@ def get_agency_analytics():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/admin/analytics', methods=['GET'])
+@app.route('/client-report')
+@login_required
+def client_report():
+    """
+    Branded, one-page client performance report.
+    Accessible by the agency owner (?client_id=) or a logged-in client portal user.
+    """
+    client_id = request.args.get('client_id', '').strip()
+    period    = request.args.get('period', 'month')   # week | month | all
+
+    # Owner access — verify ownership
+    if client_id and not models.verify_client_ownership(current_user.id, client_id):
+        return "Unauthorized", 403
+    # Fall back to first client if not specified
+    if not client_id:
+        clients = models.get_user_clients(current_user.id)
+        if clients:
+            client_id = clients[0]['client_id']
+        else:
+            return redirect(url_for('dashboard'))
+
+    client = models.get_client_by_id(client_id)
+    if not client:
+        return "Client not found", 404
+
+    # Parse branding
+    branding = {}
+    bs_raw   = client.get('branding_settings') or '{}'
+    try:
+        branding = json.loads(bs_raw) if isinstance(bs_raw, str) else bs_raw
+    except Exception:
+        branding = {}
+
+    branding_inner = branding.get('branding', {})
+    primary_color  = branding_inner.get('primary_color') or client.get('widget_color') or '#B8924A'
+    logo_url       = branding_inner.get('logo') or branding_inner.get('logo_url') or ''
+    company_name   = branding_inner.get('company_name') or client.get('company_name', 'Client')
+
+    # Date range label
+    period_labels = {'week': 'Last 7 Days', 'month': 'Last 30 Days', 'all': 'All Time'}
+    period_label  = period_labels.get(period, 'Last 30 Days')
+
+    # Get agency branding for the report header
+    agency_branding = models.get_agency_branding(current_user.id) if hasattr(models, 'get_agency_branding') else {}
+    agency_name     = (agency_branding.get('branding', {}).get('company_name') or
+                       current_user.email.split('@')[0].title())
+
+    return render_template(
+        'client_report.html',
+        client        = client,
+        client_id     = client_id,
+        company_name  = company_name,
+        primary_color = primary_color,
+        logo_url      = logo_url,
+        agency_name   = agency_name,
+        agency_branding = agency_branding,
+        period        = period,
+        period_label  = period_label,
+        user          = current_user,
+    )
 @login_required
 def get_analytics():
     try:

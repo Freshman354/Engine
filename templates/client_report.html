@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ company_name }} — AI Chatbot Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --brand:{{ primary_color }};
+  --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
+  --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
+  --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#fff;
+  --success:#16A34A;--success-lt:#F0FDF4;
+  --danger:#EF4444;--danger-lt:#FEF2F2;
+  --warning:#D97706;--warning-lt:#FFFBEB;
+  --radius:12px;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;}
+
+/* ── CONTROL BAR (screen only, hidden in PDF) ── */
+.control-bar{background:var(--dark);padding:10px 28px;display:flex;align-items:center;
+  justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.ctrl-left{display:flex;align-items:center;gap:12px;}
+.ctrl-back{color:rgba(255,255,255,0.6);font-size:13px;text-decoration:none;
+  padding:6px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:8px;transition:all 0.15s;}
+.ctrl-back:hover{color:#fff;border-color:rgba(255,255,255,0.4);}
+.ctrl-title{font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:#fff;}
+.ctrl-right{display:flex;gap:8px;align-items:center;}
+.period-sel{padding:7px 12px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);
+  border-radius:8px;color:rgba(255,255,255,0.75);font-size:13px;font-family:'DM Sans',sans-serif;
+  outline:none;cursor:pointer;}
+.btn-export{padding:8px 18px;background:var(--gold);color:#fff;border-radius:8px;
+  font-size:13.5px;font-weight:700;border:none;cursor:pointer;
+  display:flex;align-items:center;gap:6px;font-family:'DM Sans',sans-serif;transition:all 0.15s;}
+.btn-export:hover{background:var(--gold-dk);}
+.btn-export svg{width:13px;height:13px;}
+.btn-share{padding:8px 16px;background:rgba(255,255,255,0.1);color:rgba(255,255,255,0.8);
+  border:1px solid rgba(255,255,255,0.15);border-radius:8px;font-size:13px;font-weight:600;
+  border:none;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;}
+.btn-share:hover{background:rgba(255,255,255,0.18);}
+
+/* ── REPORT PAGE ── */
+.report-page{max-width:900px;margin:24px auto 60px;padding:0 20px;}
+@media(max-width:640px){.report-page{padding:0 12px;margin:16px auto 40px;}}
+
+/* ── REPORT CARD (the printable region) ── */
+#reportContent{background:var(--white);border-radius:20px;overflow:hidden;
+  box-shadow:0 4px 24px rgba(0,0,0,0.07);}
+
+/* ── HEADER ── */
+.report-header{padding:32px 36px;background:var(--brand);position:relative;overflow:hidden;}
+.report-header::before{content:'';position:absolute;top:-60px;right:-60px;width:220px;height:220px;
+  border-radius:50%;background:rgba(255,255,255,0.06);}
+.report-header::after{content:'';position:absolute;bottom:-40px;left:20px;width:140px;height:140px;
+  border-radius:50%;background:rgba(255,255,255,0.04);}
+.rh-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;position:relative;z-index:1;}
+.rh-brand{display:flex;align-items:center;gap:10px;}
+.rh-logo{width:44px;height:44px;border-radius:11px;object-fit:cover;background:rgba(255,255,255,0.2);}
+.rh-logo-placeholder{width:44px;height:44px;border-radius:11px;background:rgba(255,255,255,0.2);
+  display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;
+  font-size:17px;font-weight:700;color:rgba(255,255,255,0.9);}
+.rh-agency-name{font-size:14px;font-weight:700;color:rgba(255,255,255,0.9);}
+.rh-agency-sub{font-size:11.5px;color:rgba(255,255,255,0.6);margin-top:2px;}
+.rh-badge{padding:5px 14px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.25);
+  border-radius:20px;font-size:12px;font-weight:700;color:rgba(255,255,255,0.9);}
+.rh-client{position:relative;z-index:1;}
+.rh-client-name{font-family:'Fraunces',serif;font-size:30px;font-weight:800;color:#fff;
+  letter-spacing:-0.3px;line-height:1.1;margin-bottom:4px;}
+.rh-period{font-size:14px;color:rgba(255,255,255,0.7);}
+.rh-generated{font-size:12px;color:rgba(255,255,255,0.5);margin-top:2px;}
+
+/* ── SUMMARY STATS ── */
+.stats-band{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border);}
+@media(max-width:640px){.stats-band{grid-template-columns:repeat(2,1fr);}}
+.stat-cell{padding:24px;border-right:1px solid var(--border);text-align:center;}
+.stat-cell:last-child{border-right:none;}
+.stat-val{font-family:'Fraunces',serif;font-size:36px;font-weight:800;color:var(--dark);
+  line-height:1;letter-spacing:-1px;}
+.stat-val.brand{color:var(--brand);}
+.stat-label{font-size:11.5px;color:var(--sub);margin-top:5px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.06em;}
+.stat-delta{font-size:12px;margin-top:5px;}
+.stat-delta.up{color:var(--success);}
+.stat-delta.warn{color:var(--warning);}
+
+/* ── BODY SECTIONS ── */
+.report-body{padding:28px 36px;display:flex;flex-direction:column;gap:28px;}
+@media(max-width:640px){.report-body{padding:20px 18px;}}
+.section-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+  color:var(--sub);margin-bottom:14px;display:flex;align-items:center;gap:6px;}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ── CHART ── */
+.chart-wrap{background:var(--cream);border-radius:var(--radius);padding:20px;border:1px solid var(--border);}
+.chart-legend{display:flex;gap:16px;margin-bottom:14px;}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--mid);}
+.legend-dot{width:8px;height:8px;border-radius:50%;}
+.chart-canvas-wrap{position:relative;height:160px;}
+canvas{width:100%!important;}
+
+/* ── TWO COL GRID ── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:640px){.two-col{grid-template-columns:1fr;}}
+
+/* ── QUESTION LISTS ── */
+.q-list{display:flex;flex-direction:column;gap:8px;}
+.q-item{display:flex;align-items:center;gap:10px;padding:9px 12px;
+  background:var(--cream);border-radius:9px;border:1px solid var(--border);}
+.q-rank{width:22px;height:22px;border-radius:6px;background:var(--dark);color:#fff;
+  font-size:10.5px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.q-text{flex:1;font-size:13px;color:var(--dark);line-height:1.4;}
+.q-count{font-size:12px;font-weight:700;color:var(--sub);flex-shrink:0;}
+.q-item.unanswered .q-rank{background:var(--danger);}
+.q-item.unanswered .q-text{color:var(--mid);}
+
+/* ── LEADS TABLE ── */
+.leads-table{width:100%;border-collapse:collapse;}
+.leads-table th{padding:9px 12px;text-align:left;font-size:10.5px;font-weight:700;
+  text-transform:uppercase;letter-spacing:0.07em;color:var(--sub);background:var(--cream);
+  border-bottom:1px solid var(--border);}
+.leads-table td{padding:11px 12px;font-size:13px;border-bottom:1px solid var(--border);}
+.leads-table tbody tr:last-child td{border-bottom:none;}
+.leads-table tbody tr:hover{background:var(--cream);}
+.lead-name{font-weight:600;color:var(--dark);}
+.lead-email{font-family:'DM Mono',monospace;font-size:12px;color:var(--mid);}
+.lead-date{font-size:12px;color:var(--sub);}
+.empty-row{text-align:center;padding:28px;color:var(--sub);font-size:13px;}
+
+/* ── AI HEALTH BAND ── */
+.health-band{background:var(--cream);border-radius:var(--radius);padding:20px;
+  border:1px solid var(--border);display:flex;align-items:center;gap:24px;flex-wrap:wrap;}
+.health-item{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;min-width:100px;}
+.health-ring{width:64px;height:64px;position:relative;}
+.health-ring svg{transform:rotate(-90deg);}
+.health-ring-track{fill:none;stroke:var(--panel);stroke-width:6;}
+.health-ring-fill{fill:none;stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset 1s ease;}
+.health-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif;font-size:15px;font-weight:800;color:var(--dark);}
+.health-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;
+  color:var(--sub);text-align:center;}
+
+/* ── FOOTER ── */
+.report-footer{padding:16px 36px;border-top:1px solid var(--border);display:flex;
+  align-items:center;justify-content:space-between;background:var(--cream);}
+.rf-left{font-size:12px;color:var(--sub);}
+.rf-left strong{color:var(--mid);}
+.rf-right{font-size:11.5px;color:var(--sub);}
+.powered-link{color:var(--sub);text-decoration:none;}
+.powered-link:hover{color:var(--dark);}
+
+/* ── LOADING ── */
+.loading-overlay{position:fixed;inset:0;background:rgba(247,244,239,0.9);z-index:1000;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
+.loading-overlay.hide{display:none;}
+.loader{width:44px;height:44px;border:3px solid var(--border);border-top-color:var(--gold);
+  border-radius:50%;animation:spin 0.7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-overlay p{font-size:14px;font-weight:600;color:var(--mid);}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(10px);
+  padding:11px 18px;border-radius:10px;font-size:13.5px;font-weight:600;color:#fff;
+  z-index:9999;opacity:0;transition:all 0.3s;pointer-events:none;
+  display:flex;align-items:center;gap:7px;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.success{background:var(--success);}
+.toast.error{background:var(--danger);}
+
+@media print{
+  .control-bar{display:none!important;}
+  .report-page{margin:0!important;padding:0!important;max-width:100%!important;}
+  #reportContent{border-radius:0!important;box-shadow:none!important;}
+}
+</style>
+</head>
+<body>
+
+<!-- CONTROL BAR -->
+<div class="control-bar" id="controlBar">
+  <div class="ctrl-left">
+    <a href="/analytics?client_id={{ client_id }}" class="ctrl-back">← Analytics</a>
+    <div class="ctrl-title">{{ company_name }} — Performance Report</div>
+  </div>
+  <div class="ctrl-right">
+    <select class="period-sel" onchange="changePeriod(this.value)">
+      <option value="week"  {% if period == 'week'  %}selected{% endif %}>Last 7 Days</option>
+      <option value="month" {% if period == 'month' %}selected{% endif %}>Last 30 Days</option>
+      <option value="all"   {% if period == 'all'   %}selected{% endif %}>All Time</option>
+    </select>
+    <button class="btn-share" onclick="copyShareLink()">🔗 Share Link</button>
+    <button class="btn-export" onclick="exportPDF()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download PDF
+    </button>
+  </div>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loader"></div>
+  <p>Loading report data…</p>
+</div>
+
+<!-- REPORT PAGE -->
+<div class="report-page">
+<div id="reportContent">
+
+  <!-- HEADER -->
+  <div class="report-header">
+    <div class="rh-top">
+      <div class="rh-brand">
+        {% if agency_branding.get('branding', {}).get('logo') %}
+        <img src="{{ agency_branding['branding']['logo'] }}" alt="" class="rh-logo">
+        {% else %}
+        <div class="rh-logo-placeholder">{{ agency_name[0] | upper }}</div>
+        {% endif %}
+        <div>
+          <div class="rh-agency-name">{{ agency_name }}</div>
+          <div class="rh-agency-sub">AI Chatbot Performance Report</div>
+        </div>
+      </div>
+      <div class="rh-badge" id="periodBadge">{{ period_label }}</div>
+    </div>
+    <div class="rh-client">
+      {% if logo_url %}
+      <img src="{{ logo_url }}" alt="{{ company_name }}"
+        style="height:36px;border-radius:8px;object-fit:contain;margin-bottom:10px;background:rgba(255,255,255,0.15);padding:4px 8px;">
+      {% endif %}
+      <div class="rh-client-name">{{ company_name }}</div>
+      <div class="rh-period" id="rh-period-label">{{ period_label }}</div>
+      <div class="rh-generated" id="rh-generated">Generated <span id="generatedDate"></span></div>
+    </div>
+  </div>
+
+  <!-- STATS BAND -->
+  <div class="stats-band">
+    <div class="stat-cell">
+      <div class="stat-val" id="statConvos">—</div>
+      <div class="stat-label">Conversations</div>
+      <div class="stat-delta up" id="deltaConvos"></div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-val brand" id="statLeads">—</div>
+      <div class="stat-label">Leads Captured</div>
+      <div class="stat-delta up" id="deltaLeads"></div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-val" id="statResolution">—</div>
+      <div class="stat-label">AI Resolution Rate</div>
+      <div class="stat-delta" id="deltaResolution"></div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-val" id="statUnanswered">—</div>
+      <div class="stat-label">Missed Questions</div>
+      <div class="stat-delta warn" id="deltaUnanswered"></div>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="report-body">
+
+    <!-- Activity Chart -->
+    <div>
+      <div class="section-title">Activity Overview</div>
+      <div class="chart-wrap">
+        <div class="chart-legend">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:{{ primary_color }};"></div>
+            Conversations
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:var(--success);"></div>
+            Leads Captured
+          </div>
+        </div>
+        <div class="chart-canvas-wrap">
+          <canvas id="activityChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Health -->
+    <div>
+      <div class="section-title">Chatbot Health</div>
+      <div class="health-band">
+        <div class="health-item">
+          <div class="health-ring">
+            <svg viewBox="0 0 64 64" width="64" height="64">
+              <circle class="health-ring-track" cx="32" cy="32" r="28"/>
+              <circle class="health-ring-fill" id="ringResolution" cx="32" cy="32" r="28"
+                stroke="{{ primary_color }}" stroke-dasharray="176" stroke-dashoffset="176"/>
+            </svg>
+            <div class="health-pct" id="ringResolutionPct">0%</div>
+          </div>
+          <div class="health-lbl">AI Resolution</div>
+        </div>
+        <div class="health-item">
+          <div class="health-ring">
+            <svg viewBox="0 0 64 64" width="64" height="64">
+              <circle class="health-ring-track" cx="32" cy="32" r="28"/>
+              <circle class="health-ring-fill" id="ringLeadRate" cx="32" cy="32" r="28"
+                stroke="var(--success)" stroke-dasharray="176" stroke-dashoffset="176"/>
+            </svg>
+            <div class="health-pct" id="ringLeadRatePct">0%</div>
+          </div>
+          <div class="health-lbl">Lead Conv. Rate</div>
+        </div>
+        <div style="flex:3;min-width:200px;">
+          <div style="font-size:13px;color:var(--mid);line-height:1.7;" id="healthSummary">
+            Loading summary…
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top Questions + Gaps (2 cols) -->
+    <div class="two-col">
+      <div>
+        <div class="section-title">Top Questions Answered</div>
+        <div class="q-list" id="topQuestionsList">
+          <div style="color:var(--sub);font-size:13px;padding:10px;">Loading…</div>
+        </div>
+      </div>
+      <div>
+        <div class="section-title">Knowledge Gaps</div>
+        <div class="q-list" id="unansweredList">
+          <div style="color:var(--sub);font-size:13px;padding:10px;">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Leads -->
+    <div>
+      <div class="section-title">Leads Captured</div>
+      <div style="border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);">
+        <table class="leads-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Captured</th>
+            </tr>
+          </thead>
+          <tbody id="leadsTableBody">
+            <tr><td colspan="4" class="empty-row">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /report-body -->
+
+  <!-- FOOTER -->
+  <div class="report-footer">
+    <div class="rf-left">Report for <strong>{{ company_name }}</strong> · Prepared by <strong>{{ agency_name }}</strong></div>
+    <div class="rf-right">Powered by <a href="https://lumvi.net" class="powered-link">Lumvi AI</a></div>
+  </div>
+
+</div><!-- /reportContent -->
+</div><!-- /report-page -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CLIENT_ID    = {{ client_id | tojson }};
+const PRIMARY_COLOR = {{ primary_color | tojson }};
+let PERIOD         = {{ period | tojson }};
+let analyticsData  = null;
+let chartInstance  = null;
+
+// ── Utilities ─────────────────────────────────────────────────────────
+function toast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = `toast ${type} show`;
+  setTimeout(() => t.className='toast', 3500);
+}
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtDate(str) {
+  if (!str) return '—';
+  const d = new Date(str);
+  return isNaN(d) ? str.substring(0,10) : d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+}
+
+// ── Load data ─────────────────────────────────────────────────────────
+async function loadReport() {
+  document.getElementById('loadingOverlay').classList.remove('hide');
+  document.getElementById('generatedDate').textContent = new Date().toLocaleDateString('en-GB',{
+    day:'numeric',month:'long',year:'numeric'
+  });
+  console.log('[Report] Loading data | client:', CLIENT_ID, '| period:', PERIOD);
+  try {
+    const r    = await fetch(`/api/admin/analytics?client_id=${CLIENT_ID}&range=${PERIOD}`);
+    const data = await r.json();
+    if (!data.success) { console.error('[Report] API error:', data.error); return; }
+    analyticsData = data.analytics;
+    console.log('[Report] Data loaded:', {
+      convos: analyticsData.total_conversations,
+      leads:  analyticsData.total_leads,
+      rate:   analyticsData.answer_rate,
+    });
+    renderReport(analyticsData);
+  } catch(e) {
+    console.error('[Report] Fetch error:', e);
+    toast('Failed to load report data.', 'error');
+  } finally {
+    document.getElementById('loadingOverlay').classList.add('hide');
+  }
+}
+
+function renderReport(d) {
+  // Stats band
+  document.getElementById('statConvos').textContent      = d.total_conversations.toLocaleString();
+  document.getElementById('statLeads').textContent        = d.total_leads.toLocaleString();
+  document.getElementById('statResolution').textContent   = d.answer_rate + '%';
+  document.getElementById('statUnanswered').textContent   = d.unanswered_count.toLocaleString();
+
+  // Delta context hints
+  if (d.total_leads > 0)
+    document.getElementById('deltaLeads').textContent = `↑ ${d.total_leads} new lead${d.total_leads !== 1?'s':''} captured`;
+  if (d.answer_rate >= 80)
+    document.getElementById('deltaResolution').className = 'stat-delta up';
+  else
+    document.getElementById('deltaResolution').className = 'stat-delta warn';
+  document.getElementById('deltaResolution').textContent = d.answer_rate >= 80 ? '✓ Performing well' : '⚠ Room to improve';
+  if (d.unanswered_count > 0)
+    document.getElementById('deltaUnanswered').textContent = 'Add FAQs to close these gaps';
+
+  // Chart
+  drawChart(d.timeline || []);
+
+  // Health rings
+  setRing('ringResolution', d.answer_rate);
+  document.getElementById('ringResolutionPct').textContent = d.answer_rate + '%';
+  const leadRate = d.total_conversations > 0
+    ? Math.round(d.total_leads / d.total_conversations * 100) : 0;
+  setRing('ringLeadRate', leadRate);
+  document.getElementById('ringLeadRatePct').textContent = leadRate + '%';
+
+  // Health summary
+  let summary = '';
+  if (d.answer_rate >= 80) {
+    summary += `The chatbot is performing well, resolving <strong>${d.answer_rate}%</strong> of questions automatically. `;
+  } else {
+    summary += `The AI resolved <strong>${d.answer_rate}%</strong> of questions — adding more FAQs would improve this. `;
+  }
+  if (d.total_leads > 0) {
+    summary += `<strong>${d.total_leads}</strong> leads were captured during this period, representing real business opportunities. `;
+  }
+  if (d.unanswered_count > 0) {
+    summary += `<strong>${d.unanswered_count}</strong> questions went unanswered — see the Knowledge Gaps section for what to add next.`;
+  }
+  document.getElementById('healthSummary').innerHTML = summary;
+
+  // Top questions
+  const tqList = document.getElementById('topQuestionsList');
+  if (d.top_questions && d.top_questions.length) {
+    tqList.innerHTML = d.top_questions.slice(0,6).map((q, i) => `
+      <div class="q-item">
+        <div class="q-rank">${i+1}</div>
+        <div class="q-text">${esc(q.question.slice(0,80))}</div>
+        <div class="q-count">${q.count}×</div>
+      </div>`).join('');
+  } else {
+    tqList.innerHTML = '<div style="color:var(--sub);font-size:13px;padding:10px 0;">No conversations yet in this period.</div>';
+  }
+
+  // Unanswered
+  const uList = document.getElementById('unansweredList');
+  if (d.unanswered && d.unanswered.length) {
+    uList.innerHTML = d.unanswered.slice(0,6).map((q, i) => `
+      <div class="q-item unanswered">
+        <div class="q-rank">${i+1}</div>
+        <div class="q-text">${esc(q.question.slice(0,80))}</div>
+        <div class="q-count">${q.count}×</div>
+      </div>`).join('');
+  } else {
+    uList.innerHTML = '<div style="color:var(--success);font-size:13px;padding:10px 0;">✓ No unanswered questions. Great knowledge base!</div>';
+  }
+
+  // Leads table
+  const tbody = document.getElementById('leadsTableBody');
+  if (d.leads_captured && d.leads_captured.length) {
+    tbody.innerHTML = d.leads_captured.slice(0,15).map(l => `
+      <tr>
+        <td><div class="lead-name">${esc(l.name || '—')}</div></td>
+        <td><div class="lead-email">${esc(l.email || '—')}</div></td>
+        <td style="font-size:13px;color:var(--mid);">${esc(l.phone || '—')}</td>
+        <td><div class="lead-date">${fmtDate(l.created_at)}</div></td>
+      </tr>`).join('');
+  } else {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty-row">No leads captured in this period yet.</td></tr>';
+  }
+}
+
+// ── Ring animation ────────────────────────────────────────────────────
+function setRing(id, pct) {
+  const circumference = 176;
+  const offset        = circumference - (pct / 100) * circumference;
+  setTimeout(() => {
+    const el = document.getElementById(id);
+    if (el) el.style.strokeDashoffset = offset;
+  }, 300);
+}
+
+// ── Chart (pure canvas — no Chart.js dependency) ──────────────────────
+function drawChart(timeline) {
+  const canvas = document.getElementById('activityChart');
+  if (!canvas) return;
+  const parent = canvas.parentElement;
+  canvas.width  = parent.offsetWidth * window.devicePixelRatio;
+  canvas.height = 160 * window.devicePixelRatio;
+  canvas.style.width  = parent.offsetWidth + 'px';
+  canvas.style.height = '160px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+  const W = parent.offsetWidth, H = 160;
+  const PAD = { top:12, right:12, bottom:28, left:36 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top  - PAD.bottom;
+
+  const convData  = timeline.map(t => t.count  || t.conversations || 0);
+  const leadData  = timeline.map(t => t.leads  || 0);
+  const labels    = timeline.map(t => {
+    const d = new Date(t.date);
+    return d.toLocaleDateString('en-GB',{month:'short',day:'numeric'});
+  });
+  const maxVal = Math.max(...convData, ...leadData, 1);
+
+  // Grid lines
+  ctx.strokeStyle = '#E7E2DA'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = PAD.top + chartH - (i / 4) * chartH;
+    ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(W - PAD.right, y); ctx.stroke();
+    ctx.fillStyle = '#A8A29E'; ctx.font = '10px DM Sans, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(Math.round((i / 4) * maxVal), PAD.left - 4, y + 3);
+  }
+
+  // Conversation bars
+  const barW   = (chartW / timeline.length) * 0.35;
+  const barGap = chartW / timeline.length;
+  const brandColor = PRIMARY_COLOR;
+
+  timeline.forEach((t, i) => {
+    const x     = PAD.left + i * barGap + barGap * 0.15;
+    const cv    = convData[i];
+    const lv    = leadData[i];
+    const cvH   = (cv / maxVal) * chartH;
+    const lvH   = (lv / maxVal) * chartH;
+
+    // Conv bar
+    ctx.fillStyle = brandColor + 'CC';
+    ctx.beginPath();
+    ctx.roundRect(x, PAD.top + chartH - cvH, barW, cvH, [3,3,0,0]);
+    ctx.fill();
+
+    // Lead bar
+    ctx.fillStyle = '#16A34A99';
+    ctx.beginPath();
+    ctx.roundRect(x + barW + 2, PAD.top + chartH - lvH, barW * 0.7, lvH, [3,3,0,0]);
+    ctx.fill();
+
+    // X label
+    ctx.fillStyle = '#A8A29E'; ctx.font = '9px DM Sans, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(labels[i], x + barW / 2, H - 8);
+  });
+}
+
+// ── Period change ─────────────────────────────────────────────────────
+function changePeriod(val) {
+  PERIOD = val;
+  const labels = {week:'Last 7 Days', month:'Last 30 Days', all:'All Time'};
+  document.getElementById('periodBadge').textContent    = labels[val];
+  document.getElementById('rh-period-label').textContent = labels[val];
+  loadReport();
+  history.replaceState(null,'', `?client_id=${CLIENT_ID}&period=${val}`);
+}
+
+// ── Copy share link ───────────────────────────────────────────────────
+function copyShareLink() {
+  navigator.clipboard.writeText(window.location.href)
+    .then(() => toast('Report link copied to clipboard!', 'success'))
+    .catch(() => toast('Could not copy link.', 'error'));
+}
+
+// ── PDF Export (html2canvas + jsPDF) ─────────────────────────────────
+async function exportPDF() {
+  const btn = document.querySelector('.btn-export');
+  btn.disabled = true;
+  btn.innerHTML = '<div style="width:12px;height:12px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;"></div> Generating…';
+  console.log('[Report] Starting PDF export');
+  try {
+    const { jsPDF }    = window.jspdf;
+    const reportEl     = document.getElementById('reportContent');
+    const controlBar   = document.getElementById('controlBar');
+    controlBar.style.display = 'none';
+
+    const canvas = await html2canvas(reportEl, {
+      scale:       2,
+      useCORS:     true,
+      backgroundColor: '#fff',
+      logging:     false,
+    });
+    controlBar.style.display = '';
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    const pdf     = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+    const pdfW    = pdf.internal.pageSize.getWidth();
+    const pdfH    = (canvas.height / canvas.width) * pdfW;
+
+    // Paginate if content exceeds one A4 page
+    const pageH    = pdf.internal.pageSize.getHeight();
+    let   yOffset  = 0;
+    while (yOffset < pdfH) {
+      if (yOffset > 0) pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, -yOffset, pdfW, pdfH);
+      yOffset += pageH;
+    }
+
+    const companySlug = {{ company_name | tojson }}.replace(/\s+/g, '-').toLowerCase();
+    const dateStr     = new Date().toISOString().slice(0,10);
+    pdf.save(`${companySlug}-report-${dateStr}.pdf`);
+    console.log('[Report] PDF exported successfully');
+    toast('PDF downloaded successfully!', 'success');
+  } catch(e) {
+    console.error('[Report] PDF export error:', e);
+    toast('PDF export failed — try again.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download PDF';
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  if (analyticsData) drawChart(analyticsData.timeline || []);
+});
+loadReport();
+</script>
+</body>
+</html>

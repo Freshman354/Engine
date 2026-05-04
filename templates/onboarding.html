@@ -196,9 +196,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 <!-- TOP STRIP -->
 <div class="top-strip">
   <a href="/dashboard" class="brand">
-    <div class="brand-icon">
-      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-    </div>
+    <img src="{{ url_for('static', filename='logo.jpg') }}"
+         alt="Lumvi"
+         style="width:30px;height:30px;border-radius:8px;object-fit:cover;">
     <span class="brand-name">Lumvi</span>
   </a>
   <button class="skip-btn" onclick="skipOnboarding()">Skip setup</button>
@@ -360,10 +360,31 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
       <div class="faq-list-edit" id="faqEditList">
         <!-- populated by JS -->
       </div>
-      <button class="btn-add-faq" onclick="addCustomFaq()">
+      <button class="btn-add-faq" onclick="openAddFaqModal()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add a FAQ
       </button>
+    </div>
+
+    <!-- Inline FAQ add modal -->
+    <div id="addFaqModal" style="display:none;position:fixed;inset:0;background:rgba(28,25,23,0.55);
+      backdrop-filter:blur(4px);z-index:300;align-items:center;justify-content:center;padding:16px;">
+      <div style="background:var(--white);border:1px solid var(--border);border-radius:20px;
+        padding:28px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.15);">
+        <h3 style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:18px;">Add a FAQ</h3>
+        <div class="field">
+          <label>Question</label>
+          <input type="text" id="newFaqQ" placeholder="e.g. What are your opening hours?">
+        </div>
+        <div class="field" style="margin-top:12px;">
+          <label>Answer</label>
+          <textarea id="newFaqA" rows="3" placeholder="e.g. We are open Monday to Friday, 9am–6pm."></textarea>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:18px;">
+          <button class="btn-back" onclick="closeAddFaqModal()">Cancel</button>
+          <button class="btn-next" style="padding:10px 22px;" onclick="saveNewFaq()">Add FAQ</button>
+        </div>
+      </div>
     </div>
 
     <div class="nav-btns">
@@ -463,7 +484,7 @@ const SAMPLE_FAQS = {
     { q: 'Do you work on a no-win, no-fee basis?',    a: 'We offer no-win, no-fee arrangements for personal injury and employment cases. Ask us at your consultation.' },
   ],
   dental: [
-    { q: 'How do I book an appointment?',              a: 'You can book online via our website, call us on the number above, or ask me right now and I`ll take your details.' },
+    { q: 'How do I book an appointment?',              a: 'You can book online via our website, call us on the number above, or ask me right now and I will take your details.' },
     { q: 'Do you accept NHS patients?',                a: 'We are currently accepting NHS patients for routine check-ups. Private treatments are also available with flexible payment plans.' },
     { q: 'How much does teeth whitening cost?',        a: 'Our professional teeth whitening starts from £299 for in-chair treatment and £199 for a take-home kit.' },
     { q: 'What should I do in a dental emergency?',   a: 'Call us immediately. We reserve slots each day for dental emergencies. If outside hours, call 111.' },
@@ -648,20 +669,32 @@ async function createClient() {
   const color      = document.getElementById('colorPick').value;
   const welcomeMsg = document.getElementById('welcomeMsg').value.trim() || 'Hi! How can I help?';
 
+  if (!clientName) { toast('Please enter a client name first.', 'error'); goToStep(1); return; }
+
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner"></div> Creating…';
   console.log('[Onboarding] Creating client:', clientName, '| vertical:', selectedVertical);
 
   try {
-    // Step A — create the client record
+    // Step A — create the client record (JSON-aware headers so Flask returns JSON)
     const formData = new FormData();
     formData.append('company_name', clientName);
-    const createRes = await fetch('/create-client', { method:'POST', body:formData });
-    const createData = await createRes.json();
+    const createRes = await fetch('/create-client', {
+      method:  'POST',
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body:    formData,
+    });
+
+    let createData;
+    try { createData = await createRes.json(); }
+    catch { createData = { success: false, error: 'Server returned an unexpected response.' }; }
+
     if (!createData.success) {
-      toast(createData.error || 'Failed to create client — please try again.', 'error');
+      const msg = createData.error || 'Failed to create client — please try again.';
+      toast(msg, 'error');
       console.error('[Onboarding] create-client failed:', createData);
-      btn.disabled = false; btn.innerHTML = 'Create Chatbot <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+      btn.disabled = false;
+      btn.innerHTML = 'Create Chatbot <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
       return;
     }
 
@@ -670,48 +703,60 @@ async function createClient() {
 
     // Step B — save branding
     const brandingPayload = {
-      client_id: createdClientId,
-      branding:  { company_name:clientName, primary_color:color },
-      bot_settings: { bot_name:botName, welcome_message:welcomeMsg, quick_replies:[] },
-      contact:   {},
+      client_id:    createdClientId,
+      branding:     { company_name: clientName, primary_color: color },
+      bot_settings: { bot_name: botName, welcome_message: welcomeMsg, quick_replies: [] },
+      contact:      {},
       integrations: {},
     };
-    const brandRes = await fetch('/api/admin/customize', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(brandingPayload)
-    });
-    const brandData = await brandRes.json();
-    console.log('[Onboarding] Branding saved:', brandData.success);
+    try {
+      const brandRes  = await fetch('/api/admin/customize', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(brandingPayload),
+      });
+      const brandData = await brandRes.json();
+      console.log('[Onboarding] Branding saved:', brandData.success);
+    } catch(e) { console.warn('[Onboarding] Branding save failed (non-critical):', e); }
 
     // Step C — save FAQs
-    const faqPayload = { client_id:createdClientId, faqs };
-    const faqRes = await fetch('/api/faqs', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(faqPayload)
-    });
-    const faqData = await faqRes.json();
-    console.log('[Onboarding] FAQs saved:', faqData.success, '| count:', faqs.length);
+    try {
+      const faqRes  = await fetch('/api/faqs', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ client_id: createdClientId, faqs }),
+      });
+      const faqData = await faqRes.json();
+      console.log('[Onboarding] FAQs saved:', faqData.success, '| count:', faqs.length);
+    } catch(e) { console.warn('[Onboarding] FAQ save failed (non-critical):', e); }
 
     // Step D — mark onboarding complete
-    await fetch('/api/onboarding/complete', { method:'POST' });
+    try {
+      await fetch('/api/onboarding/complete', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      console.log('[Onboarding] Marked complete');
+    } catch(e) { console.warn('[Onboarding] Mark complete failed:', e); }
 
-    // Step E — show success screen
+    // Step E — success screen
     showSuccessStep(createdClientId);
 
   } catch(err) {
     console.error('[Onboarding] Unexpected error:', err);
-    toast('Something went wrong. Please try again.', 'error');
+    toast('Something went wrong — please try again.', 'error');
     btn.disabled = false;
-    btn.innerHTML = 'Create Chatbot <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+    btn.innerHTML = 'Create Chatbot <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:14px;height:14px;"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
   }
 }
 
+// ── FAQ modal ──────────────────────────────────────────────────────────
 function showSuccessStep(clientId) {
   const embedCode = `<script>\n(function(){\n  var s=document.createElement('script');\n  s.src='https://lumvi.net/static/widget.js';\n  s.setAttribute('data-client-id','${clientId}');\n  document.body.appendChild(s);\n})();\n<\/script>`;
-  document.getElementById('embedCode').textContent     = embedCode;
-  document.getElementById('customizeLink').href        = `/customize?client_id=${clientId}`;
-  document.getElementById('faqLink').href              = `/faq-manager?client_id=${clientId}`;
-  document.getElementById('leadsLink').href            = `/admin/leads?client_id=${clientId}`;
+  document.getElementById('embedCode').textContent = embedCode;
+  document.getElementById('customizeLink').href    = `/customize?client_id=${clientId}`;
+  document.getElementById('faqLink').href          = `/faq-manager?client_id=${clientId}`;
+  document.getElementById('leadsLink').href        = `/admin/leads?client_id=${clientId}`;
   goToStep(5);
 }
 
@@ -719,27 +764,35 @@ function copyEmbed() {
   const code = document.getElementById('embedCode').textContent;
   navigator.clipboard.writeText(code).then(() => {
     toast('Embed code copied to clipboard!', 'success');
-    document.querySelector('.copy-btn').textContent = 'Copied ✓';
-    setTimeout(() => document.querySelector('.copy-btn').textContent = 'Copy', 2500);
-  });
+    const cb = document.querySelector('.copy-btn');
+    if (cb) { cb.textContent = 'Copied ✓'; setTimeout(() => cb.textContent = 'Copy', 2500); }
+  }).catch(() => toast('Copy failed — please copy manually.', 'error'));
 }
 
 // ── Skip onboarding ───────────────────────────────────────────────────
 async function skipOnboarding() {
-  await fetch('/api/onboarding/skip', { method:'POST' });
+  try {
+    await fetch('/api/onboarding/skip', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch(e) { console.warn('[Onboarding] skip request failed:', e); }
   window.location.href = '/dashboard';
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────
-function toast(msg, type='success') {
+function toast(msg, type = 'success') {
   const t = document.getElementById('toast');
-  t.innerHTML = msg; t.className = `toast ${type} show`;
-  setTimeout(() => t.className='toast', type==='success'?3200:5000);
+  t.textContent = msg;
+  t.className   = `toast ${type} show`;
+  setTimeout(() => { t.className = 'toast'; }, type === 'success' ? 3200 : 5500);
 }
 
 function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 </script>
+</body>
+</html>
 </body>
 </html>
