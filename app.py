@@ -2477,14 +2477,18 @@ def client_report():
         period_label  = period_label,
         user          = current_user,
     )
+@app.route('/api/admin/analytics', methods=['GET'])
 @login_required
 def get_analytics():
     try:
-        client_id = request.args.get('client_id', 'demo')
+        client_id = request.args.get('client_id', '').strip()
+        if not client_id:
+            return jsonify({'success': False, 'error': 'No client_id provided'}), 400
+            
         if not models.verify_client_ownership(current_user.id, client_id):
             return jsonify({'success': False, 'error': 'unauthorized'}), 403
 
-        date_range = request.args.get('range', 'week')
+        date_range = request.args.get('range', 'month')
         now = datetime.now()
         if date_range == 'today':
             start_date = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -2497,99 +2501,72 @@ def get_analytics():
 
         conn, cursor = models.get_db()
 
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS conversations (
-                id SERIAL PRIMARY KEY,
-                client_id TEXT NOT NULL,
-                user_message TEXT NOT NULL,
-                bot_response TEXT NOT NULL,
-                matched BOOLEAN DEFAULT FALSE,
-                method TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
+        # 1. Basic Stats
         cursor.execute(
             'SELECT COUNT(*) AS total FROM conversations WHERE client_id = %s AND timestamp >= %s',
             (client_id, start_date)
         )
-        row = cursor.fetchone() or {}
-        total_conversations = row.get('total', 0)
+        total_conversations = (cursor.fetchone() or {}).get('total', 0)
 
         cursor.execute(
             'SELECT COUNT(*) AS matched_count FROM conversations WHERE client_id = %s AND timestamp >= %s AND matched = TRUE',
             (client_id, start_date)
         )
-        row = cursor.fetchone() or {}
-        answered = row.get('matched_count', 0)
-        unanswered = total_conversations - answered
+        answered = (cursor.fetchone() or {}).get('matched_count', 0)
+        unanswered_count = total_conversations - answered
         answer_rate = int((answered / total_conversations * 100)) if total_conversations > 0 else 0
 
         cursor.execute(
             'SELECT COUNT(*) AS total_leads FROM leads WHERE client_id = %s AND created_at >= %s',
             (client_id, start_date)
         )
-        row = cursor.fetchone() or {}
-        total_leads = row.get('total_leads', 0)
+        total_leads = (cursor.fetchone() or {}).get('total_leads', 0)
 
+        # 2. Timeline Logic
         timeline = []
-        for i in range(7):
-            date = (now - timedelta(days=6 - i))
+        days_to_show = 7 if date_range == 'week' else 30
+        for i in range(days_to_show):
+            date = (now - timedelta(days=(days_to_show - 1) - i))
             date_str = date.strftime('%Y-%m-%d')
             cursor.execute(
                 'SELECT COUNT(*) AS daily_count FROM conversations WHERE client_id = %s AND DATE(timestamp) = %s',
                 (client_id, date_str)
             )
-            row = cursor.fetchone() or {}
-            conv_count = row.get('daily_count', 0)
-
+            conv_count = (cursor.fetchone() or {}).get('daily_count', 0)
             cursor.execute(
                 'SELECT COUNT(*) AS daily_leads FROM leads WHERE client_id = %s AND DATE(created_at) = %s',
                 (client_id, date_str)
             )
-            row = cursor.fetchone() or {}
-            lead_count = row.get('daily_leads', 0)
-
+            lead_count = (cursor.fetchone() or {}).get('daily_leads', 0)
             timeline.append({'date': date_str, 'count': conv_count, 'leads': lead_count})
 
+        # 3. Top Questions
         cursor.execute(
-            '''
-            SELECT user_message, COUNT(*) as count FROM conversations
-            WHERE client_id = %s AND timestamp >= %s AND matched = TRUE
-            GROUP BY user_message ORDER BY count DESC LIMIT 10
-            ''',
+            'SELECT user_message, COUNT(*) as count FROM conversations WHERE client_id = %s AND timestamp >= %s AND matched = TRUE GROUP BY user_message ORDER BY count DESC LIMIT 6',
             (client_id, start_date)
         )
         top_questions = [{'question': r['user_message'], 'count': r['count']} for r in cursor.fetchall()]
 
+        # 4. Unanswered (Gaps)
         cursor.execute(
-            '''
-            SELECT user_message, COUNT(*) as count FROM conversations
-            WHERE client_id = %s AND timestamp >= %s AND matched = FALSE
-            GROUP BY user_message ORDER BY count DESC LIMIT 10
-            ''',
+            'SELECT user_message, COUNT(*) as count FROM conversations WHERE client_id = %s AND timestamp >= %s AND matched = FALSE GROUP BY user_message ORDER BY count DESC LIMIT 6',
             (client_id, start_date)
         )
-        unanswered_questions = [{'question': r['user_message'], 'count': r['count']} for r in cursor.fetchall()]
+        unanswered_list = [{'question': r['user_message'], 'count': r['count']} for r in cursor.fetchall()]
 
-        # Fix 2: Return actual lead records so the dashboard can display them
+        # 5. Recent Leads
         cursor.execute(
-            '''
-            SELECT id, name, email, phone, company, message, source_url, created_at
-            FROM leads
-            WHERE client_id = %s AND created_at >= %s
-            ORDER BY created_at DESC
-            LIMIT 50
-            ''',
-            (client_id, start_date)
+            'SELECT name, email, phone, created_at FROM leads WHERE client_id = %s ORDER BY created_at DESC LIMIT 15',
+            (client_id,)
         )
         leads_captured = []
         for r in cursor.fetchall():
-            lead = dict(r)
-            # Convert datetime to ISO string so JSON can serialize it
-            if lead.get('created_at'):
-                lead['created_at'] = lead['created_at'].isoformat()
-            leads_captured.append(lead)
+            leads_captured.append({
+                'name': r['name'], 
+                'email': r['email'], 
+                'phone': r['phone'], 
+                'created_at': r['created_at'].isoformat() if r['created_at'] else ''
+            })
 
         cursor.close()
         conn.close()
@@ -2600,20 +2577,17 @@ def get_analytics():
                 'total_conversations': total_conversations,
                 'total_leads': total_leads,
                 'answer_rate': answer_rate,
-                'unanswered_count': unanswered,
+                'unanswered_count': unanswered_count,
                 'timeline': timeline,
                 'top_questions': top_questions,
-                'unanswered': unanswered_questions,
-                'leads_captured': leads_captured   # ← actual lead records
+                'unanswered': unanswered_list,
+                'leads_captured': leads_captured
             }
         })
 
     except Exception as e:
         app.logger.error(f'Error getting analytics: {e}')
-        import traceback
-        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
-
 
 @app.route('/sales')
 def sales_page():
