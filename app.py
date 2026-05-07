@@ -1012,6 +1012,8 @@ def chat():
                 # Load 15-message history + trigger summarisation checkpoint
                 convo_history = models.get_recent_conversations(client_id, limit=15)
                 ai_helper.maybe_summarise(client_id, convo_history)
+                #Clear the cache so the AI doesn't remember "old"versions of this question
+                ai_helper._response_cache = {}
 
                 app.logger.info(
                     f"[Chat] client={client_id} faqs={len(faqs_list)} "
