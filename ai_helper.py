@@ -43,6 +43,13 @@ from typing import List, Dict, Tuple, Optional
 
 logger = logging.getLogger(__name__)
 
+try:
+    import cache_utils as _cache
+    _CACHE_AVAILABLE = True
+except ImportError:
+    _cache = None           # type: ignore
+    _CACHE_AVAILABLE = False
+
 # ── Zero-cost intent keywords ─────────────────────────────────────────
 _SIMPLE_INTENTS = {
     'greeting':  ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'],
@@ -256,15 +263,30 @@ class AIHelper:
                           vertical: str = 'general',
                           conversation_history: List[Dict] = None,
                           client_id: str = None,
-                          lead_triggers: List[str] = None) -> Dict:
+                          lead_triggers: List[str] = None,
+                          kb_version: int = None) -> Dict:
         """
-        Cost-efficient 2-call pipeline:
-          Call 1 (conditional): _combined_rewrite_intent — only for short/ambiguous
-                                follow-ups. Skipped entirely for standalone messages.
-          Call 2: _rag_generate_and_polish — RAG answer + tone + IDK_FALLBACK gate.
+        Cost-efficient 2-call pipeline with KB-version cache layer.
 
-        Unchanged: intent detection (keyword tier), embedding search, hybrid rerank,
-                   lead extraction, dynamic thresholds, category stickiness, cache.
+        Call 1 (conditional): _combined_rewrite_intent
+          — only for short/ambiguous follow-ups.
+          — skipped for standalone messages (saves a full Gemini call).
+
+        Call 2: _rag_generate_and_polish
+          — merged RAG answer + tone + IDK_FALLBACK grounding gate.
+
+        Cache layer (NEW):
+          — Redis lookup before Call 2 when no conversation history.
+          — Redis write after a high-confidence response is produced.
+          — Keyed on (client_id, kb_version, normalised_question).
+          — Bypassed for: history-aware turns, lead/action/fallback responses,
+            low-confidence answers, demo client.
+          — kb_version is passed in by app.py (fetched once per /api/chat
+            request so we don't re-query Redis inside the helper).
+
+        Unchanged: intent detection, embedding search, hybrid rerank,
+                   lead extraction, dynamic thresholds, category stickiness,
+                   self._response_cache (same-session in-process dedup).
         """
         if not user_message or not user_message.strip():
             return {'response': "How can I help you today?", 'method': 'empty',
@@ -274,14 +296,11 @@ class AIHelper:
 
         # ── Preprocess ────────────────────────────────────────────────
         clean = self._preprocess(user_message)
-        logger.debug(f"[Pipeline] start | msg='{clean[:60]}' | vertical={vertical}")
+        logger.debug(f"[Pipeline] start | msg=\'{clean[:60]}\' | vertical={vertical}")
 
-        # ── ACTION ENGINE (Step 3) — runs before RAG, zero LLM cost ───
-        # If the user's message maps to a concrete action (demo, meeting,
-        # pricing, contact), handle it immediately and skip the RAG pipeline.
+        # ── ACTION ENGINE — zero LLM cost, runs first ─────────────────
         action_intent = self.detect_action_intent(clean)
         if action_intent.get('action'):
-            # Scan history for already-known email / name (Step 4 — anti-repetition)
             quick_meta   = self._extract_lead_info(clean, history)
             user_context = {
                 'email':    quick_meta.get('email'),
@@ -294,9 +313,10 @@ class AIHelper:
                 'response':      action_result['message'],
                 'method':        f"action:{action_intent['action']}",
                 'confidence':    1.0,
-                'is_lead':       action_intent['action'] in ('demo_request', 'meeting_request', 'contact_request'),
+                'is_lead':       action_intent['action'] in (
+                                     'demo_request', 'meeting_request', 'contact_request'),
                 'lead_metadata': quick_meta,
-                'action':        action_result,   # full structured payload for caller
+                'action':        action_result,
             }
 
         # ── Keyword intent detection (zero cost) ──────────────────────
@@ -320,7 +340,7 @@ class AIHelper:
                 'lead_metadata': lead_meta,
             }
 
-        # ── Dynamic threshold (pricing gets lower bar) ─────────────────
+        # ── Dynamic threshold ─────────────────────────────────────────
         msg_lower        = clean.lower()
         is_sales_query   = (intent.get('intent') == 'lead_request' or
                             any(kw in msg_lower for kw in _GLOBAL_PRICING_KW))
@@ -328,34 +348,36 @@ class AIHelper:
         logger.debug(f"[Threshold] sales={is_sales_query} threshold={vector_threshold}")
 
         # ── CALL 1 (conditional): Combined rewrite + intent ────────────
-        # Only fires for short or ambiguous follow-ups.
-        # Standalone messages (≥10 words, not a follow-up) skip this entirely.
         word_count  = len(clean.split())
         is_followup = self._is_followup(clean, history)
         if (word_count < 10 or is_followup) and history and self.enabled:
             search_query = self._combined_rewrite_intent(clean, history)
         else:
             search_query = self._resolve_query(clean, history)
-        logger.debug(f"[Rewrite] '{clean[:40]}' → '{search_query[:60]}'")
+        logger.debug(f"[Rewrite] \'{clean[:40]}\' → \'{search_query[:60]}\'")
 
-        # ── Embedding search (hard 50-candidate cap enforced inside) ───
+        # ── Embedding search ───────────────────────────────────────────
         candidates, vector_scores = self._embedding_search(
             search_query, faqs, client_id, threshold=vector_threshold
         )
-        logger.debug(f"[Search] hits={len(candidates)} top={vector_scores[0]:.3f if vector_scores else 0}")
+        logger.debug(
+            f"[Search] hits={len(candidates)} "
+            f"top={vector_scores[0]:.3f if vector_scores else 0}"
+        )
 
-        # ── Hybrid rerank with category stickiness ────────────────────
-        last_category           = self._last_response_category(history)
+        # ── Hybrid rerank with category stickiness ─────────────────────
+        last_category                = self._last_response_category(history)
         hybrid_ranked, hybrid_scores = self._hybrid_rerank(
             search_query, candidates, vector_scores, last_category=last_category
         )
         logger.debug(f"[Hybrid] top={hybrid_scores[0]:.3f if hybrid_scores else 0}")
 
-        # ── Cache check ────────────────────────────────────────────────
-        top_id    = str(hybrid_ranked[0].get('kb_id', hybrid_ranked[0].get('id', ''))) if hybrid_ranked else ''
+        # ── Internal same-session cache (unchanged from original) ──────
+        top_id    = (str(hybrid_ranked[0].get('kb_id', hybrid_ranked[0].get('id', '')))
+                     if hybrid_ranked else '')
         cache_key = self._cache_key(clean, top_id, vertical)
         if cache_key in self._response_cache:
-            logger.debug(f"[Cache HIT] key={cache_key[:10]}…")
+            logger.debug(f"[InternalCache HIT] key={cache_key[:10]}…")
             return {
                 'response':      self._response_cache[cache_key],
                 'method':        'cache',
@@ -365,15 +387,46 @@ class AIHelper:
                 'action':        None,
             }
 
-        # ── Build conversation context string ─────────────────────────
+        # ── Redis cache lookup (NEW — cross-request, persistent) ───────
+        # Only cache stateless requests (no conversation history).
+        # history-aware turns contain personalised context that must not
+        # be reused across different sessions / users.
+        _use_redis_cache = (
+            _CACHE_AVAILABLE
+            and kb_version is not None
+            and client_id
+            and client_id != 'demo'
+            and not history       # no history → stateless → cacheable
+        )
+        if _use_redis_cache:
+            cached = _cache.cache_get(client_id, kb_version, user_message)
+            if cached:
+                response_text = cached.get('response', '')
+                if response_text:
+                    logger.info(
+                        f"[RedisCache HIT] client={client_id} v{kb_version} "
+                        f"method={cached.get('method')} conf={cached.get('confidence', 0):.2f}"
+                    )
+                    # Populate internal cache too (avoids Redis on same-session repeats)
+                    self._response_cache[cache_key] = response_text
+                    return {
+                        'response':      response_text,
+                        'method':        cached.get('method', 'rag_pipeline'),
+                        'confidence':    cached.get('confidence', 0.8),
+                        'is_lead':       False,
+                        'lead_metadata': None,
+                        'action':        None,
+                        'from_cache':    True,
+                    }
+
+        # ── Build conversation context string ──────────────────────────
         context_str = self._build_context(history, client_id, clean)
 
-        # ── CALL 2: Merged RAG + Polish (with IDK_FALLBACK gate) ───────
+        # ── CALL 2: Merged RAG + Polish (IDK_FALLBACK gate) ────────────
         if hybrid_ranked and self.enabled:
             final, confidence, method = self._rag_generate_and_polish(
                 clean, hybrid_ranked, hybrid_scores, vertical, context_str
             )
-            # IDK_FALLBACK means model confirmed it can't answer from context
             if final == 'IDK_FALLBACK':
                 logger.info(f"[IDK] model returned IDK_FALLBACK — routing to fallback")
                 final      = self._vertical_fallback(clean, faqs[:8], vertical, context_str)
@@ -388,10 +441,19 @@ class AIHelper:
             confidence = 0.0
             method     = 'static_fallback'
 
-        # ── Guardrails + cache ─────────────────────────────────────────
+        # ── Guardrails ────────────────────────────────────────────────
         final = self._guardrails(final, hybrid_ranked)
+
+        # ── Internal cache write (unchanged) ──────────────────────────
         if confidence > 0.4:
             self._response_cache[cache_key] = final
+
+        # ── Redis cache write (NEW) ────────────────────────────────────
+        if _use_redis_cache and confidence > 0.4:
+            _cache.cache_set(
+                client_id, kb_version, user_message,
+                {'response': final, 'method': method, 'confidence': confidence}
+            )
 
         logger.info(
             f"[Pipeline] done | method={method} conf={confidence:.2f} "

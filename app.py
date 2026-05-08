@@ -15,7 +15,7 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from functools import wraps
 from flask_mail import Mail, Message
 import secrets
-
+import cache_utils  # KB version-based cache invalidation
 import models
 import requests
 import uuid
@@ -1012,27 +1012,37 @@ def chat():
                 # Load 15-message history + trigger summarisation checkpoint
                 convo_history = models.get_recent_conversations(client_id, limit=15)
                 ai_helper.maybe_summarise(client_id, convo_history)
-                #Clear the cache so the AI doesn't remember "old"versions of this question
-                ai_helper._response_cache = {}
 
                 app.logger.info(
                     f"[Chat] client={client_id} faqs={len(faqs_list)} "
                     f"history={len(convo_history)} vertical={vertical}"
                 )
 
-                # Full pipeline: embed search → rerank → RAG generate → guardrails → cache
+                # ── Fetch kb_version once per request (Redis O(1)) ────────
+                # Passed into generate_response so the helper can do cache
+                # lookup/write without a second Redis round-trip from app.py.
+                # Only fetch for real clients; demo always bypasses cache.
+                kb_version = (
+                    cache_utils.get_kb_version(client_id)
+                    if client_id != 'demo' else None
+                )
+
+                # Full pipeline: embed search → rerank → RAG generate → guardrails
+                # The kb_version arg enables the Redis cache layer inside generate_response.
                 result = ai_helper.generate_response(
                     user_message=message,
                     faqs=faqs_list,
                     vertical=vertical,
                     conversation_history=convo_history,
                     client_id=client_id,
-                    lead_triggers=lead_triggers
+                    lead_triggers=lead_triggers,
+                    kb_version=kb_version,        # ← NEW
                 )
 
                 response_text = result.get('response', '')
                 method        = result.get('method', 'rag_pipeline')
                 confidence    = result.get('confidence', 0.0)
+                from_cache    = result.get('from_cache', False)
 
                 # Catch any late lead detection from inside the pipeline
                 if result.get('is_lead'):
@@ -1050,13 +1060,13 @@ def chat():
                     log_conversation(client_id, message, response_text, matched=matched, method=method)
                     app.logger.info(
                         f"[AI Match] method={method} confidence={confidence:.2f} "
-                        f"response_len={len(response_text)}"
+                        f"response_len={len(response_text)} cached={from_cache}"
                     )
                     return jsonify({
-                        'success': True,
-                        'response': response_text,
+                        'success':    True,
+                        'response':   response_text,
                         'confidence': confidence,
-                        'method': method
+                        'method':     method,
                     })
 
             except Exception as ai_error:
@@ -1708,6 +1718,31 @@ def health_check():
         'version': '1.0.0'
     })
 
+@app.route('/api/admin/cache-stats')
+@login_required
+def cache_stats_endpoint():
+    """Return current kb_version and cache backend for a client."""
+    client_id = request.args.get('client_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    stats = cache_utils.cache_stats(client_id)
+    return jsonify({'success': True, **stats})
+
+
+@app.route('/api/admin/cache-invalidate', methods=['POST'])
+@login_required
+def cache_invalidate_endpoint():
+    """Manually invalidate KB cache for a client (emergency use)."""
+    data      = request.get_json() or {}
+    client_id = data.get('client_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    new_version = cache_utils.invalidate(client_id)
+    app.logger.info(
+        f"[Cache] Manual invalidation: client={client_id} new_version={new_version} "
+        f"by user={current_user.id}"
+    )
+    return jsonify({'success': True, 'new_kb_version': new_version})
 
 @app.route('/api/admin/backup', methods=['POST'])
 def trigger_backup():
@@ -2747,6 +2782,8 @@ def manage_faqs():
                 }), 403
 
             models.save_faqs(client_id, faqs_list)
+            cache_utils.bump_kb_version(client_id)
+            app.logger.info(f"[Cache] KB invalidated after FAQ save: client={client_id}")
 
             # Re-index embeddings for semantic search (non-blocking)
             if ai_helper and ai_helper.enabled:
@@ -2778,7 +2815,8 @@ def delete_all_faqs():
         if not models.verify_client_ownership(current_user.id, client_id):
             return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
-        models.delete_all_faqs(client_id)
+        cache_utils.bump_kb_version(client_id)
+        app.logger.info(f'[Cache] KB invalidated after delete-all: client={client_id}')
         app.logger.info(f'All FAQs deleted for client {client_id} by user {current_user.id}')
         return jsonify({'success': True, 'message': 'All FAQs deleted successfully'})
 
@@ -2897,6 +2935,8 @@ def upload_faqs():
         app.logger.info(
             f"[Upload] client={client_id} kb_saved={kb_saved} faq_saved={faq_saved}"
         )
+        cache_utils.bump_kb_version(client_id)
+        app.logger.info(f"[Cache] KB invalidated after file upload: client={client_id}")
         response = {
             'success':   True,
             'message':   f'Imported {kb_saved} knowledge chunks successfully.',
@@ -3449,6 +3489,9 @@ def webhook_faq_import():
         conn.commit()
         cursor.close()
         conn.close()
+
+        cache_utils.bump_kb_version(client_id)
+        app.logger.info(f"[Cache] KB invalidated after webhook FAQ import: client={client_id}")
 
         return jsonify({
             'success': True,
