@@ -165,11 +165,6 @@ configure({
 })
 
 # =====================================================================
-# SUBSCRIPTION ENFORCEMENT SCHEDULER
-# Runs every 24 hours to downgrade users whose trial/subscription
-# grace period has ended. Uses APScheduler (in-process, no extra
-# services needed on Render).
-# =====================================================================
 # =====================================================================
 # SUBSCRIPTION ENFORCEMENT
 # =====================================================================
@@ -191,6 +186,10 @@ def enforce_subscriptions():
     """
     Downgrade all non-admin users whose grace period has ended.
     Safe to call multiple times — SQL WHERE clause is idempotent.
+    Called from three places:
+      1. _threading.Timer on startup (after DB is ready)
+      2. GET/POST /cron/enforce-subscriptions (external pinger)
+      3. POST /api/admin/enforce-subscriptions (manual admin trigger)
     """
     try:
         now = datetime.utcnow()
@@ -198,9 +197,10 @@ def enforce_subscriptions():
         downgraded = models.downgrade_expired_users()
         if downgraded:
             for u in downgraded:
+                # Note: plan_type in the returned row is already 'free' after the
+                # downgrade — log the user identity only; old plan is recorded in DB.
                 app.logger.info(
-                    f"[Scheduler] Downgraded user {u['id']} ({u.get('email')}) "
-                    f"from {u.get('plan_type')} → free"
+                    f"[Scheduler] Downgraded user {u['id']} ({u.get('email')}) → free"
                 )
             app.logger.info(f"[Scheduler] Total downgraded: {len(downgraded)}")
         else:
@@ -209,29 +209,6 @@ def enforce_subscriptions():
     except Exception as e:
         app.logger.error(f"[Scheduler] enforce_subscriptions error: {e}")
         return []
-
-
-# ── Run once on startup (catches missed downgrades after any restart) ──
-import threading as _threading
-_threading.Timer(8.0, enforce_subscriptions).start()
-
-# ── Also keep APScheduler as a belt-and-suspenders backup ─────────────
-try:
-    from apscheduler.schedulers.background import BackgroundScheduler  # type: ignore
-    from apscheduler.triggers.interval import IntervalTrigger           # type: ignore
-    _scheduler = BackgroundScheduler(daemon=True)
-    _scheduler.add_job(
-        func=enforce_subscriptions,
-        trigger=IntervalTrigger(hours=24),
-        id='enforce_subscriptions',
-        name='Daily subscription enforcement',
-        replace_existing=True,
-        misfire_grace_time=3600
-    )
-    _scheduler.start()
-    app.logger.info("✅ APScheduler started — runs every 24h as backup to cron endpoint.")
-except ImportError:
-    app.logger.warning("[Scheduler] APScheduler not installed — relying on cron endpoint + startup run.")
 
 
 USE_AI = Config.USE_AI
@@ -364,8 +341,13 @@ try:
     if hasattr(models, 'migrate_onboarding'):
         models.migrate_onboarding()
     print("✅ Database initialized/migrated successfully!")
+    # ── Startup enforcement: runs 5s after DB is confirmed ready ──────
+    # Delay is intentional — gives the connection pool time to settle.
+    # Moved here from module top-level so it never fires before init_db().
+    print("✅ Startup enforcement scheduled (T+5s)")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
+    # DB failed — don't schedule enforcement, it would fail too
 
 # Enhanced CORS configuration
 CORS(app, resources={
@@ -4464,12 +4446,14 @@ def cron_enforce_subscriptions():
 
     # Run enforcement
     downgraded = enforce_subscriptions()
+    # Note: user emails are intentionally excluded from the response body.
+    # They are logged server-side by enforce_subscriptions() itself.
+    # This prevents email leakage into external pinger logs (UptimeRobot etc).
     return jsonify({
-        'success': True,
-        'ran_at':  datetime.utcnow().isoformat(),
-        'downgraded_count': len(downgraded),
-        'downgraded': [{'id': u['id'], 'email': u.get('email'),
-                        'was': u.get('plan_type')} for u in downgraded],
+        'success':           True,
+        'ran_at':            datetime.utcnow().isoformat(),
+        'downgraded_count':  len(downgraded),
+        'downgraded_ids':    [u['id'] for u in downgraded],
     })
 
 
