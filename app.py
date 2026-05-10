@@ -4,13 +4,12 @@ from dotenv import load_dotenv
 import os
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import logging
 from logging.handlers import RotatingFileHandler
 import shutil
-from datetime import datetime, timedelta
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from functools import wraps
 from flask_mail import Mail, Message
@@ -190,6 +189,9 @@ def enforce_subscriptions():
       1. _threading.Timer on startup (after DB is ready)
       2. GET/POST /cron/enforce-subscriptions (external pinger)
       3. POST /api/admin/enforce-subscriptions (manual admin trigger)
+
+    Returns (downgraded_list, error_message).
+    error_message is None on success, a string on failure.
     """
     try:
         now = datetime.utcnow()
@@ -205,10 +207,10 @@ def enforce_subscriptions():
             app.logger.info(f"[Scheduler] Total downgraded: {len(downgraded)}")
         else:
             app.logger.info("[Scheduler] No users to downgrade.")
-        return downgraded
+        return downgraded, None
     except Exception as e:
         app.logger.error(f"[Scheduler] enforce_subscriptions error: {e}")
-        return []
+        return [], str(e)
 
 
 USE_AI = Config.USE_AI
@@ -343,7 +345,10 @@ try:
     print("✅ Database initialized/migrated successfully!")
     # ── Startup enforcement: runs 5s after DB is confirmed ready ──────
     # Delay is intentional — gives the connection pool time to settle.
-    # Moved here from module top-level so it never fires before init_db().
+    # BUG FIX: previously this only printed "scheduled" but never actually
+    # created the Timer. Added the real threading.Timer call here.
+    import threading as _threading
+    _threading.Timer(5.0, enforce_subscriptions).start()
     print("✅ Startup enforcement scheduled (T+5s)")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
@@ -744,27 +749,6 @@ def log_conversation(client_id, user_message, bot_response, matched=False, metho
 # =====================================================================
 # PLAN ENFORCEMENT HELPERS
 # =====================================================================
-
-def get_daily_message_count(client_id):
-    """Return how many chat messages this client has received today (UTC)."""
-    try:
-        conn, cursor = models.get_db()
-        today = datetime.utcnow().strftime('%Y-%m-%d')
-        cursor.execute(
-            '''
-            SELECT COUNT(*) AS cnt FROM conversations
-            WHERE client_id = %s AND DATE(timestamp) = %s
-            ''',
-            (client_id, today)
-        )
-        row = cursor.fetchone() or {}
-        cursor.close()
-        conn.close()
-        return int(row.get('cnt', 0))
-    except Exception as e:
-        app.logger.error(f'get_daily_message_count error: {e}')
-        return 0  # fail open — don't block chat if DB is down
-
 
 def get_client_owner_plan(client_id):
     """Return the plan_type string for the user who owns this client_id."""
@@ -4440,12 +4424,19 @@ def cron_enforce_subscriptions():
         (request.get_json(silent=True) or {}).get('secret', '')
     )
 
-    if provided != cron_secret:
+    import hmac as _hmac
+    if not provided or not _hmac.compare_digest(provided, cron_secret):
         app.logger.warning(f"[Cron] Unauthorized attempt from {request.remote_addr}")
         return jsonify({'error': 'Unauthorized'}), 401
 
     # Run enforcement
-    downgraded = enforce_subscriptions()
+    downgraded, err = enforce_subscriptions()
+    if err:
+        return jsonify({
+            'success': False,
+            'error':   err,
+            'ran_at':  datetime.utcnow().isoformat(),
+        }), 500
     # Note: user emails are intentionally excluded from the response body.
     # They are logged server-side by enforce_subscriptions() itself.
     # This prevents email leakage into external pinger logs (UptimeRobot etc).

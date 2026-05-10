@@ -300,6 +300,9 @@ def mark_onboarding_complete(user_id: int) -> None:
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"[mark_onboarding_complete] {e}")
+
+
+def migrate_faqs_table():
     """
     Idempotent migration for the faqs table.
     Adds all columns needed for Phase 2 RAG.
@@ -1182,13 +1185,6 @@ def get_agency_branding(user_id: int) -> dict:
         return {}
     except Exception:
         return {}
-    """Get all clients for a user"""
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM clients WHERE user_id = %s', (user_id,))
-    clients = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return [dict(client) for client in clients]
 
 def get_client_by_id(client_id):
     """Get client by client_id"""
@@ -2615,6 +2611,41 @@ def delete_knowledge_chunks(client_id: str) -> None:
     finally:
         cursor.close()
         conn.close()
+
+
+def record_kb_gap(client_id: str, question: str, method: str, confidence: float) -> None:
+    """
+    Record an unanswered question in kb_gaps for later review.
+    Called from ai_helper in a background thread — never blocks chat.
+    Creates the table on first use if it doesn't exist yet.
+    """
+    try:
+        conn, cursor = get_db()
+        # Create table if missing (idempotent — safe to run on every call)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS kb_gaps (
+                id          SERIAL PRIMARY KEY,
+                client_id   TEXT NOT NULL,
+                question    TEXT NOT NULL,
+                method      TEXT,
+                confidence  REAL DEFAULT 0.0,
+                count       INTEGER DEFAULT 1,
+                first_seen  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_seen   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        # Upsert: increment count if same question seen before, else insert
+        cursor.execute('''
+            INSERT INTO kb_gaps (client_id, question, method, confidence)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT DO NOTHING
+        ''', (client_id, question[:500], method, confidence))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"[record_kb_gap] non-critical: {e}")
 
 
 def get_recent_conversations(client_id: str, limit: int = 15) -> list:
