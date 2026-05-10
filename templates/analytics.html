@@ -446,10 +446,12 @@ async function loadAgencyData(range) {
   renderLeadsChart(data.timeline);
   renderMcTable(data.clients);
 
-  // Pull full leads for the leads table from single client (first active)
-  if (data.clients.length > 0) {
-    const topCid = data.clients[0].client_id;
-    fetchLeads(topCid, range);
+  // Pull full leads for the leads table — use the selected client if set,
+  // otherwise fall back to the first client in the list.
+  const selectedCid = document.getElementById('clientSelect').value;
+  const leadsSource = selectedCid || (data.clients.length > 0 ? data.clients[0].client_id : null);
+  if (leadsSource) {
+    fetchLeads(leadsSource, range);
   }
 
   document.getElementById('tableSubtitle').textContent =
@@ -667,7 +669,7 @@ function renderLeadsFiltered(leads) {
   const tbody = document.getElementById('leadsTableBody');
   const empty = document.getElementById('leadsEmpty');
   if (!leads.length) {
-    tbody.innerHTML = '<tr><td colspan="6"></td></tr>';
+    tbody.innerHTML = '';
     empty.style.display = 'block';
     return;
   }
@@ -712,8 +714,12 @@ function toggleSection(bodyId, toggleId) {
 function fmtDate(str) {
   if (!str) return '—';
   try {
-    const d = new Date(str);
-    return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+    // DB returns naive ISO strings (no Z/offset). Appending 'Z' would
+    // treat them as UTC and shift the date for users in negative UTC offsets.
+    // Parse manually instead so the date displays as stored.
+    const s = str.replace('T', ' ').slice(0, 10);   // "YYYY-MM-DD"
+    const [y, m, d] = s.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
   } catch { return str; }
 }
 

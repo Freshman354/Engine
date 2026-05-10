@@ -802,7 +802,8 @@ def downgrade_single_user(user_id):
 def get_daily_message_count(client_id):
     """
     Return the number of chat messages logged for this client today (UTC).
-    Used to enforce messages_per_day plan limits in /api/chat.
+    Excludes lead_captured rows — those are lead form submissions, not chat
+    turns, and should not count against the messages_per_day plan limit.
     Fails open (returns 0) if the DB is unavailable so chat is never
     blocked by an infrastructure hiccup.
     """
@@ -815,6 +816,7 @@ def get_daily_message_count(client_id):
             FROM conversations
             WHERE client_id = %s
               AND DATE(timestamp) = %s
+              AND (method IS NULL OR method != 'lead_captured')
             ''',
             (client_id, today)
         )
@@ -1501,26 +1503,39 @@ def delete_all_faqs(client_id):
 # =====================================================================
 
 def save_lead(client_id, lead_data):
-    """Save a lead for a client"""
+    """Save a lead for a client. Returns True on success, False on failure."""
     conn, cursor = get_db()
-    cursor.execute(
-        '''INSERT INTO leads (client_id, name, email, phone, company, message, custom_fields, conversation_snippet, source_url)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)''',
-        (
-            client_id,
-            lead_data['name'],
-            lead_data['email'],
-            lead_data.get('phone', ''),
-            lead_data.get('company', ''),
-            lead_data.get('message', ''),
-            lead_data.get('custom_fields'),
-            lead_data.get('conversation_snippet', ''),
-            lead_data.get('source_url', '')
+    try:
+        # Serialize custom_fields dict to JSON string for TEXT column
+        custom_fields = lead_data.get('custom_fields')
+        if isinstance(custom_fields, dict):
+            custom_fields = json.dumps(custom_fields)
+
+        cursor.execute(
+            '''INSERT INTO leads (client_id, name, email, phone, company, message, custom_fields, conversation_snippet, source_url)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+            (
+                client_id,
+                lead_data['name'],
+                lead_data['email'],
+                lead_data.get('phone', ''),
+                lead_data.get('company', ''),
+                lead_data.get('message', ''),
+                custom_fields,
+                lead_data.get('conversation_snippet', ''),
+                lead_data.get('source_url', '')
+            )
         )
-    )
-    conn.commit()
-    cursor.close()
-    conn.close()
+        conn.commit()
+        return True
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[save_lead] Failed for client {client_id}: {e}")
+        return False
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def migrate_lead_custom_fields():
@@ -1532,13 +1547,34 @@ def migrate_lead_custom_fields():
     conn.close()
 
 def get_leads(client_id):
-    """Get all leads for a client"""
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM leads WHERE client_id = %s ORDER BY created_at DESC', (client_id,))
-    leads = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return [dict(lead) for lead in leads]
+    """Get all leads for a client, newest first. Returns [] on failure."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            'SELECT * FROM leads WHERE client_id = %s ORDER BY created_at DESC',
+            (client_id,)
+        )
+        leads = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for lead in leads:
+            row = dict(lead)
+            # Serialize datetime so JSON / analytics.html fmtDate() works
+            if row.get('created_at'):
+                row['created_at'] = row['created_at'].isoformat()
+            # Deserialize custom_fields back to dict if stored as JSON string
+            if row.get('custom_fields') and isinstance(row['custom_fields'], str):
+                try:
+                    row['custom_fields'] = json.loads(row['custom_fields'])
+                except Exception:
+                    pass
+            result.append(row)
+        return result
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_leads] {e}")
+        return []
 
 
 # =====================================================================
@@ -2650,9 +2686,11 @@ def record_kb_gap(client_id: str, question: str, method: str, confidence: float)
 
 def get_recent_conversations(client_id: str, limit: int = 15) -> list:
     """
-    Return the last `limit` conversation turns for a client,
+    Return the last `limit` real conversation turns for a client,
     oldest → newest, as a list of {role, content} dicts
     ready to pass directly to generate_human_like_response.
+    Excludes lead_captured rows (form submissions) — those are not
+    real chat turns and would pollute the AI conversation context.
     """
     try:
         conn, cursor = get_db()
@@ -2660,6 +2698,7 @@ def get_recent_conversations(client_id: str, limit: int = 15) -> list:
             '''SELECT user_message, bot_response
                FROM conversations
                WHERE client_id = %s
+                 AND (method IS NULL OR method != 'lead_captured')
                ORDER BY timestamp DESC
                LIMIT %s''',
             (client_id, limit)

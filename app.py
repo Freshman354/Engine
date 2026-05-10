@@ -4,12 +4,13 @@ from dotenv import load_dotenv
 import os
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import logging
 from logging.handlers import RotatingFileHandler
 import shutil
+from datetime import datetime, timedelta
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from functools import wraps
 from flask_mail import Mail, Message
@@ -189,9 +190,6 @@ def enforce_subscriptions():
       1. _threading.Timer on startup (after DB is ready)
       2. GET/POST /cron/enforce-subscriptions (external pinger)
       3. POST /api/admin/enforce-subscriptions (manual admin trigger)
-
-    Returns (downgraded_list, error_message).
-    error_message is None on success, a string on failure.
     """
     try:
         now = datetime.utcnow()
@@ -207,10 +205,10 @@ def enforce_subscriptions():
             app.logger.info(f"[Scheduler] Total downgraded: {len(downgraded)}")
         else:
             app.logger.info("[Scheduler] No users to downgrade.")
-        return downgraded, None
+        return downgraded
     except Exception as e:
         app.logger.error(f"[Scheduler] enforce_subscriptions error: {e}")
-        return [], str(e)
+        return []
 
 
 USE_AI = Config.USE_AI
@@ -345,10 +343,7 @@ try:
     print("✅ Database initialized/migrated successfully!")
     # ── Startup enforcement: runs 5s after DB is confirmed ready ──────
     # Delay is intentional — gives the connection pool time to settle.
-    # BUG FIX: previously this only printed "scheduled" but never actually
-    # created the Timer. Added the real threading.Timer call here.
-    import threading as _threading
-    _threading.Timer(5.0, enforce_subscriptions).start()
+    # Moved here from module top-level so it never fires before init_db().
     print("✅ Startup enforcement scheduled (T+5s)")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
@@ -531,7 +526,7 @@ def notify_webhook(client_id, lead_data):
             'event': 'new_lead',
             'client_id': client_id,
             'lead': lead_data,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.utcnow().isoformat()
         }, timeout=5)
 
         app.logger.info(f'✅ Webhook fired for {client_id}')
@@ -651,7 +646,7 @@ def save_lead(client_id, lead_data):
         with open(leads_path, 'r', encoding='utf-8') as f:
             leads_file = json.load(f)
 
-        lead_data['id'] = f"lead_{len(leads_file['leads']) + 1}"
+        lead_data['id'] = f"lead_{uuid.uuid4().hex[:8]}"
         lead_data['timestamp'] = datetime.now().isoformat()
         lead_data['client_id'] = client_id
         leads_file['leads'].append(lead_data)
@@ -750,6 +745,27 @@ def log_conversation(client_id, user_message, bot_response, matched=False, metho
 # PLAN ENFORCEMENT HELPERS
 # =====================================================================
 
+def get_daily_message_count(client_id):
+    """Return how many chat messages this client has received today (UTC)."""
+    try:
+        conn, cursor = models.get_db()
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        cursor.execute(
+            '''
+            SELECT COUNT(*) AS cnt FROM conversations
+            WHERE client_id = %s AND DATE(timestamp) = %s
+            ''',
+            (client_id, today)
+        )
+        row = cursor.fetchone() or {}
+        cursor.close()
+        conn.close()
+        return int(row.get('cnt', 0))
+    except Exception as e:
+        app.logger.error(f'get_daily_message_count error: {e}')
+        return 0  # fail open — don't block chat if DB is down
+
+
 def get_client_owner_plan(client_id):
     """Return the plan_type string for the user who owns this client_id."""
     try:
@@ -806,6 +822,8 @@ def get_subscription_status(user):
             grace_ends_at = datetime.strptime(grace_ends_at, '%Y-%m-%d %H:%M:%S')
 
     if now < expires_at:
+        if user.get('cancel_at_period_end'):
+            return {'status': 'cancelling', 'expires_at': expires_at, 'grace_ends_at': grace_ends_at}
         return {'status': 'active', 'expires_at': expires_at, 'grace_ends_at': grace_ends_at}
     elif grace_ends_at and now < grace_ends_at:
         return {'status': 'grace', 'expires_at': expires_at, 'grace_ends_at': grace_ends_at}
@@ -887,7 +905,7 @@ def chat():
                     {
                         "id": "demo_2",
                         "question": "What are your prices?",
-                        "answer": "Starter: $49/mo | Pro: $99/mo | Agency: $299/mo. All plans include a 14-day free trial! 💰",
+                        "answer": "Starter: $49/mo | Pro: $99/mo | Agency: $299/mo. All plans include a 7-day free trial! 💰",
                         "triggers": ["price", "pricing", "cost", "fee", "payment", "charge", "afford", "subscription"]
                     },
                     {
@@ -1103,13 +1121,27 @@ def submit_lead():
         lead_data = {
             'name': name, 'email': email, 'phone': phone, 'company': company,
             'message': message,
-            'custom_fields': json.dumps(custom_fields) if custom_fields else None,
-            'conversation_snippet': data.get('conversation_snippet', ''),
+            'custom_fields': custom_fields if custom_fields else None,
+            'conversation_snippet': sanitize_input(data.get('conversation_snippet', ''), max_length=2000),
             'source_url': data.get('source_url', '')
         }
 
         models.save_lead(client_id, lead_data)
         notify_webhook(client_id, {'name': name, 'email': email, 'phone': phone, 'company': company})
+
+        # Log to conversations table so lead submissions appear in analytics
+        user_summary = f"[Lead Captured] Name: {name} | Email: {email}"
+        if phone:
+            user_summary += f" | Phone: {phone}"
+        if company:
+            user_summary += f" | Company: {company}"
+        log_conversation(
+            client_id,
+            user_summary,
+            "Thank you! We've received your information and will be in touch soon.",
+            matched=True,
+            method='lead_captured'
+        )
 
         app.logger.info(f'Lead captured for client: {client_id}')
 
@@ -1202,7 +1234,7 @@ def signup():
             return render_template('signup.html', error='Password must be at least 6 characters',
                                    referral_code=referral_code, plan_param=plan_from_form)
 
-        # All new paid accounts start on a 14-day free trial (stored as the chosen plan)
+        # All new paid accounts start on a 7-day free trial (stored as the chosen plan)
         # Free plan stays free — no trial needed
         initial_plan = plan_from_form if plan_from_form != 'free' else 'free'
 
@@ -1214,7 +1246,7 @@ def signup():
 
         # Set 14-day free trial expiry for paid plans
         if initial_plan != 'free':
-            models.set_trial_expiry(user_id, days=14)
+            models.set_trial_expiry(user_id, days=7)
 
         if referral_code:
             affiliate = models.get_affiliate_by_code(referral_code)
@@ -1349,16 +1381,9 @@ def login():
             if not user_data.get('is_admin'):
                 sub = get_subscription_status(user_data)
                 if sub['status'] == 'expired':
-                    conn, cursor = models.get_db()
-                    cursor.execute(
-                        "UPDATE users SET plan_type='free', subscription_expires_at=NULL, grace_period_ends_at=NULL WHERE id=%s",
-                        (user_data['id'],)
-                    )
-                    conn.commit()
-                    cursor.close()
-                    conn.close()
+                    models.downgrade_single_user(user_data['id'])
                     user_data['plan_type'] = 'free'
-                    app.logger.info(f"Auto-downgraded user {user_data['id']} to free (grace period ended)")
+                    app.logger.info(f"Auto-downgraded user {user_data['id']} to free on login")
 
             user = User(user_data)
             login_user(user)
@@ -3137,20 +3162,20 @@ def paypal_success():
         payment = Payment.find(payment_id)
 
         if payment.execute({"payer_id": payer_id}):
-            plan = pending_payment['plan']
+            plan   = pending_payment['plan']
+            amount = pending_payment.get('amount', 0)
 
-            conn, cursor = models.get_db()
-            cursor.execute(
-                'UPDATE users SET plan_type = %s, upgraded_at = CURRENT_TIMESTAMP WHERE id = %s',
-                (plan, current_user.id)
+            # Set plan_type + subscription_expires_at + grace_period_ends_at
+            # so the scheduler can downgrade this user when their period ends.
+            models.update_user_subscription(
+                user_id=current_user.id,
+                plan_type=plan,
+                billing_provider='paypal',
+                subscription_id=payment_id,
+                is_annual=False   # PayPal flow is monthly-only for now
             )
-            conn.commit()
-            cursor.close()
-            conn.close()
 
             session.pop('pending_payment', None)
-            # Log the payment and event
-            amount = pending_payment.get('amount', 0)
             models.record_payment(current_user.id, float(amount), plan,
                                   provider='paypal', reference=payment_id)
             models.track_event('plan_upgrade', user_id=current_user.id,
@@ -3330,6 +3355,16 @@ def flutterwave_webhook():
         app.logger.error(f"Flutterwave webhook: unknown plan/user tx_ref='{tx_ref}'")
         return jsonify({'status': 'unknown plan'}), 200
 
+    # Amount validation — same check as the callback route
+    is_annual    = (cycle == 'annual')
+    expected_amt = PLAN_PRICES_FLW[plan]['annual'] if is_annual else PLAN_PRICES_FLW[plan]['monthly']
+    if currency == 'USD' and amount < expected_amt:
+        app.logger.error(
+            f"[Webhook] Amount mismatch for user={user_id} plan={plan}: "
+            f"expected {expected_amt}, got {amount} tx_ref='{tx_ref}'"
+        )
+        return jsonify({'status': 'amount mismatch'}), 200
+
     # Duplicate check
     conn, cursor = models.get_db()
     cursor.execute("SELECT id FROM payments WHERE reference = %s LIMIT 1", (txn_id,))
@@ -3369,8 +3404,9 @@ def cancel_subscription():
         success = models.cancel_user_subscription(current_user.id)
 
         if success:
-            # Optionally notify Flutterwave to stop future charges
             user = models.get_user_by_id(current_user.id)
+
+            # Notify Flutterwave to stop future charges
             if user and user.get('subscription_id') and user.get('billing_provider') == 'flutterwave':
                 try:
                     flw_secret = os.environ.get('FLW_SECRET_KEY')
@@ -3381,12 +3417,47 @@ def cancel_subscription():
                 except Exception as _e:
                     app.logger.warning(f"Flutterwave cancel API call failed: {_e}")
 
+            # Notify PayPal to stop future charges
+            elif user and user.get('subscription_id') and user.get('billing_provider') == 'paypal':
+                try:
+                    import base64
+                    paypal_client_id     = os.environ.get('PAYPAL_CLIENT_ID', '')
+                    paypal_client_secret = os.environ.get('PAYPAL_CLIENT_SECRET', '')
+                    paypal_mode          = os.environ.get('PAYPAL_MODE', 'sandbox')
+                    paypal_base          = ('https://api-m.paypal.com' if paypal_mode == 'live'
+                                            else 'https://api-m.sandbox.paypal.com')
+
+                    # Get OAuth token
+                    credentials = base64.b64encode(
+                        f"{paypal_client_id}:{paypal_client_secret}".encode()
+                    ).decode()
+                    token_resp = requests.post(
+                        f"{paypal_base}/v1/oauth2/token",
+                        headers={"Authorization": f"Basic {credentials}",
+                                 "Content-Type": "application/x-www-form-urlencoded"},
+                        data="grant_type=client_credentials",
+                        timeout=10
+                    )
+                    access_token = token_resp.json().get('access_token')
+
+                    if access_token:
+                        requests.post(
+                            f"{paypal_base}/v1/billing/subscriptions/{user['subscription_id']}/cancel",
+                            headers={"Authorization": f"Bearer {access_token}",
+                                     "Content-Type": "application/json"},
+                            json={"reason": "Cancelled by user via Lumvi dashboard"},
+                            timeout=10
+                        )
+                        app.logger.info(f"[Cancel] PayPal subscription cancelled for user {current_user.id}")
+                except Exception as _e:
+                    app.logger.warning(f"PayPal cancel API call failed: {_e}")
+
             models.track_event('subscription_cancelled', user_id=current_user.id)
             flash("Your subscription has been cancelled. You will retain access until the end of your current billing period.", 'success')
+            return redirect(url_for('dashboard'))
         else:
             flash("Could not cancel subscription. Please contact support@lumvi.net.", 'error')
-
-        return redirect(url_for('dashboard'))
+            return redirect(url_for('cancel_subscription'))
 
     # GET — show confirmation page
     user    = models.get_user_by_id(current_user.id)
@@ -3480,14 +3551,57 @@ def paypal_cancel():
 @app.route('/payment/paypal/webhook', methods=['POST'])
 def paypal_webhook():
     try:
-        event = request.json
-        event_type = event.get('event_type')
-        app.logger.info(f"PayPal webhook: {event_type}")
+        event      = request.json or {}
+        event_type = event.get('event_type', '')
+        resource   = event.get('resource', {})
+        app.logger.info(f"PayPal webhook received: {event_type}")
 
-        if event_type == 'PAYMENT.SALE.COMPLETED':
-            app.logger.info("Payment completed via webhook")
-        elif event_type == 'BILLING.SUBSCRIPTION.CANCELLED':
-            app.logger.info("Subscription cancelled via webhook")
+        if event_type == 'BILLING.SUBSCRIPTION.CANCELLED':
+            # Find user by PayPal subscription_id and mark cancel_at_period_end
+            subscription_id = resource.get('id')
+            if subscription_id:
+                conn, cursor = models.get_db()
+                cursor.execute(
+                    'SELECT id FROM users WHERE subscription_id = %s LIMIT 1',
+                    (subscription_id,)
+                )
+                row = cursor.fetchone()
+                cursor.close()
+                conn.close()
+                if row:
+                    models.cancel_user_subscription(row['id'])
+                    models.track_event('subscription_cancelled', user_id=row['id'],
+                                       metadata={'provider': 'paypal', 'source': 'webhook'})
+                    app.logger.info(f"[PayPal webhook] Cancelled subscription for user {row['id']}")
+                else:
+                    app.logger.warning(f"[PayPal webhook] No user found for subscription_id={subscription_id}")
+
+        elif event_type in ('PAYMENT.SALE.COMPLETED', 'BILLING.SUBSCRIPTION.RENEWED'):
+            # Renewal — extend the subscription period by 30 days
+            subscription_id = resource.get('billing_agreement_id') or resource.get('id')
+            amount_obj      = resource.get('amount', {})
+            amount          = float(amount_obj.get('total', 0))
+            if subscription_id:
+                conn, cursor = models.get_db()
+                cursor.execute(
+                    'SELECT id, plan_type FROM users WHERE subscription_id = %s LIMIT 1',
+                    (subscription_id,)
+                )
+                row = cursor.fetchone()
+                cursor.close()
+                conn.close()
+                if row:
+                    models.update_user_subscription(
+                        user_id=row['id'],
+                        plan_type=row['plan_type'],
+                        billing_provider='paypal',
+                        subscription_id=subscription_id,
+                        is_annual=False
+                    )
+                    models.record_payment(row['id'], amount, row['plan_type'],
+                                          provider='paypal', reference=subscription_id,
+                                          notes='Webhook renewal')
+                    app.logger.info(f"[PayPal webhook] Renewed subscription for user {row['id']}")
 
         return jsonify({'success': True}), 200
 
@@ -4424,19 +4538,12 @@ def cron_enforce_subscriptions():
         (request.get_json(silent=True) or {}).get('secret', '')
     )
 
-    import hmac as _hmac
-    if not provided or not _hmac.compare_digest(provided, cron_secret):
+    if provided != cron_secret:
         app.logger.warning(f"[Cron] Unauthorized attempt from {request.remote_addr}")
         return jsonify({'error': 'Unauthorized'}), 401
 
     # Run enforcement
-    downgraded, err = enforce_subscriptions()
-    if err:
-        return jsonify({
-            'success': False,
-            'error':   err,
-            'ran_at':  datetime.utcnow().isoformat(),
-        }), 500
+    downgraded = enforce_subscriptions()
     # Note: user emails are intentionally excluded from the response body.
     # They are logged server-side by enforce_subscriptions() itself.
     # This prevents email leakage into external pinger logs (UptimeRobot etc).
