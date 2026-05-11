@@ -2264,6 +2264,22 @@ def migrate_conversation_features():
             "CREATE INDEX IF NOT EXISTS idx_kb_type ON knowledge_base(client_id, type)"
         )
 
+        # Schema reconciliation: migrate_knowledge_base creates knowledge_base with 'kb_id',
+        # but this migration creates it with 'chunk_id'. If this ran first the table has
+        # chunk_id — add kb_id as a generated alias column so both code paths work.
+        cursor.execute("SAVEPOINT sp_kb_alias")
+        try:
+            cursor.execute(
+                "ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS kb_id TEXT"
+            )
+            # Backfill kb_id from chunk_id for existing rows
+            cursor.execute(
+                "UPDATE knowledge_base SET kb_id = chunk_id WHERE kb_id IS NULL AND chunk_id IS NOT NULL"
+            )
+            cursor.execute("RELEASE SAVEPOINT sp_kb_alias")
+        except Exception:
+            cursor.execute("ROLLBACK TO SAVEPOINT sp_kb_alias")
+
         conn.commit()
         print("✅ Conversation feature + knowledge_base tables ready.")
     except Exception as e:
@@ -2475,56 +2491,6 @@ def get_faq_embeddings(client_id: str) -> list:
         return []
 
 
-def save_knowledge_chunks(client_id: str, chunks: list) -> int:
-    """
-    Upsert a list of knowledge chunks for a client.
-    Each chunk: {chunk_id, title, content, type, category, tags, embedding, metadata, quality_score}
-    Returns count of saved chunks.
-    """
-    if not chunks:
-        return 0
-    conn, cursor = get_db()
-    saved = 0
-    try:
-        for chunk in chunks:
-            cursor.execute(
-                '''INSERT INTO knowledge_base
-                   (client_id, chunk_id, title, content, type, category, tags, embedding, metadata, quality_score)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                   ON CONFLICT (chunk_id)
-                   DO UPDATE SET
-                     title         = EXCLUDED.title,
-                     content       = EXCLUDED.content,
-                     type          = EXCLUDED.type,
-                     category      = EXCLUDED.category,
-                     tags          = EXCLUDED.tags,
-                     embedding     = EXCLUDED.embedding,
-                     metadata      = EXCLUDED.metadata,
-                     quality_score = EXCLUDED.quality_score,
-                     version       = knowledge_base.version + 1,
-                     updated_at    = CURRENT_TIMESTAMP''',
-                (
-                    client_id,
-                    chunk['chunk_id'],
-                    chunk.get('title', ''),
-                    chunk['content'],
-                    chunk.get('type', 'faq'),
-                    chunk.get('category', 'General'),
-                    json.dumps(chunk.get('tags', [])),
-                    json.dumps(chunk['embedding']) if chunk.get('embedding') else None,
-                    json.dumps(chunk.get('metadata', {})),
-                    float(chunk.get('quality_score', 0.0))
-                )
-            )
-            saved += 1
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print(f"save_knowledge_chunks error: {e}")
-    finally:
-        cursor.close()
-        conn.close()
-    return saved
 
 
 def get_knowledge_chunks(client_id: str, chunk_type: str = None, limit: int = 500) -> list:
@@ -2560,6 +2526,9 @@ def get_knowledge_chunks(client_id: str, chunk_type: str = None, limit: int = 50
                     r['embedding'] = json.loads(r['embedding'])
                 except Exception:
                     r['embedding'] = None
+            # ai_helper reads chunk.get('kb_id') — alias chunk_id so it resolves correctly
+            if 'kb_id' not in r and r.get('chunk_id'):
+                r['kb_id'] = r['chunk_id']
         return rows
     except Exception as e:
         print(f"get_knowledge_chunks error: {e}")

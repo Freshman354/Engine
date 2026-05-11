@@ -179,7 +179,8 @@ _FRUSTRATION_SIGNALS = [
 
 # ── Billing urgency signals ───────────────────────────────────────────
 _BILLING_URGENCY_SIGNALS = [
-    'overcharged', 'charged twice', 'wrong charge', 'refund',
+    'overcharged', 'charged twice', 'wrong charge',
+    'need a refund', 'request a refund', 'issue a refund', 'refund my payment',
     'cancel my subscription', 'unauthorised charge', 'unauthorized charge',
     'dispute', 'charge my card', 'billing error', 'charged the wrong amount',
 ]
@@ -215,10 +216,11 @@ _QUESTION_SIGNALS = re.compile(
 # ─────────────────────────────────────────────────────────────────────
 
 def _cosine(a: list, b: list) -> float:
-    pairs = list(zip(a, b))
-    dot   = sum([x * y for x, y in pairs])
-    mag_a = math.sqrt(sum([x * x for x in a]))
-    mag_b = math.sqrt(sum([x * x for x in b]))
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot   = sum(x * y for x, y in zip(a, b))
+    mag_a = math.sqrt(sum(x * x for x in a))
+    mag_b = math.sqrt(sum(x * x for x in b))
     return dot / (mag_a * mag_b) if mag_a and mag_b else 0.0
 
 
@@ -236,8 +238,10 @@ def _bm25_score(query_tokens: List[str], doc_tokens: List[str],
     """
     if not query_tokens or not doc_tokens:
         return 0.0
+    if avg_doc_len == 0:
+        return 0.0
     doc_len = len(doc_tokens)
-    tf_map  = {tok: doc_tokens.count(tok) for tok in set(doc_tokens)}
+    tf_map  = collections.Counter(doc_tokens)
     score   = 0.0
     for term in query_tokens:
         if term not in tf_map:
@@ -306,11 +310,12 @@ def extract_session_memory(
         'frustration_score': 0,
         'is_frustrated':     False,
         'repeated_question': False,
-        'turns':             len(conversation_history),
+        'turns':             sum(1 for t in conversation_history if t.get('role') == 'user'),
     }
 
     try:
         all_text      = current_message
+        user_text     = current_message  # PII scan scope: user turns only
         user_messages: List[str] = []
 
         for turn in conversation_history:
@@ -320,24 +325,25 @@ def extract_session_memory(
             all_text += ' ' + content
             if turn.get('role') == 'user':
                 user_messages.append(content.lower())
+                user_text += ' ' + content
 
         # Name
         name_match = re.search(
             r"(?:my name is|i(?:'?m| am)|this is|call me)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
-            all_text, re.IGNORECASE,
+            user_text, re.IGNORECASE,
         )
         if name_match:
             memory['name'] = name_match.group(1).strip().title()
 
         # Email
         email_match = re.search(
-            r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b', all_text
+            r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b', user_text
         )
         if email_match:
             memory['email'] = email_match.group(0)
 
         # Phone
-        phone_match = re.search(r'(\+?[\d][\d\s\-().]{7,14}\d)', all_text)
+        phone_match = re.search(r'(\+?[\d][\d\s\-().]{7,14}\d)', user_text)
         if phone_match:
             candidate = re.sub(r'[\s\-().]', '', phone_match.group(1))
             if 7 <= len(candidate) <= 15:
@@ -623,7 +629,10 @@ class AIHelper:
             # ── CALL 1 (conditional): Query rewrite ───────────────────────
             word_count  = len(clean.split())
             is_followup = self._is_followup(clean, history)
-            if (word_count < 10 or is_followup) and history and self.enabled:
+            # Bug #10: Skip Call 1 if detect_intent already consumed the AI budget
+            # via its Tier 3 confirmation call, to honour the MAX 2 calls per turn contract.
+            intent_used_ai = intent.get('ai_used', False)
+            if (word_count < 10 or is_followup) and history and self.enabled and not intent_used_ai:
                 search_query = self._combined_rewrite_intent(clean, history)
             else:
                 search_query = self._resolve_query(clean, history)
@@ -694,10 +703,11 @@ class AIHelper:
                          if hybrid_ranked else '')
             # FIX #13: Pass kb_version so updated KB entries bypass the cache.
             cache_key = self._cache_key(clean, top_id, vertical, kb_version)
-            if cache_key in self._response_cache:
+            _cached_response = self._response_cache.get(cache_key)
+            if _cached_response is not None:
                 logger.debug(f"[Cache HIT] key={cache_key[:10]}…")
                 return {
-                    'response':      self._response_cache[cache_key],
+                    'response':      _cached_response,
                     'method':        'cache',
                     'confidence':    hybrid_scores[0] if hybrid_scores else 0.8,
                     'is_lead':       False,
@@ -738,6 +748,10 @@ class AIHelper:
             # _BG_EXECUTOR caps concurrent background workers at 4.
             if method in ('idk_fallback', 'vertical_fallback') and client_id and client_id != 'demo':
                 _BG_EXECUTOR.submit(record_kb_gap, client_id, user_message, method, confidence)
+
+            # Bug #22: maybe_summarise was fully implemented but never called.
+            if client_id and client_id != 'demo':
+                self.maybe_summarise(client_id, history)
 
             logger.info(
                 f"[Pipeline] done | method={method} conf={confidence:.2f} "
@@ -900,8 +914,8 @@ class AIHelper:
                 # Prepend any orphan text that arrived before this valid part
                 valid.append((pending_prefix + ' ' + part).strip() if pending_prefix else part)
                 pending_prefix = ''
-            elif valid:
-                # Append trailing/connecting fragment to the last valid sub-query
+            elif valid and len(part.split()) <= 3:
+                # Append short trailing/connecting fragment to the last valid sub-query
                 valid[-1] = valid[-1] + ' ' + part
             else:
                 # No valid sub-query yet — carry as prefix for the next one
@@ -978,7 +992,7 @@ class AIHelper:
         msg = message.lower().strip()
         for action, keywords in _ACTION_KEYWORDS.items():
             for kw in keywords:
-                if kw in msg:
+                if re.search(r'\b' + re.escape(kw) + r'\b', msg):
                     logger.info(f"[Action] detected='{action}' via keyword='{kw}'")
                     return {'action': action}
         return {'action': None}
@@ -1066,9 +1080,10 @@ class AIHelper:
                 reasons.append(f"lead:{kw}")
 
         for kw in vert_cfg.get('pricing_keywords', _GLOBAL_PRICING_KW):
-            if kw in msg:
+            if re.search(r'\b' + re.escape(kw) + r'\b', msg):
                 score += 2.5
                 reasons.append(f"price:{kw}")
+                break  # Bug #15: score only once for pricing intent
 
         for trigger in lead_triggers:
             if trigger.lower() in msg:
@@ -1098,7 +1113,8 @@ class AIHelper:
                     if is_lead:
                         logger.info(f"[Intent] AI-confirmed lead score={score:.1f} conf={conf:.2f}")
                     return {'intent': 'lead_request' if is_lead else 'question',
-                            'is_lead': is_lead, 'score': score, 'confidence': conf}
+                            'is_lead': is_lead, 'score': score, 'confidence': conf,
+                            'ai_used': True}
             except Exception as _e:
                 logger.debug(f"[Intent] AI tier failed: {_e}")
 
@@ -1237,7 +1253,7 @@ Rules:
         action = action_phrases.get(vertical, action_phrases['general'])
 
         if not email:
-            nudge = f"{greeting} To {action}, what's the best email address to reach you at?"
+            nudge = f"{greeting.rstrip()} To {action}, what's the best email address to reach you at?"
         elif not name:
             nudge = f"{greeting} Just so we can personalise things — what's your name?"
         elif not phone:
@@ -1338,7 +1354,7 @@ Rules:
                             'category': chunk.get('category', 'General'),
                             'type':     chunk.get('type', 'faq'),
                         }, _cosine(query_vec, chunk['embedding']) if chunk.get('embedding')
-                           else max(0.0, 0.5 - (i * 0.05)))
+                           else 0.0)
                         for i, chunk in enumerate(kb_chunks)
                     ]
                     scored = [(c, s) for c, s in scored if s > threshold]
@@ -1455,8 +1471,9 @@ Rules:
         doc_freq_map: Dict[str, int] = {}
         for cand in candidates:
             doc_text   = (cand.get('question', '') + ' ' + cand.get('answer', cand.get('content', '')))
-            doc_tokens = set(_tokenize(doc_text))
-            all_doc_lengths.append(len(_tokenize(doc_text)))
+            tokens_list = _tokenize(doc_text)
+            doc_tokens  = set(tokens_list)
+            all_doc_lengths.append(len(tokens_list))
             for term in query_tokens:
                 if term in doc_tokens:
                     doc_freq_map[term] = doc_freq_map.get(term, 0) + 1
@@ -1466,9 +1483,10 @@ Rules:
 
         scored = []
         for i, cand in enumerate(candidates):
-            vec_score  = vector_scores[i] if i < len(vector_scores) else 0.0
-            doc_text   = (cand.get('question', '') + ' ' + cand.get('answer', cand.get('content', '')))
-            doc_tokens = _tokenize(doc_text)
+            vec_score   = vector_scores[i] if i < len(vector_scores) else 0.0
+            doc_text    = (cand.get('question', '') + ' ' + cand.get('answer', cand.get('content', '')))
+            tokens_list = _tokenize(doc_text)
+            doc_tokens  = tokens_list
             kw_score   = _bm25_score(
                 query_tokens, doc_tokens,
                 avg_doc_len=avg_doc_len,
@@ -1493,12 +1511,13 @@ Rules:
             )
 
         scored.sort(key=lambda x: x[1], reverse=True)
-        if scored:
-            logger.info(
-                f"[Stage5/Hybrid] top_hybrid={scored[0][1]:.3f} "
-                f"vec={scored[0][2]:.3f} bm25={scored[0][3]:.3f} "
-                f"sticky={scored[0][4]} active_cat='{active_category}' n={len(scored)}"
-            )
+        if not scored:
+            return [], []
+        logger.info(
+            f"[Stage5/Hybrid] top_hybrid={scored[0][1]:.3f} "
+            f"vec={scored[0][2]:.3f} bm25={scored[0][3]:.3f} "
+            f"sticky={scored[0][4]} active_cat='{active_category}' n={len(scored)}"
+        )
         return [s[0] for s in scored], [s[1] for s in scored]
 
     def _last_response_category(self, history: List[Dict]) -> Optional[str]:
@@ -1517,7 +1536,7 @@ Rules:
                     return tag_match.group(1).strip()
                 content_lower = content.lower()
                 for cat in KNOWN_CATS:
-                    if cat in content_lower:
+                    if re.search(r'\b' + cat + r'\b', content_lower):
                         return cat.title()
 
         return None
@@ -1671,6 +1690,9 @@ Rules:
             else:
                 sentences     = re.split(r'(?<=[.!?])\s+', response_text)
                 response_text = ' '.join(sentences[:3])
+            # Bug #20: hard cap — sentences[:3] can still exceed 600 chars
+            if len(response_text) > 600:
+                response_text = response_text[:597] + '...'
 
         return response_text
 
@@ -1735,7 +1757,7 @@ Sound friendly and human. Return ONLY the response text."""
         'how much is the ', 'how much does the ', 'what does the ',
         'what is the ', 'is the ', 'does the ', 'how about the ',
         'same for ', 'same question for ', 'and for ',
-        'the ', 'that one', 'this one', 'the same ',
+        'that one', 'this one', 'the same ',
     )
 
     _TOPIC_STOPS = {
@@ -1770,15 +1792,16 @@ Sound friendly and human. Return ONLY the response text."""
                 'it', 'that', 'this', 'they', 'them', 'those', 'these', 'there',
                 'its', "it's", "that's", "there's", 'same', 'both', 'either',
             }
-            if not GREETINGS.issuperset(set(words)):
-                # Only treat as follow-up if there is a context reference pronoun
-                has_context_ref = bool(set(words) & CONTEXT_PRONOUNS)
-                last_bot = next(
-                    (m.get('content', '') for m in reversed(history)
-                     if m.get('role') != 'user'), None
-                )
-                if has_context_ref and last_bot and len(last_bot) > 40:
-                    return True
+            if any(w in GREETINGS for w in words):
+                return False
+            # Only treat as follow-up if there is a context reference pronoun
+            has_context_ref = bool(set(words) & CONTEXT_PRONOUNS)
+            last_bot = next(
+                (m.get('content', '') for m in reversed(history)
+                 if m.get('role') != 'user'), None
+            )
+            if has_context_ref and last_bot and len(last_bot) > 40:
+                return True
         return False
 
     def _resolve_query(self, message: str, history: List[Dict]) -> str:
@@ -1949,7 +1972,14 @@ Sound friendly and human. Return ONLY the response text."""
                 embed_text = f"{question} {chunk_text}"
                 embedding  = _embed(embed_text, task='retrieval_document')
 
-                if embedding and seen_embeddings:
+                if not embedding:
+                    logger.warning(
+                        f"[Enrich] _embed() returned empty for chunk idx={idx} "
+                        f"q='{question[:50]}' — skipping chunk to avoid zero-score DB row"
+                    )
+                    continue
+
+                if seen_embeddings:
                     max_sim = max((_cosine(embedding, ex) for ex in seen_embeddings), default=0.0)
                     if max_sim > 0.92:
                         logger.debug(f"[Dedup] skipped (sim={max_sim:.3f}): {question[:50]}")
@@ -1995,7 +2025,7 @@ Sound friendly and human. Return ONLY the response text."""
             else:
                 if current:
                     chunks.append(current)
-                current = sent
+                current = sent if len(sent) <= max_len else sent[:max_len]
         if current:
             chunks.append(current)
         return chunks if chunks else [text[:max_len]]
@@ -2094,12 +2124,22 @@ Sound friendly and human. Return ONLY the response text."""
         try:
             return json.loads(text)
         except Exception:
-            m = re.search(r'\{.*?\}', text, re.DOTALL)  # Fix 3: non-greedy
-            if m:
-                try:
-                    return json.loads(m.group(0))
-                except Exception:
-                    pass
+            # Find the outermost {...} by tracking brace depth — handles nested JSON
+            # without the catastrophic backtracking risk of a greedy r'\{.*\}' regex.
+            start = text.find('{')
+            if start != -1:
+                depth = 0
+                for i, ch in enumerate(text[start:], start):
+                    if ch == '{':
+                        depth += 1
+                    elif ch == '}':
+                        depth -= 1
+                        if depth == 0:
+                            try:
+                                return json.loads(text[start:i + 1])
+                            except Exception:
+                                pass
+                            break
         return None
 
 

@@ -905,13 +905,13 @@ def chat():
                     {
                         "id": "demo_2",
                         "question": "What are your prices?",
-                        "answer": "Starter: $49/mo | Pro: $99/mo | Agency: $299/mo. All plans include a 7-day free trial! 💰",
+                        "answer": "Starter: $49/mo | Pro: $99/mo | Agency: $299/mo. All plans include a 7-day free trial.",
                         "triggers": ["price", "pricing", "cost", "fee", "payment", "charge", "afford", "subscription"]
                     },
                     {
                         "id": "demo_3",
                         "question": "Do you offer discounts?",
-                        "answer": "Yes! Annual plans save you 2 full months. Ask us about annual billing. 🎉",
+                        "answer": "Yes! Annual plans save you 2 full months. Ask us about annual billing.",
                         "triggers": ["discount", "sale", "promo", "coupon", "deal", "cheaper", "reduce", "saving", "annual"]
                     }
                 ]
@@ -993,9 +993,8 @@ def chat():
         # ── Step 2: Full RAG Pipeline ────────────────────────────────────
         if ai_helper and ai_helper.enabled:
             try:
-                # Load 15-message history + trigger summarisation checkpoint
+                # Load 15-message history — summarisation is handled inside generate_response
                 convo_history = models.get_recent_conversations(client_id, limit=15)
-                ai_helper.maybe_summarise(client_id, convo_history)
 
                 app.logger.info(
                     f"[Chat] client={client_id} faqs={len(faqs_list)} "
@@ -1026,7 +1025,7 @@ def chat():
                 response_text = result.get('response', '')
                 method        = result.get('method', 'rag_pipeline')
                 confidence    = result.get('confidence', 0.0)
-                from_cache    = result.get('from_cache', False)
+                from_cache    = result.get('method') == 'cache'
 
                 # Catch any late lead detection from inside the pipeline
                 if result.get('is_lead'):
@@ -1234,7 +1233,7 @@ def signup():
             return render_template('signup.html', error='Password must be at least 6 characters',
                                    referral_code=referral_code, plan_param=plan_from_form)
 
-        # All new paid accounts start on a 7-day free trial (stored as the chosen plan)
+        # All new paid accounts start on a 14-day free trial (stored as the chosen plan)
         # Free plan stays free — no trial needed
         initial_plan = plan_from_form if plan_from_form != 'free' else 'free'
 
@@ -1244,7 +1243,7 @@ def signup():
             return render_template('signup.html', error='An account with that email already exists',
                                    referral_code=referral_code, plan_param=plan_from_form)
 
-        # Set 14-day free trial expiry for paid plans
+        # Set 7-day free trial expiry for paid plans
         if initial_plan != 'free':
             models.set_trial_expiry(user_id, days=7)
 
