@@ -8,17 +8,66 @@ import uuid
 import os
 
 DATABASE_URL = os.environ.get('DATABASE_URL')
+if not DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL environment variable is not set. "
+        "Add it to your Render/local .env before starting the server."
+    )
+
+# ── Connection pool ───────────────────────────────────────────────────
+# Opens at most (maxconn) connections to Postgres. Every call to get_db()
+# checks out one connection from the pool and every caller must return it
+# via cursor.close() + conn.close() (which puts it back, not disconnects).
+# This replaces psycopg2.connect() on every request — critical at scale.
+import psycopg2.pool as _pool
+import threading as _threading
+
+_pool_lock = _threading.Lock()
+_db_pool: _pool.ThreadedConnectionPool | None = None
+
+def _get_pool() -> _pool.ThreadedConnectionPool:
+    """Initialise the connection pool lazily (thread-safe)."""
+    global _db_pool
+    if _db_pool is None:
+        with _pool_lock:
+            if _db_pool is None:
+                _db_pool = _pool.ThreadedConnectionPool(
+                    minconn=2,
+                    maxconn=int(os.environ.get('DB_POOL_MAX', 10)),
+                    dsn=DATABASE_URL,
+                )
+    return _db_pool
+
 
 def get_db():
-    """Get database connection"""
-    conn = psycopg2.connect(DATABASE_URL)
-    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    """Check out a connection from the pool and return (conn, RealDictCursor).
+    Callers do cursor.close() then conn.close() — conn.close() is patched to
+    return the connection to the pool rather than destroying the socket.
+    """
+    conn = _get_pool().getconn()
+    conn.cursor_factory = psycopg2.extras.RealDictCursor
+    conn.close = lambda: _return_conn(conn)
+    cursor = conn.cursor()
     return conn, cursor
 
+
+def _return_conn(conn) -> None:
+    """Return a connection to the pool (called by close() shim below).
+    Callers already do cursor.close(); conn.close() — we monkey-patch
+    conn.close so it returns to the pool instead of closing the socket.
+    """
+    try:
+        _get_pool().putconn(conn)
+    except Exception:
+        pass
+
+
 def get_db_connection():
-    """Get database connection (legacy alias)"""
-    conn = psycopg2.connect(DATABASE_URL)
+    """Legacy alias — returns a pooled connection with RealDictCursor factory."""
+    conn = _get_pool().getconn()
     conn.cursor_factory = psycopg2.extras.RealDictCursor
+    # Patch close() so conn.close() returns to pool, not disconnects
+    conn.close = lambda: _return_conn(conn)
     return conn
 
 def init_db():
@@ -191,6 +240,21 @@ def init_db():
             invited_by INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_login TIMESTAMP
+        )
+    ''')
+
+    # kb_gaps — unanswered question tracker (was incorrectly created per-request
+    # inside record_kb_gap; moved here so the DDL runs exactly once at startup)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS kb_gaps (
+            id          SERIAL PRIMARY KEY,
+            client_id   TEXT NOT NULL,
+            question    TEXT NOT NULL,
+            method      TEXT,
+            confidence  REAL DEFAULT 0.0,
+            count       INTEGER DEFAULT 1,
+            first_seen  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_seen   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
 
@@ -877,33 +941,50 @@ def create_user(email, password, plan_type='starter'):
         return None  # Email already exists
 
 def verify_user(email, password):
-    """Verify user credentials"""
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
-    user = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    if user and bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
-        return dict(user)
-    return None
+    """Verify user credentials. Returns user dict on success, None otherwise."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if user and bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+            return dict(user)
+        return None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[verify_user] {e}')
+        return None
+
 
 def get_user_by_id(user_id):
-    """Get user by ID"""
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))
-    user = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    return dict(user) if user else None
+    """Get user by ID. Returns None on missing row or DB error."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return dict(user) if user else None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_user_by_id] {e}')
+        return None
+
 
 def get_user_by_email(email):
-    """Get user by email"""
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
-    user = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    return dict(user) if user else None
+    """Get user by email. Returns None on missing row or DB error."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+        user = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return dict(user) if user else None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_user_by_email] {e}')
+        return None
 
 
 # =====================================================================
@@ -1675,13 +1756,13 @@ def get_affiliate_stats(affiliate_id):
         (affiliate_id,)
     )
     pending_result = cursor.fetchone()
-    pending_earnings = pending_result['pending'] if pending_result['pending'] else 0
+    pending_earnings = (pending_result.get('pending') or 0) if pending_result else 0
     cursor.execute(
         "SELECT SUM(amount) as paid FROM commissions WHERE affiliate_id = %s AND status = 'paid'",
         (affiliate_id,)
     )
     paid_result = cursor.fetchone()
-    paid_earnings = paid_result['paid'] if paid_result['paid'] else 0
+    paid_earnings = (paid_result.get('paid') or 0) if paid_result else 0
     cursor.close()
     conn.close()
     return {
@@ -1859,9 +1940,10 @@ def get_revenue_by_month(months=6):
                   COALESCE(SUM(amount), 0) AS revenue
            FROM payments
            WHERE status = 'completed'
-             AND payment_date >= CURRENT_DATE - INTERVAL '%(m)s months'
+             AND payment_date >= CURRENT_DATE - (INTERVAL '1 month' * %s)
            GROUP BY DATE_TRUNC('month', payment_date)
-           ORDER BY month_date ASC""" % {'m': months}
+           ORDER BY month_date ASC""",
+        (months,)
     )
     rows = [{'month': r['month'], 'revenue': float(r['revenue'])} for r in cursor.fetchall()]
     cursor.close()
@@ -1927,9 +2009,10 @@ def get_user_growth_by_month(months=6):
                   DATE_TRUNC('month', created_at) AS month_date,
                   COUNT(*) AS count
            FROM users
-           WHERE created_at >= CURRENT_DATE - INTERVAL '%(m)s months'
+           WHERE created_at >= CURRENT_DATE - (INTERVAL '1 month' * %s)
            GROUP BY DATE_TRUNC('month', created_at)
-           ORDER BY month_date ASC""" % {'m': months}
+           ORDER BY month_date ASC""",
+        (months,)
     )
     rows = [{'month': r['month'], 'count': int(r['count'])} for r in cursor.fetchall()]
     cursor.close()
@@ -2571,15 +2654,31 @@ def get_relevant_knowledge(client_id: str, query_embedding: list = None, limit: 
     return chunks[:limit]
 
 
-def store_embedding(client_id: str, chunk_id: str, embedding: list) -> None:
-    """Update the embedding for a single knowledge chunk."""
+def store_embedding(client_id: str, chunk_id: str = None, embedding: list = None,
+                    kb_id: str = None) -> None:
+    """Update the embedding for a single knowledge chunk.
+    Accepts chunk_id (chunk-based schema) or kb_id (kb-based schema) — tries both.
+    """
+    key_val = chunk_id or kb_id
+    if not key_val or embedding is None:
+        return
     conn, cursor = get_db()
     try:
-        cursor.execute(
-            '''UPDATE knowledge_base SET embedding = %s, updated_at = CURRENT_TIMESTAMP
-               WHERE client_id = %s AND chunk_id = %s''',
-            (json.dumps(embedding), client_id, chunk_id)
-        )
+        # Try chunk_id column first; fall back to kb_id
+        updated = 0
+        if chunk_id:
+            cursor.execute(
+                '''UPDATE knowledge_base SET embedding = %s, updated_at = CURRENT_TIMESTAMP
+                   WHERE client_id = %s AND chunk_id = %s''',
+                (json.dumps(embedding), client_id, chunk_id)
+            )
+            updated = cursor.rowcount
+        if not updated and kb_id:
+            cursor.execute(
+                '''UPDATE knowledge_base SET embedding = %s, updated_at = CURRENT_TIMESTAMP
+                   WHERE client_id = %s AND kb_id = %s''',
+                (json.dumps(embedding), client_id, kb_id)
+            )
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -2589,15 +2688,28 @@ def store_embedding(client_id: str, chunk_id: str, embedding: list) -> None:
 
 
 def get_embeddings_for_client(client_id: str) -> list:
-    """Return all chunk_id + embedding pairs for a client (for batch re-indexing)."""
+    """Return all chunk_id/kb_id + embedding pairs for a client (for batch re-indexing).
+    Returns dicts with both 'chunk_id' and 'kb_id' keys so callers using either schema work.
+    """
     conn, cursor = get_db()
     try:
         cursor.execute(
-            "SELECT chunk_id, embedding FROM knowledge_base WHERE client_id = %s AND embedding IS NOT NULL",
+            """SELECT COALESCE(chunk_id, kb_id) AS cid,
+                      COALESCE(kb_id, chunk_id) AS kid,
+                      embedding
+               FROM knowledge_base
+               WHERE client_id = %s AND embedding IS NOT NULL""",
             (client_id,)
         )
         rows = cursor.fetchall()
-        return [{'chunk_id': r['chunk_id'], 'embedding': json.loads(r['embedding'])} for r in rows]
+        return [
+            {
+                'chunk_id':  r['cid'],
+                'kb_id':     r['kid'],
+                'embedding': json.loads(r['embedding']),
+            }
+            for r in rows
+        ]
     except Exception:
         return []
     finally:
@@ -2622,24 +2734,10 @@ def record_kb_gap(client_id: str, question: str, method: str, confidence: float)
     """
     Record an unanswered question in kb_gaps for later review.
     Called from ai_helper in a background thread — never blocks chat.
-    Creates the table on first use if it doesn't exist yet.
+    NOTE: kb_gaps table is created once in init_db(), not here.
     """
     try:
         conn, cursor = get_db()
-        # Create table if missing (idempotent — safe to run on every call)
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS kb_gaps (
-                id          SERIAL PRIMARY KEY,
-                client_id   TEXT NOT NULL,
-                question    TEXT NOT NULL,
-                method      TEXT,
-                confidence  REAL DEFAULT 0.0,
-                count       INTEGER DEFAULT 1,
-                first_seen  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_seen   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        # Upsert: increment count if same question seen before, else insert
         cursor.execute('''
             INSERT INTO kb_gaps (client_id, question, method, confidence)
             VALUES (%s, %s, %s, %s)
@@ -2817,35 +2915,8 @@ def delete_knowledge_base(client_id: str) -> None:
         pass
 
 
-def store_embedding(client_id: str, kb_id: str, embedding: list) -> None:
-    """Update the embedding for an existing knowledge chunk."""
-    try:
-        conn, cursor = get_db()
-        cursor.execute(
-            "UPDATE knowledge_base SET embedding = %s WHERE client_id = %s AND kb_id = %s",
-            (json.dumps(embedding), client_id, kb_id)
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
-    except Exception:
-        pass
-
-
-def get_embeddings_for_client(client_id: str) -> list:
-    """Return list of {kb_id, embedding} dicts for cosine ranking."""
-    try:
-        conn, cursor = get_db()
-        cursor.execute(
-            "SELECT kb_id, embedding FROM knowledge_base WHERE client_id = %s AND embedding IS NOT NULL",
-            (client_id,)
-        )
-        rows = cursor.fetchall()
-        cursor.close()
-        conn.close()
-        return [{'kb_id': r['kb_id'], 'embedding': json.loads(r['embedding'])} for r in rows]
-    except Exception:
-        return []
+# store_embedding and get_embeddings_for_client are defined above (unified version
+# that handles both chunk_id and kb_id column schemas).
 
 
 # =====================================================================

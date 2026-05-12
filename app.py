@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 import os
 import json
 import re
-from datetime import datetime
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import logging
@@ -30,11 +29,19 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Admin blueprint — register immediately after app creation
+# SECRET_KEY must be set in env — crash at startup rather than silently use a weak key
+_secret = os.environ.get("SECRET_KEY")
+if not _secret:
+    raise RuntimeError(
+        "SECRET_KEY environment variable is not set. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
+app.config['SECRET_KEY'] = _secret
+app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB max request body
+
+# Admin blueprint — registered AFTER SECRET_KEY is configured
 from admin_routes import admin_bp
 app.register_blueprint(admin_bp)
-app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev_key_change_this_in_prod")
-app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB max request body
 
 # ── Flask-Mail (password reset emails) ──────────────────────────────
 app.config['MAIL_SERVER']   = os.environ.get('MAIL_SERVER', 'smtp-relay.brevo.com')
@@ -340,6 +347,29 @@ try:
         models.migrate_client_status()
     if hasattr(models, 'migrate_onboarding'):
         models.migrate_onboarding()
+
+    # Ensure the conversations table exists.
+    # This was previously (incorrectly) created inside log_conversation() on every
+    # chat request. It belongs here — once, at startup, alongside all other schema work.
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS conversations (
+                id SERIAL PRIMARY KEY,
+                client_id TEXT NOT NULL,
+                user_message TEXT NOT NULL,
+                bot_response TEXT NOT NULL,
+                matched BOOLEAN DEFAULT FALSE,
+                method TEXT,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as _conv_err:
+        print(f"⚠️  conversations table migration failed: {_conv_err}")
+
     print("✅ Database initialized/migrated successfully!")
     # ── Startup enforcement: runs 5s after DB is confirmed ready ──────
     # Delay is intentional — gives the connection pool time to settle.
@@ -365,11 +395,21 @@ CORS(app, resources={
 })
 
 # Rate limiting
+# Use Redis when available (required for multi-worker correctness).
+# Falls back to in-memory only if REDIS_URL is not set (single-worker dev).
+import warnings as _warnings
+_limiter_storage = os.environ.get("REDIS_URL", "memory://")
+if _limiter_storage == "memory://":
+    _warnings.warn(
+        "REDIS_URL not set — rate limiter is in-memory. "
+        "This resets on restart and breaks under multiple workers.",
+        RuntimeWarning,
+    )
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
+    storage_uri=_limiter_storage,
 )
 
 # =====================================================================
@@ -510,7 +550,17 @@ def find_best_match(user_query, faqs_list, confidence_threshold=0.68):
     return best_faq, round(best_score, 2)
 
 
+def _fire_webhook(webhook_url, payload, client_id):
+    """Internal: POST the webhook payload. Always runs in a background thread."""
+    try:
+        requests.post(webhook_url, json=payload, timeout=5)
+        app.logger.info(f'✅ Webhook fired for {client_id}')
+    except Exception as e:
+        app.logger.error(f'Webhook error for {client_id}: {e}')
+
+
 def notify_webhook(client_id, lead_data):
+    """Fire the webhook in a daemon thread so it never blocks the request cycle."""
     try:
         client = models.get_client_by_id(client_id)
         if not client:
@@ -522,31 +572,46 @@ def notify_webhook(client_id, lead_data):
         if not webhook_url:
             return
 
-        requests.post(webhook_url, json={
+        payload = {
             'event': 'new_lead',
             'client_id': client_id,
             'lead': lead_data,
             'timestamp': datetime.utcnow().isoformat()
-        }, timeout=5)
-
-        app.logger.info(f'✅ Webhook fired for {client_id}')
+        }
+        import threading
+        threading.Thread(
+            target=_fire_webhook,
+            args=(webhook_url, payload, client_id),
+            daemon=True,
+        ).start()
 
     except Exception as e:
-        app.logger.error(f'Webhook error: {e}')
+        app.logger.error(f'notify_webhook setup error: {e}')
 
 
 @app.after_request
 def allow_widget_embedding(response):
+    # Allow the chat widget to be iframed from any domain.
     response.headers.pop('X-Frame-Options', None)
     response.headers['Content-Security-Policy'] = "frame-ancestors *"
 
     origin = request.headers.get('Origin')
     if origin:
-        response.headers['Access-Control-Allow-Origin'] = origin
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        # Only reflect the origin (and allow credentials) for widget/API routes.
+        # Applying credentials: true globally with a wildcard origin is a CORS
+        # security violation — browsers block it and it leaks session cookies to
+        # arbitrary third-party sites.
+        path = request.path
+        is_widget_or_api = (
+            path.startswith('/api/')
+            or path == '/widget'
+            or path.startswith('/widget')
+        )
+        if is_widget_or_api:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
 
     return response
 
@@ -712,20 +777,11 @@ def match_faq(message, faqs, lead_triggers):
 
 
 def log_conversation(client_id, user_message, bot_response, matched=False, method='unknown'):
+    # NOTE: The conversations table is created once in models.init_db().
+    # Do NOT run CREATE TABLE here — it fires a DDL statement on every chat
+    # message, which is extremely expensive and serialises all DB writes.
     try:
         conn, cursor = models.get_db()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS conversations (
-                id SERIAL PRIMARY KEY,
-                client_id TEXT NOT NULL,
-                user_message TEXT NOT NULL,
-                bot_response TEXT NOT NULL,
-                matched BOOLEAN DEFAULT FALSE,
-                method TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
         cursor.execute(
             '''
             INSERT INTO conversations (client_id, user_message, bot_response, matched, method)
@@ -733,7 +789,6 @@ def log_conversation(client_id, user_message, bot_response, matched=False, metho
             ''',
             (client_id, user_message, bot_response, matched, method)
         )
-
         conn.commit()
         cursor.close()
         conn.close()
@@ -905,13 +960,13 @@ def chat():
                     {
                         "id": "demo_2",
                         "question": "What are your prices?",
-                        "answer": "Starter: $49/mo | Pro: $99/mo | Agency: $299/mo. All plans include a 7-day free trial.",
+                        "answer": "Starter: $49/mo | Pro: $99/mo | Agency: $299/mo. All plans include a 14-day free trial! 💰",
                         "triggers": ["price", "pricing", "cost", "fee", "payment", "charge", "afford", "subscription"]
                     },
                     {
                         "id": "demo_3",
                         "question": "Do you offer discounts?",
-                        "answer": "Yes! Annual plans save you 2 full months. Ask us about annual billing.",
+                        "answer": "Yes! Annual plans save you 2 full months. Ask us about annual billing. 🎉",
                         "triggers": ["discount", "sale", "promo", "coupon", "deal", "cheaper", "reduce", "saving", "annual"]
                     }
                 ]
@@ -1243,9 +1298,9 @@ def signup():
             return render_template('signup.html', error='An account with that email already exists',
                                    referral_code=referral_code, plan_param=plan_from_form)
 
-        # Set 7-day free trial expiry for paid plans
+        # Set 14-day free trial expiry for paid plans
         if initial_plan != 'free':
-            models.set_trial_expiry(user_id, days=7)
+            models.set_trial_expiry(user_id, days=14)
 
         if referral_code:
             affiliate = models.get_affiliate_by_code(referral_code)
@@ -1736,9 +1791,18 @@ def cache_invalidate_endpoint():
 
 @app.route('/api/admin/backup', methods=['POST'])
 def trigger_backup():
-    auth_token = request.headers.get('X-Admin-Token')
+    import hmac
+    auth_token = request.headers.get('X-Admin-Token') or ''
+    admin_token = os.environ.get('ADMIN_TOKEN', '')
 
-    if auth_token != os.getenv('ADMIN_TOKEN', 'change-me-in-production'):
+    # Require ADMIN_TOKEN to be explicitly set in env — no insecure default.
+    if not admin_token:
+        app.logger.error('[Backup] ADMIN_TOKEN env var not set — endpoint disabled.')
+        return jsonify({'success': False, 'error': 'Backup not configured'}), 503
+
+    # Timing-safe comparison prevents secret-length oracle attacks.
+    if not hmac.compare_digest(auth_token.encode(), admin_token.encode()):
+        app.logger.warning(f'[Backup] Unauthorized attempt from {request.remote_addr}')
         return jsonify({'success': False, 'error': 'Unauthorized'}), 401
 
     success = backup_all_clients()
@@ -1812,9 +1876,14 @@ def save_customization():
         if not client:
             return jsonify({'success': False, 'error': 'Client not found'}), 404
 
-        plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
+        # Always fetch plan from DB — current_user.plan_type is cached in the
+        # session and may be stale after a downgrade. A downgraded user could
+        # otherwise still save white-label / webhook settings.
+        fresh_user  = models.get_user_by_id(current_user.id)
+        fresh_plan  = (fresh_user or {}).get('plan_type', 'free')
+        plan_limits = PLAN_LIMITS.get(fresh_plan, PLAN_LIMITS['free'])
 
-        # ── Fix 1: Integrations / Zapier / Make ─────────────────────────
+        # ── Integrations / Zapier / Make ─────────────────────────────────
         # Pro + Agency: webhook URL is supported, save whatever they send.
         # Free + Starter: wipe the webhook URL so it can never fire.
         incoming_integrations = data.get('integrations', {})
@@ -1822,7 +1891,7 @@ def save_customization():
             integrations = incoming_integrations
             app.logger.info(
                 f"[Webhooks] Saved for user {current_user.id} "
-                f"(plan: {current_user.plan_type}), "
+                f"(plan: {fresh_plan}), "
                 f"url_set: {bool(incoming_integrations.get('webhook_url'))}"
             )
         else:
@@ -1830,7 +1899,7 @@ def save_customization():
             if incoming_integrations.get('webhook_url'):
                 app.logger.info(
                     f"[Limit] Webhook URL stripped for user {current_user.id} "
-                    f"on plan '{current_user.plan_type}'"
+                    f"on plan '{fresh_plan}'"
                 )
 
         branding_settings = {
@@ -1849,9 +1918,9 @@ def save_customization():
             r for r in raw_qr if r and str(r).strip()
         ]
 
-        # White-label only on agency/enterprise
+        # White-label only on agency/enterprise — use fresh plan, not cached session
         remove_branding = False
-        if current_user.plan_type in ('agency', 'enterprise'):
+        if fresh_plan in ('agency', 'enterprise'):
             remove_branding = bool(data.get('remove_branding'))
 
         branding_settings['branding']['remove_branding'] = remove_branding
@@ -4537,7 +4606,8 @@ def cron_enforce_subscriptions():
         (request.get_json(silent=True) or {}).get('secret', '')
     )
 
-    if provided != cron_secret:
+    # Timing-safe comparison prevents secret-length oracle attacks.
+    if not __import__("hmac").compare_digest(provided, cron_secret):
         app.logger.warning(f"[Cron] Unauthorized attempt from {request.remote_addr}")
         return jsonify({'error': 'Unauthorized'}), 401
 
@@ -4586,5 +4656,12 @@ def request_too_large(e):
 
 
 if __name__ == '__main__':
+    # ⚠️  Flask's built-in server is single-threaded and NOT suitable for production.
+    # For production / Render, use Gunicorn with multiple workers:
+    #
+    #   gunicorn app:app --workers 4 --worker-class gevent --bind 0.0.0.0:$PORT
+    #
+    # Set your Render Start Command to the above (install gevent via requirements.txt).
+    # With REDIS_URL set, Flask-Limiter and session state will be consistent across workers.
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=port, debug=False)

@@ -1,3 +1,3 @@
 ### **Create file: `Procfile`**
 ```
-web: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+web: gunicorn app:app --workers 4 --worker-class gevent --bind 0.0.0.0:$PORT
