@@ -347,6 +347,8 @@ try:
         models.migrate_client_status()
     if hasattr(models, 'migrate_onboarding'):
         models.migrate_onboarding()
+    if hasattr(models, 'migrate_api_usage_log'):
+        models.migrate_api_usage_log()
 
     # Ensure the conversations table exists.
     # This was previously (incorrectly) created inside log_conversation() on every

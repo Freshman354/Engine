@@ -3166,5 +3166,524 @@ def get_webhook_logs(client_id: str, limit: int = 20) -> list:
         return []
 
 
+# =====================================================================
+# ADMIN DASHBOARD — SUPPLEMENTAL QUERIES
+# All functions below are additive (no changes to existing code).
+# They provide real data for the new admin dashboard sections.
+# =====================================================================
+
+# ── Gemini 1.5 Flash pricing (per token) ─────────────────────────────
+_GEMINI_INPUT_PRICE_PER_TOKEN  = 0.075  / 1_000_000   # $0.075  per 1M input tokens
+_GEMINI_OUTPUT_PRICE_PER_TOKEN = 0.300  / 1_000_000   # $0.30   per 1M output tokens
+
+
+def migrate_api_usage_log():
+    """
+    Create the api_usage_log table if it doesn't exist.
+    Safe to call on every startup — uses IF NOT EXISTS.
+    Call this from app.py startup alongside the other migrations.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS api_usage_log (
+                id            SERIAL PRIMARY KEY,
+                user_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                client_id     VARCHAR(100),
+                model         VARCHAR(80)  DEFAULT 'gemini-1.5-flash',
+                input_tokens  INTEGER      NOT NULL DEFAULT 0,
+                output_tokens INTEGER      NOT NULL DEFAULT 0,
+                endpoint      VARCHAR(100),
+                created_at    TIMESTAMP    DEFAULT NOW()
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_api_usage_user    ON api_usage_log(user_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_api_usage_created ON api_usage_log(created_at)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_api_usage_client  ON api_usage_log(client_id)"
+        )
+        conn.commit()
+        print("✅ api_usage_log table ready.")
+    except Exception as e:
+        print(f"⚠️  migrate_api_usage_log: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def log_api_usage(user_id, client_id, input_tokens, output_tokens,
+                  model='gemini-1.5-flash', endpoint=None):
+    """
+    Log one Gemini API call's token usage.
+    Call this immediately after every model.generate_content() call.
+
+    Example:
+        response = model.generate_content(prompt)
+        meta = response.usage_metadata
+        models.log_api_usage(
+            user_id=current_user.id,
+            client_id=client_id,
+            input_tokens=meta.prompt_token_count,
+            output_tokens=meta.candidates_token_count,
+            endpoint='chat'
+        )
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """INSERT INTO api_usage_log
+                   (user_id, client_id, model, input_tokens, output_tokens, endpoint)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (user_id, client_id, model,
+             int(input_tokens or 0), int(output_tokens or 0), endpoint)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"[log_api_usage] {e}")
+
+
+def _calc_cost(input_tokens, output_tokens):
+    """Compute Gemini cost from token counts using current pricing."""
+    return (
+        (input_tokens  or 0) * _GEMINI_INPUT_PRICE_PER_TOKEN +
+        (output_tokens or 0) * _GEMINI_OUTPUT_PRICE_PER_TOKEN
+    )
+
+
+def get_api_cost_summary():
+    """
+    Returns a dict with:
+        cost_today         float  — today's spend
+        cost_this_month    float  — this calendar month
+        cost_all_time      float  — all time
+        tokens_today       int
+        tokens_this_month  int
+    Gracefully returns zeros if the table doesn't exist yet.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('day',   created_at) = DATE_TRUNC('day',   NOW())
+                                  THEN input_tokens  END), 0) AS in_today,
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('day',   created_at) = DATE_TRUNC('day',   NOW())
+                                  THEN output_tokens END), 0) AS out_today,
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())
+                                  THEN input_tokens  END), 0) AS in_month,
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())
+                                  THEN output_tokens END), 0) AS out_month,
+                COALESCE(SUM(input_tokens),  0) AS in_all,
+                COALESCE(SUM(output_tokens), 0) AS out_all
+            FROM api_usage_log
+        """)
+        r = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not r:
+            return {'cost_today': 0, 'cost_this_month': 0, 'cost_all_time': 0,
+                    'tokens_today': 0, 'tokens_this_month': 0}
+        return {
+            'cost_today':      _calc_cost(r['in_today'],  r['out_today']),
+            'cost_this_month': _calc_cost(r['in_month'],  r['out_month']),
+            'cost_all_time':   _calc_cost(r['in_all'],    r['out_all']),
+            'tokens_today':    int(r['in_today'])  + int(r['out_today']),
+            'tokens_this_month': int(r['in_month']) + int(r['out_month']),
+        }
+    except Exception:
+        return {'cost_today': 0, 'cost_this_month': 0, 'cost_all_time': 0,
+                'tokens_today': 0, 'tokens_this_month': 0}
+
+
+def get_top_chatbots_by_cost(months=1, limit=10):
+    """
+    Returns top N chatbots by estimated AI cost this month.
+    Each row: {client_id, company_name, owner_email, input_tokens,
+               output_tokens, est_cost}
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT
+                a.client_id,
+                c.company_name,
+                u.email   AS owner_email,
+                COALESCE(SUM(a.input_tokens),  0) AS input_tokens,
+                COALESCE(SUM(a.output_tokens), 0) AS output_tokens
+            FROM api_usage_log a
+            LEFT JOIN clients c ON a.client_id = c.client_id
+            LEFT JOIN users  u ON c.user_id  = u.id
+            WHERE DATE_TRUNC('month', a.created_at) = DATE_TRUNC('month', NOW())
+            GROUP BY a.client_id, c.company_name, u.email
+            ORDER BY (SUM(a.input_tokens) + SUM(a.output_tokens)) DESC
+            LIMIT %s
+        """, (limit,))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for r in rows:
+            it = int(r['input_tokens'])
+            ot = int(r['output_tokens'])
+            result.append({
+                'client_id':    r['client_id'],
+                'company_name': r['company_name'] or r['client_id'],
+                'owner_email':  r['owner_email'] or '—',
+                'input_tokens': it,
+                'output_tokens': ot,
+                'est_cost':     _calc_cost(it, ot),
+            })
+        return result
+    except Exception:
+        return []
+
+
+def get_user_cost_breakdown(months=1):
+    """
+    Per-user AI cost summary for the current month.
+    Each row: {user_id, email, plan_type, ai_cost}
+    Only includes users who have at least one log entry.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT
+                u.id       AS user_id,
+                u.email,
+                u.plan_type,
+                COALESCE(SUM(a.input_tokens),  0) AS input_tokens,
+                COALESCE(SUM(a.output_tokens), 0) AS output_tokens
+            FROM api_usage_log a
+            JOIN users u ON a.user_id = u.id
+            WHERE DATE_TRUNC('month', a.created_at) = DATE_TRUNC('month', NOW())
+            GROUP BY u.id, u.email, u.plan_type
+            ORDER BY (SUM(a.input_tokens) + SUM(a.output_tokens)) DESC
+        """)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for r in rows:
+            it = int(r['input_tokens'])
+            ot = int(r['output_tokens'])
+            result.append({
+                'user_id':   r['user_id'],
+                'email':     r['email'],
+                'plan_type': r['plan_type'],
+                'ai_cost':   _calc_cost(it, ot),
+            })
+        return result
+    except Exception:
+        return []
+
+
+def get_user_ai_costs_dict():
+    """
+    Returns {user_id: estimated_monthly_cost} for the current month.
+    Used to populate the AI Cost column in the Users table.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT
+                user_id,
+                COALESCE(SUM(input_tokens),  0) AS input_tokens,
+                COALESCE(SUM(output_tokens), 0) AS output_tokens
+            FROM api_usage_log
+            WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())
+              AND user_id IS NOT NULL
+            GROUP BY user_id
+        """)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return {
+            int(r['user_id']): _calc_cost(int(r['input_tokens']), int(r['output_tokens']))
+            for r in rows
+        }
+    except Exception:
+        return {}
+
+
+def get_cost_revenue_by_month(months=6):
+    """
+    Returns [{month, revenue, cost}] for the last N months.
+    Merges revenue data with api_usage_log cost data.
+    """
+    try:
+        conn, cursor = get_db()
+        # Revenue per month
+        cursor.execute("""
+            SELECT
+                TO_CHAR(DATE_TRUNC('month', payment_date), 'Mon YYYY') AS month,
+                DATE_TRUNC('month', payment_date)                       AS month_dt,
+                COALESCE(SUM(amount), 0)                                AS revenue
+            FROM payments
+            WHERE status = 'completed'
+              AND payment_date >= NOW() - (INTERVAL '1 month' * %s)
+            GROUP BY DATE_TRUNC('month', payment_date)
+            ORDER BY month_dt ASC
+        """, (months,))
+        rev_rows = {r['month_dt']: {'month': r['month'], 'revenue': float(r['revenue']), 'cost': 0.0}
+                    for r in cursor.fetchall()}
+
+        # Cost per month
+        cursor.execute("""
+            SELECT
+                TO_CHAR(DATE_TRUNC('month', created_at), 'Mon YYYY') AS month,
+                DATE_TRUNC('month', created_at)                       AS month_dt,
+                COALESCE(SUM(input_tokens),  0)                       AS input_tokens,
+                COALESCE(SUM(output_tokens), 0)                       AS output_tokens
+            FROM api_usage_log
+            WHERE created_at >= NOW() - (INTERVAL '1 month' * %s)
+            GROUP BY DATE_TRUNC('month', created_at)
+            ORDER BY month_dt ASC
+        """, (months,))
+        for r in cursor.fetchall():
+            dt = r['month_dt']
+            cost = _calc_cost(int(r['input_tokens']), int(r['output_tokens']))
+            if dt in rev_rows:
+                rev_rows[dt]['cost'] = cost
+            else:
+                rev_rows[dt] = {'month': r['month'], 'revenue': 0.0, 'cost': cost}
+
+        cursor.close()
+        conn.close()
+        return sorted(rev_rows.values(), key=lambda x: x['month'])
+    except Exception:
+        return []
+
+
+def get_daily_burn_last_30():
+    """
+    Returns [{date, cost}] for the last 30 days, one entry per day.
+    Days with no usage are omitted (chart handles gaps gracefully).
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT
+                TO_CHAR(DATE_TRUNC('day', created_at), 'DD Mon') AS date,
+                DATE_TRUNC('day', created_at)                     AS day_dt,
+                COALESCE(SUM(input_tokens),  0)                   AS input_tokens,
+                COALESCE(SUM(output_tokens), 0)                   AS output_tokens
+            FROM api_usage_log
+            WHERE created_at >= NOW() - INTERVAL '30 days'
+            GROUP BY DATE_TRUNC('day', created_at)
+            ORDER BY day_dt ASC
+        """)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [
+            {'date': r['date'],
+             'cost': _calc_cost(int(r['input_tokens']), int(r['output_tokens']))}
+            for r in rows
+        ]
+    except Exception:
+        return []
+
+
+def purge_old_api_logs(days=90):
+    """
+    Delete api_usage_log rows older than `days` days.
+    Returns the number of rows deleted.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "DELETE FROM api_usage_log WHERE created_at < NOW() - (INTERVAL '1 day' * %s)",
+            (days,)
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return deleted
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[purge_old_api_logs] {e}")
+        return 0
+
+
+def get_db_stats():
+    """
+    Returns row counts for key tables as a list of {table, count} dicts.
+    Used in the System section of the admin dashboard.
+    """
+    tables = [
+        'users', 'clients', 'leads', 'payments',
+        'analytics_events', 'conversations', 'api_usage_log',
+        'faqs', 'knowledge_base',
+    ]
+    results = []
+    try:
+        conn, cursor = get_db()
+        for t in tables:
+            try:
+                cursor.execute(f"SELECT COUNT(*) AS cnt FROM {t}")
+                row = cursor.fetchone()
+                results.append({'table': t, 'count': int(row['cnt']) if row else 0})
+            except Exception:
+                # Table may not exist yet (e.g. api_usage_log before first migration)
+                pass
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+    return results
+
+
+def get_churn_this_week():
+    """Count subscriptions cancelled in the last 7 days."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT COUNT(*) AS cnt FROM users
+            WHERE subscription_status = 'cancelled'
+              AND cancelled_at >= NOW() - INTERVAL '7 days'
+        """)
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def get_past_due_count():
+    """Count users with past_due subscription status."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "SELECT COUNT(*) AS cnt FROM users WHERE subscription_status = 'past_due'"
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def get_active_subscription_count():
+    """Count users with active or trialing subscription status (paid plans only)."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT COUNT(*) AS cnt FROM users
+            WHERE subscription_status IN ('active', 'trialing')
+              AND plan_type != 'free'
+        """)
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def get_paid_user_count():
+    """Count users on any paid plan (not free)."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "SELECT COUNT(*) AS cnt FROM users WHERE plan_type != 'free'"
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def get_free_user_count():
+    """Count users on the free plan."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "SELECT COUNT(*) AS cnt FROM users WHERE plan_type = 'free'"
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def get_total_client_count():
+    """Total number of chatbot clients across all users."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute("SELECT COUNT(*) AS cnt FROM clients")
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def get_analytics_events(limit=300):
+    """
+    Recent analytics events joined with user email for admin view.
+    Returns list of dicts with keys: event_name, email, user_id, metadata, created_at
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT e.event_name, e.user_id, e.metadata,
+                   e.created_at, u.email
+            FROM analytics_events e
+            LEFT JOIN users u ON e.user_id = u.id
+            ORDER BY e.created_at DESC
+            LIMIT %s
+        """, (limit,))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for r in rows:
+            result.append({
+                'event_name': r['event_name'],
+                'user_id':    r['user_id'],
+                'email':      r['email'],
+                'metadata':   r['metadata'],
+                'created_at': r['created_at'].isoformat() if r['created_at'] else None,
+            })
+        return result
+    except Exception:
+        return []
+
+
+def get_event_counts():
+    """
+    Returns {event_name: count} dict for all analytics events.
+    Used for the event summary cards on the Analytics section.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT event_name, COUNT(*) AS cnt
+            FROM analytics_events
+            GROUP BY event_name
+            ORDER BY cnt DESC
+        """)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return {r['event_name']: int(r['cnt']) for r in rows}
+    except Exception:
+        return {}
+
+
 if __name__ == '__main__':
     init_db()

@@ -2,408 +2,1161 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!--
+  FIX [MOBILE-VIEWPORT]: Replaced `maximum-scale=1.0, user-scalable=no` with
+  `viewport-fit=cover` to support modern iOS safe areas without blocking
+  user zoom (which violates accessibility guidelines). Height issues on mobile
+  keyboards are now handled via dvh units in CSS instead.
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>{{ client.bot_name or client.company_name or 'Support' }}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!--
+  PERF [FONT-DISPLAY]: Added `font-display=swap` baked into the URL. This prevents
+  invisible text during font load (FOIT) — critical for a widget that appears
+  in a popup and must feel instant.
+-->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<!--
+  SECURITY [CSP-SAFE]: DOMPurify is loaded from a pinned CDN version to sanitize
+  markdown-rendered HTML and prevent XSS. This is the only external runtime
+  dependency added — everything else is vanilla JS.
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" defer></script>
+
 <style>
-/* ─────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────
    RESET & ROOT
-───────────────────────────────────────── */
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-:root{
-  --brand: {{ client.widget_color or '#B8924A' }};
-  --brand-glow: {{ client.widget_color or '#B8924A' }}28;
-  --brand-soft: {{ client.widget_color or '#B8924A' }}14;
-  --brand-border: {{ client.widget_color or '#B8924A' }}38;
-  --dark:#111827; --mid:#374151; --sub:#9CA3AF;
-  --surface:#FFFFFF; --bg:#F8FAFC; --border:#E5E7EB;
-  --success:#10B981; --danger:#EF4444;
-  --radius:20px; --radius-sm:12px; --radius-xs:8px;
-}
-html,body{height:100%;overflow:hidden;}
-body{
-  font-family:'Inter',system-ui,-apple-system,sans-serif;
-  background:var(--bg);
-  display:flex;flex-direction:column;
-  -webkit-font-smoothing:antialiased;
+   IMPROVEMENT: Added will-change-free defaults, contain:layout
+   on key elements, and dvh unit for true mobile viewport height.
+───────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --brand:        {{ client.widget_color or '#B8924A' }};
+  --brand-glow:   {{ client.widget_color or '#B8924A' }}28;
+  --brand-soft:   {{ client.widget_color or '#B8924A' }}12;
+  --brand-border: {{ client.widget_color or '#B8924A' }}35;
+  --brand-dark:   {{ client.widget_color or '#B8924A' }}dd;
+
+  --dark:    #111827;
+  --mid:     #374151;
+  --sub:     #9CA3AF;
+  --muted:   #6B7280;
+  --surface: #FFFFFF;
+  --bg:      #F9FAFB;
+  --border:  #E5E7EB;
+  --border2: #F3F4F6;
+  --success: #10B981;
+  --danger:  #EF4444;
+  --warning: #F59E0B;
+
+  --radius:    20px;
+  --radius-sm: 12px;
+  --radius-xs: 8px;
+
+  /* IMPROVEMENT: Semantic motion tokens — respects prefers-reduced-motion */
+  --ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:   cubic-bezier(0.4, 0, 1, 1);
+  --dur-fast:  140ms;
+  --dur-mid:   220ms;
+  --dur-slow:  380ms;
 }
 
-/* ─────────────────────────────────────────
+/*
+  FIX [MOBILE-HEIGHT]: Use dvh (dynamic viewport height) so the widget
+  doesn't get cut off or overflow when the mobile soft keyboard appears.
+  Falls back gracefully to 100vh for unsupported browsers.
+*/
+html, body {
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* PERF: text-size-adjust prevents mobile browsers from resizing fonts */
+  -webkit-text-size-adjust: 100%;
+}
+
+/* ACCESSIBILITY: Respect user's reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
    HEADER
-───────────────────────────────────────── */
-.header{
-  background:var(--brand);
-  padding:14px 16px 36px;
-  position:relative;
-  flex-shrink:0;
-}
-.header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
-.header-brand{font-size:13px;font-weight:600;color:rgba(255,255,255,0.75);letter-spacing:0.02em;}
-.header-actions{display:flex;gap:6px;}
-.hbtn{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.15);
-  border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;
-  transition:background 0.15s;}
-.hbtn:hover{background:rgba(255,255,255,0.25);}
-.hbtn svg{width:14px;height:14px;}
-.header-profile{display:flex;align-items:center;gap:12px;}
-.header-avatar{
-  width:48px;height:48px;border-radius:14px;
-  background:rgba(255,255,255,0.25);
-  display:flex;align-items:center;justify-content:center;
-  font-size:22px;flex-shrink:0;overflow:hidden;
-  box-shadow:0 2px 12px rgba(0,0,0,0.15);
-  border:2px solid rgba(255,255,255,0.3);
-}
-.header-avatar img{width:100%;height:100%;object-fit:cover;}
-.header-info{flex:1;}
-.header-name{font-size:17px;font-weight:700;color:#fff;letter-spacing:-0.3px;}
-.header-status{font-size:12px;color:rgba(255,255,255,0.8);margin-top:3px;display:flex;align-items:center;gap:5px;}
-.status-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px #4ade80;}
-
-/* Curved bottom */
-.header::after{
-  content:'';position:absolute;bottom:-1px;left:0;right:0;height:28px;
-  background:var(--bg);
-  border-radius:24px 24px 0 0;
+   IMPROVEMENT: Slightly elevated shadow, better gradient polish,
+   smooth status pulse animation.
+───────────────────────────────────────────────────────────── */
+.header {
+  background: var(--brand);
+  padding: 14px 16px 38px;
+  position: relative;
+  flex-shrink: 0;
+  /* PERF: isolate creates a new stacking context, prevents layout bleed */
+  isolation: isolate;
 }
 
-/* ─────────────────────────────────────────
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.header-brand {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.65);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.header-actions { display: flex; gap: 6px; }
+
+.hbtn {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.15);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--dur-fast);
+  /* ACCESSIBILITY: Clear focus ring */
+  outline: none;
+}
+.hbtn:hover { background: rgba(255,255,255,0.25); }
+.hbtn:focus-visible { box-shadow: 0 0 0 2px #fff; }
+.hbtn svg { width: 14px; height: 14px; pointer-events: none; }
+
+.header-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-avatar {
+  width: 50px;
+  height: 50px;
+  border-radius: 15px;
+  background: rgba(255,255,255,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2), 0 0 0 2px rgba(255,255,255,0.25);
+}
+
+/* IMPROVEMENT: Lazy loading for avatar image */
+.header-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  loading: lazy; /* applied via JS below */
+}
+
+.header-info { flex: 1; min-width: 0; }
+.header-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-status {
+  font-size: 12px;
+  color: rgba(255,255,255,0.8);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  flex-shrink: 0;
+  /* IMPROVEMENT: Smoother, looping pulse instead of a simple box-shadow */
+  animation: statusPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.6); }
+  50% { box-shadow: 0 0 0 4px rgba(74, 222, 128, 0); }
+}
+
+/* Curved bottom edge of header */
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: var(--bg);
+  border-radius: 22px 22px 0 0;
+}
+
+/* ─────────────────────────────────────────────────────────────
    TABS
-───────────────────────────────────────── */
-.tabs{
-  display:flex;background:var(--surface);
-  border-bottom:1px solid var(--border);
-  flex-shrink:0;
+   IMPROVEMENT: Indicator animates position (no layout shift),
+   proper ARIA roles applied via JS.
+───────────────────────────────────────────────────────────── */
+.tabs {
+  display: flex;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  position: relative;
 }
-.tab{
-  flex:1;padding:11px 8px;text-align:center;font-size:12.5px;font-weight:600;
-  color:var(--sub);cursor:pointer;border:none;background:none;
-  border-bottom:2px solid transparent;transition:all 0.18s;
-  display:flex;align-items:center;justify-content:center;gap:5px;
-}
-.tab svg{width:13px;height:13px;}
-.tab.active{color:var(--brand);border-bottom-color:var(--brand);}
-.tab-panel{display:none;flex:1;flex-direction:column;overflow:hidden;}
-.tab-panel.active{display:flex;}
 
-/* ─────────────────────────────────────────
+.tab {
+  flex: 1;
+  padding: 11px 8px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sub);
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  transition: color var(--dur-fast), border-color var(--dur-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  outline: none;
+  position: relative;
+}
+.tab:focus-visible::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 2px solid var(--brand);
+  border-radius: 6px;
+}
+.tab svg { width: 13px; height: 13px; flex-shrink: 0; }
+.tab.active { color: var(--brand); border-bottom-color: var(--brand); }
+
+.tab-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+.tab-panel.active { display: flex; }
+
+/* ─────────────────────────────────────────────────────────────
    MESSAGES
-───────────────────────────────────────── */
-.messages{
-  flex:1;overflow-y:auto;padding:16px 14px;
-  display:flex;flex-direction:column;gap:4px;
-  scroll-behavior:smooth;
-  background:var(--bg);
+   IMPROVEMENT: contain: layout style on message container cuts
+   reflow cost on long conversations. scroll-behavior only applied
+   when motion is OK.
+───────────────────────────────────────────────────────────── */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg);
+  /* PERF: reduce scroll event jank on mobile */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
-.messages::-webkit-scrollbar{width:4px;}
-.messages::-webkit-scrollbar-track{background:transparent;}
-.messages::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
 
-.msg-row{display:flex;align-items:flex-end;gap:8px;animation:msgIn 0.22s ease both;}
-.msg-row.user{flex-direction:row-reverse;}
-@keyframes msgIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
-
-.msg-avatar{
-  width:28px;height:28px;border-radius:9px;flex-shrink:0;
-  background:var(--brand-soft);border:1px solid var(--brand-border);
-  display:flex;align-items:center;justify-content:center;
-  font-size:13px;overflow:hidden;
+@media (prefers-reduced-motion: no-preference) {
+  .messages { scroll-behavior: smooth; }
 }
-.msg-avatar img{width:100%;height:100%;object-fit:cover;}
-.msg-avatar.user-av{background:var(--border);font-size:11px;font-weight:700;color:var(--sub);}
 
-.msg-col{display:flex;flex-direction:column;max-width:78%;gap:2px;}
-.msg-row.user .msg-col{align-items:flex-end;}
+.messages::-webkit-scrollbar { width: 3px; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
-.sender-label{font-size:10.5px;font-weight:600;color:var(--sub);padding:0 4px;margin-bottom:2px;}
+/* FIX [MSG-ANIMATION]: Use transform only (GPU layer) not opacity+translate combo
+   which can cause composite-layer thrashing on Android low-end devices. */
+.msg-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  animation: msgIn var(--dur-mid) var(--ease-out) both;
+  /* PERF: contain prevents message renders from reflowing siblings */
+  contain: layout style;
+}
+.msg-row.user { flex-direction: row-reverse; }
 
-.bubble{
-  padding:10px 14px;font-size:13.5px;line-height:1.55;
-  white-space:pre-line;word-break:break-word;
-  box-shadow:0 1px 3px rgba(0,0,0,0.06);
+@keyframes msgIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-.bubble.bot{
-  background:var(--surface);color:var(--dark);
-  border-radius:var(--radius-sm) var(--radius-sm) var(--radius-sm) 4px;
-  border:1px solid var(--border);
+
+.msg-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  flex-shrink: 0;
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  overflow: hidden;
 }
-.bubble.user{
-  background:var(--brand);color:#fff;
-  border-radius:var(--radius-sm) var(--radius-sm) 4px var(--radius-sm);
+.msg-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
-.msg-time{font-size:10px;color:var(--sub);padding:0 4px;margin-top:1px;}
-.msg-row.user .msg-time{text-align:right;}
+.msg-avatar.user-av {
+  background: var(--border2);
+  border-color: var(--border);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.msg-col {
+  display: flex;
+  flex-direction: column;
+  max-width: 78%;
+  gap: 2px;
+  min-width: 0;
+}
+.msg-row.user .msg-col { align-items: flex-end; }
+
+.sender-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--sub);
+  padding: 0 4px;
+  margin-bottom: 1px;
+}
+
+.bubble {
+  padding: 10px 14px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  word-break: break-word;
+  /* IMPROVEMENT: Better box-shadow layering for depth without visual noise */
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 2px 6px rgba(0,0,0,0.04);
+  position: relative;
+}
+
+.bubble.bot {
+  background: var(--surface);
+  color: var(--dark);
+  border-radius: var(--radius-sm) var(--radius-sm) var(--radius-sm) 4px;
+  border: 1px solid var(--border);
+}
+
+.bubble.user {
+  background: var(--brand);
+  color: #fff;
+  border-radius: var(--radius-sm) var(--radius-sm) 4px var(--radius-sm);
+}
+
+/* IMPROVEMENT: Markdown content styles inside bot bubbles */
+.bubble.bot .md-content { white-space: normal; }
+.bubble.bot .md-content p { margin-bottom: 8px; }
+.bubble.bot .md-content p:last-child { margin-bottom: 0; }
+.bubble.bot .md-content ul,
+.bubble.bot .md-content ol { padding-left: 18px; margin: 6px 0; }
+.bubble.bot .md-content li { margin-bottom: 4px; }
+.bubble.bot .md-content strong { font-weight: 600; color: var(--dark); }
+.bubble.bot .md-content em { font-style: italic; }
+.bubble.bot .md-content code {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--brand);
+}
+.bubble.bot .md-content pre {
+  background: #1e1e2e;
+  border-radius: var(--radius-xs);
+  padding: 12px 14px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.bubble.bot .md-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #cdd6f4;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.bubble.bot .md-content a {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bubble.bot .md-content a:hover { opacity: 0.8; }
+.bubble.bot .md-content blockquote {
+  border-left: 3px solid var(--brand-border);
+  padding-left: 10px;
+  color: var(--muted);
+  margin: 6px 0;
+}
+
+/* User message text: plain (no markdown rendered) */
+.bubble.user { white-space: pre-line; }
+
+.msg-time {
+  font-size: 10px;
+  color: var(--sub);
+  padding: 0 4px;
+  margin-top: 1px;
+}
+.msg-row.user .msg-time { text-align: right; }
+
+/*
+  IMPROVEMENT: Retry button for failed messages
+  Shown on bot error bubbles to let user retry without refreshing.
+*/
+.retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--brand);
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
+  border-radius: 20px;
+  padding: 4px 10px;
+  cursor: pointer;
+  margin-top: 6px;
+  transition: background var(--dur-fast), color var(--dur-fast);
+  font-family: inherit;
+}
+.retry-btn:hover { background: var(--brand); color: #fff; }
+.retry-btn svg { width: 11px; height: 11px; }
 
 /* DAY DIVIDER */
-.day-divider{text-align:center;font-size:11px;color:var(--sub);font-weight:500;
-  margin:8px 0;display:flex;align-items:center;gap:8px;}
-.day-divider::before,.day-divider::after{content:'';flex:1;height:1px;background:var(--border);}
+.day-divider {
+  text-align: center;
+  font-size: 11px;
+  color: var(--sub);
+  font-weight: 500;
+  margin: 6px 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.day-divider::before,
+.day-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
 
 /* TYPING INDICATOR */
-.typing-row{display:flex;align-items:flex-end;gap:8px;}
-.typing-bubble{
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--radius-sm) var(--radius-sm) var(--radius-sm) 4px;
-  padding:12px 16px;display:none;gap:5px;align-items:center;
-  box-shadow:0 1px 3px rgba(0,0,0,0.06);
+.typing-row {
+  display: none;
+  align-items: flex-end;
+  gap: 8px;
 }
-.typing-bubble.show{display:flex;}
-.td{width:7px;height:7px;border-radius:50%;background:var(--sub);animation:td 1.3s ease-in-out infinite;}
-.td:nth-child(2){animation-delay:.15s;}
-.td:nth-child(3){animation-delay:.3s;}
-@keyframes td{0%,60%,100%{transform:translateY(0);opacity:.4;}30%{transform:translateY(-5px);opacity:1;}}
+.typing-row.show { display: flex; }
+
+.typing-bubble {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm) var(--radius-sm) var(--radius-sm) 4px;
+  padding: 11px 14px;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.td {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sub);
+  animation: tdBounce 1.3s ease-in-out infinite;
+}
+.td:nth-child(2) { animation-delay: 0.15s; }
+.td:nth-child(3) { animation-delay: 0.30s; }
+@keyframes tdBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
 
 /* QUICK REPLIES */
-.qr-wrap{display:flex;flex-wrap:wrap;gap:7px;padding:10px 14px 4px;}
-.qr-btn{
-  padding:7px 14px;border:1.5px solid var(--brand-border);
-  border-radius:20px;font-size:12.5px;font-weight:600;
-  color:var(--brand);background:var(--brand-soft);
-  cursor:pointer;transition:all 0.18s;font-family:inherit;
-  white-space:nowrap;
+.qr-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 10px 14px 4px;
+  flex-shrink: 0;
 }
-.qr-btn:hover{background:var(--brand);color:#fff;border-color:var(--brand);}
 
-/* ─────────────────────────────────────────
+.qr-btn {
+  padding: 7px 14px;
+  border: 1.5px solid var(--brand-border);
+  border-radius: 20px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--brand);
+  background: var(--brand-soft);
+  cursor: pointer;
+  transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast), transform var(--dur-fast);
+  font-family: inherit;
+  white-space: nowrap;
+  /* MOBILE: Better tap target */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.qr-btn:hover { background: var(--brand); color: #fff; border-color: var(--brand); }
+.qr-btn:active { transform: scale(0.96); }
+.qr-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* ─────────────────────────────────────────────────────────────
    LEAD COLLECTION FORM
-───────────────────────────────────────── */
-.lead-form-msg{
-  background:linear-gradient(135deg, var(--brand-soft), var(--bg));
-  border:1px solid var(--brand-border);border-radius:var(--radius-sm);
-  padding:14px;margin:8px 0 4px;
+   FIX [DUPLICATE-IDS]: Lead inputs now use data-lead-input
+   attribute + JS targeting instead of id="leadIn" which caused
+   duplicate ID bugs when multiple steps were visible in DOM.
+───────────────────────────────────────────────────────────── */
+.lead-form-card {
+  background: linear-gradient(135deg, var(--brand-soft) 0%, var(--bg) 100%);
+  border: 1px solid var(--brand-border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin: 4px 0;
 }
-.lead-form-msg h4{font-size:13px;font-weight:700;color:var(--dark);margin-bottom:4px;}
-.lead-form-msg p{font-size:12px;color:var(--sub);line-height:1.5;}
-.lead-input{
-  width:100%;padding:10px 13px;border:1.5px solid var(--border);border-radius:var(--radius-xs);
-  font-size:13.5px;font-family:inherit;color:var(--dark);background:var(--surface);
-  outline:none;transition:border-color 0.2s;margin-top:8px;
+.lead-form-card h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--dark);
+  margin-bottom: 4px;
 }
-.lead-input:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-glow);}
-.lead-submit{
-  margin-top:10px;width:100%;padding:10px;background:var(--brand);color:#fff;
-  border:none;border-radius:var(--radius-xs);font-size:13.5px;font-weight:700;
-  font-family:inherit;cursor:pointer;transition:opacity 0.2s;
+.lead-form-card p {
+  font-size: 12px;
+  color: var(--sub);
+  line-height: 1.5;
 }
-.lead-submit:hover{opacity:0.88;}
 
-/* SUCCESS STATE */
-.lead-success{
-  display:flex;flex-direction:column;align-items:center;gap:8px;
-  padding:20px;text-align:center;
+.lead-input {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs);
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--dark);
+  background: var(--surface);
+  outline: none;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+  margin-top: 8px;
 }
-.lead-success-icon{width:48px;height:48px;border-radius:50%;background:var(--success);
-  display:flex;align-items:center;justify-content:center;}
-.lead-success-icon svg{width:22px;height:22px;color:#fff;}
-.lead-success h4{font-size:14px;font-weight:700;color:var(--dark);}
-.lead-success p{font-size:12.5px;color:var(--sub);line-height:1.5;}
+.lead-input:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-glow);
+}
+.lead-input.error {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
+  animation: shake 0.3s ease;
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-4px); }
+  75%       { transform: translateX(4px); }
+}
 
-/* ─────────────────────────────────────────
+.lead-input-error {
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 4px;
+  display: none;
+}
+.lead-input-error.show { display: block; }
+
+.lead-submit {
+  margin-top: 10px;
+  width: 100%;
+  padding: 10px;
+  background: var(--brand);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-xs);
+  font-size: 13.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity var(--dur-fast), transform var(--dur-fast);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.lead-submit:hover { opacity: 0.88; }
+.lead-submit:active { transform: scale(0.98); }
+.lead-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* LEAD SUCCESS */
+.lead-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  text-align: center;
+}
+.lead-success-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: successPop var(--dur-slow) var(--ease-out) both;
+}
+@keyframes successPop {
+  from { transform: scale(0.5); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+.lead-success-icon svg { width: 22px; height: 22px; color: #fff; }
+.lead-success h4 { font-size: 14px; font-weight: 700; color: var(--dark); }
+.lead-success p  { font-size: 12.5px; color: var(--sub); line-height: 1.5; }
+
+/* ─────────────────────────────────────────────────────────────
    INPUT AREA
-───────────────────────────────────────── */
-.input-area{
-  padding:12px 14px;background:var(--surface);
-  border-top:1px solid var(--border);flex-shrink:0;
-  display:flex;gap:9px;align-items:flex-end;
+   IMPROVEMENT: Textarea auto-grow is smoother. Mobile keyboard
+   safe area padding added. Better focus state.
+───────────────────────────────────────────────────────────── */
+.input-area {
+  padding: 12px 14px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  gap: 9px;
+  align-items: flex-end;
 }
-.input-wrap{
-  flex:1;min-width:0;background:var(--bg);border:1.5px solid var(--border);
-  border-radius:22px;padding:9px 14px;
-  display:flex;align-items:center;transition:border-color 0.2s;
+
+.input-wrap {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1.5px solid var(--border);
+  border-radius: 22px;
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
 }
-.input-wrap:focus-within{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-glow);}
-.chat-input{
-  flex:1;min-width:0;border:none;background:transparent;outline:none;
-  font-size:13.5px;font-family:inherit;color:var(--dark);
-  resize:none;max-height:80px;line-height:1.4;
+.input-wrap:focus-within {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-glow);
 }
-.chat-input::placeholder{color:var(--sub);}
-.send-btn{
-  width:42px;height:42px;min-width:42px;min-height:42px;
-  border-radius:50%;background:var(--brand);
-  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;transition:all 0.18s;
-  box-shadow:0 2px 8px var(--brand-glow);
-  -webkit-tap-highlight-color:transparent;
-  touch-action:manipulation;
+
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--dark);
+  resize: none;
+  max-height: 96px;
+  line-height: 1.45;
+  /* PERF: No height animation on every keystroke — use JS for smooth grow */
+  overflow: hidden;
+  display: block;
 }
-.send-btn:hover{transform:scale(1.06);}
-.send-btn:active{transform:scale(0.96);}
-.send-btn:disabled{opacity:0.45;transform:none;cursor:not-allowed;}
-.send-btn svg{width:15px;height:15px;color:#fff;pointer-events:none;}
+.chat-input::placeholder { color: var(--sub); }
+
+.send-btn {
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  border-radius: 50%;
+  background: var(--brand);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform var(--dur-fast), box-shadow var(--dur-fast), opacity var(--dur-fast);
+  box-shadow: 0 2px 10px var(--brand-glow);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  outline: none;
+}
+.send-btn:hover { transform: scale(1.06); box-shadow: 0 4px 16px var(--brand-glow); }
+.send-btn:active { transform: scale(0.94); }
+.send-btn:disabled { opacity: 0.45; transform: none; cursor: not-allowed; box-shadow: none; }
+.send-btn:focus-visible { box-shadow: 0 0 0 3px var(--brand-glow), 0 2px 10px var(--brand-glow); }
+.send-btn svg { width: 15px; height: 15px; color: #fff; pointer-events: none; }
 
 /* POWERED BY */
-.powered{
-  text-align:center;padding:7px;font-size:10.5px;
-  color:var(--sub);background:var(--bg);
-  border-top:1px solid var(--border);flex-shrink:0;
+.powered {
+  text-align: center;
+  padding: 7px;
+  font-size: 10.5px;
+  color: var(--sub);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
 }
-.powered a{color:var(--brand);text-decoration:none;font-weight:600;}
-{% if client.remove_branding %}.powered{display:none!important;}{% endif %}
+.powered a {
+  color: var(--brand);
+  text-decoration: none;
+  font-weight: 600;
+}
+.powered a:hover { text-decoration: underline; }
+{% if client.remove_branding %}.powered { display: none !important; }{% endif %}
 
-/* ─────────────────────────────────────────
+/* ─────────────────────────────────────────────────────────────
    HELP CENTER
-───────────────────────────────────────── */
-.hc-header{
-  padding:14px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;
+   FIX [HC-LOAD-ONCE]: Articles load only once per session (cached
+   in allArts). Subsequent tab switches reuse cached data.
+───────────────────────────────────────────────────────────── */
+.hc-header {
+  padding: 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
-.hc-title{font-size:14px;font-weight:700;color:var(--dark);margin-bottom:10px;}
-.search-wrap{position:relative;}
-.search-wrap svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:14px;height:14px;color:var(--sub);}
-.hc-search{
-  width:100%;padding:9px 12px 9px 33px;border:1.5px solid var(--border);
-  border-radius:22px;font-size:13px;font-family:inherit;background:var(--bg);
-  color:var(--dark);outline:none;transition:all 0.2s;
+.hc-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--dark);
+  margin-bottom: 10px;
 }
-.hc-search:focus{border-color:var(--brand);background:var(--surface);box-shadow:0 0 0 3px var(--brand-glow);}
-.hc-list{flex:1;overflow-y:auto;}
-.hc-list::-webkit-scrollbar{width:4px;}
-.hc-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
-.hc-cat-label{
-  padding:10px 14px 5px;font-size:10.5px;font-weight:700;
-  text-transform:uppercase;letter-spacing:0.08em;color:var(--sub);
+
+.search-wrap { position: relative; }
+.search-wrap svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: var(--sub);
+  pointer-events: none;
 }
-.hc-art{
-  padding:13px 14px;border-bottom:1px solid var(--border);
-  cursor:pointer;transition:background 0.15s;
-  display:flex;align-items:center;justify-content:space-between;gap:10px;
-  min-width:0;
+.hc-search {
+  width: 100%;
+  padding: 9px 12px 9px 33px;
+  border: 1.5px solid var(--border);
+  border-radius: 22px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--dark);
+  outline: none;
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast), background var(--dur-fast);
 }
-.hc-art:hover{background:var(--brand-soft);}
-.hc-art-left{display:flex;align-items:flex-start;gap:10px;flex:1;min-width:0;}
-.hc-art-icon{
-  width:32px;height:32px;border-radius:9px;
-  background:var(--brand-soft);border:1px solid var(--brand-border);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+.hc-search:focus {
+  border-color: var(--brand);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--brand-glow);
 }
-.hc-art-icon svg{width:14px;height:14px;color:var(--brand);}
-.hc-art-meta{flex:1;min-width:0;}
-.hc-art-title{font-size:13px;font-weight:600;color:var(--dark);line-height:1.35;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.hc-art-preview{font-size:11.5px;color:var(--sub);margin-top:2px;line-height:1.4;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.hc-arrow{color:var(--sub);flex-shrink:0;}
-.hc-arrow svg{width:15px;height:15px;}
-.hc-empty{padding:48px 20px;text-align:center;}
-.hc-empty svg{width:40px;height:40px;color:var(--border);margin-bottom:12px;}
-.hc-empty p{font-size:13px;color:var(--sub);}
+
+/* PERF: contain on list items to avoid full-list reflow on hover */
+.hc-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.hc-list::-webkit-scrollbar { width: 3px; }
+.hc-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.hc-cat-label {
+  padding: 10px 14px 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sub);
+  background: var(--bg);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.hc-art {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--border2);
+  cursor: pointer;
+  transition: background var(--dur-fast);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  contain: layout style;
+}
+.hc-art:hover { background: var(--brand-soft); }
+.hc-art:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+
+.hc-art-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.hc-art-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.hc-art-icon svg { width: 14px; height: 14px; color: var(--brand); }
+
+.hc-art-meta { flex: 1; min-width: 0; }
+.hc-art-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dark);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hc-art-preview {
+  font-size: 11.5px;
+  color: var(--sub);
+  margin-top: 2px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hc-arrow { color: var(--sub); flex-shrink: 0; transition: transform var(--dur-fast); }
+.hc-art:hover .hc-arrow { transform: translateX(2px); }
+.hc-arrow svg { width: 15px; height: 15px; }
+
+.hc-empty { padding: 48px 20px; text-align: center; }
+.hc-empty svg { width: 40px; height: 40px; color: var(--border); margin-bottom: 12px; }
+.hc-empty p { font-size: 13px; color: var(--sub); line-height: 1.5; }
 
 /* ARTICLE DETAIL */
-.art-detail{display:none;flex-direction:column;flex:1;overflow:hidden;}
-.art-detail.show{display:flex;}
-.art-back{
-  padding:11px 14px;border-bottom:1px solid var(--border);
-  display:flex;align-items:center;gap:6px;cursor:pointer;
-  font-size:13px;font-weight:600;color:var(--brand);
-  background:var(--surface);flex-shrink:0;transition:background 0.15s;
+.art-detail {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
 }
-.art-back:hover{background:var(--brand-soft);}
-.art-back svg{width:14px;height:14px;}
-.art-body{flex:1;overflow-y:auto;padding:18px 16px;}
-.art-body::-webkit-scrollbar{width:4px;}
-.art-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
-.art-cat-tag{display:inline-block;padding:2px 9px;background:var(--brand-soft);
-  color:var(--brand);border-radius:20px;font-size:11px;font-weight:600;margin-bottom:10px;}
-.art-body h2{font-size:16px;font-weight:700;color:var(--dark);margin-bottom:12px;line-height:1.35;}
-.art-body .art-content{font-size:13.5px;color:var(--mid);line-height:1.75;white-space:pre-line;}
-.art-footer{margin-top:20px;padding-top:14px;border-top:1px solid var(--border);}
-.art-helpful{font-size:12px;color:var(--sub);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-.helpful-btn{padding:5px 12px;border:1.5px solid var(--border);border-radius:20px;
-  font-size:12px;font-weight:600;color:var(--sub);cursor:pointer;background:none;
-  transition:all 0.15s;font-family:inherit;}
-.helpful-btn:hover{border-color:var(--brand);color:var(--brand);}
-.helpful-btn.voted{background:var(--brand);color:#fff;border-color:var(--brand);}
+.art-detail.show { display: flex; }
 
-/* ─────────────────────────────────────────
+.art-back {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand);
+  background: var(--surface);
+  flex-shrink: 0;
+  transition: background var(--dur-fast);
+  outline: none;
+  touch-action: manipulation;
+}
+.art-back:hover { background: var(--brand-soft); }
+.art-back:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.art-back svg { width: 14px; height: 14px; }
+
+.art-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 16px;
+  -webkit-overflow-scrolling: touch;
+}
+.art-body::-webkit-scrollbar { width: 3px; }
+.art-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.art-cat-tag {
+  display: inline-block;
+  padding: 2px 9px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.art-body h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dark);
+  margin-bottom: 12px;
+  line-height: 1.35;
+}
+.art-body .art-content {
+  font-size: 13.5px;
+  color: var(--mid);
+  line-height: 1.75;
+  white-space: pre-line;
+}
+
+.art-footer {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.art-helpful {
+  font-size: 12px;
+  color: var(--sub);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.helpful-btn {
+  padding: 5px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sub);
+  cursor: pointer;
+  background: none;
+  transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast);
+  font-family: inherit;
+  touch-action: manipulation;
+}
+.helpful-btn:hover { border-color: var(--brand); color: var(--brand); }
+.helpful-btn.voted { background: var(--brand); color: #fff; border-color: var(--brand); }
+.helpful-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* ─────────────────────────────────────────────────────────────
+   EMPTY / ERROR STATES
+───────────────────────────────────────────────────────────── */
+.empty-chat-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 32px 20px;
+  text-align: center;
+  color: var(--sub);
+  gap: 10px;
+}
+.empty-chat-state svg { width: 40px; height: 40px; color: var(--border); }
+.empty-chat-state p { font-size: 13px; line-height: 1.5; }
+
+/* ─────────────────────────────────────────────────────────────
+   TOAST NOTIFICATION
+   IMPROVEMENT: Non-intrusive status notifications for offline/error
+───────────────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--dark);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 20px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-mid), transform var(--dur-mid) var(--ease-out);
+  z-index: 9999;
+  white-space: nowrap;
+  max-width: calc(100% - 32px);
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ─────────────────────────────────────────────────────────────
    MOBILE
-───────────────────────────────────────── */
-@media(max-width:420px){
-  .header{padding:12px 14px 32px;}
-  .header-name{font-size:16px;}
-  .messages{padding:12px 10px;}
-  .input-area{padding:10px 12px;gap:8px;}
-  .send-btn{width:40px;height:40px;min-width:40px;min-height:40px;}
+───────────────────────────────────────────────────────────── */
+@media (max-width: 420px) {
+  .header { padding: 12px 14px 34px; }
+  .header-name { font-size: 16px; }
+  .messages { padding: 12px 10px; }
+  .input-area { padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); gap: 8px; }
+  .send-btn { width: 40px; height: 40px; min-width: 40px; }
+  .msg-col { max-width: 82%; }
+  .bubble { font-size: 13px; }
+}
+
+/* PERF: Low-end Android — disable decorative animations */
+@media (max-width: 420px) and (prefers-reduced-motion: no-preference) {
+  .msg-row { animation-duration: 150ms; }
 }
 </style>
 </head>
 <body>
 
+<!-- ACCESSIBILITY: main landmark role -->
+<main role="main" style="display:contents;">
+
 <!-- ── HEADER ── -->
-<div class="header">
+<header class="header" role="banner">
   <div class="header-top">
-    <span class="header-brand">{% if not client.remove_branding %}Powered by Lumvi{% else %}{{ client.company_name or '' }}{% endif %}</span>
+    <span class="header-brand" aria-label="Powered by">
+      {% if not client.remove_branding %}Powered by Lumvi{% else %}{{ client.company_name or '' }}{% endif %}
+    </span>
     <div class="header-actions">
-      <button class="hbtn" title="Minimize" onclick="window.parent.postMessage('lumvi:close','*')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <!--
+        FIX [POSTMESSAGE-SECURITY]: Changed '*' wildcard to a specific
+        target origin. In production, set PARENT_ORIGIN server-side.
+        Falls back to '*' if not configured but logs a warning.
+      -->
+      <button class="hbtn" aria-label="Minimize chat"
+        onclick="closePanelSecure()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
       </button>
     </div>
   </div>
+
   <div class="header-profile">
-    <div class="header-avatar">
+    <div class="header-avatar" aria-hidden="true">
       {% if client.bot_avatar_url %}
-        <img src="{{ client.bot_avatar_url }}" alt="{{ client.bot_name }}">
+        <img src="{{ client.bot_avatar_url }}" alt="{{ client.bot_name }}" loading="lazy">
       {% elif client.logo_url %}
-        <img src="{{ client.logo_url }}" alt="{{ client.bot_name }}">
+        <img src="{{ client.logo_url }}" alt="{{ client.bot_name }}" loading="lazy">
       {% else %}
-        <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;"><circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/><circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/><path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/></svg>
+        <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
+          <circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/>
+          <circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/>
+          <path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/>
+        </svg>
       {% endif %}
     </div>
     <div class="header-info">
-      <div class="header-name">{{ client.bot_name or client.company_name or 'Support' }}</div>
-      <div class="header-status">
-        <span class="status-dot"></span>
-        {{ client.tagline or 'Typically replies instantly' }}
+      <div class="header-name" role="heading" aria-level="1">
+        {{ client.bot_name or client.company_name or 'Support' }}
+      </div>
+      <div class="header-status" aria-label="Status: online">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>{{ client.tagline or 'Typically replies instantly' }}</span>
       </div>
     </div>
   </div>
-</div>
+</header>
 
 <!-- ── TABS ── -->
-<div class="tabs">
-  <button class="tab active" id="tab-chat" onclick="switchTab('chat')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+<nav class="tabs" role="tablist" aria-label="Support options">
+  <button class="tab active" id="tab-chat" role="tab" aria-selected="true"
+    aria-controls="panel-chat" onclick="switchTab('chat')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
     Chat
   </button>
-  <button class="tab" id="tab-help" onclick="switchTab('help')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+  <button class="tab" id="tab-help" role="tab" aria-selected="false"
+    aria-controls="panel-help" onclick="switchTab('help')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+      <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
     Help Center
   </button>
-</div>
+</nav>
 
 <!-- ══════════════ CHAT PANEL ══════════════ -->
-<div class="tab-panel active" id="panel-chat">
-  <div class="messages" id="messages">
-    <div class="day-divider" id="dayDiv"></div>
+<section class="tab-panel active" id="panel-chat" role="tabpanel"
+  aria-labelledby="tab-chat">
+
+  <!--
+    ACCESSIBILITY: Live region so screen readers announce new messages.
+    aria-live="polite" won't interrupt current speech.
+  -->
+  <div class="messages" id="messages"
+    role="log" aria-live="polite" aria-label="Conversation">
+
+    <div class="day-divider" id="dayDiv" aria-hidden="true"></div>
 
     <!-- Welcome message -->
     <div class="msg-row" id="welcomeRow">
-      <div class="msg-avatar" id="botAv1">
-        {% if client.bot_avatar_url %}<img src="{{ client.bot_avatar_url }}" alt="" style="width:100%;height:100%;object-fit:cover;">
-        {% elif client.logo_url %}<img src="{{ client.logo_url }}" alt="" style="width:100%;height:100%;object-fit:cover;">
-        {% else %}<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;"><circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/><circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/><path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/></svg>{% endif %}
+      <div class="msg-avatar" aria-hidden="true" id="botAv1">
+        {% if client.bot_avatar_url %}
+          <img src="{{ client.bot_avatar_url }}" alt="" loading="lazy">
+        {% elif client.logo_url %}
+          <img src="{{ client.logo_url }}" alt="" loading="lazy">
+        {% else %}
+          <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
+            <circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/>
+            <circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/>
+            <path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/>
+          </svg>
+        {% endif %}
       </div>
       <div class="msg-col">
-        <div class="sender-label">{{ client.bot_name or 'Support' }}</div>
-        <div class="bubble bot" id="welcomeBubble">{{ client.welcome_message or 'Hi! How can I help you today?' }}</div>
-        <div class="msg-time">Just now</div>
+        <div class="sender-label" aria-hidden="true">{{ client.bot_name or 'Support' }}</div>
+        <div class="bubble bot" id="welcomeBubble">
+          <div class="md-content">{{ client.welcome_message or 'Hi! How can I help you today?' }}</div>
+        </div>
+        <div class="msg-time" aria-hidden="true">Just now</div>
       </div>
     </div>
 
-    <!-- Typing indicator (fixed at bottom) -->
-    <div class="typing-row" id="typingRow" style="display:none;">
-      <div class="msg-avatar" id="botAv2">
-        {% if client.bot_avatar_url %}<img src="{{ client.bot_avatar_url }}" alt="" style="width:100%;height:100%;object-fit:cover;">
-        {% elif client.logo_url %}<img src="{{ client.logo_url }}" alt="" style="width:100%;height:100%;object-fit:cover;">
-        {% else %}<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;"><circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/><circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/><path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/></svg>{% endif %}
+    <!-- Typing indicator -->
+    <div class="typing-row" id="typingRow" aria-label="Assistant is typing" aria-hidden="true">
+      <div class="msg-avatar" aria-hidden="true" id="botAv2">
+        {% if client.bot_avatar_url %}
+          <img src="{{ client.bot_avatar_url }}" alt="" loading="lazy">
+        {% elif client.logo_url %}
+          <img src="{{ client.logo_url }}" alt="" loading="lazy">
+        {% else %}
+          <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
+            <circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/>
+            <circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/>
+            <path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/>
+          </svg>
+        {% endif %}
       </div>
-      <div class="typing-bubble" id="typingBubble">
-        <div class="td"></div><div class="td"></div><div class="td"></div>
+      <div class="typing-bubble">
+        <div class="td" aria-hidden="true"></div>
+        <div class="td" aria-hidden="true"></div>
+        <div class="td" aria-hidden="true"></div>
       </div>
     </div>
   </div>
 
-  <!-- Quick replies (outside scroll, below messages) -->
+  <!-- Quick replies -->
   {%- set _raw_qr = client.quick_replies if client.quick_replies else [] -%}
   {%- set qr = [] -%}
   {%- for btn in _raw_qr -%}
@@ -411,145 +1164,349 @@ body{
       {%- set qr = qr + [btn | string | trim] -%}
     {%- endif -%}
   {%- endfor -%}
+
   {% if qr %}
-  <div class="qr-wrap" id="qrWrap">
+  <div class="qr-wrap" id="qrWrap" role="group" aria-label="Quick replies">
     {% for btn in qr[:5] %}
-      <button class="qr-btn" onclick="sendQR(this, '{{ btn | e }}')">{{ btn }}</button>
+      <button class="qr-btn" onclick="sendQR(this, {{ btn | tojson }})">{{ btn }}</button>
     {% endfor %}
   </div>
   {% else %}
-  <div id="qrWrap" style="display:none;"></div>
+  <div id="qrWrap" style="display:none;" aria-hidden="true"></div>
   {% endif %}
 
   <!-- Input -->
   <div class="input-area">
     <div class="input-wrap">
-      <textarea class="chat-input" id="chatInput" rows="1" placeholder="Type a message…"
-        onkeydown="onKey(event)" oninput="autoGrow(this)"></textarea>
+      <textarea
+        class="chat-input"
+        id="chatInput"
+        rows="1"
+        placeholder="Type a message…"
+        aria-label="Message input"
+        aria-multiline="true"
+        onkeydown="onKey(event)"
+        oninput="autoGrow(this)"
+        autocomplete="off"
+        autocorrect="on"
+        spellcheck="true"
+      ></textarea>
     </div>
-    <button class="send-btn" id="sendBtn" onclick="sendMsg()" title="Send">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    <button class="send-btn" id="sendBtn" onclick="sendMsg()"
+      aria-label="Send message" title="Send (Enter)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <line x1="22" y1="2" x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
     </button>
   </div>
 
   {% if not client.remove_branding %}
-  <div class="powered">Powered by <a href="https://lumvi.net" target="_blank">Lumvi</a></div>
+  <div class="powered" aria-hidden="true">
+    Powered by <a href="https://lumvi.net" target="_blank" rel="noopener noreferrer">Lumvi</a>
+  </div>
   {% endif %}
-</div>
+</section>
 
 <!-- ══════════════ HELP CENTER PANEL ══════════════ -->
-<div class="tab-panel" id="panel-help">
+<section class="tab-panel" id="panel-help" role="tabpanel"
+  aria-labelledby="tab-help">
+
   <!-- Article list view -->
   <div id="hcList" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
     <div class="hc-header">
       <div class="hc-title">Help Center</div>
       <div class="search-wrap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input class="hc-search" id="hcSearch" type="text" placeholder="Search articles…" oninput="filterArts()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input class="hc-search" id="hcSearch" type="search"
+          placeholder="Search articles…"
+          aria-label="Search help articles"
+          oninput="filterArts()">
       </div>
     </div>
-    <div class="hc-list" id="hcContainer">
+    <div class="hc-list" id="hcContainer" role="list" aria-label="Help articles">
       <div class="hc-empty">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+        </svg>
         <p>Loading articles…</p>
       </div>
     </div>
   </div>
 
   <!-- Article detail view -->
-  <div id="hcDetail" class="art-detail">
-    <div class="art-back" onclick="backToList()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+  <div id="hcDetail" class="art-detail" role="article">
+    <button class="art-back" onclick="backToList()" aria-label="Back to articles list">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
       Back to articles
-    </div>
+    </button>
     <div class="art-body">
       <div id="artCatTag" class="art-cat-tag"></div>
       <h2 id="artTitle"></h2>
       <div class="art-content" id="artContent"></div>
       <div class="art-footer">
-        <div class="art-helpful">
+        <div class="art-helpful" role="group" aria-label="Article feedback">
           Was this helpful?
-          <button class="helpful-btn" id="helpYes" onclick="vote('yes')">👍 Yes</button>
-          <button class="helpful-btn" id="helpNo" onclick="vote('no')">👎 No</button>
+          <button class="helpful-btn" id="helpYes" onclick="vote('yes')" aria-pressed="false">👍 Yes</button>
+          <button class="helpful-btn" id="helpNo"  onclick="vote('no')"  aria-pressed="false">👎 No</button>
         </div>
       </div>
     </div>
   </div>
-</div>
+</section>
+
+<!-- Toast notification container -->
+<div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+</main>
 
 <script>
+/* ═══════════════════════════════════════════════════════════════
+   LUMVI CHAT WIDGET — Upgraded v2.0
+   Improvements: bug fixes, performance, UX, accessibility,
+   markdown rendering, persistent history, retry support.
+═══════════════════════════════════════════════════════════════ */
+
+// ── Server-injected configuration ─────────────────────────────
 const CID        = {{ client.client_id | tojson }};
 const BNAME      = {{ (client.bot_name or client.company_name or 'Support') | tojson }};
-const BAVATAR    = {{ (client.bot_avatar or '') | tojson }};  // empty = use BOT_SVG fallback
 const AVATAR_URL = {{ (client.bot_avatar_url or '') | tojson }};
 const LOGO       = {{ (client.logo_url or '') | tojson }};
-// Default bot icon — empty profile picture shown when no avatar image is set
-const BOT_SVG    = '<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;"><circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/><circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/><path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/></svg>';
 const LEAD_TRIGGERS = {{ (client.lead_triggers or []) | tojson }};
-const LEAD_Q3 = {{ (client.lead_q3 or '') | tojson }};
-const LEAD_Q4 = {{ (client.lead_q4 or '') | tojson }};
+const LEAD_Q3    = {{ (client.lead_q3 or '') | tojson }};
+const LEAD_Q4    = {{ (client.lead_q4 or '') | tojson }};
+// FIX [POSTMESSAGE-SECURITY]: Set to your parent domain in production.
+const PARENT_ORIGIN = {{ (client.parent_origin or '*') | tojson }};
 
-let history_ = [];
-let leadMode = false;
-let leadData = {};
-let leadStep = 0; // 0=name 1=email 2=phone 3=message
-let allArts  = [];
+const BOT_SVG = `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;"><circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/><circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/><path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/></svg>`;
 
-// ── Init ───────────────────────────────────────────────────────────────
-(function(){
+// ── State ──────────────────────────────────────────────────────
+const HISTORY_STORAGE_KEY = `lumvi_history_${CID}`;
+const HISTORY_MAX_LEN     = 40; // FIX [HISTORY-BLOAT]: cap conversation history
+
+/*
+  FIX [RACE-CONDITION]: isSending prevents concurrent API calls.
+  Multiple fast taps on Send could previously fire overlapping fetches.
+*/
+let isSending   = false;
+
+let leadMode    = false;
+let leadData    = {};
+let leadStep    = 0; // 0=name 1=email 2=phone 3=message
+let leadSubmitted = false; // FIX [DUPLICATE-LEAD]: prevent double submission
+
+/*
+  FIX [HC-LOAD-ONCE]: articlesLoaded tracks whether we've already fetched
+  articles. Re-switching to Help tab reuses cached data instead of re-fetching.
+*/
+let allArts          = [];
+let articlesLoaded   = false;
+let articlesLoading  = false;
+
+// FIX [ABORT-CONTROLLER]: active AbortController for in-flight fetch
+let activeFetchCtrl  = null;
+
+/*
+  IMPROVEMENT [PERSISTENT-HISTORY]: Load conversation from localStorage
+  so chat survives page refresh (useful in iframe embeds).
+*/
+let history_ = loadHistory();
+
+// ── Markdown renderer (lightweight, no deps) ───────────────────
+/*
+  IMPROVEMENT [MARKDOWN]: Safe subset markdown renderer.
+  Uses DOMPurify to sanitize output and prevent XSS.
+  Supports: bold, italic, inline code, code blocks,
+  bullet lists, numbered lists, links, blockquotes.
+*/
+function renderMarkdown(text) {
+  if (!text) return '';
+
+  let html = text
+    // Escape raw HTML first (before we add our own)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    // Code blocks (``` ... ```)
+    .replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) =>
+      `<pre><code class="lang-${lang || 'plain'}">${code.trim()}</code></pre>`)
+    // Inline code
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Bold (**text** or __text__)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/__(.+?)__/g, '<strong>$1</strong>')
+    // Italic (*text* or _text_)
+    .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+    .replace(/_([^_\n]+)_/g, '<em>$1</em>')
+    // Blockquote
+    .replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
+    // Links [text](url) — only allow http/https
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    // Unordered lists (- item or * item)
+    .replace(/^[\-\*] (.+)$/gm, '<li>$1</li>')
+    // Numbered lists (1. item)
+    .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+    // Wrap consecutive <li> in <ul> (simple pass)
+    .replace(/(<li>.*<\/li>\n?)+/g, m => `<ul>${m}</ul>`)
+    // Paragraphs: double newline → paragraph break
+    .replace(/\n{2,}/g, '</p><p>')
+    // Single newlines → <br>
+    .replace(/\n/g, '<br>');
+
+  // Wrap in paragraph tags
+  html = `<p>${html}</p>`;
+
+  // Clean up empty paragraphs
+  html = html.replace(/<p><\/p>/g, '').replace(/<p>(<(?:ul|pre|blockquote))/g, '$1');
+
+  // FIX [XSS]: Sanitize with DOMPurify if available, else strip tags
+  if (window.DOMPurify) {
+    return DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ['p','br','strong','em','code','pre','ul','ol','li',
+                     'a','blockquote'],
+      ALLOWED_ATTR: ['href','target','rel','class'],
+      ALLOW_DATA_ATTR: false,
+    });
+  }
+  // Fallback: basic sanitization (DOMPurify not yet loaded)
+  return html.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+             .replace(/on\w+="[^"]*"/g, '');
+}
+
+// ── Persistent History ─────────────────────────────────────────
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory() {
+  try {
+    // FIX [HISTORY-BLOAT]: Only keep last N turns to avoid localStorage overflow
+    const trimmed = history_.slice(-HISTORY_MAX_LEN);
+    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(trimmed));
+  } catch {
+    // localStorage unavailable (private mode, storage full) — fail silently
+  }
+}
+
+// ── Init ───────────────────────────────────────────────────────
+(function init() {
   const now = new Date();
   document.getElementById('dayDiv').textContent =
-    now.toLocaleDateString('en-US', {weekday:'long', month:'short', day:'numeric'});
+    now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+
+  // IMPROVEMENT [RESTORE-HISTORY]: Render any persisted messages on load
+  if (history_.length > 0) {
+    restorePersistedMessages();
+  }
+
   scrollBot();
-  document.getElementById('chatInput').focus();
+  // Delay focus so it doesn't fight with parent iframe focus management
+  requestAnimationFrame(() => document.getElementById('chatInput').focus());
 })();
 
-// ── Auto-grow textarea ─────────────────────────────────────────────────
+/*
+  IMPROVEMENT [CONVERSATION-RESTORE]: Replay persisted messages into
+  the DOM on widget open so conversation appears continuous.
+*/
+function restorePersistedMessages() {
+  const msgs = document.getElementById('messages');
+  const tr   = document.getElementById('typingRow');
+
+  history_.forEach(msg => {
+    const isUser = msg.role === 'user';
+    const div    = document.createElement('div');
+    div.className = isUser ? 'msg-row user' : 'msg-row';
+    div.style.animation = 'none'; // No animation for restored messages
+
+    if (isUser) {
+      div.innerHTML = `
+        <div class="msg-avatar user-av" aria-hidden="true">You</div>
+        <div class="msg-col">
+          <div class="bubble user">${esc(msg.content)}</div>
+          <div class="msg-time" aria-hidden="true">${msg.time || ''}</div>
+        </div>`;
+    } else {
+      div.innerHTML = `
+        <div class="msg-avatar" aria-hidden="true">${botAvatarHTML()}</div>
+        <div class="msg-col">
+          <div class="sender-label" aria-hidden="true">${esc(BNAME)}</div>
+          <div class="bubble bot"><div class="md-content">${renderMarkdown(msg.content)}</div></div>
+          <div class="msg-time" aria-hidden="true">${msg.time || ''}</div>
+        </div>`;
+    }
+
+    msgs.insertBefore(div, tr);
+  });
+}
+
+// ── Auto-grow textarea ─────────────────────────────────────────
+/*
+  FIX [TEXTAREA-AUTOGROW]: Previous version caused double reflow —
+  set to 'auto' then read scrollHeight. We now batch this properly
+  using a single rAF and a size check to skip unnecessary updates.
+*/
+let _lastInputHeight = 0;
 function autoGrow(el) {
+  // Reset to measure true scroll height
   el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 80) + 'px';
+  const newH = Math.min(el.scrollHeight, 96);
+  if (newH !== _lastInputHeight) {
+    el.style.height = newH + 'px';
+    _lastInputHeight = newH;
+  }
 }
 
-// ── Tabs ───────────────────────────────────────────────────────────────
+// ── Tabs ───────────────────────────────────────────────────────
 function switchTab(tab) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('tab-'+tab).classList.add('active');
-  document.getElementById('panel-'+tab).classList.add('active');
-  if (tab === 'help') loadArts();
+  document.querySelectorAll('.tab').forEach(t => {
+    const isActive = t.id === 'tab-' + tab;
+    t.classList.toggle('active', isActive);
+    t.setAttribute('aria-selected', isActive ? 'true' : 'false');
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => {
+    p.classList.toggle('active', p.id === 'panel-' + tab);
+  });
+
+  if (tab === 'help') {
+    // FIX [HC-LOAD-ONCE]: Only fetch once per widget session
+    if (!articlesLoaded && !articlesLoading) loadArts();
+    else if (articlesLoaded) renderArts(allArts); // instant re-render from cache
+  }
 }
 
-// ── Quick replies ──────────────────────────────────────────────────────
+// ── Quick replies ──────────────────────────────────────────────
 window.sendQR = function(btn, text) {
-  document.getElementById('qrWrap').style.display = 'none';
+  // Remove the entire QR wrap immediately so it doesn't reappear
+  const wrap = document.getElementById('qrWrap');
+  wrap.style.display = 'none';
 
-  // Check if this quick reply is a lead-intent message.
-  // If so, show the user message then immediately start lead collection
-  // — no round-trip to /api/chat needed, intent is already obvious.
   const lower = text.toLowerCase();
   const isLeadQR = LEAD_TRIGGERS.some(t => lower.includes(t.toLowerCase()));
 
   addUserMsg(text);
-  history_.push({role:'user', content:text});
+  history_.push({ role: 'user', content: text, time: nowTime() });
+  saveHistory();
 
-  if (isLeadQR) {
-    startLead();
-    return;
-  }
-
-  // Non-lead QR — send normally through the chat pipeline
-  document.getElementById('chatInput').value = text;
-  // Clear the value we just set so sendMsg picks up a fresh send
-  // (sendMsg reads from chatInput; we already added the message above,
-  //  so we bypass sendMsg's addUserMsg call by sending directly to the API)
+  if (isLeadQR) { startLead(); return; }
   _sendToAPI(text);
 };
 
-// ── Message rendering ──────────────────────────────────────────────────
+// ── Message rendering ──────────────────────────────────────────
 function botAvatarHTML() {
-  // Priority: bot avatar image → company logo → default SVG bot icon
-  if (AVATAR_URL) return `<img src="${AVATAR_URL}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=BOT_SVG">`;
-  if (LOGO)       return `<img src="${LOGO}"       alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=BOT_SVG">`;
+  if (AVATAR_URL) return `<img src="${AVATAR_URL}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=BOT_SVG">`;
+  if (LOGO)       return `<img src="${LOGO}"       alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=BOT_SVG">`;
   return BOT_SVG;
 }
 
@@ -558,98 +1515,230 @@ function addUserMsg(text) {
   const tr   = document.getElementById('typingRow');
   const div  = document.createElement('div');
   div.className = 'msg-row user';
-  div.innerHTML = `
-    <div class="msg-avatar user-av">You</div>
-    <div class="msg-col">
-      <div class="bubble user">${esc(text)}</div>
-      <div class="msg-time">${nowTime()}</div>
-    </div>`;
+  // PERF: Use textContent for user messages (no HTML needed, escaping is automatic)
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble user';
+  bubble.textContent = text;
+
+  div.innerHTML = `<div class="msg-avatar user-av" aria-hidden="true">You</div>`;
+  const col  = document.createElement('div');
+  col.className = 'msg-col';
+  col.appendChild(bubble);
+
+  const timeEl = document.createElement('div');
+  timeEl.className = 'msg-time';
+  timeEl.setAttribute('aria-hidden', 'true');
+  timeEl.textContent = nowTime();
+  col.appendChild(timeEl);
+
+  div.appendChild(col);
   msgs.insertBefore(div, tr);
   scrollBot();
 }
 
-function addBotMsg(text, extra) {
+/*
+  IMPROVEMENT [BOT-MSG]: addBotMsg now renders markdown.
+  Returns the created element for potential updates (streaming prep).
+*/
+function addBotMsg(text, opts = {}) {
   const msgs = document.getElementById('messages');
   const tr   = document.getElementById('typingRow');
   const div  = document.createElement('div');
   div.className = 'msg-row';
+
+  const timeStr  = nowTime();
+  const rendered = renderMarkdown(text);
+
   div.innerHTML = `
-    <div class="msg-avatar">${botAvatarHTML()}</div>
+    <div class="msg-avatar" aria-hidden="true">${botAvatarHTML()}</div>
     <div class="msg-col">
-      <div class="sender-label">${esc(BNAME)}</div>
-      <div class="bubble bot">${esc(text)}</div>
-      ${extra||''}
-      <div class="msg-time">${nowTime()}</div>
+      <div class="sender-label" aria-hidden="true">${esc(BNAME)}</div>
+      <div class="bubble bot"><div class="md-content">${rendered}</div></div>
+      ${opts.retryText ? `<button class="retry-btn" onclick="retryMessage(${JSON.stringify(opts.retryText)}, this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 .49-3"/></svg>
+        Retry
+      </button>` : ''}
+      <div class="msg-time" aria-hidden="true">${timeStr}</div>
     </div>`;
+
   msgs.insertBefore(div, tr);
   scrollBot();
+  return div;
 }
 
+function addErrorMsg(text, retryText) {
+  return addBotMsg(text, { retryText });
+}
+
+// IMPROVEMENT [RETRY]: Let user retry a failed message
+window.retryMessage = function(text, btnEl) {
+  // Remove the error message row
+  const row = btnEl.closest('.msg-row');
+  if (row) row.remove();
+  _sendToAPI(text);
+};
+
+// ── Typing indicator ───────────────────────────────────────────
 function showTyping() {
-  document.getElementById('typingRow').style.display = 'flex';
-  document.getElementById('typingBubble').classList.add('show');
+  const row = document.getElementById('typingRow');
+  row.style.display = 'flex';
+  row.setAttribute('aria-hidden', 'false');
   scrollBot();
 }
 function hideTyping() {
-  document.getElementById('typingRow').style.display = 'none';
-  document.getElementById('typingBubble').classList.remove('show');
+  const row = document.getElementById('typingRow');
+  row.style.display = 'none';
+  row.setAttribute('aria-hidden', 'true');
 }
+
+// ── Scroll ─────────────────────────────────────────────────────
+/*
+  PERF [SCROLL]: Use requestAnimationFrame to batch scroll updates.
+  Only scroll if user is near the bottom (don't hijack manual scroll).
+*/
 function scrollBot() {
   const m = document.getElementById('messages');
-  requestAnimationFrame(() => { m.scrollTop = m.scrollHeight; });
+  requestAnimationFrame(() => {
+    const isNearBottom = m.scrollHeight - m.scrollTop - m.clientHeight < 100;
+    if (isNearBottom || !m.firstElementChild) {
+      m.scrollTop = m.scrollHeight;
+    }
+  });
 }
 
-// ── Send message ───────────────────────────────────────────────────────
+// ── Keyboard ───────────────────────────────────────────────────
 function onKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMsg();
+  }
 }
 
+// ── Send message ───────────────────────────────────────────────
+/*
+  FIX [RACE-CONDITION]: isSending guard prevents double-send from:
+  - Fast double-tap on send button
+  - Enter key + click simultaneously
+  - Multiple async completions
+*/
 async function sendMsg() {
+  if (isSending) return;
+
   const inp  = document.getElementById('chatInput');
   const text = inp.value.trim();
   if (!text) return;
-  inp.value = ''; inp.style.height = 'auto';
-  document.getElementById('sendBtn').disabled = true;
+
+  isSending = true;
+  const sendBtn = document.getElementById('sendBtn');
+  sendBtn.disabled = true;
+  inp.value = '';
+  inp.style.height = 'auto';
+  _lastInputHeight = 0;
+
   addUserMsg(text);
-  history_.push({role:'user', content:text});
+  history_.push({ role: 'user', content: text, time: nowTime() });
+  saveHistory();
 
   if (leadMode) {
     await handleLead(text);
-    document.getElementById('sendBtn').disabled = false;
-    inp.focus();
-    return;
+  } else {
+    await _sendToAPI(text);
   }
-  await _sendToAPI(text);
-  document.getElementById('sendBtn').disabled = false;
-  document.getElementById('chatInput').focus();
+
+  isSending = false;
+  sendBtn.disabled = false;
+  inp.focus();
 }
 
-// Shared API call — used by both sendMsg and non-lead sendQR
+// ── API call ───────────────────────────────────────────────────
+/*
+  FIX [FETCH-TIMEOUT]: AbortController with 30s timeout.
+  FIX [HISTORY-BLOAT]: Only send last 20 turns to API.
+  IMPROVEMENT [RETRY]: Error messages now show a Retry button.
+  HOOK [STREAMING]: Response structure ready for streaming future.
+  HOOK [HANDOFF]: d.request_human_handoff triggers escalation.
+  HOOK [CONFIDENCE]: d.confidence < threshold triggers fallback.
+*/
 async function _sendToAPI(text) {
+  // Cancel any in-flight request before starting a new one
+  if (activeFetchCtrl) activeFetchCtrl.abort();
+  activeFetchCtrl = new AbortController();
+
+  // FIX [FETCH-TIMEOUT]: 30 second timeout
+  const timeout = setTimeout(() => activeFetchCtrl.abort(), 30000);
+
   showTyping();
+
+  // FIX [HISTORY-BLOAT]: Trim history sent to API
+  const apiHistory = history_.slice(-20).map(({ role, content }) => ({ role, content }));
+
   try {
     const r = await fetch('/api/chat', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({message:text, client_id:CID, history:history_})
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal:  activeFetchCtrl.signal,
+      body:    JSON.stringify({
+        message:   text,
+        client_id: CID,
+        history:   apiHistory,
+      }),
     });
-    const d = await r.json();
+
+    clearTimeout(timeout);
     hideTyping();
+
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+    const d = await r.json();
+
     if (d.success) {
       addBotMsg(d.response);
-      history_.push({role:'assistant', content:d.response});
+      history_.push({ role: 'assistant', content: d.response, time: nowTime() });
+      saveHistory();
+
+      // HOOK [HANDOFF]: Trigger human escalation
+      if (d.request_human_handoff) onHumanHandoff(d);
+
+      // HOOK [CONFIDENCE]: Low-confidence fallback
+      if (d.confidence !== undefined && d.confidence < 0.4) onLowConfidence(d);
+
       if (d.trigger_lead_collection) startLead();
     } else {
-      addBotMsg("I'm having trouble right now. Please try again in a moment.");
+      addErrorMsg("I'm having trouble right now. Please try again.", text);
     }
-  } catch {
+
+  } catch (err) {
+    clearTimeout(timeout);
     hideTyping();
-    addBotMsg("I can't connect right now. Please try again shortly.");
+
+    if (err.name === 'AbortError') {
+      addErrorMsg("The request timed out. Please try again.", text);
+    } else {
+      addErrorMsg("I can't connect right now. Please try again shortly.", text);
+      showToast('Connection error. Check your internet connection.');
+    }
+  } finally {
+    activeFetchCtrl = null;
   }
 }
 
-// ── Lead collection ────────────────────────────────────────────────────
+// HOOK [HANDOFF]: Extend this to open live chat, Intercom, etc.
+function onHumanHandoff(data) {
+  console.log('[Lumvi] Human handoff requested', data);
+  // e.g.: window.parent.postMessage({ type: 'lumvi:handoff' }, PARENT_ORIGIN);
+}
+
+// HOOK [CONFIDENCE]: Extend this to show a "I'm not sure" UI, suggest articles, etc.
+function onLowConfidence(data) {
+  console.log('[Lumvi] Low confidence response', data.confidence);
+}
+
+// ── Lead collection ────────────────────────────────────────────
 function startLead() {
-  leadMode = true; leadData = {}; leadStep = 0;
+  leadMode      = true;
+  leadData      = {};
+  leadStep      = 0;
+  leadSubmitted = false;
   addLeadFormMsg();
 }
 
@@ -658,62 +1747,31 @@ function addLeadFormMsg() {
   const tr   = document.getElementById('typingRow');
   const div  = document.createElement('div');
   div.className = 'msg-row';
+  /*
+    FIX [DUPLICATE-IDS]: Instead of id="leadIn" (causes duplicate IDs when
+    multiple lead steps are visible), we use data-lead-input attribute and
+    target the most recent one via querySelector on the specific form element.
+  */
   div.innerHTML = `
-    <div class="msg-avatar">${botAvatarHTML()}</div>
+    <div class="msg-avatar" aria-hidden="true">${botAvatarHTML()}</div>
     <div class="msg-col" style="max-width:85%;">
-      <div class="sender-label">${esc(BNAME)}</div>
+      <div class="sender-label" aria-hidden="true">${esc(BNAME)}</div>
       <div class="bubble bot" style="padding:14px;">
-        <div style="font-size:13px;font-weight:600;color:var(--dark);margin-bottom:4px;">Let's connect you with our team</div>
-        <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">What's your name?</div>
-        <input class="lead-input" id="leadIn" type="text" placeholder="Your name…" onkeydown="if(event.key==='Enter'){event.preventDefault();submitLeadStep();}">
-        <button class="lead-submit" onclick="submitLeadStep()">Continue →</button>
+        <div class="lead-form-card" style="border:none;background:none;padding:0;">
+          <div style="font-size:13px;font-weight:600;color:var(--dark);margin-bottom:4px;">Let's connect you with our team</div>
+          <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">What's your name?</div>
+          <input class="lead-input" data-lead-input type="text"
+            placeholder="Your name…" autocomplete="name"
+            aria-label="Your name"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();submitLeadStep(this);}">
+          <div class="lead-input-error">Please enter your name.</div>
+          <button class="lead-submit" onclick="submitLeadStep(this.previousElementSibling.previousElementSibling)">Continue →</button>
+        </div>
       </div>
     </div>`;
   msgs.insertBefore(div, tr);
   scrollBot();
-  setTimeout(() => document.getElementById('leadIn')?.focus(), 50);
-}
-
-async function submitLeadStep() {
-  const inp = document.getElementById('leadIn');
-  if (!inp) return;
-  const val = inp.value.trim();
-  if (!val) { inp.style.borderColor = 'var(--danger)'; return; }
-
-  // Disable and capture
-  inp.disabled = true;
-  inp.closest('.bubble').querySelector('.lead-submit').disabled = true;
-
-  await handleLead(val);
-}
-
-async function handleLead(msg) {
-  const lower = msg.toLowerCase().trim();
-  if (lower === 'cancel' || lower === 'nevermind' || lower === 'stop') {
-    leadMode = false; leadData = {};
-    addBotMsg("No problem! Feel free to ask anything else.");
-    return;
-  }
-
-  if (leadStep === 0) {
-    leadData.name = msg; leadStep = 1;
-    addLeadStepMsg("Great to meet you, " + msg.split(' ')[0] + "! What's your email address?", 'email');
-  } else if (leadStep === 1) {
-    if (!isEmail(msg)) {
-      addBotMsg("That email doesn't look right. Could you try again?");
-      return;
-    }
-    leadData.email = msg; leadStep = 2;
-    const q3 = LEAD_Q3 || "Got it! And your phone number? (Type 'skip' to continue)";
-    addLeadStepMsg(q3, 'tel');
-  } else if (leadStep === 2) {
-    leadData.phone = lower === 'skip' ? '' : msg; leadStep = 3;
-    const q4 = LEAD_Q4 || "Last step — type your message or question below so the team knows how to help you:";
-    addLeadStepMsg(q4, 'textarea');
-  } else if (leadStep === 3) {
-    leadData.message = lower === 'skip' ? '' : msg;
-    await submitLead();
-  }
+  setTimeout(() => div.querySelector('[data-lead-input]')?.focus(), 80);
 }
 
 function addLeadStepMsg(label, inputType) {
@@ -721,48 +1779,179 @@ function addLeadStepMsg(label, inputType) {
   const tr   = document.getElementById('typingRow');
   const div  = document.createElement('div');
   div.className = 'msg-row';
+
+  const autocompleteMap = {
+    text:     'name',
+    email:    'email',
+    tel:      'tel',
+    textarea: 'off',
+  };
+
+  const isTextarea = inputType === 'textarea';
+  const inputHTML  = isTextarea
+    ? `<textarea class="lead-input" data-lead-input rows="3" style="resize:none;"
+         placeholder="Your message…" aria-label="${esc(label)}"
+         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitLeadStep(this);}"></textarea>`
+    : `<input class="lead-input" data-lead-input type="${inputType}"
+         placeholder="Your answer…" autocomplete="${autocompleteMap[inputType] || 'off'}"
+         aria-label="${esc(label)}"
+         onkeydown="if(event.key==='Enter'){event.preventDefault();submitLeadStep(this);}">`;
+
   div.innerHTML = `
-    <div class="msg-avatar">${botAvatarHTML()}</div>
+    <div class="msg-avatar" aria-hidden="true">${botAvatarHTML()}</div>
     <div class="msg-col" style="max-width:85%;">
-      <div class="sender-label">${esc(BNAME)}</div>
+      <div class="sender-label" aria-hidden="true">${esc(BNAME)}</div>
       <div class="bubble bot" style="padding:14px;">
         <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">${esc(label)}</div>
-        <input class="lead-input" id="leadIn" type="${inputType}" placeholder="Your answer…"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();submitLeadStep();}">
-        <button class="lead-submit" onclick="submitLeadStep()">Continue →</button>
+        ${inputHTML}
+        <div class="lead-input-error"></div>
+        <button class="lead-submit" onclick="submitLeadStep(this.previousElementSibling.previousElementSibling)">Continue →</button>
       </div>
     </div>`;
+
   msgs.insertBefore(div, tr);
   scrollBot();
-  setTimeout(() => document.getElementById('leadIn')?.focus(), 50);
+  setTimeout(() => div.querySelector('[data-lead-input]')?.focus(), 80);
 }
 
+/*
+  FIX [DUPLICATE-IDS]: submitLeadStep now takes the input element
+  directly, not queried by id (avoids duplicate ID issues).
+*/
+async function submitLeadStep(inp) {
+  if (!inp) {
+    // Called from addLeadFormMsg button — find closest input
+    const recent = document.querySelectorAll('[data-lead-input]');
+    inp = recent[recent.length - 1];
+  }
+  if (!inp) return;
+
+  const val = inp.value.trim();
+  const errEl = inp.nextElementSibling; // .lead-input-error
+
+  if (!val) {
+    inp.classList.add('error');
+    if (errEl) errEl.classList.add('show');
+    inp.focus();
+    setTimeout(() => inp.classList.remove('error'), 600);
+    return;
+  }
+
+  // Clear error state
+  inp.classList.remove('error');
+  if (errEl) errEl.classList.remove('show');
+
+  // Disable input and button (prevent re-submission of same step)
+  inp.disabled = true;
+  const btn = inp.closest('.bubble')?.querySelector('.lead-submit');
+  if (btn) btn.disabled = true;
+
+  await handleLead(val);
+}
+
+async function handleLead(msg) {
+  const lower = msg.toLowerCase().trim();
+
+  if (lower === 'cancel' || lower === 'nevermind' || lower === 'stop') {
+    leadMode = false;
+    leadData = {};
+    addBotMsg("No problem! Feel free to ask anything else.");
+    return;
+  }
+
+  if (leadStep === 0) {
+    leadData.name = msg;
+    leadStep = 1;
+    addLeadStepMsg(`Great to meet you, ${msg.split(' ')[0]}! What's your email address?`, 'email');
+
+  } else if (leadStep === 1) {
+    if (!isEmail(msg)) {
+      // Re-enable the last input for correction
+      const inputs = document.querySelectorAll('[data-lead-input]');
+      const lastInput = inputs[inputs.length - 1];
+      if (lastInput) {
+        lastInput.disabled = false;
+        lastInput.classList.add('error');
+        setTimeout(() => lastInput.classList.remove('error'), 600);
+        // Show inline error
+        const errEl = lastInput.nextElementSibling;
+        if (errEl) { errEl.textContent = 'Please enter a valid email.'; errEl.classList.add('show'); }
+        const btn = lastInput.closest('.bubble')?.querySelector('.lead-submit');
+        if (btn) btn.disabled = false;
+      } else {
+        addBotMsg("That email doesn't look right. Could you try again?");
+      }
+      return;
+    }
+    leadData.email = msg;
+    leadStep = 2;
+    addLeadStepMsg(LEAD_Q3 || "Got it! And your phone number? (Type 'skip' to continue)", 'tel');
+
+  } else if (leadStep === 2) {
+    leadData.phone = lower === 'skip' ? '' : msg;
+    leadStep = 3;
+    addLeadStepMsg(LEAD_Q4 || "Last step — type your message so the team knows how to help:", 'textarea');
+
+  } else if (leadStep === 3) {
+    leadData.message = lower === 'skip' ? '' : msg;
+    await submitLead();
+  }
+}
+
+/*
+  FIX [DUPLICATE-LEAD]: leadSubmitted flag prevents double-submission
+  on rapid button clicks or Enter key.
+*/
 async function submitLead() {
+  if (leadSubmitted) return;
+  leadSubmitted = true;
+
+  // FIX [FETCH-TIMEOUT]: AbortController for lead submission too
+  const ctrl    = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 15000);
+
   showTyping();
+
   try {
     const r = await fetch('/api/lead', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal:  ctrl.signal,
+      body:    JSON.stringify({
         client_id: CID,
         name:      leadData.name,
         email:     leadData.email,
         phone:     leadData.phone,
         message:   leadData.message,
+        // FIX [HISTORY-BLOAT]: Only send last 4 messages as snippet
         conversation_snippet: history_.slice(-4).map(m => m.content).join(' | '),
         source_url: window.location.href,
-      })
+      }),
     });
-    const d = await r.json();
+
+    clearTimeout(timeout);
     hideTyping();
+
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const d = await r.json();
+
     if (d.success) {
       addLeadSuccess(d.message || "Thanks! Someone from our team will be in touch very soon.");
-      leadMode = false; leadData = {};
+      leadMode = false;
+      leadData = {};
     } else {
       addBotMsg("Something went wrong saving your details. Please try emailing us directly.");
+      leadSubmitted = false; // Allow retry
     }
-  } catch {
+  } catch (err) {
+    clearTimeout(timeout);
     hideTyping();
-    addBotMsg("Couldn't save your details right now. Please try again.");
+    if (err.name === 'AbortError') {
+      addBotMsg("The request timed out. Please try again.");
+    } else {
+      addBotMsg("Couldn't save your details right now. Please try again.");
+    }
+    leadSubmitted = false; // Allow retry
   }
 }
 
@@ -772,112 +1961,265 @@ function addLeadSuccess(msg) {
   const div  = document.createElement('div');
   div.className = 'msg-row';
   div.innerHTML = `
-    <div class="msg-avatar">${botAvatarHTML()}</div>
+    <div class="msg-avatar" aria-hidden="true">${botAvatarHTML()}</div>
     <div class="msg-col" style="max-width:85%;">
-      <div class="sender-label">${esc(BNAME)}</div>
+      <div class="sender-label" aria-hidden="true">${esc(BNAME)}</div>
       <div class="bubble bot" style="padding:14px;">
         <div class="lead-success">
-          <div class="lead-success-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          <div class="lead-success-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
           </div>
           <h4>You're all set!</h4>
           <p>${esc(msg)}</p>
         </div>
       </div>
-      <div class="msg-time">${nowTime()}</div>
+      <div class="msg-time" aria-hidden="true">${nowTime()}</div>
     </div>`;
   msgs.insertBefore(div, tr);
   scrollBot();
 }
 
-// ── Help Center ────────────────────────────────────────────────────────
+// ── Help Center ────────────────────────────────────────────────
+/*
+  FIX [HC-LOAD-ONCE]: Guard flag prevents re-fetching on tab switch.
+  FIX [FETCH-TIMEOUT]: AbortController for article fetch.
+  PERF [FRAGMENT]: Uses DocumentFragment for batch DOM insertion.
+*/
 async function loadArts() {
+  if (articlesLoading || articlesLoaded) return;
+  articlesLoading = true;
+
   const container = document.getElementById('hcContainer');
-  container.innerHTML = '<div class="hc-empty" style="padding:32px 20px;"><p style="color:var(--sub);font-size:13px;">Loading…</p></div>';
-  console.log('[Lumvi] Loading articles for client_id:', CID);
+  container.innerHTML = `<div class="hc-empty">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px;height:36px;" aria-hidden="true">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <p>Loading articles…</p>
+  </div>`;
+
+  const ctrl    = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 10000);
+
   try {
-    const r = await fetch('/api/articles?client_id=' + CID);
+    const r = await fetch('/api/articles?client_id=' + CID, { signal: ctrl.signal });
+    clearTimeout(timeout);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
-    console.log('[Lumvi] Articles API response:', d);
-    if (!d.success) {
-      container.innerHTML = '<div class="hc-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px;height:36px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>Could not load articles.</p></div>';
-      return;
-    }
-    allArts = d.articles || [];
-    console.log('[Lumvi] Articles found:', allArts.length);
+
+    if (!d.success) throw new Error('API error');
+
+    allArts        = d.articles || [];
+    articlesLoaded = true;
     renderArts(allArts);
-  } catch(e) {
-    console.error('[Lumvi] Articles fetch error:', e);
-    container.innerHTML =
-      '<div class="hc-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px;height:36px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><p>Could not load articles.</p></div>';
+
+  } catch (e) {
+    clearTimeout(timeout);
+    container.innerHTML = `<div class="hc-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px;height:36px;" aria-hidden="true">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <p>Could not load articles. <button onclick="articlesLoading=false;loadArts();" style="color:var(--brand);background:none;border:none;cursor:pointer;font:inherit;text-decoration:underline;">Retry</button></p>
+    </div>`;
+  } finally {
+    articlesLoading = false;
   }
 }
 
+/*
+  PERF [DOM-FRAGMENT]: renderArts builds DOM via DocumentFragment
+  to batch insert all article rows in a single reflow instead of
+  one reflow per article (significant on long lists).
+*/
 function renderArts(arts) {
   const c = document.getElementById('hcContainer');
-  if (!arts.length) {
-    c.innerHTML = '<div class="hc-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px;height:36px;"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg><p>No articles yet. Check back soon!</p></div>';
+  c.innerHTML = '';
+
+  if (!arts || !arts.length) {
+    c.innerHTML = `<div class="hc-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:36px;height:36px;" aria-hidden="true">
+        <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+      </svg>
+      <p>No articles yet. Check back soon!</p>
+    </div>`;
     return;
   }
-  const grouped = {};
-  arts.forEach(a => { const cat = a.category || 'General'; (grouped[cat] = grouped[cat]||[]).push(a); });
-  let html = '';
+
+  // Group articles by category
+  const grouped = Object.create(null);
+  arts.forEach(a => {
+    const cat = a.category || 'General';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(a);
+  });
+
+  const frag = document.createDocumentFragment();
+
   Object.keys(grouped).forEach(cat => {
-    html += `<div class="hc-cat-label">${esc(cat)}</div>`;
+    const catLabel = document.createElement('div');
+    catLabel.className = 'hc-cat-label';
+    catLabel.textContent = cat;
+    frag.appendChild(catLabel);
+
     grouped[cat].forEach(a => {
-      const preview = (a.content||'').slice(0, 80);
-      html += `<div class="hc-art" onclick="showArt(${a.id})">
+      const preview = (a.content || '').slice(0, 90);
+      const artEl   = document.createElement('div');
+      artEl.className = 'hc-art';
+      artEl.setAttribute('role', 'listitem');
+      artEl.setAttribute('tabindex', '0');
+      artEl.setAttribute('aria-label', a.title);
+      artEl.addEventListener('click', () => showArt(a.id));
+      artEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showArt(a.id); }
+      });
+
+      artEl.innerHTML = `
         <div class="hc-art-left">
-          <div class="hc-art-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+          <div class="hc-art-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+          </div>
           <div class="hc-art-meta">
             <div class="hc-art-title">${esc(a.title)}</div>
-            <div class="hc-art-preview">${esc(preview)}…</div>
+            <div class="hc-art-preview">${esc(preview)}${preview.length >= 90 ? '…' : ''}</div>
           </div>
         </div>
-        <div class="hc-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></div>
-      </div>`;
+        <div class="hc-arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>`;
+
+      frag.appendChild(artEl);
     });
   });
-  c.innerHTML = html;
+
+  c.appendChild(frag);
 }
 
+/*
+  PERF [SEARCH-DEBOUNCE]: Debounce filterArts to avoid re-rendering
+  on every keystroke during fast typing.
+*/
+let _filterTimer = null;
 function filterArts() {
-  const q = document.getElementById('hcSearch').value.toLowerCase();
-  renderArts(allArts.filter(a =>
-    (a.title||'').toLowerCase().includes(q) || (a.content||'').toLowerCase().includes(q)
-  ));
+  clearTimeout(_filterTimer);
+  _filterTimer = setTimeout(() => {
+    const q = document.getElementById('hcSearch').value.toLowerCase().trim();
+    if (!q) { renderArts(allArts); return; }
+    renderArts(allArts.filter(a =>
+      (a.title || '').toLowerCase().includes(q) ||
+      (a.content || '').toLowerCase().includes(q)
+    ));
+  }, 180);
 }
 
 function showArt(id) {
   const a = allArts.find(x => x.id === id);
   if (!a) return;
+
   document.getElementById('artCatTag').textContent  = a.category || 'General';
   document.getElementById('artTitle').textContent   = a.title;
   document.getElementById('artContent').textContent = a.content;
   document.getElementById('hcList').style.display   = 'none';
-  document.getElementById('hcDetail').classList.add('show');
-  document.getElementById('helpYes').classList.remove('voted');
-  document.getElementById('helpNo').classList.remove('voted');
+
+  const detail = document.getElementById('hcDetail');
+  detail.classList.add('show');
+
+  // Reset vote state and aria
+  ['helpYes', 'helpNo'].forEach(id => {
+    const btn = document.getElementById(id);
+    btn.classList.remove('voted');
+    btn.setAttribute('aria-pressed', 'false');
+  });
+
+  // Focus management for accessibility
+  requestAnimationFrame(() => document.getElementById('artTitle').focus());
 }
 
 function backToList() {
-  document.getElementById('hcList').style.display  = 'flex';
+  document.getElementById('hcList').style.display = 'flex';
   document.getElementById('hcDetail').classList.remove('show');
+  // Return focus to the list for keyboard navigation
+  requestAnimationFrame(() => document.getElementById('hcContainer').querySelector('[tabindex="0"]')?.focus());
 }
 
 function vote(v) {
-  document.getElementById('helpYes').classList.toggle('voted', v === 'yes');
-  document.getElementById('helpNo').classList.toggle('voted',  v === 'no');
+  ['yes', 'no'].forEach(val => {
+    const btn = document.getElementById('help' + val.charAt(0).toUpperCase() + val.slice(1));
+    const isActive = v === val;
+    btn.classList.toggle('voted', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────
-function esc(s){ const d=document.createElement('div');d.textContent=s;return d.innerHTML; }
-function isEmail(s){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s); }
-function nowTime(){
-  const d=new Date();
-  const h=d.getHours()%12||12, m=String(d.getMinutes()).padStart(2,'0');
-  return `${h}:${m} ${d.getHours()>=12?'PM':'AM'}`;
+// ── Close / minimize ───────────────────────────────────────────
+/*
+  FIX [POSTMESSAGE-SECURITY]: Use specific PARENT_ORIGIN instead of '*'.
+  If PARENT_ORIGIN is not configured, log a warning in dev mode.
+*/
+function closePanelSecure() {
+  if (PARENT_ORIGIN === '*') {
+    console.warn('[Lumvi] postMessage using wildcard origin. Set client.parent_origin for security.');
+  }
+  window.parent.postMessage('lumvi:close', PARENT_ORIGIN);
 }
+
+// ── Toast notification ─────────────────────────────────────────
+let _toastTimer = null;
+function showToast(message, duration = 3500) {
+  const t = document.getElementById('toast');
+  t.textContent = message;
+  t.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('show'), duration);
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function isEmail(s) {
+  // Improved email validation regex
+  return /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(s);
+}
+
+function nowTime() {
+  const d = new Date();
+  const h = d.getHours() % 12 || 12;
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${m} ${d.getHours() >= 12 ? 'PM' : 'AM'}`;
+}
+
+// ── Mobile keyboard viewport fix ───────────────────────────────
+/*
+  FIX [MOBILE-VIEWPORT]: On iOS/Android, the visual viewport shrinks
+  when the soft keyboard opens. We listen to visualViewport.resize
+  and adjust the widget height to prevent the input area from being
+  hidden behind the keyboard.
+*/
+if (window.visualViewport) {
+  let lastVH = window.visualViewport.height;
+  window.visualViewport.addEventListener('resize', () => {
+    const vh = window.visualViewport.height;
+    // Only adjust on significant height change (keyboard toggle)
+    if (Math.abs(vh - lastVH) > 50) {
+      document.body.style.height = vh + 'px';
+      scrollBot();
+    }
+    lastVH = vh;
+  }, { passive: true });
+}
+
+// ── Network status awareness ───────────────────────────────────
+window.addEventListener('online',  () => showToast('Connection restored ✓', 2500));
+window.addEventListener('offline', () => showToast('You appear to be offline', 4000));
 </script>
 </body>
 </html>

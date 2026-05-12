@@ -1,264 +1,300 @@
 """
-admin_routes.py — Lumvi Admin Control Panel
-Blueprint: all routes are prefixed /admin/
-Protection: login_required + is_admin check on every route.
-
-Register in app.py:
+admin_routes.py — Lumvi Admin Panel Blueprint
+=============================================
+All routes under /admin/* live here.
+Registered in app.py via:
     from admin_routes import admin_bp
     app.register_blueprint(admin_bp)
+
+Every route that renders admin_dashboard.html passes a complete, safe
+context dict so the template never crashes on a missing variable.
+All DB calls are wrapped in try/except so a single query failure never
+takes down the entire page — it degrades gracefully to an empty/zero value.
 """
 
-import csv
-import io
-import json
-from datetime import datetime
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, session
+from flask_login import login_required, current_user
 from functools import wraps
-
-from flask import (Blueprint, jsonify, redirect, render_template,
-                   request, url_for, Response)
-from flask_login import current_user, login_required
-
+import json
 import models
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
-PLAN_PRICES = {'free': 0, 'starter': 49, 'pro': 99, 'agency': 299, 'enterprise': 499}
-VALID_PLANS = list(PLAN_PRICES.keys())
-VALID_STATUSES = ['active', 'cancelled', 'past_due', 'trialing', 'paused']
 
-
-# ── Admin guard ────────────────────────────────────────────────────────────────
+# ── Admin-only decorator ─────────────────────────────────────────────────────
 
 def admin_required(f):
-    """Decorator: must be logged in AND have is_admin = True."""
+    """Wraps a route so only is_admin=True users can access it.
+    Returns 403 JSON for API routes, redirect to /dashboard for page routes.
+    """
     @wraps(f)
+    @login_required
     def decorated(*args, **kwargs):
-        if not current_user.is_authenticated:
-            return redirect(url_for('login'))
         user = models.get_user_by_id(current_user.id)
         if not user or not user.get('is_admin'):
-            return render_template_string(ACCESS_DENIED_HTML), 403
+            if request.path.startswith('/admin/api/'):
+                return jsonify({'success': False, 'error': 'Admin access required'}), 403
+            return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
     return decorated
 
 
-ACCESS_DENIED_HTML = '''<!DOCTYPE html>
-<html>
-<head><title>Access Denied</title>
-<style>body{font-family:-apple-system,sans-serif;background:#0f172a;min-height:100vh;
-display:flex;align-items:center;justify-content:center;}
-.card{background:#1e293b;border:1px solid rgba(255,255,255,.1);border-radius:16px;
-padding:48px;text-align:center;color:#f8fafc;max-width:400px;}
-h1{font-size:24px;margin-bottom:12px;}p{color:#64748b;margin-bottom:24px;}
-a{color:#06b6d4;text-decoration:none;font-weight:600;}</style>
-</head><body>
-<div class="card">
-  <h1>🚫 Access Denied</h1>
-  <p>You need admin privileges to access this page.</p>
-  <a href="/dashboard">← Back to Dashboard</a>
-</div></body></html>'''
+# ── Safe context builder ─────────────────────────────────────────────────────
 
-from flask import render_template_string
+def _safe(fn, default=None, *args, **kwargs):
+    """Call fn(*args, **kwargs), return default on any exception.
+    Prevents a single failing DB query from crashing the whole page.
+    """
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"[admin _safe] {fn.__name__}: {e}")
+        return default if default is not None else ([] if fn.__name__.startswith('get_all') else 0)
 
 
-# ── Dashboard overview ─────────────────────────────────────────────────────────
+# ── Shared base context (injected into every section) ────────────────────────
+
+def _base_context():
+    """Variables every section of admin_dashboard.html needs."""
+    return {
+        # Used by profit card and cost tracker margin calculation
+        'mrr': _safe(models.get_mrr, 0.0),
+    }
+
+
+# =====================================================================
+# SECTION: DASHBOARD (Overview)
+# =====================================================================
 
 @admin_bp.route('/')
 @admin_bp.route('/dashboard')
-@login_required
 @admin_required
 def dashboard():
-    total_users = len(models.get_all_users(limit=9999))
-    by_plan = models.get_user_count_by_plan()
-    new_this_month = models.get_new_users_this_month()
-    mrr = models.get_mrr()
-    total_revenue = models.get_total_revenue()
-    revenue_by_month = models.get_revenue_by_month(6)
-    user_growth = models.get_user_growth_by_month(6)
-    total_clients = 0
-    try:
-        conn, cursor = models.get_db()
-        cursor.execute('SELECT COUNT(*) AS c FROM clients')
-        total_clients = cursor.fetchone()['c']
-        cursor.close()
-        conn.close()
-    except Exception:
-        pass
+    by_plan      = _safe(models.get_user_count_by_plan, {})
+    cost_summary = _safe(models.get_api_cost_summary, {
+        'cost_today': 0, 'cost_this_month': 0, 'cost_all_time': 0,
+        'tokens_today': 0, 'tokens_this_month': 0,
+    })
 
-    paid_users = sum(v for k, v in by_plan.items() if k not in ('free',))
-    free_users = by_plan.get('free', 0)
-    active_subs = 0
-    try:
-        conn, cursor = models.get_db()
-        cursor.execute("SELECT COUNT(*) AS c FROM users WHERE subscription_status = 'active' AND plan_type != 'free'")
-        active_subs = cursor.fetchone()['c']
-        cursor.close()
-        conn.close()
-    except Exception:
-        pass
-
-    return render_template(
-        'admin_dashboard.html',
-        total_users=total_users,
-        paid_users=paid_users,
-        free_users=free_users,
-        new_this_month=new_this_month,
-        mrr=mrr,
-        total_revenue=total_revenue,
-        active_subs=active_subs,
-        total_clients=total_clients,
-        by_plan=by_plan,
-        revenue_by_month=revenue_by_month,
-        user_growth=user_growth,
-        section='dashboard'
-    )
+    ctx = _base_context()
+    ctx.update({
+        'section':          'dashboard',
+        'total_users':      _safe(lambda: sum(models.get_user_count_by_plan().values()), 0),
+        'new_this_month':   _safe(models.get_new_users_this_month, 0),
+        'total_revenue':    _safe(models.get_total_revenue, 0.0),
+        'active_subs':      _safe(models.get_active_subscription_count, 0),
+        'paid_users':       _safe(models.get_paid_user_count, 0),
+        'free_users':       _safe(models.get_free_user_count, 0),
+        'total_clients':    _safe(models.get_total_client_count, 0),
+        'by_plan':          by_plan,
+        'revenue_data':     _safe(models.get_revenue_by_month, [], 6),
+        'user_growth_data': _safe(models.get_user_growth_by_month, [], 6),
+        # Health alert counters
+        'churned_this_week': _safe(models.get_churn_this_week, 0),
+        'past_due_count':    _safe(models.get_past_due_count, 0),
+        # Profit card
+        'estimated_monthly_ai_cost': cost_summary.get('cost_this_month', 0),
+    })
+    return render_template('admin_dashboard.html', **ctx)
 
 
-# ── Users ─────────────────────────────────────────────────────────────────────
+# =====================================================================
+# SECTION: USERS
+# =====================================================================
 
 @admin_bp.route('/users')
-@login_required
 @admin_required
 def users():
-    all_users = models.get_all_users(limit=500)
-    return render_template(
-        'admin_dashboard.html',
-        users=all_users,
-        valid_plans=VALID_PLANS,
-        valid_statuses=VALID_STATUSES,
-        section='users'
+    search = request.args.get('search', '').strip()
+
+    all_users = _safe(models.get_all_users, [], 500)
+
+    # Client-side search filter (avoids a second DB call)
+    if search:
+        sl = search.lower()
+        all_users = [
+            u for u in all_users
+            if sl in (u.get('email') or '').lower()
+            or sl in (u.get('plan_type') or '').lower()
+        ]
+
+    # Per-user AI cost dict for the new column
+    user_ai_costs = _safe(models.get_user_ai_costs_dict, {})
+
+    ctx = _base_context()
+    ctx.update({
+        'section':       'users',
+        'users':         all_users,
+        'user_ai_costs': user_ai_costs,
+        'search':        search,
+    })
+    return render_template('admin_dashboard.html', **ctx)
+
+
+# =====================================================================
+# SECTION: REVENUE
+# =====================================================================
+
+@admin_bp.route('/revenue')
+@admin_required
+def revenue():
+    payments = _safe(models.get_all_payments, [], 200)
+
+    ctx = _base_context()
+    ctx.update({
+        'section':        'revenue',
+        'payments':       payments,
+        'total_revenue':  _safe(models.get_total_revenue, 0.0),
+        'revenue_data':   _safe(models.get_revenue_by_month, [], 6),
+    })
+    return render_template('admin_dashboard.html', **ctx)
+
+
+# =====================================================================
+# SECTION: LEADS
+# =====================================================================
+
+@admin_bp.route('/leads')
+@admin_required
+def leads():
+    search    = request.args.get('search', '').strip() or None
+    client_id = request.args.get('client_id', '').strip() or None
+
+    all_leads = _safe(
+        models.get_all_leads_admin, [],
+        500, client_id, search
     )
 
+    ctx = _base_context()
+    ctx.update({
+        'section': 'leads',
+        'leads':   all_leads,
+        'search':  search or '',
+    })
+    return render_template('admin_dashboard.html', **ctx)
 
-@admin_bp.route('/api/users/<int:user_id>/update', methods=['POST'])
-@login_required
+
+# =====================================================================
+# SECTION: ANALYTICS
+# =====================================================================
+
+@admin_bp.route('/analytics')
 @admin_required
-def api_update_user(user_id):
-    data = request.json or {}
-    plan_type = data.get('plan_type')
-    subscription_status = data.get('subscription_status')
-    is_admin = data.get('is_admin')
+def analytics():
+    events       = _safe(models.get_analytics_events, [], 300)
+    event_counts = _safe(models.get_event_counts, {})
 
-    if plan_type and plan_type not in VALID_PLANS:
-        return jsonify({'success': False, 'error': f'Invalid plan: {plan_type}'}), 400
-    if subscription_status and subscription_status not in VALID_STATUSES:
-        return jsonify({'success': False, 'error': f'Invalid status: {subscription_status}'}), 400
-
-    ok = models.admin_update_user(
-        user_id,
-        plan_type=plan_type,
-        subscription_status=subscription_status,
-        is_admin=is_admin
-    )
-    if ok:
-        models.track_event('admin_user_update', user_id=current_user.id,
-                           metadata={'target_user': user_id, 'changes': data})
-        return jsonify({'success': True})
-    return jsonify({'success': False, 'error': 'Nothing to update'}), 400
+    ctx = _base_context()
+    ctx.update({
+        'section':       'analytics',
+        'events':        events,
+        'event_counts':  event_counts,
+    })
+    return render_template('admin_dashboard.html', **ctx)
 
 
-@admin_bp.route('/api/users/<int:user_id>/delete', methods=['DELETE', 'POST'])
-@login_required
+# =====================================================================
+# SECTION: AI COSTS
+# =====================================================================
+
+@admin_bp.route('/costs')
 @admin_required
-def api_delete_user(user_id):
-    if user_id == current_user.id:
-        return jsonify({'success': False, 'error': 'Cannot delete your own account'}), 400
+def costs():
+    cost_summary        = _safe(models.get_api_cost_summary, {
+        'cost_today': 0, 'cost_this_month': 0, 'cost_all_time': 0,
+        'tokens_today': 0, 'tokens_this_month': 0,
+    })
+    top_chatbots        = _safe(models.get_top_chatbots_by_cost, [], 1, 10)
+    user_cost_breakdown = _safe(models.get_user_cost_breakdown, [], 1)
+    cost_revenue_chart  = _safe(models.get_cost_revenue_by_month, [], 6)
+    daily_burn          = _safe(models.get_daily_burn_last_30, [])
+
+    ctx = _base_context()
+    ctx.update({
+        'section':               'costs',
+        # Top-line numbers
+        'cost_today':            cost_summary.get('cost_today',      0),
+        'cost_this_month':       cost_summary.get('cost_this_month', 0),
+        'cost_all_time':         cost_summary.get('cost_all_time',   0),
+        'tokens_today':          cost_summary.get('tokens_today',    0),
+        'tokens_this_month':     cost_summary.get('tokens_this_month', 0),
+        # Tables
+        'top_chatbots_by_cost':  top_chatbots,
+        'user_cost_breakdown':   user_cost_breakdown,
+        # Charts
+        'cost_revenue_by_month': cost_revenue_chart,
+        'daily_burn_last_30':    daily_burn,
+    })
+    return render_template('admin_dashboard.html', **ctx)
+
+
+# =====================================================================
+# SECTION: SYSTEM
+# =====================================================================
+
+@admin_bp.route('/system')
+@admin_required
+def system():
+    ctx = _base_context()
+    ctx.update({
+        'section':  'system',
+        'db_stats': _safe(models.get_db_stats, []),
+    })
+    return render_template('admin_dashboard.html', **ctx)
+
+
+# =====================================================================
+# API: USER MANAGEMENT
+# =====================================================================
+
+@admin_bp.route('/api/users/update', methods=['POST'])
+@admin_required
+def api_update_user():
+    data = request.get_json() or {}
+    user_id = data.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Missing user_id'}), 400
     try:
-        models.admin_delete_user(user_id)
-        models.track_event('admin_user_delete', user_id=current_user.id,
-                           metadata={'deleted_user_id': user_id})
+        models.admin_update_user(
+            user_id,
+            plan_type=data.get('plan_type'),
+            subscription_status=data.get('subscription_status'),
+            is_admin=data.get('is_admin'),
+        )
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-# ── Revenue ───────────────────────────────────────────────────────────────────
-
-@admin_bp.route('/revenue')
-@login_required
+@admin_bp.route('/api/users/delete', methods=['POST'])
 @admin_required
-def revenue():
-    payments = models.get_all_payments(limit=200)
-    mrr = models.get_mrr()
-    total_revenue = models.get_total_revenue()
-    revenue_by_month = models.get_revenue_by_month(12)
-    failed_count = sum(1 for p in payments if p.get('status') == 'failed')
-    return render_template(
-        'admin_dashboard.html',
-        payments=payments,
-        mrr=mrr,
-        total_revenue=total_revenue,
-        revenue_by_month=revenue_by_month,
-        failed_count=failed_count,
-        valid_plans=VALID_PLANS,
-        section='revenue'
-    )
-
-
-@admin_bp.route('/api/payments/add', methods=['POST'])
-@login_required
-@admin_required
-def api_add_payment():
-    data = request.json or {}
+def api_delete_user():
+    data = request.get_json() or {}
     user_id = data.get('user_id')
-    amount = data.get('amount')
-    plan_type = data.get('plan_type', 'manual')
-    provider = data.get('provider', 'manual')
-    notes = data.get('notes', '')
-
-    if not user_id or not amount:
-        return jsonify({'success': False, 'error': 'user_id and amount required'}), 400
-
-    user = models.get_user_by_id(int(user_id))
-    if not user:
-        return jsonify({'success': False, 'error': 'User not found'}), 404
-
-    pid = models.record_payment(
-        user_id=int(user_id), amount=float(amount),
-        plan_type=plan_type, provider=provider, notes=notes
-    )
-    models.track_event('admin_payment_recorded', user_id=current_user.id,
-                       metadata={'payment_id': pid, 'amount': amount, 'for_user': user_id})
-    return jsonify({'success': True, 'payment_id': pid})
-
-
-# ── Leads ─────────────────────────────────────────────────────────────────────
-
-@admin_bp.route('/leads')
-@login_required
-@admin_required
-def leads():
-    search = request.args.get('q', '').strip()
-    client_filter = request.args.get('client_id', '').strip()
-    all_leads = models.get_all_leads_admin(
-        limit=500,
-        client_id_filter=client_filter or None,
-        search=search or None
-    )
-    # Get unique clients for filter dropdown
-    clients = []
+    if not user_id:
+        return jsonify({'success': False, 'error': 'Missing user_id'}), 400
     try:
-        conn, cursor = models.get_db()
-        cursor.execute('SELECT client_id, company_name FROM clients ORDER BY company_name')
-        clients = [dict(r) for r in cursor.fetchall()]
-        cursor.close()
-        conn.close()
-    except Exception:
-        pass
-    return render_template(
-        'admin_dashboard.html',
-        leads=all_leads,
-        clients=clients,
-        search=search,
-        client_filter=client_filter,
-        section='leads'
-    )
+        # Prevent self-deletion
+        if int(user_id) == int(current_user.id):
+            return jsonify({'success': False, 'error': "You can't delete your own account"}), 400
+        models.admin_delete_user(user_id)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@admin_bp.route('/api/leads/<int:lead_id>/delete', methods=['DELETE', 'POST'])
-@login_required
+# =====================================================================
+# API: LEADS
+# =====================================================================
+
+@admin_bp.route('/api/leads/delete', methods=['POST'])
 @admin_required
-def api_delete_lead(lead_id):
+def api_delete_lead():
+    data = request.get_json() or {}
+    lead_id = data.get('lead_id')
+    if not lead_id:
+        return jsonify({'success': False, 'error': 'Missing lead_id'}), 400
     try:
         models.admin_delete_lead(lead_id)
         return jsonify({'success': True})
@@ -266,134 +302,82 @@ def api_delete_lead(lead_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@admin_bp.route('/leads/export')
-@login_required
-@admin_required
-def export_leads():
-    search = request.args.get('q', '').strip()
-    client_filter = request.args.get('client_id', '').strip()
-    all_leads = models.get_all_leads_admin(
-        limit=5000,
-        client_id_filter=client_filter or None,
-        search=search or None
-    )
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(['ID', 'Name', 'Email', 'Phone', 'Company', 'Message',
-                     'Source URL', 'Client', 'Owner', 'Created At'])
-    for lead in all_leads:
-        writer.writerow([
-            lead.get('id'), lead.get('name'), lead.get('email'),
-            lead.get('phone'), lead.get('company'), lead.get('message'),
-            lead.get('source_url'), lead.get('company_name'),
-            lead.get('owner_email'), lead.get('created_at')
-        ])
-    output.seek(0)
-    filename = f'lumvi_leads_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.csv'
-    return Response(
-        output.getvalue(),
-        mimetype='text/csv',
-        headers={'Content-Disposition': f'attachment; filename={filename}'}
-    )
-
-
-# ── Analytics Events ──────────────────────────────────────────────────────────
-
-@admin_bp.route('/analytics')
-@login_required
-@admin_required
-def analytics():
-    events = []
-    event_counts = {}
-    try:
-        conn, cursor = models.get_db()
-        cursor.execute(
-            '''SELECT ae.*, u.email
-               FROM analytics_events ae
-               LEFT JOIN users u ON ae.user_id = u.id
-               ORDER BY ae.created_at DESC LIMIT 300'''
-        )
-        events = [dict(r) for r in cursor.fetchall()]
-        for e in events:
-            if e.get('created_at'):
-                e['created_at'] = e['created_at'].isoformat()
-        cursor.execute(
-            '''SELECT event_name, COUNT(*) AS cnt
-               FROM analytics_events
-               GROUP BY event_name ORDER BY cnt DESC LIMIT 20'''
-        )
-        event_counts = {r['event_name']: int(r['cnt']) for r in cursor.fetchall()}
-        cursor.close()
-        conn.close()
-    except Exception:
-        pass
-    return render_template(
-        'admin_dashboard.html',
-        events=events,
-        event_counts=event_counts,
-        section='analytics'
-    )
-
-
-# ── System / Migrations ───────────────────────────────────────────────────────
-
-@admin_bp.route('/system')
-@login_required
-@admin_required
-def system():
-    return render_template('admin_dashboard.html', section='system')
-
+# =====================================================================
+# API: SYSTEM UTILITIES
+# =====================================================================
 
 @admin_bp.route('/api/system/migrate', methods=['POST'])
-@login_required
 @admin_required
-def api_migrate():
+def api_run_migrations():
+    """Run all safe migrations. Returns list of results."""
     results = []
-    try:
-        models.migrate_admin_columns()
-        results.append('Admin columns migration: OK')
-    except Exception as e:
-        results.append(f'Admin columns migration: {e}')
-    try:
-        models.migrate_payments_and_events()
-        results.append('Payments / events tables: OK')
-    except Exception as e:
-        results.append(f'Payments / events tables: {e}')
-    try:
-        models.migrate_clients_table()
-        results.append('Clients table migration: OK')
-    except Exception as e:
-        results.append(f'Clients table migration: {e}')
-    try:
-        models.migrate_faqs_table()
-        results.append('FAQs table migration: OK')
-    except Exception as e:
-        results.append(f'FAQs table migration: {e}')
-    try:
-        models.migrate_lead_custom_fields()
-        results.append('Lead custom_fields column: OK')
-    except Exception as e:
-        results.append(f'Lead custom_fields column: {e}')
-    try:
-        models.migrate_password_reset_tokens()
-        results.append('Password reset tokens table: OK')
-    except Exception as e:
-        results.append(f'Password reset tokens table: {e}')
-    models.track_event('admin_migration_run', user_id=current_user.id,
-                       metadata={'results': results})
+
+    migration_fns = [
+        ('clients table',           models.migrate_clients_table),
+        ('faqs table',               models.migrate_faqs_table),
+        ('faq → knowledge_base',     models.migrate_faq_to_knowledge_base),
+        ('subscription expiry',      models.migrate_subscription_expiry)      if hasattr(models, 'migrate_subscription_expiry')      else None,
+        ('recurring subscriptions',  models.migrate_to_recurring_subscriptions) if hasattr(models, 'migrate_to_recurring_subscriptions') else None,
+        ('conversation features',    models.migrate_conversation_features)     if hasattr(models, 'migrate_conversation_features')     else None,
+        ('knowledge base',           models.migrate_knowledge_base)            if hasattr(models, 'migrate_knowledge_base')            else None,
+        ('webhooks',                 models.migrate_webhooks),
+        ('white label',              models.migrate_white_label),
+        ('client status',            models.migrate_client_status),
+        ('onboarding',               models.migrate_onboarding),
+        ('api_usage_log',            models.migrate_api_usage_log),
+    ]
+
+    for entry in migration_fns:
+        if entry is None:
+            continue
+        label, fn = entry
+        try:
+            fn()
+            results.append(f"✅ {label}")
+        except Exception as e:
+            results.append(f"⚠️  {label}: {e}")
+
     return jsonify({'success': True, 'results': results})
 
 
 @admin_bp.route('/api/system/make-admin', methods=['POST'])
-@login_required
 @admin_required
 def api_make_admin():
-    data = request.json or {}
-    email = data.get('email', '').strip().lower()
+    data  = request.get_json() or {}
+    email = (data.get('email') or '').strip().lower()
     if not email:
-        return jsonify({'success': False, 'error': 'Email required'}), 400
+        return jsonify({'success': False, 'error': 'Email is required'}), 400
     user = models.get_user_by_email(email)
     if not user:
-        return jsonify({'success': False, 'error': f'User not found: {email}'}), 404
-    models.admin_update_user(user['id'], is_admin=True)
-    return jsonify({'success': True, 'message': f'{email} is now an admin'})
+        return jsonify({'success': False, 'error': f'No user found with email: {email}'}), 404
+    try:
+        models.admin_update_user(user['id'], is_admin=True)
+        return jsonify({'success': True, 'message': f'{email} is now an admin'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api/system/purge-logs', methods=['POST'])
+@admin_required
+def api_purge_logs():
+    """Delete api_usage_log rows older than 90 days."""
+    try:
+        deleted = models.purge_old_api_logs(days=90)
+        return jsonify({'success': True, 'deleted': deleted})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# =====================================================================
+# API: COST TRACKER (live refresh)
+# =====================================================================
+
+@admin_bp.route('/api/costs/summary', methods=['GET'])
+@admin_required
+def api_cost_summary():
+    """Live cost summary for AJAX refresh."""
+    summary = _safe(models.get_api_cost_summary, {
+        'cost_today': 0, 'cost_this_month': 0, 'cost_all_time': 0,
+        'tokens_today': 0, 'tokens_this_month': 0,
+    })
+    return jsonify({'success': True, **summary})
