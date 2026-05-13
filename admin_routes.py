@@ -88,8 +88,8 @@ def dashboard():
         'free_users':       _safe(models.get_free_user_count, 0),
         'total_clients':    _safe(models.get_total_client_count, 0),
         'by_plan':          by_plan,
-        'revenue_data':     _safe(models.get_revenue_by_month, [], 6),
-        'user_growth_data': _safe(models.get_user_growth_by_month, [], 6),
+        'revenue_by_month':  _safe(models.get_revenue_by_month, [], 6),
+        'user_growth':       _safe(models.get_user_growth_by_month, [], 6),
         # Health alert counters
         'churned_this_week': _safe(models.get_churn_this_week, 0),
         'past_due_count':    _safe(models.get_past_due_count, 0),
@@ -146,7 +146,7 @@ def revenue():
         'section':        'revenue',
         'payments':       payments,
         'total_revenue':  _safe(models.get_total_revenue, 0.0),
-        'revenue_data':   _safe(models.get_revenue_by_month, [], 6),
+        'revenue_by_month':   _safe(models.get_revenue_by_month, [], 6),
     })
     return render_template('admin_dashboard.html', **ctx)
 

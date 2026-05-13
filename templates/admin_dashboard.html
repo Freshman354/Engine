@@ -527,9 +527,9 @@
 
     <script>
     (function() {
-    const revenueData = {{ revenue_by_month | tojson | safe }};
-    const userGrowthData = {{ user_growth | tojson | safe }};
-    const byPlan = {{ by_plan | tojson | safe }};
+    const revenueData    = {{ revenue_by_month | default([]) | tojson | safe }};
+    const userGrowthData = {{ user_growth | default([]) | tojson | safe }};
+    const byPlan         = {{ by_plan | default({}) | tojson | safe }};
 
     // Revenue chart
     new Chart(document.getElementById('revenueChart'), {
@@ -906,7 +906,7 @@
 
     <script>
     {
-    const revData = {{ revenue_by_month | tojson | safe }};
+    const revData = {{ revenue_by_month | default([]) | tojson | safe }};
     new Chart(document.getElementById('revChart'), {
         type: 'bar',
         data: {
