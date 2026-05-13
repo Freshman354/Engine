@@ -15,18 +15,21 @@ if not DATABASE_URL:
     )
 
 # ── Connection pool ───────────────────────────────────────────────────
-# psycopg2 v2.9+ made connection a C extension type — you cannot
-# monkey-patch attributes like conn.close on it. We use a thin wrapper
-# class instead so conn.close() returns the connection to the pool
-# without touching the underlying C object's attributes.
+# Opens at most (maxconn) connections to Postgres. Every call to get_db()
+# checks out one connection from the pool and every caller must return it
+# via cursor.close() + conn.close() (which puts it back, not disconnects).
+# psycopg2 v2.9+ made connection a C extension — its attributes are
+# read-only and cannot be monkey-patched. We use a thin Python wrapper
+# class (_PooledConn) so conn.close() can return the connection to the
+# pool without touching the underlying C object's attributes.
 import psycopg2.pool as _pool
 import threading as _threading
 
 _pool_lock = _threading.Lock()
-_db_pool: '_pool.ThreadedConnectionPool | None' = None
+_db_pool = None
 
 
-def _get_pool() -> '_pool.ThreadedConnectionPool':
+def _get_pool():
     """Initialise the connection pool lazily (thread-safe)."""
     global _db_pool
     if _db_pool is None:
@@ -42,23 +45,17 @@ def _get_pool() -> '_pool.ThreadedConnectionPool':
 
 class _PooledConn:
     """
-    Thin wrapper around a psycopg2 connection checked out from the pool.
-    Proxies every attribute to the real connection EXCEPT close(), which
-    returns the connection to the pool instead of destroying the socket.
+    Wraps a psycopg2 connection checked out from the pool.
+    Proxies every attribute to the real connection EXCEPT close(),
+    which returns the connection to the pool instead of destroying it.
     This avoids monkey-patching conn.close, which psycopg2 v2.9+ forbids.
-
-    Usage is identical to a raw connection:
-        conn, cursor = get_db()
-        cursor.execute(...)
-        cursor.close()
-        conn.close()   ← puts connection back in pool
+    All calling code is unchanged — conn.close() still works as expected.
     """
     __slots__ = ('_conn',)
 
     def __init__(self, conn):
         object.__setattr__(self, '_conn', conn)
 
-    # Proxy attribute reads/writes to the real connection
     def __getattr__(self, name):
         return getattr(object.__getattribute__(self, '_conn'), name)
 
@@ -86,12 +83,9 @@ class _PooledConn:
 
 
 def get_db():
-    """
-    Check out a connection from the pool.
-    Returns (_PooledConn, RealDictCursor).
-    Callers must call cursor.close() then conn.close() when done.
-    conn.close() returns the connection to the pool — it does NOT
-    destroy the socket.
+    """Check out a connection from the pool. Returns (_PooledConn, RealDictCursor).
+    Callers do cursor.close() then conn.close() — conn.close() returns the
+    connection to the pool, it does NOT destroy the socket.
     """
     raw = _get_pool().getconn()
     raw.cursor_factory = psycopg2.extras.RealDictCursor
@@ -101,11 +95,7 @@ def get_db():
 
 
 def get_db_connection():
-    """
-    Legacy alias used by older code paths.
-    Returns a _PooledConn with RealDictCursor factory set.
-    Call conn.close() when done to return it to the pool.
-    """
+    """Legacy alias — returns a _PooledConn with RealDictCursor factory set."""
     raw = _get_pool().getconn()
     raw.cursor_factory = psycopg2.extras.RealDictCursor
     return _PooledConn(raw)
@@ -3208,9 +3198,7 @@ def get_webhook_logs(client_id: str, limit: int = 20) -> list:
 
 # =====================================================================
 # ADMIN DASHBOARD — SUPPLEMENTAL QUERIES
-# All additive — zero edits to existing code above.
-# Pattern matches every other function in this file:
-# cursor.close() + conn.close() inside try, before except.
+# Additive only. Pattern: cursor.close()/conn.close() inside try block.
 # =====================================================================
 
 _GEMINI_INPUT_PRICE_PER_TOKEN  = 0.075 / 1_000_000
@@ -3253,7 +3241,7 @@ def migrate_api_usage_log():
 
 def log_api_usage(user_id, client_id, input_tokens, output_tokens,
                   model='gemini-1.5-flash', endpoint=None):
-    """Log one Gemini API call. Never raises — safe to call from any route."""
+    """Log one Gemini API call. Never raises."""
     try:
         conn, cursor = get_db()
         cursor.execute(
