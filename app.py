@@ -948,6 +948,7 @@ def chat():
         if not message:
             return jsonify({'success': False, 'error': 'Message is required'}), 400
 
+        client = None  # always defined even if the DB call below fails
         try:
             client = models.get_client_by_id(client_id)
             if not client:

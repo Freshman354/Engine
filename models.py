@@ -15,17 +15,18 @@ if not DATABASE_URL:
     )
 
 # ── Connection pool ───────────────────────────────────────────────────
-# Opens at most (maxconn) connections to Postgres. Every call to get_db()
-# checks out one connection from the pool and every caller must return it
-# via cursor.close() + conn.close() (which puts it back, not disconnects).
-# This replaces psycopg2.connect() on every request — critical at scale.
+# psycopg2 v2.9+ made connection a C extension type — you cannot
+# monkey-patch attributes like conn.close on it. We use a thin wrapper
+# class instead so conn.close() returns the connection to the pool
+# without touching the underlying C object's attributes.
 import psycopg2.pool as _pool
 import threading as _threading
 
 _pool_lock = _threading.Lock()
-_db_pool: _pool.ThreadedConnectionPool | None = None
+_db_pool: '_pool.ThreadedConnectionPool | None' = None
 
-def _get_pool() -> _pool.ThreadedConnectionPool:
+
+def _get_pool() -> '_pool.ThreadedConnectionPool':
     """Initialise the connection pool lazily (thread-safe)."""
     global _db_pool
     if _db_pool is None:
@@ -39,36 +40,75 @@ def _get_pool() -> _pool.ThreadedConnectionPool:
     return _db_pool
 
 
-def get_db():
-    """Check out a connection from the pool and return (conn, RealDictCursor).
-    Callers do cursor.close() then conn.close() — conn.close() is patched to
-    return the connection to the pool rather than destroying the socket.
+class _PooledConn:
     """
-    conn = _get_pool().getconn()
-    conn.cursor_factory = psycopg2.extras.RealDictCursor
-    conn.close = lambda: _return_conn(conn)
+    Thin wrapper around a psycopg2 connection checked out from the pool.
+    Proxies every attribute to the real connection EXCEPT close(), which
+    returns the connection to the pool instead of destroying the socket.
+    This avoids monkey-patching conn.close, which psycopg2 v2.9+ forbids.
+
+    Usage is identical to a raw connection:
+        conn, cursor = get_db()
+        cursor.execute(...)
+        cursor.close()
+        conn.close()   ← puts connection back in pool
+    """
+    __slots__ = ('_conn',)
+
+    def __init__(self, conn):
+        object.__setattr__(self, '_conn', conn)
+
+    # Proxy attribute reads/writes to the real connection
+    def __getattr__(self, name):
+        return getattr(object.__getattribute__(self, '_conn'), name)
+
+    def __setattr__(self, name, value):
+        if name == '_conn':
+            object.__setattr__(self, name, value)
+        else:
+            setattr(object.__getattribute__(self, '_conn'), name, value)
+
+    def close(self):
+        """Return this connection to the pool."""
+        try:
+            _get_pool().putconn(object.__getattribute__(self, '_conn'))
+        except Exception:
+            pass
+
+    def cursor(self, *args, **kwargs):
+        return object.__getattribute__(self, '_conn').cursor(*args, **kwargs)
+
+    def commit(self):
+        return object.__getattribute__(self, '_conn').commit()
+
+    def rollback(self):
+        return object.__getattribute__(self, '_conn').rollback()
+
+
+def get_db():
+    """
+    Check out a connection from the pool.
+    Returns (_PooledConn, RealDictCursor).
+    Callers must call cursor.close() then conn.close() when done.
+    conn.close() returns the connection to the pool — it does NOT
+    destroy the socket.
+    """
+    raw = _get_pool().getconn()
+    raw.cursor_factory = psycopg2.extras.RealDictCursor
+    conn = _PooledConn(raw)
     cursor = conn.cursor()
     return conn, cursor
 
 
-def _return_conn(conn) -> None:
-    """Return a connection to the pool (called by close() shim below).
-    Callers already do cursor.close(); conn.close() — we monkey-patch
-    conn.close so it returns to the pool instead of closing the socket.
-    """
-    try:
-        _get_pool().putconn(conn)
-    except Exception:
-        pass
-
-
 def get_db_connection():
-    """Legacy alias — returns a pooled connection with RealDictCursor factory."""
-    conn = _get_pool().getconn()
-    conn.cursor_factory = psycopg2.extras.RealDictCursor
-    # Patch close() so conn.close() returns to pool, not disconnects
-    conn.close = lambda: _return_conn(conn)
-    return conn
+    """
+    Legacy alias used by older code paths.
+    Returns a _PooledConn with RealDictCursor factory set.
+    Call conn.close() when done to return it to the pool.
+    """
+    raw = _get_pool().getconn()
+    raw.cursor_factory = psycopg2.extras.RealDictCursor
+    return _PooledConn(raw)
 
 def init_db():
     """Initialize database with tables"""
@@ -3168,18 +3208,16 @@ def get_webhook_logs(client_id: str, limit: int = 20) -> list:
 
 # =====================================================================
 # ADMIN DASHBOARD — SUPPLEMENTAL QUERIES
-# All functions below are additive — zero edits to existing code.
-# Pattern: cursor.close() + conn.close() are INSIDE the try block,
-# matching every other migration/query in this file. No finally blocks.
+# All additive — zero edits to existing code above.
+# Pattern matches every other function in this file:
+# cursor.close() + conn.close() inside try, before except.
 # =====================================================================
 
-# ── Gemini 1.5 Flash pricing (per token) ─────────────────────────────
-_GEMINI_INPUT_PRICE_PER_TOKEN  = 0.075 / 1_000_000   # $0.075 per 1M input tokens
-_GEMINI_OUTPUT_PRICE_PER_TOKEN = 0.300 / 1_000_000   # $0.30  per 1M output tokens
+_GEMINI_INPUT_PRICE_PER_TOKEN  = 0.075 / 1_000_000
+_GEMINI_OUTPUT_PRICE_PER_TOKEN = 0.300 / 1_000_000
 
 
 def _calc_cost(input_tokens, output_tokens):
-    """Compute Gemini cost from token counts."""
     return (
         (input_tokens  or 0) * _GEMINI_INPUT_PRICE_PER_TOKEN +
         (output_tokens or 0) * _GEMINI_OUTPUT_PRICE_PER_TOKEN
@@ -3187,7 +3225,7 @@ def _calc_cost(input_tokens, output_tokens):
 
 
 def migrate_api_usage_log():
-    """Create api_usage_log table if it doesn't exist. Safe — uses IF NOT EXISTS."""
+    """Create api_usage_log table. Safe — uses IF NOT EXISTS."""
     try:
         conn, cursor = get_db()
         cursor.execute("""
@@ -3215,22 +3253,7 @@ def migrate_api_usage_log():
 
 def log_api_usage(user_id, client_id, input_tokens, output_tokens,
                   model='gemini-1.5-flash', endpoint=None):
-    """
-    Log one Gemini API call's token usage.
-    Call immediately after every model.generate_content().
-
-    Example:
-        response = model.generate_content(prompt)
-        meta = response.usage_metadata
-        models.log_api_usage(
-            user_id=current_user.id,
-            client_id=client_id,
-            input_tokens=meta.prompt_token_count,
-            output_tokens=meta.candidates_token_count,
-            endpoint='chat'
-        )
-    Wrapped in its own try/except — never crashes the calling route.
-    """
+    """Log one Gemini API call. Never raises — safe to call from any route."""
     try:
         conn, cursor = get_db()
         cursor.execute(
@@ -3249,27 +3272,18 @@ def log_api_usage(user_id, client_id, input_tokens, output_tokens,
 
 
 def get_api_cost_summary():
-    """
-    Returns a dict with cost_today, cost_this_month, cost_all_time,
-    tokens_today, tokens_this_month.
-    Returns all-zeros dict if api_usage_log doesn't exist yet.
-    """
     _zero = {'cost_today': 0.0, 'cost_this_month': 0.0, 'cost_all_time': 0.0,
              'tokens_today': 0, 'tokens_this_month': 0}
     try:
         conn, cursor = get_db()
         cursor.execute("""
             SELECT
-                COALESCE(SUM(CASE WHEN DATE_TRUNC('day',   created_at) = DATE_TRUNC('day',   NOW())
-                                  THEN input_tokens  END), 0) AS in_today,
-                COALESCE(SUM(CASE WHEN DATE_TRUNC('day',   created_at) = DATE_TRUNC('day',   NOW())
-                                  THEN output_tokens END), 0) AS out_today,
-                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())
-                                  THEN input_tokens  END), 0) AS in_month,
-                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())
-                                  THEN output_tokens END), 0) AS out_month,
-                COALESCE(SUM(input_tokens),  0) AS in_all,
-                COALESCE(SUM(output_tokens), 0) AS out_all
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('day',   created_at)=DATE_TRUNC('day',   NOW()) THEN input_tokens  END),0) AS in_today,
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('day',   created_at)=DATE_TRUNC('day',   NOW()) THEN output_tokens END),0) AS out_today,
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at)=DATE_TRUNC('month', NOW()) THEN input_tokens  END),0) AS in_month,
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at)=DATE_TRUNC('month', NOW()) THEN output_tokens END),0) AS out_month,
+                COALESCE(SUM(input_tokens),0)  AS in_all,
+                COALESCE(SUM(output_tokens),0) AS out_all
             FROM api_usage_log
         """)
         r = cursor.fetchone()
@@ -3289,22 +3303,18 @@ def get_api_cost_summary():
 
 
 def get_top_chatbots_by_cost(months=1, limit=10):
-    """Top N chatbots by estimated AI cost this month."""
     try:
         conn, cursor = get_db()
         cursor.execute("""
-            SELECT
-                a.client_id,
-                c.company_name,
-                u.email   AS owner_email,
-                COALESCE(SUM(a.input_tokens),  0) AS input_tokens,
-                COALESCE(SUM(a.output_tokens), 0) AS output_tokens
+            SELECT a.client_id, c.company_name, u.email AS owner_email,
+                   COALESCE(SUM(a.input_tokens),0)  AS input_tokens,
+                   COALESCE(SUM(a.output_tokens),0) AS output_tokens
             FROM api_usage_log a
             LEFT JOIN clients c ON a.client_id = c.client_id
             LEFT JOIN users  u ON c.user_id    = u.id
             WHERE DATE_TRUNC('month', a.created_at) = DATE_TRUNC('month', NOW())
             GROUP BY a.client_id, c.company_name, u.email
-            ORDER BY (SUM(a.input_tokens) + SUM(a.output_tokens)) DESC
+            ORDER BY (SUM(a.input_tokens)+SUM(a.output_tokens)) DESC
             LIMIT %s
         """, (limit,))
         rows = cursor.fetchall()
@@ -3312,176 +3322,120 @@ def get_top_chatbots_by_cost(months=1, limit=10):
         conn.close()
         result = []
         for r in rows:
-            it = int(r['input_tokens'])
-            ot = int(r['output_tokens'])
-            result.append({
-                'client_id':     r['client_id'],
-                'company_name':  r['company_name'] or r['client_id'],
-                'owner_email':   r['owner_email'] or '—',
-                'input_tokens':  it,
-                'output_tokens': ot,
-                'est_cost':      _calc_cost(it, ot),
-            })
+            it, ot = int(r['input_tokens']), int(r['output_tokens'])
+            result.append({'client_id': r['client_id'], 'company_name': r['company_name'] or r['client_id'],
+                           'owner_email': r['owner_email'] or '—', 'input_tokens': it,
+                           'output_tokens': ot, 'est_cost': _calc_cost(it, ot)})
         return result
     except Exception:
         return []
 
 
 def get_user_cost_breakdown():
-    """Per-user AI cost for current month. Returns list of {user_id, email, plan_type, ai_cost}."""
     try:
         conn, cursor = get_db()
         cursor.execute("""
-            SELECT
-                u.id        AS user_id,
-                u.email,
-                u.plan_type,
-                COALESCE(SUM(a.input_tokens),  0) AS input_tokens,
-                COALESCE(SUM(a.output_tokens), 0) AS output_tokens
+            SELECT u.id AS user_id, u.email, u.plan_type,
+                   COALESCE(SUM(a.input_tokens),0)  AS input_tokens,
+                   COALESCE(SUM(a.output_tokens),0) AS output_tokens
             FROM api_usage_log a
             JOIN users u ON a.user_id = u.id
             WHERE DATE_TRUNC('month', a.created_at) = DATE_TRUNC('month', NOW())
             GROUP BY u.id, u.email, u.plan_type
-            ORDER BY (SUM(a.input_tokens) + SUM(a.output_tokens)) DESC
+            ORDER BY (SUM(a.input_tokens)+SUM(a.output_tokens)) DESC
         """)
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
-        return [
-            {
-                'user_id':   r['user_id'],
-                'email':     r['email'],
-                'plan_type': r['plan_type'],
-                'ai_cost':   _calc_cost(int(r['input_tokens']), int(r['output_tokens'])),
-            }
-            for r in rows
-        ]
+        return [{'user_id': r['user_id'], 'email': r['email'], 'plan_type': r['plan_type'],
+                 'ai_cost': _calc_cost(int(r['input_tokens']), int(r['output_tokens']))} for r in rows]
     except Exception:
         return []
 
 
 def get_user_ai_costs_dict():
-    """Returns {user_id: estimated_monthly_cost} for current month."""
     try:
         conn, cursor = get_db()
         cursor.execute("""
-            SELECT
-                user_id,
-                COALESCE(SUM(input_tokens),  0) AS input_tokens,
-                COALESCE(SUM(output_tokens), 0) AS output_tokens
+            SELECT user_id, COALESCE(SUM(input_tokens),0) AS it, COALESCE(SUM(output_tokens),0) AS ot
             FROM api_usage_log
-            WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW())
-              AND user_id IS NOT NULL
+            WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND user_id IS NOT NULL
             GROUP BY user_id
         """)
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
-        return {
-            int(r['user_id']): _calc_cost(int(r['input_tokens']), int(r['output_tokens']))
-            for r in rows
-        }
+        return {int(r['user_id']): _calc_cost(int(r['it']), int(r['ot'])) for r in rows}
     except Exception:
         return {}
 
 
 def get_cost_revenue_by_month(months=6):
-    """Returns [{month, revenue, cost}] for the last N months."""
     try:
         conn, cursor = get_db()
         cursor.execute("""
-            SELECT
-                TO_CHAR(DATE_TRUNC('month', payment_date), 'Mon YYYY') AS month,
-                DATE_TRUNC('month', payment_date)                       AS month_dt,
-                COALESCE(SUM(amount), 0)                                AS revenue
-            FROM payments
-            WHERE status = 'completed'
-              AND payment_date >= NOW() - (INTERVAL '1 month' * %s)
-            GROUP BY DATE_TRUNC('month', payment_date)
-            ORDER BY month_dt ASC
+            SELECT TO_CHAR(DATE_TRUNC('month', payment_date),'Mon YYYY') AS month,
+                   DATE_TRUNC('month', payment_date) AS month_dt,
+                   COALESCE(SUM(amount),0) AS revenue
+            FROM payments WHERE status='completed' AND payment_date >= NOW()-(INTERVAL '1 month'*%s)
+            GROUP BY DATE_TRUNC('month', payment_date) ORDER BY month_dt
         """, (months,))
-        rev_rows = {r['month_dt']: {'month': r['month'], 'revenue': float(r['revenue']), 'cost': 0.0}
-                    for r in cursor.fetchall()}
-
+        rev = {r['month_dt']: {'month': r['month'], 'revenue': float(r['revenue']), 'cost': 0.0}
+               for r in cursor.fetchall()}
         cursor.execute("""
-            SELECT
-                TO_CHAR(DATE_TRUNC('month', created_at), 'Mon YYYY') AS month,
-                DATE_TRUNC('month', created_at)                       AS month_dt,
-                COALESCE(SUM(input_tokens),  0)                       AS input_tokens,
-                COALESCE(SUM(output_tokens), 0)                       AS output_tokens
-            FROM api_usage_log
-            WHERE created_at >= NOW() - (INTERVAL '1 month' * %s)
-            GROUP BY DATE_TRUNC('month', created_at)
-            ORDER BY month_dt ASC
+            SELECT TO_CHAR(DATE_TRUNC('month', created_at),'Mon YYYY') AS month,
+                   DATE_TRUNC('month', created_at) AS month_dt,
+                   COALESCE(SUM(input_tokens),0) AS it, COALESCE(SUM(output_tokens),0) AS ot
+            FROM api_usage_log WHERE created_at >= NOW()-(INTERVAL '1 month'*%s)
+            GROUP BY DATE_TRUNC('month', created_at) ORDER BY month_dt
         """, (months,))
         for r in cursor.fetchall():
-            dt = r['month_dt']
-            cost = _calc_cost(int(r['input_tokens']), int(r['output_tokens']))
-            if dt in rev_rows:
-                rev_rows[dt]['cost'] = cost
+            cost = _calc_cost(int(r['it']), int(r['ot']))
+            if r['month_dt'] in rev:
+                rev[r['month_dt']]['cost'] = cost
             else:
-                rev_rows[dt] = {'month': r['month'], 'revenue': 0.0, 'cost': cost}
-
+                rev[r['month_dt']] = {'month': r['month'], 'revenue': 0.0, 'cost': cost}
         cursor.close()
         conn.close()
-        return sorted(rev_rows.values(), key=lambda x: x['month'])
+        return sorted(rev.values(), key=lambda x: x['month'])
     except Exception:
         return []
 
 
 def get_daily_burn_last_30():
-    """Returns [{date, cost}] for the last 30 days."""
     try:
         conn, cursor = get_db()
         cursor.execute("""
-            SELECT
-                TO_CHAR(DATE_TRUNC('day', created_at), 'DD Mon') AS date,
-                DATE_TRUNC('day', created_at)                     AS day_dt,
-                COALESCE(SUM(input_tokens),  0)                   AS input_tokens,
-                COALESCE(SUM(output_tokens), 0)                   AS output_tokens
-            FROM api_usage_log
-            WHERE created_at >= NOW() - INTERVAL '30 days'
-            GROUP BY DATE_TRUNC('day', created_at)
-            ORDER BY day_dt ASC
+            SELECT TO_CHAR(DATE_TRUNC('day', created_at),'DD Mon') AS date,
+                   DATE_TRUNC('day', created_at) AS day_dt,
+                   COALESCE(SUM(input_tokens),0) AS it, COALESCE(SUM(output_tokens),0) AS ot
+            FROM api_usage_log WHERE created_at >= NOW()-INTERVAL '30 days'
+            GROUP BY DATE_TRUNC('day', created_at) ORDER BY day_dt
         """)
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
-        return [
-            {'date': r['date'],
-             'cost': _calc_cost(int(r['input_tokens']), int(r['output_tokens']))}
-            for r in rows
-        ]
+        return [{'date': r['date'], 'cost': _calc_cost(int(r['it']), int(r['ot']))} for r in rows]
     except Exception:
         return []
 
 
 def purge_old_api_logs(days=90):
-    """Delete api_usage_log rows older than `days` days. Returns deleted count."""
     try:
         conn, cursor = get_db()
-        cursor.execute(
-            "DELETE FROM api_usage_log WHERE created_at < NOW() - (INTERVAL '1 day' * %s)",
-            (days,)
-        )
+        cursor.execute("DELETE FROM api_usage_log WHERE created_at < NOW()-(INTERVAL '1 day'*%s)", (days,))
         deleted = cursor.rowcount
         conn.commit()
         cursor.close()
         conn.close()
         return deleted
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"[purge_old_api_logs] {e}")
+    except Exception:
         return 0
 
 
 def get_db_stats():
-    """Row counts for key tables. Used in System section. Skips tables that don't exist."""
-    tables = [
-        'users', 'clients', 'leads', 'payments',
-        'analytics_events', 'conversations', 'api_usage_log',
-        'faqs', 'knowledge_base',
-    ]
+    tables = ['users','clients','leads','payments','analytics_events',
+              'conversations','api_usage_log','faqs','knowledge_base']
     results = []
     try:
         conn, cursor = get_db()
@@ -3491,7 +3445,7 @@ def get_db_stats():
                 row = cursor.fetchone()
                 results.append({'table': t, 'count': int(row['cnt']) if row else 0})
             except Exception:
-                pass  # table doesn't exist yet — silently skip
+                pass
         cursor.close()
         conn.close()
     except Exception:
@@ -3500,14 +3454,9 @@ def get_db_stats():
 
 
 def get_churn_this_week():
-    """Count subscriptions cancelled in the last 7 days."""
     try:
         conn, cursor = get_db()
-        cursor.execute("""
-            SELECT COUNT(*) AS cnt FROM users
-            WHERE subscription_status = 'cancelled'
-              AND cancelled_at >= NOW() - INTERVAL '7 days'
-        """)
+        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE subscription_status='cancelled' AND cancelled_at >= NOW()-INTERVAL '7 days'")
         row = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -3517,12 +3466,9 @@ def get_churn_this_week():
 
 
 def get_past_due_count():
-    """Count users with past_due subscription status."""
     try:
         conn, cursor = get_db()
-        cursor.execute(
-            "SELECT COUNT(*) AS cnt FROM users WHERE subscription_status = 'past_due'"
-        )
+        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE subscription_status='past_due'")
         row = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -3532,14 +3478,9 @@ def get_past_due_count():
 
 
 def get_active_subscription_count():
-    """Count paid users with active or trialing status."""
     try:
         conn, cursor = get_db()
-        cursor.execute("""
-            SELECT COUNT(*) AS cnt FROM users
-            WHERE subscription_status IN ('active', 'trialing')
-              AND plan_type != 'free'
-        """)
+        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE subscription_status IN ('active','trialing') AND plan_type!='free'")
         row = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -3549,10 +3490,9 @@ def get_active_subscription_count():
 
 
 def get_paid_user_count():
-    """Count users on any paid plan."""
     try:
         conn, cursor = get_db()
-        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE plan_type != 'free'")
+        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE plan_type!='free'")
         row = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -3562,10 +3502,9 @@ def get_paid_user_count():
 
 
 def get_free_user_count():
-    """Count users on the free plan."""
     try:
         conn, cursor = get_db()
-        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE plan_type = 'free'")
+        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE plan_type='free'")
         row = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -3575,7 +3514,6 @@ def get_free_user_count():
 
 
 def get_total_client_count():
-    """Total chatbot clients across all users."""
     try:
         conn, cursor = get_db()
         cursor.execute("SELECT COUNT(*) AS cnt FROM clients")
@@ -3588,44 +3526,28 @@ def get_total_client_count():
 
 
 def get_analytics_events(limit=300):
-    """Recent analytics events joined with user email."""
     try:
         conn, cursor = get_db()
         cursor.execute("""
-            SELECT e.event_name, e.user_id, e.metadata,
-                   e.created_at, u.email
-            FROM analytics_events e
-            LEFT JOIN users u ON e.user_id = u.id
-            ORDER BY e.created_at DESC
-            LIMIT %s
+            SELECT e.event_name, e.user_id, e.metadata, e.created_at, u.email
+            FROM analytics_events e LEFT JOIN users u ON e.user_id=u.id
+            ORDER BY e.created_at DESC LIMIT %s
         """, (limit,))
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
-        return [
-            {
-                'event_name': r['event_name'],
-                'user_id':    r['user_id'],
-                'email':      r['email'],
-                'metadata':   r['metadata'],
-                'created_at': r['created_at'].isoformat() if r['created_at'] else None,
-            }
-            for r in rows
-        ]
+        return [{'event_name': r['event_name'], 'user_id': r['user_id'], 'email': r['email'],
+                 'metadata': r['metadata'],
+                 'created_at': r['created_at'].isoformat() if r['created_at'] else None}
+                for r in rows]
     except Exception:
         return []
 
 
 def get_event_counts():
-    """Returns {event_name: count} for all analytics events."""
     try:
         conn, cursor = get_db()
-        cursor.execute("""
-            SELECT event_name, COUNT(*) AS cnt
-            FROM analytics_events
-            GROUP BY event_name
-            ORDER BY cnt DESC
-        """)
+        cursor.execute("SELECT event_name, COUNT(*) AS cnt FROM analytics_events GROUP BY event_name ORDER BY cnt DESC")
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
