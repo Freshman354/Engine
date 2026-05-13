@@ -14,6 +14,7 @@ if not DATABASE_URL:
         "Add it to your Render/local .env before starting the server."
     )
 
+
 # ── Connection pool ───────────────────────────────────────────────────
 # Opens at most (maxconn) connections to Postgres. Every call to get_db()
 # checks out one connection from the pool and every caller must return it
