@@ -14,7 +14,6 @@ if not DATABASE_URL:
         "Add it to your Render/local .env before starting the server."
     )
 
-
 # ── Connection pool ───────────────────────────────────────────────────
 # Opens at most (maxconn) connections to Postgres. Every call to get_db()
 # checks out one connection from the pool and every caller must return it
@@ -298,6 +297,7 @@ def init_db():
     # without needing a separate startup call.
     migrate_faqs_table()
     migrate_faq_to_knowledge_base()
+    migrate_kb_gaps()  # adds UNIQUE(client_id, question) for upsert counting
 
 
 def migrate_clients_table():
@@ -2766,13 +2766,22 @@ def record_kb_gap(client_id: str, question: str, method: str, confidence: float)
     Record an unanswered question in kb_gaps for later review.
     Called from ai_helper in a background thread — never blocks chat.
     NOTE: kb_gaps table is created once in init_db(), not here.
+
+    Uses ON CONFLICT upsert so repeated identical questions increment count
+    rather than being silently dropped. Requires a UNIQUE constraint on
+    (client_id, question) — added by migrate_kb_gaps().
     """
     try:
         conn, cursor = get_db()
         cursor.execute('''
-            INSERT INTO kb_gaps (client_id, question, method, confidence)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT DO NOTHING
+            INSERT INTO kb_gaps (client_id, question, method, confidence, count, last_seen)
+            VALUES (%s, %s, %s, %s, 1, NOW())
+            ON CONFLICT (client_id, question)
+            DO UPDATE SET
+                count      = kb_gaps.count + 1,
+                last_seen  = NOW(),
+                confidence = EXCLUDED.confidence,
+                method     = EXCLUDED.method
         ''', (client_id, question[:500], method, confidence))
         conn.commit()
         cursor.close()
@@ -2780,6 +2789,67 @@ def record_kb_gap(client_id: str, question: str, method: str, confidence: float)
     except Exception as e:
         import logging
         logging.getLogger(__name__).debug(f"[record_kb_gap] non-critical: {e}")
+
+
+def get_kb_gaps(client_id: str, limit: int = 20) -> list:
+    """
+    Return the top unanswered questions for a client ordered by hit count.
+    Used by ai_helper.get_top_kb_gaps() to surface the FAQ Manager's
+    'Suggested FAQs' panel.
+
+    Returns [] on any failure — never raises.
+    Each dict has: question, count, confidence, last_seen, method.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """SELECT question, count, confidence, last_seen, method
+               FROM kb_gaps
+               WHERE client_id = %s
+               ORDER BY count DESC, last_seen DESC
+               LIMIT %s""",
+            (client_id, limit)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for r in rows:
+            row = dict(r)
+            if row.get('last_seen'):
+                row['last_seen'] = row['last_seen'].isoformat()
+            result.append(row)
+        return result
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"[get_kb_gaps] {e}")
+        return []
+
+
+def migrate_kb_gaps():
+    """
+    Add a UNIQUE constraint on (client_id, question) to kb_gaps so that
+    record_kb_gap() can use ON CONFLICT upsert to increment hit counts
+    rather than silently dropping duplicates.
+    Safe to call every startup — uses SAVEPOINT to skip if already exists.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute("SAVEPOINT sp_kb_gaps_unique")
+        try:
+            cursor.execute(
+                "ALTER TABLE kb_gaps ADD CONSTRAINT kb_gaps_client_question_unique "
+                "UNIQUE (client_id, question)"
+            )
+            cursor.execute("RELEASE SAVEPOINT sp_kb_gaps_unique")
+        except Exception:
+            cursor.execute("ROLLBACK TO SAVEPOINT sp_kb_gaps_unique")
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("✅ migrate_kb_gaps complete")
+    except Exception as e:
+        print(f"⚠️  migrate_kb_gaps: {e}")
 
 
 def get_recent_conversations(client_id: str, limit: int = 15) -> list:

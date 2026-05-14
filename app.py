@@ -349,6 +349,8 @@ try:
         models.migrate_onboarding()
     if hasattr(models, 'migrate_api_usage_log'):
         models.migrate_api_usage_log()
+    if hasattr(models, 'migrate_kb_gaps'):
+        models.migrate_kb_gaps()
 
     # Ensure the conversations table exists.
     # This was previously (incorrectly) created inside log_conversation() on every
@@ -1013,28 +1015,9 @@ def chat():
         vertical = config.get('vertical', 'general')
         vertical_system_prompt = config.get('bot_settings', {}).get('system_prompt') or VERTICAL_PROMPTS.get(vertical)
 
-        # ── Step 1: Intent + Lead Detection (vertical-aware, 3-tier) ──────
-        # detect_intent handles: simple keywords → keyword scoring → AI confirmation
-        intent_result = ai_helper.detect_intent(message, lead_triggers, vertical) \
-                        if (ai_helper and ai_helper.enabled) \
-                        else {'intent': 'question', 'is_lead': False, 'confidence': 0.0}
-
-        if intent_result.get('is_lead') and intent_result.get('confidence', 0) >= 0.65:
-            app.logger.info(
-                f"[Lead] client={client_id} score={intent_result.get('score', 0):.1f} "
-                f"conf={intent_result.get('confidence', 0):.2f}"
-            )
-            response_text = "I'd be happy to connect you with our team! What's the best email to reach you?"
-            log_conversation(client_id, message, response_text, matched=True, method='lead_ai')
-            return jsonify({
-                'success': True,
-                'response': response_text,
-                'trigger_lead_collection': True,
-                'method': 'lead_ai',
-                'contact_info': config.get('contact', {})
-            })
-
-        # Keyword-only lead check when AI is disabled
+        # ── Step 1: Keyword-only lead check (AI disabled path only) ────────
+        # When AI is enabled, generate_response() handles lead detection
+        # internally as part of the full pipeline — no need to pre-check here.
         if not (ai_helper and ai_helper.enabled):
             for trigger in lead_triggers:
                 if trigger.lower() in message_lower:
@@ -1103,6 +1086,15 @@ def chat():
                         f"[AI Match] method={method} confidence={confidence:.2f} "
                         f"response_len={len(response_text)} cached={from_cache}"
                     )
+
+                    # Summarise long conversations non-blocking — must be called from
+                    # app.py because ai_helper has no reference to the Flask app logger.
+                    if not from_cache and client_id != 'demo':
+                        try:
+                            ai_helper.maybe_summarise(client_id, convo_history)
+                        except Exception as _sum_err:
+                            app.logger.debug(f"[Summarise] non-critical: {_sum_err}")
+
                     return jsonify({
                         'success':    True,
                         'response':   response_text,
@@ -2877,6 +2869,7 @@ def delete_all_faqs():
         if not models.verify_client_ownership(current_user.id, client_id):
             return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
+        models.delete_all_faqs(client_id)
         cache_utils.bump_kb_version(client_id)
         app.logger.info(f'[Cache] KB invalidated after delete-all: client={client_id}')
         app.logger.info(f'All FAQs deleted for client {client_id} by user {current_user.id}')
@@ -3094,7 +3087,14 @@ Return ONLY valid JSON array like:
   {{"question": "How much does it cost?", "answer": "$49 per month"}}
 ]
 """
-        response = ai_helper.model.generate_content(prompt)
+        # Guard: model may be None if Gemini init failed
+        if not ai_helper or not ai_helper.enabled or not ai_helper.model:
+            return parse_structured_faq_text(text)
+
+        response = ai_helper.model.generate_content(
+            prompt,
+            request_options={'timeout': 20},  # prevent worker exhaustion
+        )
         import re
         json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
         if json_match:
@@ -3807,9 +3807,9 @@ def init_db_production():
             except Exception as e:
                 app.logger.warning(f"Clients migration helper failed: {e}")
 
-            conn = models.get_db()
-            cursor = conn.cursor()
+            conn, cursor = models.get_db()
             conn.commit()
+            cursor.close()
             conn.close()
             return "✅ Database initialized!"
         else:
