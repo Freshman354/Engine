@@ -79,52 +79,37 @@ SCALE NOTES (Fix 6 — no code change required here, action in infrastructure):
       the implementation inside models.py.
 
 Pipeline is unchanged. Fixes slot into existing stages.
-"""
-"""
-AI Helper — Phase 5: Intelligence Upgrade
-==========================================
-Built on top of Phase 4's cost-efficient 2-call pipeline.
-All original architecture is preserved exactly. New features are
-additive — they slot between existing stages without changing
-any existing method signature or return shape.
 
-COST MODEL (unchanged from Phase 4):
-  MAX 2 Gemini calls per user message.
-  Call 1  _combined_rewrite_intent  (conditional — short/ambiguous only)
-  Call 2  _rag_generate_and_polish  (RAG answer + tone + IDK_FALLBACK gate)
+QUERY-TIME COST MODEL (hard limit: 2 Gemini calls per user message):
+  Call 1  _combined_rewrite_intent  (conditional — short/follow-up only)
+  Call 2  _rag_generate_and_polish  (RAG answer + CLARIFY + IDK_FALLBACK gate)
 
-NEW IN PHASE 5 (all zero extra Gemini calls unless noted):
-  ① Session Memory        — extract_session_memory() — pure Python, zero cost
-  ② Escalation Detection  — _check_escalation()      — pure Python, zero cost
-  ③ Ambiguity Detection   — _detect_ambiguity()       — pure Python, zero cost
-  ④ Confidence-Aware Tone — _rag_generate_and_polish  — prompt string change only
-  ⑤ Dynamic Personality   — _get_dynamic_personality() — pure Python, zero cost
-  ⑥ Multi-Intent Search   — _decompose_intents()       — +1 embed call when split
-  ⑦ KB Gap Recording      — record_kb_gap()            — async thread, never blocks
+UPLOAD-TIME COST MODEL (per KB item, called from enrich_and_chunk):
+  +1  _normalize_chunk()     — rewrite raw PDF/CSV text into clean answer
+  +1  _ai_enrich()           — tag + categorise (first chunk only)
+  +1  _generate_paraphrases() — 4 query-expansion variants (first chunk only)
+  Total: up to 3 Gemini calls per uploaded item. For large bulk uploads,
+  implement rate-limiting or batching in the caller.
 
 Pipeline order in generate_response():
   preprocess
-  → session memory   (NEW ①)
-  → escalation check (NEW ②)
-  → action engine
-  → lead detection
-  → dynamic threshold  (③ TIERED in Phase 6)
-  → query rewrite / resolve
-  → multi-intent decomposition (NEW ⑥)
-  → embedding search  (① query-expanded embeddings in Phase 6)
-  → hybrid rerank     (② RRF in Phase 6)
-  → ambiguity check  (NEW ③)
+  → session memory   (extract_session_memory — zero cost)
+  → escalation check (_check_escalation — zero cost)
+  → action engine    (detect_action_intent — zero cost)
+  → lead detection   (detect_intent — zero cost; optional AI tier)
+  → dynamic threshold (tiered confidence bands — zero cost)
+  → query rewrite    (_combined_rewrite_intent — CALL 1, conditional)
+  → multi-intent decomposition (_decompose_intents — zero cost)
+  → embedding search  (_embedding_search — embed API, no score filter)
+  → hybrid rerank     (_hybrid_rerank / RRF — zero cost)
+  → pronoun short-circuit (bare pronoun + no history only — zero cost)
   → internal cache check
   → context builder
-  → _rag_generate_and_polish  (confidence-aware ④ + dynamic personality ⑤)
-  → guardrails
-  → KB gap recording (NEW ⑦, surfacing via get_top_kb_gaps() in Phase 6)
+  → _rag_generate_and_polish  (CALL 2 — answer | CLARIFY | IDK_FALLBACK)
+  → CLARIFY parser (zero cost — parse model response)
+  → guardrails + cache write
+  → KB gap recording (async thread — never blocks)
   → return
-
-Preserved from Phase 4:
-  Vertical personalities, dynamic thresholds, category stickiness, BM25 hybrid rank,
-  smart lead extraction, nudge builder, enrich_and_chunk, find_best_faq, index_faqs,
-  backward-compat aliases, pure-Python math — no numpy / scipy.
 """
 
 import google.generativeai as genai
@@ -266,28 +251,6 @@ _BILLING_URGENCY_SIGNALS = [
     'dispute', 'charge my card', 'billing error', 'charged the wrong amount',
 ]
 
-# ── Domain-specificity bypass for ambiguity detection (Fix 4 / Bug 5) ──────
-# Compiled ONCE at module level — was incorrectly compiled inside _detect_ambiguity()
-# on every call, burning CPU on every query at scale.
-_SPECIFIC_TERMS = re.compile(
-    r'\b(?:pric(?:e|ing)|billing|cancel(?:lation)?|refund|api|gdpr|'
-    r'enterprise|integration|trial|onboard(?:ing)?|invoice|login|'
-    r'password|upgrade|downgrade|subscription|contract|sla|'
-    r'compliance|security|oauth|webhook|export|import|migrate|'
-    r'backup|restore|two.?factor|2fa|sso|saml|hipaa|iso)\b',
-    re.IGNORECASE,
-)
-
-# ── Ambiguity patterns ────────────────────────────────────────────────
-_AMBIGUITY_PATTERNS = [
-    (r'\bhow much\b',                                "Are you asking about a specific plan or service?"),
-    (r'\bwhat(?:\'s| is) the (?:price|cost|fee)\b',  "Which plan or service are you asking about?"),
-    (r'\bhow (?:do|can) (?:i|we)\b',                 "Could you tell me a bit more about what you're trying to do?"),
-    (r'\bwhat (?:does|do) (?:it|you|that)\b',        "What specifically would you like to know about?"),
-    (r'\bis (?:it|this|that)\b',                     "Could you clarify what you're referring to?"),
-    (r'\bwhen\b.*\?$',                               "Are you asking about a specific service, feature, or process?"),
-]
-
 # FIX #9: Replaced broad single-word splitters ('and', 'also', 'plus') that
 # fragment natural sentences. New pattern only splits on phrases that strongly
 # suggest a *new independent question* is following.
@@ -302,6 +265,11 @@ _QUESTION_SIGNALS = re.compile(
     r'\b(?:what|how|when|where|why|who|is|are|do|does|can|will|would|could)\b',
     re.IGNORECASE,
 )
+
+# ── Bare pronoun set for pronoun-only short-circuit in generate_response ──────
+# Defined at module level — was incorrectly defined inside the hot path,
+# recreating the set object on every call.
+_BARE_PRONOUNS = frozenset({'it', 'that', 'this', 'they', 'them', 'those', 'these'})
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -346,7 +314,7 @@ def _bm25_score(query_tokens: List[str], doc_tokens: List[str],
     if not query_tokens or not doc_tokens:
         return 0.0
     doc_len = len(doc_tokens)
-    tf_map  = {tok: doc_tokens.count(tok) for tok in set(doc_tokens)}
+    tf_map  = dict(collections.Counter(doc_tokens))  # O(n) — replaces O(n²) .count() loop
     score   = 0.0
     for term in query_tokens:
         if term not in tf_map:
@@ -830,8 +798,7 @@ class AIHelper:
                 all_scores:     List[float] = []
                 seen_ids: set = set()
                 for sq in sub_queries[:2]:
-                    c, s = self._embedding_search(sq, faqs, client_id,
-                                                  threshold=vector_threshold)
+                    c, s = self._embedding_search(sq, faqs, client_id)
                     for cand, score in zip(c, s):
                         cid = str(cand.get('kb_id', cand.get('id', '')))
                         if cid not in seen_ids:
@@ -842,7 +809,7 @@ class AIHelper:
                 vector_scores = all_scores[:8]
             else:
                 candidates, vector_scores = self._embedding_search(
-                    search_query, faqs, client_id, threshold=vector_threshold
+                    search_query, faqs, client_id
                 )
 
             # FIX #1: Invalid f-string conditional format expression crashes at runtime.
@@ -864,29 +831,32 @@ class AIHelper:
             top_hybrid_score = f"{hybrid_scores[0]:.3f}" if hybrid_scores else "0"
             logger.debug(f"[Hybrid] top={top_hybrid_score}")
 
-            # Annotate candidates with scores for ambiguity detector
+            # Annotate candidates with scores for downstream use
             for i, c in enumerate(hybrid_ranked):
                 c['_hybrid_score'] = hybrid_scores[i] if i < len(hybrid_scores) else 0.0
 
-            top_score = hybrid_scores[0] if hybrid_scores else 0.0
-
-            # ── ③ AMBIGUITY CHECK (zero cost) ─────────────────────────────
-            # FIX Bug5: pass vector (cosine) score, not top_score (RRF).
-            # RRF max is ~0.032; passing it to a 0.38 threshold meant the guard
-            # never fired and ambiguity triggered on nearly every short query.
-            top_vec = vector_scores[0] if vector_scores else 0.0
-            clarification = self._detect_ambiguity(
-                clean, top_vec, hybrid_ranked[:2],
-                all_candidates=hybrid_ranked[:3],
-            )
-            if clarification:
-                logger.info(
-                    f"[Ambiguity] top_vec={top_vec:.3f} → clarification "
-                    f"with {len(clarification['options'])} options"
-                )
+            # ── ③ LIGHTWEIGHT PRONOUN SHORT-CIRCUIT (zero cost) ───────────
+            # The ONLY pre-model ambiguity gate: bare pronouns with no history
+            # to resolve them from. Everything else goes to the model (Call 2),
+            # which returns CLARIFY:<opt1>|<opt2>|... if it judges candidates
+            # genuinely ambiguous. Score thresholds are intentionally absent —
+            # they break across tenants because KB density and domain vocabulary
+            # shift score distributions per client.
+            _clean_tokens = clean.lower().split()
+            if (
+                len(_clean_tokens) <= 2
+                and all(t.strip('?.,!') in _BARE_PRONOUNS for t in _clean_tokens if t.strip('?.,!'))
+                and _clean_tokens  # non-empty
+                and not history    # no conversation history to resolve pronouns from
+            ):
+                logger.info(f"[Ambiguity] bare pronoun with no history → structural clarification")
                 return {
-                    'response':       clarification['message'],
-                    'clarification':  clarification,
+                    'response':       "Could you tell me a bit more about what you're referring to?",
+                    'clarification':  {
+                        'type':    'clarification',
+                        'message': "Could you tell me a bit more about what you're referring to?",
+                        'options': [],
+                    },
                     'method':         'clarification',
                     'confidence':     0.5,
                     'is_lead':        False,
@@ -896,11 +866,15 @@ class AIHelper:
                 }
 
             # ── INTERNAL CACHE CHECK ──────────────────────────────────────
-            top_id    = (str(hybrid_ranked[0].get('kb_id', hybrid_ranked[0].get('id', '')))
-                         if hybrid_ranked else '')
+            top_id = (str(hybrid_ranked[0].get('kb_id', hybrid_ranked[0].get('id', '')))
+                      if hybrid_ranked else '')
             # FIX #13: Pass kb_version so updated KB entries bypass the cache.
+            # Guard: only check cache when top_id is non-empty. An empty top_id
+            # means retrieval returned nothing — two different misses would share
+            # the same bucket and the first fallback response would be served to
+            # all subsequent unrelated queries that also miss retrieval.
             cache_key = self._cache_key(clean, top_id, vertical, kb_version)
-            if cache_key in self._response_cache:
+            if top_id and cache_key in self._response_cache:
                 logger.debug(f"[Cache HIT] key={cache_key[:10]}…")
                 return {
                     'response':      self._response_cache[cache_key],
@@ -922,6 +896,53 @@ class AIHelper:
                     confidence_high=confidence_high,
                     confidence_medium=confidence_medium,
                 )
+                # ── Model-driven CLARIFY response ─────────────────────────
+                # _rag_generate_and_polish instructs the model to return
+                # CLARIFY:<opt1>|<opt2>|... when candidates are genuinely
+                # distinct and equally valid. Parse it here and return the
+                # same structured clarification dict the frontend already
+                # consumes — no contract change.
+                if isinstance(final, str) and final.startswith('CLARIFY:'):
+                    raw_opts = final[len('CLARIFY:'):].strip()
+                    options  = []
+                    for i, part in enumerate(raw_opts.split('|')):
+                        label = part.strip()
+                        if label:
+                            # Best-effort: match option label to a candidate kb_id
+                            matched_id = ''
+                            for cand in hybrid_ranked:
+                                cand_label = (cand.get('question') or cand.get('title', '')).strip()
+                                if cand_label and cand_label[:60] == label[:60]:
+                                    matched_id = str(cand.get('kb_id', cand.get('id', '')))
+                                    break
+                            if not matched_id and i < len(hybrid_ranked):
+                                matched_id = str(
+                                    hybrid_ranked[i].get('kb_id',
+                                    hybrid_ranked[i].get('id', ''))
+                                )
+                            options.append({'label': label[:80], 'kb_id': matched_id})
+                    if options:
+                        clarification = {
+                            'type':    'clarification',
+                            'message': "I'm not sure which of these you're asking about — could you pick one?",
+                            'options': options,
+                        }
+                        logger.info(
+                            f"[Ambiguity/Model] CLARIFY returned with {len(options)} options"
+                        )
+                        return {
+                            'response':       clarification['message'],
+                            'clarification':  clarification,
+                            'method':         'clarification',
+                            'confidence':     0.5,
+                            'is_lead':        False,
+                            'lead_metadata':  None,
+                            'action':         None,
+                            'needs_followup': True,
+                        }
+                    # If CLARIFY had no parseable options, fall through to IDK handling
+                    final = 'IDK_FALLBACK'
+
                 if final == 'IDK_FALLBACK':
                     logger.info("[IDK] model returned IDK_FALLBACK — routing to fallback")
                     final      = self._vertical_fallback(clean, faqs[:8], vertical, context_str)
@@ -1043,76 +1064,23 @@ class AIHelper:
         all_candidates: List[Dict] = None,
     ) -> Optional[Dict]:
         """
-        Returns a structured clarification dict when retrieval is weak AND the
-        question is ambiguous. Returns None otherwise. Zero Gemini calls.
+        NO-OP STUB — preserved for backward compatibility with any callers
+        outside this file (e.g. tests, external integrations).
 
-        FIX Bug5: Was comparing RRF scores (max ~0.032) against a 0.38 threshold
-        designed for cosine scores (0–1). The guard `top_score >= 0.38` was never
-        True, so ambiguity fired on almost every short query — returning a
-        clarification question instead of passing through to RAG.
-        Now receives the vector (cosine) score from the call site, making the
-        0.38 threshold meaningful again.
+        Ambiguity detection has been moved into the model (Call 2 /
+        _rag_generate_and_polish). The model returns CLARIFY:<opt1>|<opt2>|...
+        when it judges candidates genuinely ambiguous, which is parsed in
+        generate_response(). Score-threshold gating has been removed because
+        thresholds break across tenants (KB density, domain vocabulary, and
+        query length all shift score distributions per client).
 
-        Also upgraded return type from plain str to a structured dict so the
-        frontend can render up to 3 tappable option buttons instead of a
-        freeform text clarification.
+        The only pre-model structural check is the bare-pronoun short-circuit
+        in generate_response(), which fires only when the query is 1–2 tokens
+        of bare pronouns AND there is no conversation history.
 
-        Fires when ALL true:
-          1. top vector score < 0.38
-          2. message ≤ 8 words
-          3. two candidates nearly tied (gap < 0.08) OR pattern match
+        Always returns None.
         """
-        if top_score >= 0.38:
-            return None
-
-        msg   = user_message.lower().strip()
-        words = msg.split()
-
-        if len(words) > 8:
-            return None
-
-        # FIX 4 / Bug 5: _SPECIFIC_TERMS is now compiled at module level.
-        # Domain-specific terms signal precise intent — never route to clarification.
-        if _SPECIFIC_TERMS.search(msg):
-            logger.debug(f"[Ambiguity] bypassed — domain-specific term in '{msg[:60]}'")
-            return None
-
-        triggered = False
-
-        if len(top_candidates) >= 2:
-            s0 = top_candidates[0].get('_hybrid_score', 0.0)
-            s1 = top_candidates[1].get('_hybrid_score', 0.0)
-            if s0 > 0 and s1 > 0 and (s0 - s1) < 0.08:
-                triggered = True
-
-        if not triggered:
-            for pattern, _ in _AMBIGUITY_PATTERNS:
-                if re.search(pattern, msg):
-                    triggered = True
-                    break
-
-        if not triggered:
-            return None
-
-        # Build up to 3 options from the candidate pool
-        pool = (all_candidates or top_candidates)[:3]
-        options = []
-        for c in pool:
-            label = (c.get('question') or c.get('title', '')).strip()
-            if label:
-                options.append({
-                    'label': label[:80],
-                    'kb_id': c.get('kb_id', c.get('id', '')),
-                })
-
-        if not options:
-            return None
-
-        return {
-            'type':    'clarification',
-            'message': "I'm not sure which of these you're asking about — could you pick one?",
-            'options': options,
-        }
+        return None
 
     # ═══════════════════════════════════════════════════════════════════
     # ⑥ MULTI-INTENT DECOMPOSITION
@@ -1583,11 +1551,12 @@ Rules:
                            else max(0.0, 0.5 - (i * 0.05)))
                         for i, chunk in enumerate(kb_chunks)
                     ]
-                    scored = [(c, s) for c, s in scored if s > threshold]
+                    # No score threshold — always pass top-N by rank to the model.
+                    # The model (Call 2) decides quality; magic numbers break across tenants.
+                    scored.sort(key=lambda x: x[1], reverse=True)
                     if scored:
-                        scored.sort(key=lambda x: x[1], reverse=True)
                         logger.debug(
-                            f"[KB] cap={_MAX_CANDIDATES} threshold={threshold} "
+                            f"[KB] cap={_MAX_CANDIDATES} (no threshold) "
                             f"top={scored[0][1]:.3f} hits={len(scored)}"
                         )
                         return [s[0] for s in scored[:8]], [s[1] for s in scored[:8]]
@@ -1641,12 +1610,12 @@ Rules:
                         for fid, emb in capped
                         if fid in faq_idx
                         for sim in (_cosine(query_vec, emb),)
-                        if sim > threshold
+                        # No score threshold — top-N by rank, model decides quality
                     ]
                     scored.sort(key=lambda x: x[1], reverse=True)
                     if scored:
                         logger.debug(
-                            f"[FAQ Embed] cap={_MAX_CANDIDATES} threshold={threshold} "
+                            f"[FAQ Embed] cap={_MAX_CANDIDATES} (no threshold) "
                             f"top={scored[0][1]:.3f} hits={len(scored)}"
                         )
                         return [s[0] for s in scored[:8]], [s[1] for s in scored[:8]]
@@ -1666,12 +1635,12 @@ Rules:
                     if not emb:
                         continue
                     sim = _cosine(query_vec, emb)
-                    if sim > threshold:
-                        scored.append((faq, sim))
+                    # No score threshold — top-N by rank, model decides quality
+                    scored.append((faq, sim))
                 scored.sort(key=lambda x: x[1], reverse=True)
                 if scored:
                     logger.debug(
-                        f"[FAQ Embed/NoClient] threshold={threshold} "
+                        f"[FAQ Embed/NoClient] (no threshold) "
                         f"top={scored[0][1]:.3f} hits={len(scored)}"
                     )
                     return [s[0] for s in scored[:8]], [s[1] for s in scored[:8]]
@@ -1904,14 +1873,22 @@ Rules:
             f"1. If the context does NOT contain enough information to answer accurately,\n"
             f"   respond with ONLY: IDK_FALLBACK\n"
             f"   (No explanation, no guessing — just the string IDK_FALLBACK)\n"
-            f"2. If you CAN answer:\n"
+            f"2. If the context contains MULTIPLE clearly distinct topics that are equally\n"
+            f"   plausible answers to the customer's message, and you cannot determine which\n"
+            f"   one they mean, respond with ONLY:\n"
+            f"   CLARIFY:<option 1 label>|<option 2 label>[|<option 3 label>]\n"
+            f"   Use the Source question text as the option label (max 80 chars each).\n"
+            f"   Example: CLARIFY:Cancelling a subscription|Cancelling an order\n"
+            f"   IMPORTANT: Only use CLARIFY when topics are genuinely distinct AND equally\n"
+            f"   valid. If one source clearly answers the query, answer it — do NOT clarify.\n"
+            f"3. If you CAN answer:\n"
             f"   - Direct, conversational, 1–3 sentences.\n"
             f"   - Bullets only for 3+ distinct items; otherwise prose.\n"
             f"   - Natural contractions (I'm, it's, we're).\n"
             f"   - No markdown headers, preamble, or sign-off.\n"
             f"   - Do NOT invent facts not in the context.\n"
-            f"3. Short/vague messages are usually follow-ups — infer full intent from history.\n\n"
-            f"Return ONLY the final response (or IDK_FALLBACK)."
+            f"4. Short/vague messages are usually follow-ups — infer full intent from history.\n\n"
+            f"Return ONLY the final response (or IDK_FALLBACK or CLARIFY:...)."
         )
 
         try:
@@ -1975,6 +1952,10 @@ Rules:
     def _vertical_fallback(self, user_message: str, faqs: List[Dict],
                            vertical: str, context_str: str) -> str:
         """Fallback when no strong embedding hit or IDK_FALLBACK returned."""
+        # Guard: if Gemini init failed, self.model is None — fall back to static response.
+        if not self.enabled or not self.model:
+            return self._make_fallback(faqs[0].get('answer', '') if faqs else '')
+
         vert_cfg    = self.personalities.get(vertical, self.personalities['general'])
         personality = vert_cfg['tone']
 
@@ -2239,6 +2220,13 @@ Sound friendly and human. Return ONLY the response text."""
             if not question or not answer or len(answer) < 10:
                 continue
 
+            # CHUNK NORMALIZATION — rewrite raw extracted text into a clean,
+            # self-contained conversational answer before chunking or embedding.
+            # This runs once per item at index time and fixes the two main sources
+            # of uncertain RAG answers: PDF extraction noise and terse/reference-
+            # dependent CSV answers. Falls back to the original on any failure.
+            answer = self._normalize_chunk(question, answer)
+
             content_chunks = self._split_content(answer)
 
             for idx, chunk_text in enumerate(content_chunks):
@@ -2424,6 +2412,83 @@ Sound friendly and human. Return ONLY the response text."""
         except Exception as _e:
             logger.debug(f"[QueryExpansion] failed (non-critical): {_e}")
         return []
+
+    def _normalize_chunk(self, question: str, answer: str) -> str:
+        """
+        CHUNK NORMALIZATION — called once per item at upload/index time.
+
+        Rewrites raw extracted text (from PDFs, CSVs, pasted content) into a
+        clean, self-contained, conversational answer. This is the single biggest
+        lever for fixing uncertain or context-dependent answers in the RAG path:
+        if the stored answer is already clear and standalone, the model rarely
+        needs to infer or hedge.
+
+        Why this matters:
+          - PDF extraction loses structure: headers merge with body text, bullets
+            collapse, tables become garbled strings.
+          - CSV answers are often terse or reference-dependent ("see above",
+            "same as Pro plan") which the RAG model cannot resolve at query time.
+          - Long prose answers contain the right facts buried in the wrong shape.
+
+        This call rewrites the answer ONCE at index time so every subsequent
+        query benefits — it never adds latency to user responses.
+
+        Returns the original answer unchanged on any failure (non-critical path).
+        Cost: +1 Gemini call per KB item at upload time (same budget as
+              _generate_paraphrases, which already runs per item).
+        """
+        if not self.enabled or not self.model:
+            return answer
+
+        # Skip if the answer is already short and clean — no rewrite needed.
+        # "Short and clean" = under 60 chars with no structural red flags.
+        _structural_flags = ('see above', 'same as', 'refer to', 'as mentioned',
+                             'n/a', 'tbd', 'please note', '\t', '  ')
+        is_short_clean = (
+            len(answer) < 60
+            and not any(f in answer.lower() for f in _structural_flags)
+        )
+        if is_short_clean:
+            return answer
+
+        try:
+            prompt = (
+                f"You are rewriting a customer support knowledge base entry so it reads "
+                f"as a clear, self-contained, conversational answer.\n\n"
+                f"Question: {question}\n\n"
+                f"Original answer (may be extracted from a PDF or CSV — could be "
+                f"poorly formatted, truncated, or reference context that isn't here):\n"
+                f"{answer[:800]}\n\n"
+                f"Rewrite rules:\n"
+                f"- The rewritten answer must fully stand alone — no references to "
+                f"'above', 'below', 'see section X', or anything outside this answer.\n"
+                f"- Keep ALL factual details: numbers, dates, prices, policy names.\n"
+                f"- Use plain conversational English. Contractions are fine (it's, we're).\n"
+                f"- 1–4 sentences for simple answers. Short bullets ONLY if there are "
+                f"3+ genuinely distinct steps or options.\n"
+                f"- Do NOT add facts that are not in the original. Do NOT invent.\n"
+                f"- If the original is already clear and complete, return it unchanged.\n\n"
+                f"Return ONLY the rewritten answer text. No preamble, no explanation."
+            )
+            response = self.model.generate_content(
+                prompt, request_options={'timeout': 20}
+            )
+            normalized = response.text.strip()
+            # Sanity checks: reject if suspiciously short, or longer than 2× original
+            if len(normalized) < 15:
+                logger.debug(f"[NormalizeChunk] rejected (too short): '{normalized}'")
+                return answer
+            if len(normalized) > max(len(answer) * 2.5, len(answer) + 300):
+                logger.debug(f"[NormalizeChunk] rejected (bloated): original={len(answer)} normalized={len(normalized)}")
+                return answer
+            logger.debug(
+                f"[NormalizeChunk] '{question[:50]}' "
+                f"original={len(answer)}ch → normalized={len(normalized)}ch"
+            )
+            return normalized
+        except Exception as _e:
+            logger.debug(f"[NormalizeChunk] failed (non-critical): {_e}")
+            return answer
 
     def _quality_score(self, question: str, answer: str) -> float:
         score = 0.5
