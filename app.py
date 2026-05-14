@@ -23,11 +23,13 @@ from io import StringIO
 from config import Config
 from ai_helper import get_ai_helper
 from paypalrestsdk import Payment, configure
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
+app.wsgi_app=ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # SECRET_KEY must be set in env — crash at startup rather than silently use a weak key
 _secret = os.environ.get("SECRET_KEY")
