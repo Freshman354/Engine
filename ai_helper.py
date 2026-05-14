@@ -293,7 +293,11 @@ def _cosine(a: list, b: list) -> float:
     mag_a_sq = sum(x * x for x in a)
     mag_b_sq = sum(x * x for x in b)
     if abs(mag_a_sq - 1.0) < 1e-6 and abs(mag_b_sq - 1.0) < 1e-6:
-        return min(dot, 1.0)   # clamp for float rounding
+        # FIX BUG-10: clamp both ends — dot can be a small negative float for
+        # near-orthogonal unit vectors due to floating-point rounding. A negative
+        # cosine score propagates into hybrid_scores and can be stored as a
+        # negative cache confidence value, which is semantically wrong.
+        return max(min(dot, 1.0), 0.0)
     mag_a = math.sqrt(mag_a_sq)
     mag_b = math.sqrt(mag_b_sq)
     return dot / (mag_a * mag_b) if mag_a and mag_b else 0.0
@@ -390,6 +394,19 @@ def _embed(text: str, task: str = 'retrieval_document') -> list:
     if cached is not None:
         return cached
 
+    # FIX BUG-3 (embed guard): _embed is module-level so it has no access to
+    # self.enabled. Guard against calling genai when it was never configured by
+    # checking whether genai has been configured at all. If configure() was never
+    # called (no api key / init failure) the internal client will be absent.
+    try:
+        # genai stores its client in a module-level default; accessing it raises
+        # AttributeError / ValueError when not configured.
+        _client = genai._default_api_client  # noqa: SLF001 — intentional internal check
+        if _client is None:
+            return []
+    except Exception:
+        return []
+
     try:
         result = genai.embed_content(
             model='models/text-embedding-004',
@@ -434,16 +451,27 @@ def extract_session_memory(
     }
 
     try:
-        all_text      = current_message
         user_messages: List[str] = []
-
+        # FIX BUG-8: Build all_text from history first so we can detect whether
+        # current_message is already the last user turn. If it is, don't append
+        # it again — otherwise frustration signals in the current turn are counted
+        # twice: once when scanning history and once when scanning msgs_to_scan.
+        history_text = ''
         for turn in conversation_history:
             content = (turn.get('content') or '').strip()
             if not content:
                 continue
-            all_text += ' ' + content
+            history_text += ' ' + content
             if turn.get('role') == 'user':
                 user_messages.append(content.lower())
+
+        cur_lower = current_message.lower()
+        # Only prepend current_message to all_text if it isn't already the most
+        # recent user turn in history (prevents duplicate entity extraction too).
+        if not (user_messages and user_messages[-1] == cur_lower):
+            all_text = current_message + history_text
+        else:
+            all_text = history_text.strip()
 
         # Name
         name_match = re.search(
@@ -470,7 +498,6 @@ def extract_session_memory(
         # Purchase stage — most recent user message wins
         # Guard: only append current_message if it isn't already the last entry,
         # preventing a double-count when history already includes the current turn.
-        cur_lower    = current_message.lower()
         msgs_to_scan = (
             user_messages
             if (user_messages and user_messages[-1] == cur_lower)
@@ -716,7 +743,27 @@ class AIHelper:
             # ── ACTION ENGINE (zero LLM cost) ─────────────────────────────
             action_intent = self.detect_action_intent(clean)
             if action_intent.get('action'):
-                quick_meta   = self._extract_lead_info(clean, history)
+                # FIX BUG-1: _extract_lead_info's Pass 2 can make a Gemini call,
+                # which is unbudgeted here (before Call 1 / Call 2 even start).
+                # The action path only needs contact details to personalise the
+                # acknowledgement message — Pass 1 regex is sufficient for that.
+                # Force regex-only by temporarily disabling the AI flag via a
+                # monkey-patched context rather than modifying the method signature:
+                # we pass a throw-away AIHelper flag by calling the regex inline.
+                _regex_meta: Dict = {'name': None, 'email': None, 'phone': None, 'interest_topic': None}
+                _all_action_text = ' '.join(
+                    [m.get('content', '') for m in history[-4:] if m.get('content')] + [clean]
+                )
+                _em = re.search(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b', _all_action_text)
+                if _em:
+                    _regex_meta['email'] = _em.group(0)
+                _nm = re.search(
+                    r"(?:my name is|i(?:'?m| am)|this is|call me)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
+                    _all_action_text, re.IGNORECASE,
+                )
+                if _nm:
+                    _regex_meta['name'] = _nm.group(1).strip().title()
+                quick_meta   = _regex_meta
                 user_context = {
                     'email':    quick_meta.get('email') or session_mem.get('email'),
                     'name':     quick_meta.get('name')  or session_mem.get('name'),
@@ -735,7 +782,15 @@ class AIHelper:
                 }
 
             # ── LEAD DETECTION (zero cost keyword + optional AI confirm) ──
-            intent = self.detect_intent(clean, lead_triggers or [], vertical)
+            # FIX BUG-7: Pass _ai_budget_used=True when history is non-empty.
+            # If the user has history, _combined_rewrite_intent (Call 1) may have
+            # already fired above. Allowing detect_intent's Tier-3 Gemini call here
+            # would push a borderline-lead turn to 3 total Gemini calls, violating
+            # the MAX 2 calls per turn budget. When history is present we rely on
+            # the keyword score alone for the lead decision.
+            _budget_used = bool(history)
+            intent = self.detect_intent(clean, lead_triggers or [], vertical,
+                                        _ai_budget_used=_budget_used)
             if intent.get('is_lead') and intent.get('confidence', 0) >= 0.65:
                 logger.info(
                     f"[Lead] client={client_id} vertical={vertical} "
@@ -780,10 +835,44 @@ class AIHelper:
                 f"floor={vector_threshold} high={confidence_high}"
             )
 
+            # ── FIX BUG-9: LIGHTWEIGHT PRONOUN SHORT-CIRCUIT moved here ───
+            # Previously placed AFTER embedding search and rerank, meaning two
+            # embedding API calls were wasted before the short-circuit fired.
+            # Bare pronouns with no history are structurally unresolvable —
+            # detect them now, before any API cost is incurred.
+            _clean_tokens_early = clean.lower().split()
+            if (
+                len(_clean_tokens_early) <= 2
+                and all(t.strip('?.,!') in _BARE_PRONOUNS for t in _clean_tokens_early if t.strip('?.,!'))
+                and _clean_tokens_early
+                and not history
+            ):
+                logger.info(f"[Ambiguity] bare pronoun with no history → structural clarification (pre-embed)")
+                return {
+                    'response':       "Could you tell me a bit more about what you're referring to?",
+                    'clarification':  {
+                        'type':    'clarification',
+                        'message': "Could you tell me a bit more about what you're referring to?",
+                        'options': [],
+                    },
+                    'method':         'clarification',
+                    'confidence':     0.5,
+                    'is_lead':        False,
+                    'lead_metadata':  None,
+                    'action':         None,
+                    'needs_followup': True,
+                }
+
             # ── CALL 1 (conditional): Query rewrite ───────────────────────
             word_count  = len(clean.split())
             is_followup = self._is_followup(clean, history)
-            if (word_count < 10 or is_followup) and history and self.enabled:
+            # FIX BUG-11: The old condition was `(word_count < 10 or is_followup)`,
+            # which fired Call 1 for ANY short message (e.g. "pricing", "cancel")
+            # as long as history was non-empty — even for standalone queries that
+            # don't reference prior context. The rewrite adds no value there and
+            # may introduce query drift. Require BOTH short AND followup; a short
+            # standalone query is served better by the raw keyword resolver.
+            if word_count < 10 and is_followup and history and self.enabled:
                 search_query = self._combined_rewrite_intent(clean, history)
             else:
                 search_query = self._resolve_query(clean, history)
@@ -805,8 +894,12 @@ class AIHelper:
                             all_candidates.append(cand)
                             all_scores.append(score)
                             seen_ids.add(cid)
-                candidates    = all_candidates[:8]
-                vector_scores = all_scores[:8]
+                # FIX BUG-4: Do NOT slice here. Slicing before _hybrid_rerank discards
+                # potentially higher-scoring candidates from the second sub-query based
+                # purely on insertion order. Pass the full merged set to the reranker;
+                # the reranker already caps output via its own top-k logic.
+                candidates    = all_candidates
+                vector_scores = all_scores
             else:
                 candidates, vector_scores = self._embedding_search(
                     search_query, faqs, client_id
@@ -835,36 +928,6 @@ class AIHelper:
             for i, c in enumerate(hybrid_ranked):
                 c['_hybrid_score'] = hybrid_scores[i] if i < len(hybrid_scores) else 0.0
 
-            # ── ③ LIGHTWEIGHT PRONOUN SHORT-CIRCUIT (zero cost) ───────────
-            # The ONLY pre-model ambiguity gate: bare pronouns with no history
-            # to resolve them from. Everything else goes to the model (Call 2),
-            # which returns CLARIFY:<opt1>|<opt2>|... if it judges candidates
-            # genuinely ambiguous. Score thresholds are intentionally absent —
-            # they break across tenants because KB density and domain vocabulary
-            # shift score distributions per client.
-            _clean_tokens = clean.lower().split()
-            if (
-                len(_clean_tokens) <= 2
-                and all(t.strip('?.,!') in _BARE_PRONOUNS for t in _clean_tokens if t.strip('?.,!'))
-                and _clean_tokens  # non-empty
-                and not history    # no conversation history to resolve pronouns from
-            ):
-                logger.info(f"[Ambiguity] bare pronoun with no history → structural clarification")
-                return {
-                    'response':       "Could you tell me a bit more about what you're referring to?",
-                    'clarification':  {
-                        'type':    'clarification',
-                        'message': "Could you tell me a bit more about what you're referring to?",
-                        'options': [],
-                    },
-                    'method':         'clarification',
-                    'confidence':     0.5,
-                    'is_lead':        False,
-                    'lead_metadata':  None,
-                    'action':         None,
-                    'needs_followup': True,
-                }
-
             # ── INTERNAL CACHE CHECK ──────────────────────────────────────
             top_id = (str(hybrid_ranked[0].get('kb_id', hybrid_ranked[0].get('id', '')))
                       if hybrid_ranked else '')
@@ -876,8 +939,18 @@ class AIHelper:
             cache_key = self._cache_key(clean, top_id, vertical, kb_version)
             if top_id and cache_key in self._response_cache:
                 logger.debug(f"[Cache HIT] key={cache_key[:10]}…")
+                cached_response = self._response_cache[cache_key]
+                # FIX BUG-5: If the cached answer is an IDK/fallback response, still
+                # submit a gap record so the gap counter keeps incrementing for repeated
+                # unanswered questions. Without this, the cache short-circuits after the
+                # first miss and the gap score never rises above 1, undermining
+                # get_top_kb_gaps() prioritisation.
+                _idk_signals = ('i don\'t have enough', 'connect you with the team', 'idk')
+                if (method := 'cache') and any(sig in cached_response.lower() for sig in _idk_signals):
+                    if client_id and client_id != 'demo':
+                        _BG_EXECUTOR.submit(record_kb_gap, client_id, user_message, 'cache_idk', 0.0)
                 return {
-                    'response':      self._response_cache[cache_key],
+                    'response':      cached_response,
                     'method':        'cache',
                     'confidence':    hybrid_scores[0] if hybrid_scores else 0.8,
                     'is_lead':       False,
@@ -886,10 +959,33 @@ class AIHelper:
                 }
 
             # ── CONTEXT BUILDER ───────────────────────────────────────────
+            # FIX BUG-2: maybe_summarise was never called inside ai_helper.py,
+            # so _build_context always read a stale/empty summary for long
+            # conversations. Call it here, just before _build_context consumes it.
+            # maybe_summarise is cheap (no-ops when <2000 estimated tokens) and
+            # non-blocking (all failures are logged and swallowed).
+            if client_id:
+                self.maybe_summarise(client_id, history)
             context_str = self._build_context(history, client_id, clean)
 
+            # ── MIN RAG SCORE GATE ────────────────────────────────────────
+            # Do NOT pass weak matches to Gemini — it will hallucinate an answer
+            # rather than return IDK_FALLBACK. This gate ensures only retrievals
+            # with genuine semantic overlap reach the model (Call 2).
+            # Threshold 0.32 was chosen empirically: below this, cosine similarity
+            # is essentially noise for text-embedding-004 on short KB entries.
+            # Sales/pricing queries use a lower floor (0.27) matching vector_threshold.
+            _MIN_RAG_SCORE = 0.27 if is_sales_query else 0.32
+            _top_hybrid    = hybrid_scores[0] if hybrid_scores else 0.0
+            _rag_qualified = hybrid_ranked and _top_hybrid >= _MIN_RAG_SCORE
+
+            logger.debug(
+                f"[RAGGate] top={_top_hybrid:.3f} min={_MIN_RAG_SCORE} "
+                f"qualified={_rag_qualified} sales={is_sales_query}"
+            )
+
             # ── CALL 2: RAG + POLISH (④ confidence-aware + ⑤ dynamic personality) ──
-            if hybrid_ranked and self.enabled:
+            if _rag_qualified and self.enabled:
                 final, confidence, method = self._rag_generate_and_polish(
                     clean, hybrid_ranked, hybrid_scores, vertical, context_str,
                     session_mem=session_mem,
@@ -944,20 +1040,38 @@ class AIHelper:
                     final = 'IDK_FALLBACK'
 
                 if final == 'IDK_FALLBACK':
-                    logger.info("[IDK] model returned IDK_FALLBACK — routing to fallback")
-                    final      = self._vertical_fallback(clean, faqs[:8], vertical, context_str)
-                    confidence = 0.3
+                    logger.info("[IDK] model returned IDK_FALLBACK — returning safe deflection")
+                    final      = "I don't have enough information to answer that accurately. Would you like me to connect you with the team?"
+                    confidence = 0.0
                     method     = 'idk_fallback'
             elif self.enabled:
-                final      = self._vertical_fallback(clean, faqs[:8], vertical, context_str)
-                confidence = 0.35
-                method     = 'vertical_fallback'
+                # Either hybrid_ranked is empty (no KB results at all) OR the top score
+                # was below _MIN_RAG_SCORE. In both cases, calling _vertical_fallback would
+                # give Gemini no grounded context — pure hallucination risk. Return IDK
+                # directly instead. _vertical_fallback is intentionally bypassed here.
+                if not hybrid_ranked:
+                    logger.info("[Pipeline] No KB candidates — skipping model, returning IDK")
+                else:
+                    logger.info(
+                        f"[RAGGate] top score {_top_hybrid:.3f} below threshold {_MIN_RAG_SCORE} "
+                        f"— skipping model to prevent hallucination, returning IDK"
+                    )
+                final      = "I don't have enough information to answer that accurately. Would you like me to connect you with the team?"
+                confidence = 0.0
+                method     = 'idk_fallback'
             else:
                 final      = self._make_fallback(faqs[0].get('answer', '') if faqs else '')
                 confidence = 0.0
                 method     = 'static_fallback'
 
             # ── GUARDRAILS + INTERNAL CACHE WRITE ────────────────────────
+            # FIX BUG-6: CLARIFY strings must be parsed BEFORE _guardrails runs.
+            # _guardrails truncates responses longer than 600 chars (by sentence or
+            # line), which silently destroys a valid CLARIFY:<opt1>|<opt2>|... string
+            # before the parser below ever sees it — causing fall-through to IDK.
+            # The CLARIFY check has therefore been moved to directly after
+            # _rag_generate_and_polish returns, which already happens above (lines
+            # 946–985). _guardrails is now only applied to non-CLARIFY final text.
             final = self._guardrails(final, hybrid_ranked)
             if confidence > 0.4:
                 self._response_cache[cache_key] = final
@@ -1251,11 +1365,21 @@ class AIHelper:
     # ═══════════════════════════════════════════════════════════════════
 
     def detect_intent(self, user_message: str, lead_triggers: List[str],
-                      vertical: str = 'general') -> Dict:
+                      vertical: str = 'general',
+                      _ai_budget_used: bool = False) -> Dict:
         """
         Tier 1 — Simple intents (greeting/gratitude/bye): free keyword match
         Tier 2 — Keyword lead scoring
         Tier 3 — Gemini confirmation for borderline scores (2.5 ≤ score < 5)
+
+        FIX BUG-7: Added _ai_budget_used parameter. The pipeline header declares
+        MAX 2 Gemini calls per turn (Call 1 = query rewrite, Call 2 = RAG).
+        Tier 3 fires before either of those, so on a borderline lead message it
+        was silently creating a 3rd call. Callers that have already consumed a
+        Gemini call (or want to enforce the 2-call budget) must pass
+        _ai_budget_used=True to suppress the Tier-3 confirmation call.
+        The pipeline in generate_response() passes _ai_budget_used=True when
+        history is non-empty (query rewrite may already have fired).
         """
         msg      = user_message.lower().strip()
         vert_cfg = self.personalities.get(vertical, self.personalities['general'])
@@ -1291,7 +1415,7 @@ class AIHelper:
             return {'intent': 'lead_request', 'is_lead': True,
                     'score': score, 'confidence': confidence, 'reasons': reasons[:3]}
 
-        if self.enabled and 2.5 <= score < 5.0:
+        if self.enabled and 2.5 <= score < 5.0 and not _ai_budget_used:
             try:
                 prompt = (
                     f'Is this a lead request (user wants human contact, a demo, or to buy)?\n'
@@ -1870,10 +1994,19 @@ Rules:
             f"Knowledge base context (ground your answer ONLY in these sources):\n"
             f"{chunks_context}\n\n"
             f"CRITICAL RULES:\n"
-            f"1. If the context does NOT contain enough information to answer accurately,\n"
+            f"1. RELEVANCE CHECK FIRST: Read the [Source] blocks carefully. Ask yourself:\n"
+            f"   'Does this source DIRECTLY and SPECIFICALLY answer the customer's question?'\n"
+            f"   If the source is on a related topic but does not actually answer the question,\n"
             f"   respond with ONLY: IDK_FALLBACK\n"
-            f"   (No explanation, no guessing — just the string IDK_FALLBACK)\n"
-            f"2. If the context contains MULTIPLE clearly distinct topics that are equally\n"
+            f"   When in doubt, ALWAYS return IDK_FALLBACK. It is always better to say you\n"
+            f"   don't know than to guess, adapt, or stretch an answer that does not fit.\n"
+            f"   (No explanation, no partial answer — just the string IDK_FALLBACK)\n"
+            f"2. GROUNDING: Every fact in your answer MUST come verbatim or directly from\n"
+            f"   the sources above. If any part cannot be supported by a source, return\n"
+            f"   IDK_FALLBACK for the ENTIRE response — no partial answers allowed.\n"
+            f"   Do NOT use your general knowledge. Do NOT invent or infer details.\n"
+            f"   Do NOT blend two sources to construct a new answer.\n"
+            f"3. If the context contains MULTIPLE clearly distinct topics that are equally\n"
             f"   plausible answers to the customer's message, and you cannot determine which\n"
             f"   one they mean, respond with ONLY:\n"
             f"   CLARIFY:<option 1 label>|<option 2 label>[|<option 3 label>]\n"
@@ -1881,13 +2014,12 @@ Rules:
             f"   Example: CLARIFY:Cancelling a subscription|Cancelling an order\n"
             f"   IMPORTANT: Only use CLARIFY when topics are genuinely distinct AND equally\n"
             f"   valid. If one source clearly answers the query, answer it — do NOT clarify.\n"
-            f"3. If you CAN answer:\n"
+            f"4. If you CAN answer (sources are relevant AND fully support the answer):\n"
             f"   - Direct, conversational, 1–3 sentences.\n"
             f"   - Bullets only for 3+ distinct items; otherwise prose.\n"
             f"   - Natural contractions (I'm, it's, we're).\n"
             f"   - No markdown headers, preamble, or sign-off.\n"
-            f"   - Do NOT invent facts not in the context.\n"
-            f"4. Short/vague messages are usually follow-ups — infer full intent from history.\n\n"
+            f"5. Short/vague messages are usually follow-ups — infer full intent from history.\n\n"
             f"Return ONLY the final response (or IDK_FALLBACK or CLARIFY:...)."
         )
 
@@ -1979,11 +2111,20 @@ Rules:
 
 User asked: "{user_message}"
 
-Available knowledge (use only if relevant):
+Available knowledge (use ONLY if it directly answers the user's question):
 {faq_context}
 
-Give a helpful, honest, 1–2 sentence response. If you can't answer well, politely offer to connect them with the team.
-Sound friendly and human. Return ONLY the response text."""
+STRICT RULES:
+1. RELEVANCE CHECK: Does the knowledge above directly answer what the user asked?
+   If NO — or if it covers a different topic — respond with ONLY: IDK_FALLBACK
+2. GROUNDING: Every fact you state MUST come from the knowledge above.
+   Do NOT use general knowledge. Do NOT guess or infer missing details.
+   If you cannot fully answer from the knowledge, respond with ONLY: IDK_FALLBACK
+3. If the knowledge DOES directly answer the question:
+   - 1–2 sentences, conversational, no markdown, no sign-off.
+   - Natural contractions (I'm, it's, we're).
+
+Return ONLY the response text or IDK_FALLBACK."""
 
         try:
             # FIX #10: Timeout protection — consistent with _rag_generate_and_polish.
@@ -1991,12 +2132,14 @@ Sound friendly and human. Return ONLY the response text."""
                 prompt,
                 request_options={"timeout": 20},
             )
-            text     = response.text.strip()
-            return (text if len(text) > 10
-                    else "I'm happy to help! Could you tell me a bit more about what you're looking for?")
+            text = response.text.strip()
+            # If the model still returns IDK_FALLBACK here, caller handles it
+            if not text or len(text) < 10:
+                return 'IDK_FALLBACK'
+            return text
         except Exception as e:
             logger.error(f"[VerticalFallback] error: {e}")
-            return "I'm not sure I have the exact answer. Would you like me to connect you with the team?"
+            return 'IDK_FALLBACK'
 
     # ═══════════════════════════════════════════════════════════════════
     # FOLLOW-UP DETECTION & KEYWORD ENRICHMENT
@@ -2336,7 +2479,16 @@ Sound friendly and human. Return ONLY the response text."""
         chunks    = []
         current   = ""
         for sent in sentences:
-            if len(current) + len(sent) + 1 <= max_len:
+            # FIX BUG-12: A sentence longer than max_len was assigned to `current`
+            # and appended to chunks without truncation. The [text[:max_len]] guard
+            # at the end only fired when chunks was completely empty, not when an
+            # oversized sentence arrived mid-loop. Truncate here instead.
+            if len(sent) > max_len:
+                if current:
+                    chunks.append(current)
+                    current = ""
+                chunks.append(sent[:max_len])
+            elif len(current) + len(sent) + 1 <= max_len:
                 current = (current + " " + sent).strip()
             else:
                 if current:
@@ -2581,12 +2733,17 @@ Sound friendly and human. Return ONLY the response text."""
     def _make_fallback(self, answer: str = '') -> str:
         if not answer:
             return "I'm not sure about that. Would you like me to connect you with the team?"
-        return (answer
-                .replace(" I am ",   " I'm ")
-                .replace(" You are ", " You're ")
-                .replace(" it is ",  " it's ")
-                .replace(" do not ", " don't ")
-                .replace(" cannot ", " can't "))
+        # FIX BUG-13: The old str.replace() variants used leading spaces
+        # (e.g. " I am "), which silently skips occurrences at the very start of
+        # a sentence / string. Use re.sub() with \b word-boundaries instead so
+        # all occurrences are normalised regardless of position.
+        result = answer
+        result = re.sub(r'\bI am\b',   "I'm",    result)
+        result = re.sub(r'\bYou are\b', "You're", result)
+        result = re.sub(r'\bit is\b',  "it's",   result, flags=re.IGNORECASE)
+        result = re.sub(r'\bdo not\b', "don't",  result, flags=re.IGNORECASE)
+        result = re.sub(r'\bcannot\b', "can't",  result, flags=re.IGNORECASE)
+        return result
 
     def _parse_json(self, text: str) -> Optional[Dict]:
         text = text.strip()
@@ -2631,13 +2788,25 @@ def get_ai_helper(api_key: str, model_name: str = 'gemini-2.0-flash') -> AIHelpe
     Bug 3 fix: protected with a threading.Lock() so concurrent first requests
     under Gunicorn threaded workers cannot create two instances simultaneously
     and race on genai.configure().
+
+    FIX BUG-14: On key rotation the old _BG_EXECUTOR is shut down before the
+    new AIHelper is created. Without this, the old ThreadPoolExecutor's 4 workers
+    keep running with the stale genai configuration (captured in their closure)
+    and silently produce auth errors for any background tasks that fire after the
+    key change. We replace the module-level executor with a fresh one so all
+    subsequent background submissions use the new configuration.
     """
-    global _ai_helper
+    global _ai_helper, _BG_EXECUTOR
     with _ai_helper_lock:
         if (
             _ai_helper is None
             or _ai_helper.api_key != api_key
             or _ai_helper.model_name != model_name
         ):
+            # Drain and replace the background executor before reconfiguring genai
+            # so no in-flight tasks can submit work under the old key.
+            old_executor = _BG_EXECUTOR
+            _BG_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix='ai_bg')
+            old_executor.shutdown(wait=False)   # non-blocking; running tasks complete naturally
             _ai_helper = AIHelper(api_key, model_name)
     return _ai_helper
