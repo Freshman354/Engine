@@ -7,6 +7,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -1057,10 +1059,10 @@ body {
         const file = event.target.files[0];
         if (!file) return;
 
-        // Fix 3: client-side type check before anything goes to the server
+        // Client-side type check before anything goes to the server
         const ext = file.name.split('.').pop().toLowerCase();
-        if (!['csv', 'json'].includes(ext)) {
-            showError('Invalid file type. Please upload a .csv or .json file.');
+        if (!['csv', 'json', 'pdf', 'xlsx', 'xls'].includes(ext)) {
+            showError('Invalid file type. Please upload a .csv, .xlsx, .json, or .pdf file.');
             document.getElementById('faq-file-input').value = '';
             return;
         }
@@ -1076,15 +1078,17 @@ body {
 
     async function _validateUploadFile(file) {
         /**
-         * Client-side validation before sending to server.
-         * Returns { ok: true } or { ok: false, error: 'Row N: ...' }
+         * Client-side validation + parsing before sending to server.
+         * For PDF/XLSX we extract FAQs here and store them in parsedFAQs
+         * so startUpload() can import them directly without a server round-trip.
+         * Returns { ok: true, count, faqs? } or { ok: false, error }
          */
-        const ext  = file.name.split('.').pop().toLowerCase();
-        const text = await file.text();
+        const ext = file.name.split('.').pop().toLowerCase();
 
+        // ── JSON ──────────────────────────────────────────────────
         if (ext === 'json') {
             let rows;
-            try { rows = JSON.parse(text); }
+            try { rows = JSON.parse(await file.text()); }
             catch { return { ok: false, error: 'Invalid JSON — could not parse the file.' }; }
             if (!Array.isArray(rows)) return { ok: false, error: 'JSON must be an array of objects.' };
             for (let i = 0; i < rows.length; i++) {
@@ -1097,8 +1101,10 @@ body {
             return { ok: true, count: rows.length };
         }
 
+        // ── CSV ───────────────────────────────────────────────────
         if (ext === 'csv') {
-            const lines  = text.split(/\r?\n/).filter(l => l.trim());
+            const text    = await file.text();
+            const lines   = text.split(/\r?\n/).filter(l => l.trim());
             if (lines.length < 2) return { ok: false, error: 'CSV is empty or has no data rows.' };
             const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
             const qIdx    = headers.findIndex(h => h === 'question');
@@ -1106,7 +1112,6 @@ body {
             if (qIdx === -1) return { ok: false, error: 'CSV is missing a "Question" header column.' };
             if (aIdx === -1) return { ok: false, error: 'CSV is missing an "Answer" header column.' };
             for (let i = 1; i < lines.length; i++) {
-                // Basic CSV cell split (handles simple quoted fields)
                 const cells = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g) || [];
                 const clean = cells.map(c => c.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
                 if (!clean[qIdx]) return { ok: false, error: `Row ${i + 1}: Question is empty.` };
@@ -1115,36 +1120,150 @@ body {
             return { ok: true, count: lines.length - 1 };
         }
 
+        // ── XLSX / XLS ────────────────────────────────────────────
+        if (ext === 'xlsx' || ext === 'xls') {
+            if (typeof XLSX === 'undefined') return { ok: false, error: 'Excel parser not loaded yet — please try again.' };
+            const buf  = await file.arrayBuffer();
+            const wb   = XLSX.read(buf, { type: 'array' });
+            const ws   = wb.Sheets[wb.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+            if (!rows.length) return { ok: false, error: 'Spreadsheet appears to be empty.' };
+            const faqs = [];
+            for (let i = 0; i < rows.length; i++) {
+                const r = rows[i];
+                const q = (r.question || r.Question || r.q || r.Q || '').toString().trim();
+                const a = (r.answer   || r.Answer   || r.a || r.A || '').toString().trim();
+                if (!q) return { ok: false, error: `Row ${i + 2}: Question column is empty.` };
+                if (!a) return { ok: false, error: `Row ${i + 2}: Answer column is empty.` };
+                faqs.push({ id: `faq_${Date.now()}_${i}`, question: q, answer: a, triggers: [] });
+            }
+            return { ok: true, count: faqs.length, faqs };
+        }
+
+        // ── PDF ───────────────────────────────────────────────────
+        if (ext === 'pdf') {
+            if (typeof pdfjsLib === 'undefined') return { ok: false, error: 'PDF parser not loaded yet — please try again.' };
+            pdfjsLib.GlobalWorkerOptions.workerSrc =
+                'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            const buf      = await file.arrayBuffer();
+            const pdf      = await pdfjsLib.getDocument({ data: buf }).promise;
+            let fullText   = '';
+            for (let p = 1; p <= pdf.numPages; p++) {
+                const page    = await pdf.getPage(p);
+                const content = await page.getTextContent();
+                fullText     += content.items.map(s => s.str).join(' ') + '\n';
+            }
+
+            // Strategy 1: explicit Q: / A: markers
+            const qaRegex = /Q\s*[:：]\s*(.+?)\s*A\s*[:：]\s*(.+?)(?=Q\s*[:：]|$)/gis;
+            const faqs    = [];
+            let match;
+            while ((match = qaRegex.exec(fullText)) !== null) {
+                const q = match[1].trim();
+                const a = match[2].trim();
+                if (q && a) faqs.push({ id: `faq_${Date.now()}_${faqs.length}`, question: q, answer: a, triggers: [] });
+            }
+
+            if (faqs.length > 0) return { ok: true, count: faqs.length, faqs };
+
+            // Strategy 2: numbered list  "1. Question … Answer …"
+            const numbered = fullText.match(/\d+\.\s+.+/g) || [];
+            if (numbered.length >= 2) {
+                for (let i = 0; i < numbered.length - 1; i += 2) {
+                    const q = numbered[i].replace(/^\d+\.\s+/, '').trim();
+                    const a = numbered[i + 1].replace(/^\d+\.\s+/, '').trim();
+                    if (q && a) faqs.push({ id: `faq_${Date.now()}_${faqs.length}`, question: q, answer: a, triggers: [] });
+                }
+                if (faqs.length > 0) return { ok: true, count: faqs.length, faqs };
+            }
+
+            // Strategy 3: sentence pairs (fallback — every two sentences become a Q&A)
+            const sentences = fullText.split(/(?<=[.?!])\s+/).map(s => s.trim()).filter(s => s.length > 20);
+            if (sentences.length >= 2) {
+                for (let i = 0; i < sentences.length - 1; i += 2) {
+                    faqs.push({ id: `faq_${Date.now()}_${faqs.length}`, question: sentences[i], answer: sentences[i + 1], triggers: [] });
+                }
+                return { ok: true, count: faqs.length, faqs, warn: 'No Q: / A: markers found — FAQs were extracted automatically. Please review them.' };
+            }
+
+            return { ok: false, error: 'Could not extract any Q&A pairs from the PDF. Add "Q:" before questions and "A:" before answers for best results.' };
+        }
+
         return { ok: true };
     }
 
+    // Holds FAQs parsed client-side (PDF / XLSX) before upload
+    let parsedFAQs = null;
+
     async function startUpload() {
         if (!selectedFile) return;
-        const progressArea  = document.getElementById('progress-area');
-        const progressFill  = document.getElementById('progress-fill');
+        const progressArea   = document.getElementById('progress-area');
+        const progressFill   = document.getElementById('progress-fill');
         const progressStatus = document.getElementById('progress-status');
-        const submitBtn     = document.getElementById('upload-submit-btn');
+        const submitBtn      = document.getElementById('upload-submit-btn');
 
-        progressArea.style.display   = 'block';
-        progressFill.style.width     = '15%';
-        progressStatus.textContent   = 'Validating file…';
-        progressStatus.style.color   = '';
-        submitBtn.disabled           = true;
+        progressArea.style.display  = 'block';
+        progressFill.style.width    = '15%';
+        progressStatus.textContent  = 'Validating file…';
+        progressStatus.style.color  = '';
+        submitBtn.disabled          = true;
+        parsedFAQs = null;
 
-        // Fix 3: client-side validation before touching the network
         const validation = await _validateUploadFile(selectedFile);
         if (!validation.ok) {
-            progressFill.style.width   = '100%';
+            progressFill.style.width      = '100%';
             progressFill.style.background = 'var(--danger)';
-            progressStatus.textContent   = `❌ ${validation.error}`;
-            progressStatus.style.color   = 'var(--danger)';
-            submitBtn.disabled           = false;
+            progressStatus.textContent    = `❌ ${validation.error}`;
+            progressStatus.style.color    = 'var(--danger)';
+            submitBtn.disabled            = false;
             showError(validation.error);
             return;
         }
 
-        progressFill.style.width   = '40%';
-        progressStatus.textContent = `Uploading ${validation.count || ''} FAQs…`;
+        // Show any non-fatal warnings (e.g. PDF auto-extraction fallback)
+        if (validation.warn) showError(validation.warn);
+
+        // PDF and XLSX are parsed client-side — import directly without a server upload
+        if (validation.faqs) {
+            parsedFAQs = validation.faqs;
+            progressFill.style.width    = '60%';
+            progressStatus.textContent  = `Importing ${parsedFAQs.length} FAQs…`;
+            progressFill.style.background = '';
+
+            const updated = [...currentFAQs, ...parsedFAQs];
+            try {
+                const res  = await fetch('/api/faqs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ client_id: CLIENT_ID, faqs: updated })
+                });
+                progressFill.style.width = '100%';
+                const data = await res.json();
+                if (data.success) {
+                    currentFAQs = updated;
+                    progressStatus.textContent = `✅ Imported ${parsedFAQs.length} FAQs successfully.`;
+                    progressStatus.style.color = 'var(--success)';
+                    setTimeout(() => { closeUploadModal(); renderFAQs(); updateFaqCount(); showSuccess(`Imported ${parsedFAQs.length} FAQs.`); }, 1200);
+                } else {
+                    const errMsg = data.error || 'Import failed — please check your file.';
+                    progressStatus.textContent = `❌ ${errMsg}`;
+                    progressStatus.style.color = 'var(--danger)';
+                    submitBtn.disabled = false;
+                    showError(errMsg);
+                }
+            } catch {
+                const errMsg = 'Network error — import failed. Please try again.';
+                progressStatus.textContent = errMsg;
+                progressStatus.style.color = 'var(--danger)';
+                submitBtn.disabled = false;
+                showError(errMsg);
+            }
+            return;
+        }
+
+        // CSV / JSON — send raw file to server as before
+        progressFill.style.width    = '40%';
+        progressStatus.textContent  = `Uploading ${validation.count || ''} FAQs…`;
         progressFill.style.background = '';
 
         const formData = new FormData();
@@ -1161,7 +1280,6 @@ body {
                 progressStatus.style.color = 'var(--success)';
                 setTimeout(() => { closeUploadModal(); loadFAQs(); showSuccess(data.message); }, 1200);
             } else {
-                // Show the server's specific error (may include row number from server-side parsing)
                 const errMsg = data.error || 'Upload failed — please check the file format.';
                 progressStatus.textContent = `❌ ${errMsg}`;
                 progressStatus.style.color = 'var(--danger)';
