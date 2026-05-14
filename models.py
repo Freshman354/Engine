@@ -1499,6 +1499,11 @@ def save_faqs(client_id: str, faqs: list) -> int:
 
             quality = float(faq.get('quality_score', 0.0))
 
+            # Strip null bytes (0x00) that arrive from PDF/binary uploads
+            # and cause "ValueError: A string literal cannot contain NUL characters"
+            def _clean(val: str) -> str:
+                return str(val).replace('\x00', '').strip()
+
             cursor.execute(
                 """INSERT INTO faqs
                        (client_id, faq_id, question, answer, category,
@@ -1516,8 +1521,8 @@ def save_faqs(client_id: str, faqs: list) -> int:
                        is_active     = TRUE""",
                 (
                     client_id, faq_id,
-                    faq.get('question', '').strip(),
-                    faq.get('answer', '').strip(),
+                    _clean(faq.get('question', '')),
+                    _clean(faq.get('answer', '')),
                     faq.get('category', 'General'),
                     json.dumps(triggers),
                     json.dumps(tags),
