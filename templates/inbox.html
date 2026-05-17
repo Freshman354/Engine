@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Inbox — Lumvi Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --bg:         #0b0d12;
+  --surface:    #13161f;
+  --surface-2:  #1a1e2a;
+  --surface-3:  #22273a;
+  --border:     rgba(255,255,255,0.07);
+  --border-hi:  rgba(255,255,255,0.13);
+  --ink:        #f0f2f8;
+  --ink-2:      #8b92aa;
+  --ink-3:      #555d78;
+  --accent:     #7c5cfc;
+  --accent-dim: rgba(124,92,252,0.15);
+  --green:      #22c97a;
+  --green-dim:  rgba(34,201,122,0.12);
+  --red:        #f04560;
+  --red-dim:    rgba(240,69,96,0.12);
+  --amber:      #f5a623;
+  --amber-dim:  rgba(245,166,35,0.12);
+  --radius:     12px;
+  --radius-sm:  8px;
+  --radius-lg:  18px;
+  --font:       'DM Sans', sans-serif;
+  --mono:       'DM Mono', monospace;
+  --sidebar-w:  240px;
+  --header-h:   60px;
+  --panel-w:    400px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { font-family: var(--font); background: var(--bg); color: var(--ink); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+button { font-family: inherit; cursor: pointer; border: none; outline: none; }
+input, textarea, select { font-family: inherit; outline: none; }
+
+/* ── LAYOUT ── */
+.layout { display: grid; grid-template-columns: var(--sidebar-w) 1fr; grid-template-rows: var(--header-h) 1fr; min-height: 100vh; }
+
+/* ── SIDEBAR ── */
+.sidebar { grid-row: 1 / -1; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 0 12px 24px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.sidebar-logo { display: flex; align-items: center; gap: 10px; height: var(--header-h); padding: 0 8px; margin-bottom: 8px; }
+.sidebar-logo img { width: 28px; height: 28px; border-radius: 7px; }
+.sidebar-logo span { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
+.sidebar-label { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); padding: 16px 8px 6px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: var(--radius-sm); color: var(--ink-2); font-size: 13.5px; font-weight: 500; transition: all 0.15s; cursor: pointer; margin-bottom: 1px; position: relative; }
+.nav-item svg { flex-shrink: 0; opacity: 0.7; }
+.nav-item:hover { background: var(--surface-2); color: var(--ink); }
+.nav-item.active { background: var(--accent-dim); color: var(--accent); }
+.nav-item.active svg { opacity: 1; }
+.nav-badge { position: absolute; right: 10px; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 20px; min-width: 18px; text-align: center; }
+.sidebar-divider { height: 1px; background: var(--border); margin: 12px 0; }
+.sidebar-bottom { margin-top: auto; }
+.sidebar-user { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.user-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #a78bfa); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0; }
+.user-name { font-size: 13px; font-weight: 600; }
+.user-plan { font-size: 11px; color: var(--ink-3); }
+
+/* ── HEADER ── */
+.header { grid-column: 2; height: var(--header-h); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; background: var(--surface); position: sticky; top: 0; z-index: 10; }
+.header-left { display: flex; align-items: center; gap: 12px; }
+.header-title { font-size: 15px; font-weight: 600; }
+.header-count { font-size: 12px; color: var(--ink-3); background: var(--surface-2); border: 1px solid var(--border); border-radius: 20px; padding: 2px 10px; }
+
+/* ── BODY ── */
+.body { grid-column: 2; display: grid; grid-template-columns: 1fr var(--panel-w); height: calc(100vh - var(--header-h)); overflow: hidden; }
+
+/* ── TICKET LIST ── */
+.ticket-list-pane { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; }
+.list-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.client-select { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--ink); padding: 7px 10px; font-size: 13px; font-weight: 500; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238b92aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; min-width: 160px; }
+.filter-tabs { display: flex; gap: 4px; }
+.filter-tab { padding: 5px 12px; border-radius: 6px; font-size: 12.5px; font-weight: 500; color: var(--ink-3); background: transparent; border: 1px solid transparent; cursor: pointer; transition: all 0.15s; }
+.filter-tab:hover { background: var(--surface-2); color: var(--ink); }
+.filter-tab.active { background: var(--accent-dim); color: var(--accent); border-color: rgba(124,92,252,0.25); }
+.ticket-scroll { flex: 1; overflow-y: auto; }
+
+/* ── TICKET ROW ── */
+.ticket-row { display: flex; flex-direction: column; gap: 5px; padding: 14px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.12s; position: relative; }
+.ticket-row:hover { background: var(--surface-2); }
+.ticket-row.selected { background: var(--accent-dim); }
+.ticket-row.selected::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--accent); border-radius: 0 2px 2px 0; }
+
+.ticket-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ticket-customer { font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ticket-time { font-size: 11px; color: var(--ink-3); white-space: nowrap; flex-shrink: 0; }
+.ticket-reason { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ticket-footer { display: flex; align-items: center; gap: 6px; }
+
+.urgency-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.urgency-dot.high   { background: var(--red); }
+.urgency-dot.urgent { background: var(--red); box-shadow: 0 0 0 2px rgba(240,69,96,0.3); }
+.urgency-dot.normal { background: var(--amber); }
+.urgency-dot.low    { background: var(--ink-3); }
+
+.ticket-badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.ticket-badge.open        { background: var(--amber-dim); color: var(--amber); }
+.ticket-badge.in_progress { background: var(--accent-dim); color: var(--accent); }
+.ticket-badge.resolved    { background: var(--green-dim);  color: var(--green); }
+
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 10px; color: var(--ink-3); padding: 40px; text-align: center; }
+.empty-icon { font-size: 36px; opacity: 0.4; }
+.empty-title { font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.empty-sub { font-size: 12.5px; }
+
+/* ── DETAIL PANEL ── */
+.detail-panel { background: var(--surface); display: flex; flex-direction: column; overflow: hidden; }
+.detail-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 10px; color: var(--ink-3); text-align: center; padding: 32px; }
+.detail-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0; }
+.detail-header-left { min-width: 0; }
+.detail-customer { font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.detail-ticket-id { font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+.detail-header-right { display: flex; gap: 6px; flex-shrink: 0; }
+.detail-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0; }
+
+/* ── META SECTION ── */
+.detail-section { padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.detail-section-title { font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 10px; }
+.meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.meta-item { display: flex; flex-direction: column; gap: 2px; }
+.meta-label { font-size: 11px; color: var(--ink-3); font-weight: 500; }
+.meta-value { font-size: 13px; color: var(--ink); font-weight: 500; }
+.meta-value.email { color: var(--accent); font-size: 12.5px; }
+.meta-value.reason { grid-column: 1 / -1; color: var(--ink-2); font-size: 12.5px; font-style: italic; line-height: 1.5; }
+
+/* ── TRANSCRIPT ── */
+.transcript-list { display: flex; flex-direction: column; gap: 0; padding: 0; }
+.turn { padding: 10px 20px; display: flex; flex-direction: column; gap: 2px; }
+.turn.user     { background: transparent; }
+.turn.assistant { background: var(--surface-2); }
+.turn-role { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 3px; }
+.turn.user .turn-role     { color: var(--accent); }
+.turn.assistant .turn-role { color: var(--ink-3); }
+.turn-content { font-size: 13px; color: var(--ink); line-height: 1.6; }
+.turn-time { font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+
+/* ── RESOLUTION FOOTER ── */
+.detail-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+.resolve-row { display: flex; gap: 8px; }
+.resolution-input { flex: 1; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--ink); padding: 9px 12px; font-size: 13px; resize: none; min-height: 70px; transition: border-color 0.15s; }
+.resolution-input:focus { border-color: var(--accent); }
+.resolution-input::placeholder { color: var(--ink-3); }
+.status-select { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--ink); padding: 8px 10px; font-size: 13px; font-weight: 500; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238b92aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; padding-right: 26px; }
+
+/* ── BUTTONS ── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; transition: all 0.15s; white-space: nowrap; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #8f70fd; }
+.btn-secondary { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--surface-3); color: var(--ink); }
+.btn-success { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,201,122,0.2); }
+.btn-success:hover { background: rgba(34,201,122,0.2); }
+.btn-sm { padding: 6px 11px; font-size: 12px; }
+.btn-full { width: 100%; }
+.btn[disabled] { opacity: 0.4; pointer-events: none; }
+
+/* ── SPINNER ── */
+.spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── TOAST ── */
+.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 200; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toast { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border-hi); border-radius: var(--radius-sm); padding: 11px 15px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); font-size: 13px; font-weight: 500; color: var(--ink); min-width: 260px; pointer-events: all; animation: slide-in 0.2s ease; }
+.toast.success { border-left: 3px solid var(--green); }
+.toast.error   { border-left: 3px solid var(--red); }
+@keyframes slide-in { from { opacity:0; transform: translateX(16px); } }
+@keyframes slide-out { to   { opacity:0; transform: translateX(16px); } }
+.toast.out { animation: slide-out 0.2s ease forwards; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .header { grid-column: 1; }
+  .body { grid-column: 1; grid-template-columns: 1fr; }
+  .detail-panel { display: none; }
+  .detail-panel.show { display: flex; position: fixed; inset: 0; z-index: 50; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="https://lumvi.net/static/logo.jpg" alt="Lumvi" onerror="this.style.display='none'" />
+      <span>Lumvi</span>
+    </div>
+    <div class="sidebar-label">Workspace</div>
+    <div class="nav-item" onclick="location.href='/dashboard'">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-item" onclick="location.href='/clients'">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Clients
+    </div>
+    <div class="nav-item active">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.18 6.18l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+      Inbox
+      <span class="nav-badge" id="sidebarBadge" style="display:none">0</span>
+    </div>
+    <div class="nav-item" onclick="location.href='/analytics'">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Analytics
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-label">Settings</div>
+    <div class="nav-item" onclick="location.href='/integrations'">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      Integrations
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-bottom">
+      <div class="sidebar-user">
+        <div class="user-avatar">AG</div>
+        <div>
+          <div class="user-name">Agency Pro</div>
+          <div class="user-plan">Agency Plan</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── HEADER ── -->
+  <header class="header">
+    <div class="header-left">
+      <div class="header-title">Human Inbox</div>
+      <div class="header-count" id="headerCount">— tickets</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select class="client-select" id="clientSelectHeader" onchange="onClientChange()">
+        <!-- populated by JS -->
+      </select>
+      <button class="btn btn-secondary btn-sm" onclick="loadTickets()">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Refresh
+      </button>
+    </div>
+  </header>
+
+  <!-- ── BODY ── -->
+  <div class="body">
+
+    <!-- Ticket list -->
+    <div class="ticket-list-pane">
+      <div class="list-toolbar">
+        <div class="filter-tabs">
+          <button class="filter-tab active" data-status="open"        onclick="setFilter('open')">Open</button>
+          <button class="filter-tab"        data-status="in_progress" onclick="setFilter('in_progress')">In Progress</button>
+          <button class="filter-tab"        data-status="resolved"    onclick="setFilter('resolved')">Resolved</button>
+          <button class="filter-tab"        data-status="all"         onclick="setFilter('all')">All</button>
+        </div>
+      </div>
+      <div class="ticket-scroll" id="ticketScroll">
+        <div class="empty-state">
+          <div class="spinner"></div>
+          <div class="empty-title">Loading tickets…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail panel -->
+    <div class="detail-panel" id="detailPanel">
+      <div class="detail-empty">
+        <div style="font-size:32px;opacity:0.3">💬</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ink-2)">Select a ticket</div>
+        <div style="font-size:12.5px;color:var(--ink-3)">Click any ticket to view the full conversation and take action.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+/* ── CONFIG ── */
+const CLIENTS = (typeof LUMVI_CLIENTS !== 'undefined') ? LUMVI_CLIENTS : [
+  { client_id: 'client_abc123', company_name: 'Bloom Flower Shop' },
+  { client_id: 'client_def456', company_name: 'Peak Fitness Studio' },
+];
+
+/* ── STATE ── */
+let currentClient  = CLIENTS.length ? CLIENTS[0].client_id : '';
+let currentFilter  = 'open';
+let selectedTicket = null;
+let allTickets     = [];
+
+/* ── INIT ── */
+window.addEventListener('DOMContentLoaded', () => {
+  populateClientSelect();
+  if (currentClient) {
+    loadCounts();
+    loadTickets();
+  }
+});
+
+function populateClientSelect() {
+  const sel = document.getElementById('clientSelectHeader');
+  sel.innerHTML = CLIENTS.map(c =>
+    `<option value="${c.client_id}">${c.company_name}</option>`
+  ).join('');
+  if (CLIENTS.length) currentClient = CLIENTS[0].client_id;
+}
+
+function onClientChange() {
+  currentClient  = document.getElementById('clientSelectHeader').value;
+  selectedTicket = null;
+  renderDetailEmpty();
+  loadCounts();
+  loadTickets();
+}
+
+/* ── FILTER ── */
+function setFilter(status) {
+  currentFilter = status;
+  document.querySelectorAll('.filter-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.status === status);
+  });
+  loadTickets();
+}
+
+/* ── LOAD COUNTS ── */
+async function loadCounts() {
+  try {
+    const res  = await fetch(`/api/inbox/${currentClient}/counts`);
+    const data = await res.json();
+    if (!data.success) return;
+    const n = data.counts.total_open;
+    const badge = document.getElementById('sidebarBadge');
+    badge.textContent = n;
+    badge.style.display = n > 0 ? 'inline' : 'none';
+  } catch (_) {}
+}
+
+/* ── LOAD TICKETS ── */
+async function loadTickets() {
+  const scroll = document.getElementById('ticketScroll');
+  scroll.innerHTML = `<div class="empty-state"><div class="spinner"></div><div class="empty-title">Loading…</div></div>`;
+  document.getElementById('headerCount').textContent = '— tickets';
+
+  try {
+    const res  = await fetch(`/api/inbox/${currentClient}?status=${currentFilter}&limit=50`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    allTickets = data.tickets || [];
+    document.getElementById('headerCount').textContent =
+      `${data.total} ticket${data.total !== 1 ? 's' : ''}`;
+    renderTicketList(allTickets);
+  } catch (err) {
+    scroll.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Failed to load</div><div class="empty-sub">${err.message}</div></div>`;
+  }
+}
+
+function renderTicketList(tickets) {
+  const scroll = document.getElementById('ticketScroll');
+  if (!tickets.length) {
+    scroll.innerHTML = `<div class="empty-state"><div class="empty-icon">✓</div><div class="empty-title">No ${currentFilter === 'all' ? '' : currentFilter + ' '}tickets</div><div class="empty-sub">New handoffs from the chatbot appear here instantly.</div></div>`;
+    return;
+  }
+  scroll.innerHTML = tickets.map(t => `
+    <div class="ticket-row ${selectedTicket === t.ticket_id ? 'selected' : ''}"
+         onclick="selectTicket('${t.ticket_id}')">
+      <div class="ticket-top">
+        <span class="ticket-customer">${esc(t.customer_name || t.customer_email || 'Unknown visitor')}</span>
+        <span class="ticket-time">${timeAgo(t.created_at)}</span>
+      </div>
+      <div class="ticket-reason">${esc(t.reason || '—')}</div>
+      <div class="ticket-footer">
+        <div class="urgency-dot ${t.urgency || 'normal'}"></div>
+        <span class="ticket-badge ${t.status}">${formatStatus(t.status)}</span>
+        ${t.urgency === 'high' || t.urgency === 'urgent' ? '<span style="font-size:11px;color:var(--red);font-weight:600">High priority</span>' : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ── SELECT TICKET ── */
+async function selectTicket(ticketId) {
+  selectedTicket = ticketId;
+  // Highlight row
+  document.querySelectorAll('.ticket-row').forEach(r => {
+    r.classList.toggle('selected', r.onclick.toString().includes(ticketId));
+  });
+
+  const panel = document.getElementById('detailPanel');
+  panel.innerHTML = `<div class="detail-empty"><div class="spinner"></div><div style="color:var(--ink-3);font-size:13px">Loading ticket…</div></div>`;
+
+  try {
+    const res  = await fetch(`/api/inbox/${currentClient}/${ticketId}`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    renderDetail(data.ticket);
+  } catch (err) {
+    panel.innerHTML = `<div class="detail-empty"><div class="empty-icon">⚠️</div><div class="empty-title">Failed to load</div><div class="empty-sub">${err.message}</div></div>`;
+  }
+}
+
+function renderDetail(t) {
+  const panel     = document.getElementById('detailPanel');
+  const isResolved = t.status === 'resolved';
+
+  const transcriptHtml = (t.transcript || []).map(turn => `
+    <div class="turn ${turn.role}">
+      <div class="turn-role">${turn.role === 'user' ? '👤 Customer' : '🤖 Lumvi'}</div>
+      <div class="turn-content">${esc(turn.content)}</div>
+      ${turn.time ? `<div class="turn-time">${formatTime(turn.time)}</div>` : ''}
+    </div>
+  `).join('') || `<div style="padding:20px;color:var(--ink-3);font-size:13px">No transcript available for this session.</div>`;
+
+  panel.innerHTML = `
+    <div class="detail-header">
+      <div class="detail-header-left">
+        <div class="detail-customer">${esc(t.customer_name || t.customer_email || 'Unknown visitor')}</div>
+        <div class="detail-ticket-id">${t.ticket_id} · ${formatStatus(t.status)}</div>
+      </div>
+      <div class="detail-header-right">
+        ${t.customer_email ? `<a href="mailto:${esc(t.customer_email)}" class="btn btn-secondary btn-sm">Email</a>` : ''}
+      </div>
+    </div>
+
+    <div class="detail-body">
+      <!-- Meta -->
+      <div class="detail-section">
+        <div class="detail-section-title">Details</div>
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">Customer</span>
+            <span class="meta-value">${esc(t.customer_name || '—')}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Email</span>
+            <span class="meta-value email">${t.customer_email ? `<a href="mailto:${esc(t.customer_email)}" style="color:var(--accent)">${esc(t.customer_email)}</a>` : '—'}</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Urgency</span>
+            <span class="meta-value" style="display:flex;align-items:center;gap:6px">
+              <span class="urgency-dot ${t.urgency || 'normal'}"></span>
+              ${t.urgency || 'normal'}
+            </span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Created</span>
+            <span class="meta-value">${formatTime(t.created_at)}</span>
+          </div>
+          ${t.assigned_to ? `<div class="meta-item"><span class="meta-label">Assigned to</span><span class="meta-value">${esc(t.assigned_to)}</span></div>` : ''}
+          <div class="meta-item" style="grid-column:1/-1">
+            <span class="meta-label">Unanswered question</span>
+            <span class="meta-value reason">"${esc(t.reason || '—')}"</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Transcript -->
+      <div class="detail-section" style="flex:1;padding-bottom:0;border-bottom:none">
+        <div class="detail-section-title">Conversation</div>
+      </div>
+      <div class="transcript-list">${transcriptHtml}</div>
+    </div>
+
+    <!-- Footer -->
+    ${!isResolved ? `
+    <div class="detail-footer">
+      <textarea class="resolution-input" id="resolveNote" placeholder="Add a resolution note (optional)…">${esc(t.resolution_notes || '')}</textarea>
+      <div class="resolve-row">
+        <select class="status-select" id="statusSelect">
+          <option value="open"        ${t.status === 'open'        ? 'selected' : ''}>Open</option>
+          <option value="in_progress" ${t.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
+          <option value="resolved"    ${t.status === 'resolved'    ? 'selected' : ''}>Resolved</option>
+        </select>
+        <button class="btn btn-primary btn-full" onclick="saveTicketUpdate('${t.ticket_id}')">
+          Save Update
+        </button>
+      </div>
+      <button class="btn btn-success btn-full" onclick="resolveTicket('${t.ticket_id}')">
+        ✓ Mark as Resolved
+      </button>
+    </div>` : `
+    <div class="detail-footer">
+      <div style="display:flex;align-items:center;gap:8px;color:var(--green);font-size:13px;font-weight:600">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Resolved ${formatTime(t.updated_at)}
+      </div>
+      ${t.resolution_notes ? `<div style="font-size:12.5px;color:var(--ink-2);line-height:1.5">${esc(t.resolution_notes)}</div>` : ''}
+    </div>`}
+  `;
+}
+
+function renderDetailEmpty() {
+  document.getElementById('detailPanel').innerHTML = `
+    <div class="detail-empty">
+      <div style="font-size:32px;opacity:0.3">💬</div>
+      <div style="font-size:14px;font-weight:600;color:var(--ink-2)">Select a ticket</div>
+      <div style="font-size:12.5px;color:var(--ink-3)">Click any ticket to view the full conversation.</div>
+    </div>`;
+}
+
+/* ── TICKET ACTIONS ── */
+async function saveTicketUpdate(ticketId) {
+  const status = document.getElementById('statusSelect')?.value;
+  const notes  = document.getElementById('resolveNote')?.value || '';
+  await patchTicket(ticketId, { status, resolution_notes: notes });
+}
+
+async function resolveTicket(ticketId) {
+  const notes = document.getElementById('resolveNote')?.value || '';
+  await patchTicket(ticketId, { status: 'resolved', resolution_notes: notes });
+}
+
+async function patchTicket(ticketId, updates) {
+  try {
+    const res  = await fetch(`/api/inbox/${currentClient}/${ticketId}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(updates),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    showToast('Ticket updated successfully', 'success');
+    loadCounts();
+    loadTickets();
+    if (updates.status !== 'resolved') selectTicket(ticketId);
+    else renderDetailEmpty();
+  } catch (err) {
+    showToast(err.message || 'Failed to update ticket', 'error');
+  }
+}
+
+/* ── HELPERS ── */
+function esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1)  return 'just now';
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h/24)}d ago`;
+}
+
+function formatTime(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('en-US', {
+      month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  } catch { return iso; }
+}
+
+function formatStatus(s) {
+  return { open: 'Open', in_progress: 'In Progress', resolved: 'Resolved' }[s] || s;
+}
+
+function showToast(message, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  const icon = type === 'success'
+    ? `<svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`
+    : `<svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+  el.innerHTML = `${icon}<span>${message}</span>`;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 220); }, 3200);
+}
+</script>
+</body>
+</html>

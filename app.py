@@ -23,13 +23,12 @@ from io import StringIO
 from config import Config
 from ai_helper import get_ai_helper
 from paypalrestsdk import Payment, configure
-from werkzeug.middleware.proxy_fix import ProxyFix
+import webhooks as _webhooks       # Platform webhook ingestion (Shopify, Acuity)
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
-app.wsgi_app=ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # SECRET_KEY must be set in env — crash at startup rather than silently use a weak key
 _secret = os.environ.get("SECRET_KEY")
@@ -309,8 +308,22 @@ class User(UserMixin):
 
 @login_manager.user_loader
 def load_user(user_id):
-    user_data = models.get_user_by_id(int(user_id))
+    # PERF FIX: Flask-Login calls this on EVERY authenticated request to
+    # rebuild the session user. Without a cache, every page load opens a
+    # new DB connection just to re-fetch a row that hasn't changed. Under
+    # Render's free-tier DB the pool exhausts quickly, causing the first
+    # 1-2 login attempts to time-out and appear as "wrong password".
+    #
+    # Solution: store the user dict in the Flask session. The cache is
+    # busted on login and logout so it can never serve stale data.
+    uid = int(user_id)
+    cached = session.get('_user_cache')
+    if cached and isinstance(cached, dict) and cached.get('id') == uid:
+        return User(cached)
+    # Cache miss — query DB and warm the session cache
+    user_data = models.get_user_by_id(uid)
     if user_data:
+        session['_user_cache'] = dict(user_data)
         return User(user_data)
     return None
 
@@ -353,6 +366,21 @@ try:
         models.migrate_api_usage_log()
     if hasattr(models, 'migrate_kb_gaps'):
         models.migrate_kb_gaps()
+
+    # ── System 1: Agent tool tables (orders, appointment_slots, appointments, human_inbox) ──
+    try:
+        from tools import migrate_agent_tables
+        migrate_agent_tables()
+    except Exception as _agent_err:
+        print(f'⚠️  migrate_agent_tables failed: {_agent_err}')
+
+    # ── Platform webhook ingestion (Shopify, Acuity) ───────────────────
+    # Creates client_integrations + webhook_log tables if they don't exist.
+    # Safe to call on every startup — fully idempotent.
+    try:
+        _webhooks.migrate_integrations()
+    except Exception as _wh_err:
+        print(f"⚠️  webhooks.migrate_integrations error: {_wh_err}")
 
     # Ensure the conversations table exists.
     # This was previously (incorrectly) created inside log_conversation() on every
@@ -399,6 +427,10 @@ CORS(app, resources={
         "max_age": 3600
     }
 })
+
+# Register platform webhook receiver routes (/webhooks/shopify, /webhooks/acuity)
+# Must be called after the app is created and CORS is configured.
+_webhooks.register_webhook_routes(app)
 
 # Rate limiting
 # Use Redis when available (required for multi-worker correctness).
@@ -595,6 +627,97 @@ def notify_webhook(client_id, lead_data):
         app.logger.error(f'notify_webhook setup error: {e}')
 
 
+def _notify_handoff(client_id, client, config, ticket_id, reason,
+                    urgency, name, email, summary, method):
+    """
+    Notify the agency's contact email when a human handoff ticket is created.
+    Fires in a background daemon thread — never blocks the chat response.
+    Also fires the outbound CRM webhook if one is configured.
+    """
+    def _send():
+        try:
+            contact_info  = config.get('contact', {})
+            notify_email  = contact_info.get('email')
+            company_name  = (client or {}).get('company_name', 'your chatbot')
+            urgency_label = '🔴 High' if urgency == 'high' else '🟡 Normal'
+            customer_label = name or email or 'Unknown visitor'
+            inbox_url = f'https://lumvi.net/inbox?client_id={client_id}&ticket={ticket_id}'
+
+            if notify_email:
+                try:
+                    sender_info = models.get_email_from_for_client(client_id)
+                    msg = Message(
+                        subject=f"[{urgency_label}] Handoff needed — {customer_label}",
+                        sender=f"{sender_info['name']} <{sender_info['address']}>",
+                        recipients=[notify_email],
+                        html=f"""
+                        <div style="font-family:'DM Sans',sans-serif;max-width:560px;margin:0 auto;
+                                    background:#F7F4EF;padding:36px;border-radius:16px;">
+                          <h2 style="font-size:20px;font-weight:700;color:#1C1917;margin-bottom:4px;">
+                            Human Handoff Requested</h2>
+                          <p style="color:#A8A29E;font-size:13px;margin-bottom:24px;">
+                            via {company_name} · Ticket
+                            <code style="background:#E7E2DA;padding:2px 6px;border-radius:4px;">
+                              {ticket_id}</code></p>
+                          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+                            <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                           font-size:13px;color:#57534E;width:120px;">Customer</td>
+                                <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                           font-size:13px;font-weight:600;color:#1C1917;">
+                                  {customer_label}</td></tr>
+                            {'<tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;color:#57534E;">Email</td><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;font-weight:600;"><a href="mailto:' + email + '" style="color:#B8924A;">' + email + '</a></td></tr>' if email else ''}
+                            <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                           font-size:13px;color:#57534E;">Urgency</td>
+                                <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                           font-size:13px;font-weight:600;">{urgency_label}</td></tr>
+                            <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                           font-size:13px;color:#57534E;">Trigger</td>
+                                <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                           font-size:13px;color:#1C1917;">{method}</td></tr>
+                            <tr><td style="padding:10px 0;font-size:13px;color:#57534E;
+                                          vertical-align:top;padding-top:14px;">Question</td>
+                                <td style="padding:10px 0;padding-top:14px;font-size:13px;
+                                           font-style:italic;color:#1C1917;">"{reason[:300]}"</td></tr>
+                          </table>
+                          {'<div style="background:#fff;border:1px solid #E7E2DA;border-radius:10px;padding:16px;margin-bottom:20px;"><p style="font-size:12px;color:#A8A29E;margin:0 0 8px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Conversation summary</p><pre style="font-size:12px;color:#57534E;white-space:pre-wrap;margin:0;line-height:1.6;">' + summary[:800] + '</pre></div>' if summary else ''}
+                          <a href="{inbox_url}"
+                             style="display:inline-block;margin-top:4px;padding:11px 22px;
+                                    background:#B8924A;color:#fff;text-decoration:none;
+                                    border-radius:9px;font-weight:700;font-size:13.5px;">
+                            Open Inbox →</a>
+                          <p style="font-size:11px;color:#A8A29E;margin-top:20px;">
+                            Ticket ID: {ticket_id} · Lumvi Platform</p>
+                        </div>"""
+                    )
+                    mail.send(msg)
+                    app.logger.info(f"[Handoff] email sent ticket={ticket_id} to={notify_email}")
+                except Exception as _mail_err:
+                    app.logger.warning(f"[Handoff] email failed ticket={ticket_id}: {_mail_err}")
+
+            # Fire outbound CRM webhook if configured
+            webhook_url = config.get('integrations', {}).get('webhook_url')
+            if webhook_url:
+                _fire_webhook(webhook_url, {
+                    'event':     'handoff_created',
+                    'client_id': client_id,
+                    'ticket': {
+                        'ticket_id':      ticket_id,
+                        'urgency':        urgency,
+                        'reason':         reason,
+                        'customer_name':  name,
+                        'customer_email': email,
+                        'method':         method,
+                        'timestamp':      datetime.utcnow().isoformat(),
+                    }
+                }, client_id)
+
+        except Exception as _outer_err:
+            app.logger.error(f"[Handoff] _notify_handoff thread error: {_outer_err}")
+
+    import threading
+    threading.Thread(target=_send, daemon=True).start()
+
+
 @app.after_request
 def allow_widget_embedding(response):
     # Allow the chat widget to be iframed from any domain.
@@ -782,23 +905,28 @@ def match_faq(message, faqs, lead_triggers):
     return None, None
 
 
-def log_conversation(client_id, user_message, bot_response, matched=False, method='unknown'):
+def log_conversation(client_id, user_message, bot_response,
+                     matched=False, method='unknown', session_id=None):
     # NOTE: The conversations table is created once in models.init_db().
     # Do NOT run CREATE TABLE here — it fires a DDL statement on every chat
     # message, which is extremely expensive and serialises all DB writes.
+    # session_id column added by migrate_agent_tables() via
+    # ALTER TABLE conversations ADD COLUMN IF NOT EXISTS session_id TEXT.
     try:
         conn, cursor = models.get_db()
         cursor.execute(
             '''
-            INSERT INTO conversations (client_id, user_message, bot_response, matched, method)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO conversations
+                (client_id, user_message, bot_response, matched, method, session_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ''',
-            (client_id, user_message, bot_response, matched, method)
+            (client_id, user_message, bot_response, matched, method,
+             session_id or None)
         )
         conn.commit()
         cursor.close()
         conn.close()
-        app.logger.info(f'✅ Logged conversation for {client_id}')
+        app.logger.info(f'✅ Logged conversation for {client_id} session={session_id}')
     except Exception as e:
         app.logger.error(f'❌ Error logging conversation: {e}')
 
@@ -840,6 +968,27 @@ def get_client_owner_plan(client_id):
     except Exception as e:
         app.logger.error(f'get_client_owner_plan error: {e}')
         return 'free'  # safest default
+
+
+# PERF FIX: Cache the (owner, plan_type) for each client_id for 60 seconds.
+# get_client_owner() + get_user_by_id() are called on EVERY chat message just
+# to check the daily message limit. That's 2 extra DB round-trips per request
+# adding ~200-400ms on a cold Render DB connection.
+# The 60-second TTL means a plan upgrade takes effect within 1 minute — acceptable.
+_client_owner_cache: dict = {}  # {client_id: (owner_dict, expires_at)}
+
+def _get_cached_client_owner(client_id: str):
+    """Return client owner dict from cache, falling back to DB on miss/expiry."""
+    entry = _client_owner_cache.get(client_id)
+    if entry:
+        owner, expires_at = entry
+        if datetime.utcnow() < expires_at:
+            return owner
+    # Cache miss or expired — query DB
+    owner = models.get_client_owner(client_id)
+    if owner:
+        _client_owner_cache[client_id] = (owner, datetime.utcnow() + timedelta(seconds=60))
+    return owner
 
 
 def get_subscription_status(user):
@@ -948,6 +1097,10 @@ def chat():
         message = sanitize_input(data.get('message', ''))
         client_id = sanitize_input(data.get('client_id', 'demo'), max_length=50)
         conversation_history = data.get('history', [])
+        # session_id — generated by the widget on first load, stored in localStorage,
+        # sent with every message. Ties conversations, session memory, and inbox
+        # tickets together into one traceable thread.
+        session_id = sanitize_input(data.get('session_id', ''), max_length=100) or None
 
         if not message:
             return jsonify({'success': False, 'error': 'Message is required'}), 400
@@ -993,7 +1146,7 @@ def chat():
         # Only check for real (non-demo) clients so the demo widget is
         # never accidentally blocked.
         if client and client_id != 'demo':
-            owner = models.get_client_owner(client_id)
+            owner = _get_cached_client_owner(client_id)
             if owner:
                 plan_type = owner.get('plan_type', 'free')
                 daily_limit = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])['messages_per_day']
@@ -1024,7 +1177,7 @@ def chat():
             for trigger in lead_triggers:
                 if trigger.lower() in message_lower:
                     response_text = "I'd be happy to connect you with our team! What's the best email to reach you?"
-                    log_conversation(client_id, message, response_text, matched=True, method='lead_trigger')
+                    log_conversation(client_id, message, response_text, matched=True, method='lead_trigger', session_id=session_id)
                     return jsonify({
                         'success': True,
                         'response': response_text,
@@ -1062,7 +1215,8 @@ def chat():
                     conversation_history=convo_history,
                     client_id=client_id,
                     lead_triggers=lead_triggers,
-                    kb_version=kb_version,        # ← NEW
+                    kb_version=kb_version,
+                    session_id=session_id,      # Phase 3 persistent memory + inbox transcript linkage
                 )
 
                 response_text = result.get('response', '')
@@ -1070,27 +1224,91 @@ def chat():
                 confidence    = result.get('confidence', 0.0)
                 from_cache    = result.get('method') == 'cache'
 
-                # Catch any late lead detection from inside the pipeline
+                # ── HANDOFF: contact_request or is_lead from pipeline ─────────
+                # When the AI returns a contact_request action (IDK, confidence
+                # gate, frustration escalation), create a human_inbox ticket
+                # immediately — don't wait for the user to fill in a lead form.
+                _action     = result.get('action') or {}
+                _is_handoff = (
+                    _action.get('type') == 'contact_request' or
+                    result.get('is_lead')
+                )
+                if _is_handoff and client_id != 'demo':
+                    _handoff   = result.get('handoff') or {}
+                    _sess_mem  = _handoff.get('session_memory') or result.get('lead_metadata') or {}
+                    _reason    = (_handoff.get('unanswered_question') or message or 'User triggered handoff')
+                    _urgency   = 'high' if _sess_mem.get('frustration_score', 0) >= 3 else 'normal'
+                    _transcript = _handoff.get('transcript') or []
+                    _summary   = '\n'.join(
+                        f"{t['role'].upper()}: {t['content']}"
+                        for t in _transcript[-6:]
+                    ) if _transcript else message
+
+                    try:
+                        from tools import escalate_to_human as _escalate
+                        _ticket = _escalate(
+                            client_id      = client_id,
+                            session_id     = session_id or '',
+                            reason         = _reason[:500],
+                            customer_email = _sess_mem.get('email') or '',
+                            customer_name  = _sess_mem.get('name')  or '',
+                            summary        = _summary[:2000],
+                            urgency        = _urgency,
+                        )
+                        if _ticket.get('success'):
+                            _ticket_id = _ticket.get('ticket_id', '')
+                            app.logger.info(
+                                f"[Handoff] ticket={_ticket_id} method={method} client={client_id}"
+                            )
+                            _notify_handoff(
+                                client_id = client_id,
+                                client    = client,
+                                config    = config,
+                                ticket_id = _ticket_id,
+                                reason    = _reason,
+                                urgency   = _urgency,
+                                name      = _sess_mem.get('name')  or '',
+                                email     = _sess_mem.get('email') or '',
+                                summary   = _summary,
+                                method    = method,
+                            )
+                    except Exception as _esc_err:
+                        app.logger.warning(f"[Handoff] escalation non-critical: {_esc_err}")
+
+                    log_conversation(
+                        client_id, message, response_text,
+                        matched=True, method=method, session_id=session_id
+                    )
+                    return jsonify({
+                        'success':               True,
+                        'response':              response_text,
+                        'trigger_lead_collection': True,
+                        'method':                method,
+                        'contact_info':          config.get('contact', {}),
+                        'session_id':            session_id,
+                    })
+
+                # Catch any remaining is_lead signals not caught above
                 if result.get('is_lead'):
-                    log_conversation(client_id, message, response_text, matched=True, method='lead_pipeline')
+                    log_conversation(client_id, message, response_text, matched=True, method='lead_pipeline', session_id=session_id)
                     return jsonify({
                         'success': True,
                         'response': response_text,
                         'trigger_lead_collection': True,
                         'method': 'lead_pipeline',
-                        'contact_info': config.get('contact', {})
+                        'contact_info': config.get('contact', {}),
+                        'session_id': session_id,
                     })
 
                 if response_text:
                     matched = confidence > 0.4
-                    log_conversation(client_id, message, response_text, matched=matched, method=method)
+                    log_conversation(client_id, message, response_text, matched=matched, method=method, session_id=session_id)
                     app.logger.info(
                         f"[AI Match] method={method} confidence={confidence:.2f} "
                         f"response_len={len(response_text)} cached={from_cache}"
                     )
 
-                    # Summarise long conversations non-blocking — must be called from
-                    # app.py because ai_helper has no reference to the Flask app logger.
+                    # Summarise long conversations non-blocking
                     if not from_cache and client_id != 'demo':
                         try:
                             ai_helper.maybe_summarise(client_id, convo_history)
@@ -1102,6 +1320,7 @@ def chat():
                         'response':   response_text,
                         'confidence': confidence,
                         'method':     method,
+                        'session_id': session_id,   # echoed so widget can store it
                     })
 
             except Exception as ai_error:
@@ -1115,7 +1334,7 @@ def chat():
                 f"score={confidence:.3f} threshold=0.68"
             )
             response_text = best_faq.get('answer')
-            log_conversation(client_id, message, response_text, matched=True, method='keyword_fallback')
+            log_conversation(client_id, message, response_text, matched=True, method='keyword_fallback', session_id=session_id)
             return jsonify({
                 'success': True,
                 'response': response_text,
@@ -1128,7 +1347,7 @@ def chat():
             'fallback_message',
             "I'm not sure about that. Would you like to speak with our team? Type 'contact'!"
         )
-        log_conversation(client_id, message, fallback, matched=False, method='fallback')
+        log_conversation(client_id, message, fallback, matched=False, method='fallback', session_id=session_id)
         return jsonify({
             'success': True,
             'response': fallback,
@@ -1191,7 +1410,10 @@ def submit_lead():
             user_summary,
             "Thank you! We've received your information and will be in touch soon.",
             matched=True,
-            method='lead_captured'
+            method='lead_captured',
+            session_id=sanitize_input(
+                (request.json or {}).get('session_id', ''), max_length=100
+            ) or None
         )
 
         app.logger.info(f'Lead captured for client: {client_id}')
@@ -1295,9 +1517,9 @@ def signup():
             return render_template('signup.html', error='An account with that email already exists',
                                    referral_code=referral_code, plan_param=plan_from_form)
 
-        # Set 14-day free trial expiry for paid plans
+        # Set 7-day free trial expiry for paid plans
         if initial_plan != 'free':
-            models.set_trial_expiry(user_id, days=14)
+            models.set_trial_expiry(user_id, days=7)
 
         if referral_code:
             affiliate = models.get_affiliate_by_code(referral_code)
@@ -1437,6 +1659,7 @@ def login():
                     app.logger.info(f"Auto-downgraded user {user_data['id']} to free on login")
 
             user = User(user_data)
+            session.pop('_user_cache', None)  # bust cache so load_user re-fetches on next request
             login_user(user)
             models.track_event('login', user_id=user_data['id'], metadata={'email': email})
 
@@ -1455,6 +1678,7 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
+    session.pop('_user_cache', None)  # clear cached user data
     logout_user()
     return redirect(url_for('login'))
 
@@ -2015,7 +2239,443 @@ def get_webhook_logs():
     return jsonify({'success': True, 'logs': models.get_webhook_logs(client_id, limit=20)})
 
 
-@app.route('/api/admin/test-webhook', methods=['POST'])
+# =====================================================================
+# PLATFORM INTEGRATIONS — Shopify / Acuity webhook setup
+# (distinct from the existing /api/admin/webhooks routes which handle
+#  outbound Lumvi → CRM webhooks; these handle inbound platform → Lumvi)
+# =====================================================================
+
+@app.route('/integrations')
+@login_required
+def integrations_page():
+    """
+    Agency dashboard — Platform Integrations page.
+    Lets operators connect Shopify / Acuity for each of their clients.
+    Requires Pro or Agency plan (webhooks feature flag).
+    """
+    fresh_user  = models.get_user_by_id(current_user.id)
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+
+    if not plan_limits.get('webhooks'):
+        # Redirect to upgrade page rather than a plain 403
+        return redirect(url_for('dashboard') + '?upgrade=webhooks')
+
+    clients = models.get_user_clients(current_user.id)
+    base_url = os.environ.get('APP_BASE_URL', 'https://app.lumvi.ai')
+
+    return render_template(
+        'integrations.html',
+        user=current_user,
+        plan_type=plan_type,
+        plan_limits=plan_limits,
+        clients=clients,
+        base_url=base_url,
+    )
+
+
+@app.route('/api/integrations/<client_id>', methods=['POST'])
+@login_required
+def create_platform_integration(client_id):
+    """
+    Connect or update a platform integration for a client.
+
+    Body:  { platform, webhook_secret, platform_config? }
+    Returns: { success, webhook_url, instructions }
+
+    Security:
+      • Ownership: caller must own client_id
+      • Plan:      requires webhooks feature (Pro / Agency)
+      • Input:     platform must be 'shopify' or 'acuity'; secret non-empty
+    """
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
+    if not plan_limits.get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+
+    data     = request.get_json(force=True) or {}
+    platform = (data.get('platform') or '').lower().strip()
+    secret   = (data.get('webhook_secret') or '').strip()
+    config   = data.get('platform_config') or {}
+
+    if platform not in ('shopify', 'acuity'):
+        return jsonify({'success': False, 'error': 'platform must be shopify or acuity'}), 400
+    if not secret:
+        return jsonify({'success': False, 'error': 'webhook_secret is required'}), 400
+
+    ok = _webhooks.upsert_integration(client_id, platform, secret, config)
+    if not ok:
+        return jsonify({'success': False, 'error': 'Failed to save integration'}), 500
+
+    base_url    = os.environ.get('APP_BASE_URL', 'https://app.lumvi.ai')
+    webhook_url = f'{base_url}/webhooks/{platform}/{client_id}'
+
+    app.logger.info(
+        f"[Integration] user={current_user.id} connected platform={platform} "
+        f"client={client_id}"
+    )
+
+    return jsonify({
+        'success':      True,
+        'platform':     platform,
+        'webhook_url':  webhook_url,
+        'instructions': _webhooks._onboarding_instructions(platform, webhook_url),
+    }), 200
+
+
+@app.route('/api/integrations/<client_id>', methods=['GET'])
+@login_required
+def list_platform_integrations(client_id):
+    """
+    List all active integrations for a client (secrets redacted).
+    Also includes the live webhook URL for each connected platform.
+    """
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
+    if not plan_limits.get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+
+    integrations = _webhooks.list_integrations(client_id)
+    base_url     = os.environ.get('APP_BASE_URL', 'https://app.lumvi.ai')
+    for i in integrations:
+        i['webhook_url'] = f'{base_url}/webhooks/{i["platform"]}/{client_id}'
+
+    return jsonify({'success': True, 'integrations': integrations}), 200
+
+
+@app.route('/api/integrations/<client_id>/<platform>', methods=['DELETE'])
+@login_required
+def delete_platform_integration(client_id, platform):
+    """
+    Deactivate a platform integration.
+    Existing data (orders, appointments) is preserved — only future
+    webhook events will be rejected.
+    """
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
+    if not plan_limits.get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+
+    if platform not in ('shopify', 'acuity'):
+        return jsonify({'success': False, 'error': 'Unknown platform'}), 400
+
+    ok = _webhooks.delete_integration(client_id, platform)
+    if not ok:
+        return jsonify({'success': False, 'error': 'Failed to deactivate integration'}), 500
+
+    app.logger.info(
+        f"[Integration] user={current_user.id} disconnected platform={platform} "
+        f"client={client_id}"
+    )
+    return jsonify({'success': True, 'platform': platform}), 200
+
+
+@app.route('/api/integrations/<client_id>/log', methods=['GET'])
+@login_required
+def get_integration_log(client_id):
+    """
+    Return the last 20 inbound webhook events for a client.
+    Used by the integrations dashboard activity log.
+    """
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
+    if not plan_limits.get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+
+    limit = min(int(request.args.get('limit', 20)), 100)
+
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute(
+            """
+            SELECT platform, event_type, status, payload_hash, error_msg, created_at
+            FROM webhook_log
+            WHERE client_id = %s
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            (client_id, limit)
+        )
+        rows = cursor.fetchall()
+        log  = [
+            {
+                'platform':   row['platform'],
+                'event_type': row['event_type'],
+                'status':     row['status'],
+                'ref':        (row.get('payload_hash') or '')[:8] or '—',
+                'error':      row.get('error_msg'),
+                'time':       str(row.get('created_at', '')),
+            }
+            for row in rows
+        ]
+        return jsonify({'success': True, 'log': log}), 200
+    except Exception as e:
+        app.logger.error(f"[IntegrationLog] error: {e}")
+        return jsonify({'success': False, 'error': 'Failed to load log'}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+# =====================================================================
+# HUMAN INBOX — read, claim, and resolve handoff tickets
+# Tickets are written by tools.escalate_to_human() which is called
+# from the chat route whenever the AI pipeline returns contact_request.
+# =====================================================================
+
+@app.route('/inbox')
+@login_required
+def inbox_page():
+    """Render the human inbox dashboard."""
+    clients = models.get_user_clients(current_user.id)
+    return render_template('inbox.html', user=current_user, clients=clients)
+
+
+@app.route('/api/inbox/<client_id>', methods=['GET'])
+@login_required
+def list_inbox_tickets(client_id):
+    """
+    List tickets for a client, sorted by urgency then time.
+    Query params: status (open|in_progress|resolved|all), limit, offset
+    """
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    status = request.args.get('status', 'open')
+    limit  = min(int(request.args.get('limit',  50)), 200)
+    offset = max(int(request.args.get('offset',  0)),   0)
+
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        where  = "client_id = %s"
+        params = [client_id]
+        if status != 'all':
+            where  += " AND status = %s"
+            params.append(status)
+
+        cursor.execute(
+            f"""
+            SELECT ticket_id, session_id, reason, customer_email, customer_name,
+                   summary, urgency, status, assigned_to, resolution_notes,
+                   created_at, updated_at
+            FROM human_inbox
+            WHERE {where}
+            ORDER BY
+                CASE urgency
+                    WHEN 'urgent' THEN 1 WHEN 'high' THEN 2
+                    WHEN 'normal' THEN 3 ELSE 4
+                END,
+                created_at DESC
+            LIMIT %s OFFSET %s
+            """,
+            params + [limit, offset]
+        )
+        rows = cursor.fetchall()
+        cursor.execute(
+            f"SELECT COUNT(*) AS n FROM human_inbox WHERE {where}", params
+        )
+        total = cursor.fetchone()['n']
+        tickets = [
+            {
+                'ticket_id':        row['ticket_id'],
+                'session_id':       row['session_id'],
+                'reason':           row['reason'],
+                'customer_email':   row['customer_email'],
+                'customer_name':    row['customer_name'],
+                'summary':          row['summary'],
+                'urgency':          row['urgency'],
+                'status':           row['status'],
+                'assigned_to':      row['assigned_to'],
+                'resolution_notes': row['resolution_notes'],
+                'created_at':  row['created_at'].isoformat() if row['created_at'] else '',
+                'updated_at':  row['updated_at'].isoformat() if row['updated_at'] else '',
+            }
+            for row in rows
+        ]
+        return jsonify({
+            'success': True, 'tickets': tickets,
+            'total': total, 'limit': limit, 'offset': offset,
+        }), 200
+    except Exception as e:
+        app.logger.error(f"[Inbox] list error client={client_id}: {e}")
+        return jsonify({'success': False, 'error': 'Failed to load tickets'}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+@app.route('/api/inbox/<client_id>/<ticket_id>', methods=['GET'])
+@login_required
+def get_inbox_ticket(client_id, ticket_id):
+    """Return one ticket in full, including the conversation transcript."""
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute(
+            """
+            SELECT ticket_id, session_id, reason, customer_email, customer_name,
+                   summary, urgency, status, assigned_to, resolution_notes,
+                   created_at, updated_at
+            FROM human_inbox
+            WHERE client_id = %s AND ticket_id = %s
+            """,
+            (client_id, ticket_id)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({'success': False, 'error': 'Ticket not found'}), 404
+
+        ticket = {
+            'ticket_id':        row['ticket_id'],
+            'session_id':       row['session_id'],
+            'reason':           row['reason'],
+            'customer_email':   row['customer_email'],
+            'customer_name':    row['customer_name'],
+            'summary':          row['summary'],
+            'urgency':          row['urgency'],
+            'status':           row['status'],
+            'assigned_to':      row['assigned_to'],
+            'resolution_notes': row['resolution_notes'],
+            'created_at':  row['created_at'].isoformat() if row['created_at'] else '',
+            'updated_at':  row['updated_at'].isoformat() if row['updated_at'] else '',
+        }
+
+        # Pull the full conversation transcript for this session
+        transcript = []
+        if row['session_id']:
+            cursor.execute(
+                """
+                SELECT user_message, bot_response, timestamp, method
+                FROM conversations
+                WHERE client_id = %s AND session_id = %s
+                ORDER BY timestamp ASC
+                LIMIT 100
+                """,
+                (client_id, row['session_id'])
+            )
+            for t in cursor.fetchall():
+                if t['user_message']:
+                    transcript.append({
+                        'role': 'user', 'content': t['user_message'],
+                        'time': t['timestamp'].isoformat() if t['timestamp'] else '',
+                    })
+                if t['bot_response']:
+                    transcript.append({
+                        'role': 'assistant', 'content': t['bot_response'],
+                        'method': t.get('method', ''),
+                        'time': t['timestamp'].isoformat() if t['timestamp'] else '',
+                    })
+
+        ticket['transcript'] = transcript
+        return jsonify({'success': True, 'ticket': ticket}), 200
+    except Exception as e:
+        app.logger.error(f"[Inbox] get error ticket={ticket_id}: {e}")
+        return jsonify({'success': False, 'error': 'Failed to load ticket'}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+@app.route('/api/inbox/<client_id>/<ticket_id>', methods=['PATCH'])
+@login_required
+def update_inbox_ticket(client_id, ticket_id):
+    """Update status, assigned_to, or resolution_notes on a ticket."""
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    data = request.get_json(force=True) or {}
+    allowed_statuses = {'open', 'in_progress', 'resolved'}
+
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute(
+            "SELECT status FROM human_inbox WHERE client_id = %s AND ticket_id = %s",
+            (client_id, ticket_id)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return jsonify({'success': False, 'error': 'Ticket not found'}), 404
+
+        updates = {}
+        new_status = (data.get('status') or '').lower().strip()
+        if new_status:
+            if new_status not in allowed_statuses:
+                return jsonify({'success': False,
+                                'error': f'status must be one of {allowed_statuses}'}), 400
+            if row['status'] == 'resolved' and new_status != 'resolved':
+                return jsonify({'success': False,
+                                'error': 'Resolved tickets cannot be reopened'}), 400
+            updates['status'] = new_status
+        if 'assigned_to' in data:
+            updates['assigned_to'] = sanitize_input(str(data['assigned_to'] or ''), 200)
+        if 'resolution_notes' in data:
+            updates['resolution_notes'] = sanitize_input(str(data['resolution_notes'] or ''), 2000)
+        if not updates:
+            return jsonify({'success': False, 'error': 'No fields to update'}), 400
+
+        updates['updated_at'] = datetime.utcnow()
+        set_clause = ', '.join(f"{k} = %s" for k in updates)
+        cursor.execute(
+            f"UPDATE human_inbox SET {set_clause} WHERE client_id = %s AND ticket_id = %s",
+            list(updates.values()) + [client_id, ticket_id]
+        )
+        conn.commit()
+        app.logger.info(
+            f"[Inbox] ticket={ticket_id} updated by user={current_user.id} "
+            f"fields={list(updates.keys())}"
+        )
+        return jsonify({'success': True, 'ticket_id': ticket_id}), 200
+    except Exception as e:
+        app.logger.error(f"[Inbox] update error ticket={ticket_id}: {e}")
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        return jsonify({'success': False, 'error': 'Failed to update ticket'}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+@app.route('/api/inbox/<client_id>/counts', methods=['GET'])
+@login_required
+def get_inbox_counts(client_id):
+    """Open/in_progress/resolved counts — used by the sidebar badge."""
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute(
+            "SELECT status, COUNT(*) AS n FROM human_inbox WHERE client_id = %s GROUP BY status",
+            (client_id,)
+        )
+        counts = {'open': 0, 'in_progress': 0, 'resolved': 0}
+        for row in cursor.fetchall():
+            if row['status'] in counts:
+                counts[row['status']] = row['n']
+        counts['total_open'] = counts['open'] + counts['in_progress']
+        return jsonify({'success': True, 'counts': counts}), 200
+    except Exception as e:
+        app.logger.error(f"[Inbox] counts error client={client_id}: {e}")
+        return jsonify({'success': False, 'error': 'Failed to load counts'}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
 @login_required
 def test_webhook():
     """
@@ -2871,7 +3531,25 @@ def delete_all_faqs():
         if not models.verify_client_ownership(current_user.id, client_id):
             return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
-        models.delete_all_faqs(client_id)
+        # Delete from both tables. models.delete_all_faqs() covers the primary
+        # knowledge_base table; the direct SQL below covers the legacy faqs table
+        # and acts as a hard fallback if the models function doesn't exist yet.
+        if hasattr(models, 'delete_all_faqs'):
+            models.delete_all_faqs(client_id)
+        else:
+            app.logger.warning("[delete_all_faqs] models.delete_all_faqs not found — using direct SQL fallback")
+
+        # Always delete from both tables directly to guarantee clean state
+        try:
+            conn, cursor = models.get_db()
+            cursor.execute('DELETE FROM faqs WHERE client_id = %s', (client_id,))
+            cursor.execute('DELETE FROM knowledge_base WHERE client_id = %s', (client_id,))
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception as _del_err:
+            app.logger.error(f"[delete_all_faqs] Direct SQL delete failed: {_del_err}")
+
         cache_utils.bump_kb_version(client_id)
         app.logger.info(f'[Cache] KB invalidated after delete-all: client={client_id}')
         app.logger.info(f'All FAQs deleted for client {client_id} by user {current_user.id}')
@@ -2882,16 +3560,87 @@ def delete_all_faqs():
         return jsonify({'success': False, 'error': 'Failed to delete FAQs'}), 500
 
 
+def _save_legacy_faqs(client_id: str, chunks: list):
+    """Insert enriched chunks into the legacy faqs table (backward compat)."""
+    conn, cursor = models.get_db()
+    saved = 0
+    try:
+        for chunk in chunks:
+            faq_id = str(uuid.uuid4())
+            cursor.execute(
+                '''INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers)
+                   VALUES (%s, %s, %s, %s, %s, %s)''',
+                (
+                    client_id, faq_id,
+                    chunk['title'],
+                    chunk['content'],
+                    chunk.get('category', 'General'),
+                    json.dumps(chunk.get('tags', []))
+                )
+            )
+            saved += 1
+        conn.commit()
+    except Exception as _e:
+        app.logger.warning(f"[Upload/BG] Legacy FAQ save error (non-critical): {_e}")
+        conn.rollback()
+    finally:
+        cursor.close()
+        conn.close()
+    return saved
+
+
+def _bg_enrich_and_save(client_id: str, valid_faqs: list):
+    """
+    Background worker: enrich → chunk → embed → save.
+    Runs in a daemon thread so the HTTP response is returned immediately.
+    The entire pipeline (Gemini enrichment + per-item embedding) can take
+    30-120 seconds for a large file — it must never block the request cycle.
+    """
+    with app.app_context():
+        try:
+            app.logger.info(f"[Upload/BG] starting enrich for client={client_id} items={len(valid_faqs)}")
+            if ai_helper and ai_helper.enabled:
+                chunks = ai_helper.enrich_and_chunk(valid_faqs, client_id)
+            else:
+                chunks = [
+                    {
+                        'kb_id':     str(uuid.uuid4()),
+                        'title':     item['question'],
+                        'content':   item['answer'],
+                        'type':      'faq',
+                        'category':  item.get('category', 'General'),
+                        'tags':      item.get('tags', []),
+                        'embedding': [],
+                        'metadata':  {'source': 'upload'},
+                        'quality':   item.get('quality_score', 0.75),
+                    }
+                    for item in valid_faqs
+                ]
+
+            if not chunks:
+                app.logger.warning(f"[Upload/BG] enrich returned 0 chunks for client={client_id}")
+                return
+
+            kb_saved  = models.save_knowledge_chunks(client_id, chunks)
+            faq_saved = _save_legacy_faqs(client_id, chunks)
+            cache_utils.bump_kb_version(client_id)
+            app.logger.info(
+                f"[Upload/BG] done client={client_id} kb_saved={kb_saved} faq_saved={faq_saved}"
+            )
+        except Exception as e:
+            app.logger.error(f"[Upload/BG] error for client={client_id}: {e}", exc_info=True)
+
+
 @app.route('/api/faq/upload', methods=['POST'])
 @login_required
 def upload_faqs():
     """
     Smart upload pipeline:
-      1. Parse file (CSV / Excel / PDF)
-      2. AI enrichment: tags, category, dedup, quality score
-      3. Chunk long content
-      4. Embed + store in knowledge_base
-      5. Also save to legacy faqs table for backward compat
+      1. Parse file (CSV / Excel / PDF)           — synchronous, fast
+      2. Validate + basic enrichment              — synchronous, fast
+      3. AI enrichment + embed + save             — BACKGROUND THREAD
+         (enrich_and_chunk makes 100s of Gemini calls for large files;
+          running it synchronously caused the 3-5 minute hang)
     """
     try:
         client_id = request.form.get('client_id')
@@ -2907,7 +3656,7 @@ def upload_faqs():
 
         filename = file.filename.lower()
 
-        # ── Parse raw items from file ─────────────────────────────────
+        # ── Parse raw items from file (fast, synchronous) ────────────
         if filename.endswith('.csv'):
             raw_items = process_csv_upload(file)
         elif filename.endswith(('.xlsx', '.xls')):
@@ -2922,7 +3671,7 @@ def upload_faqs():
 
         app.logger.info(f"[Upload] client={client_id} raw_items={len(raw_items)} file={filename}")
 
-        # ── Validate + enrich (dedup, quality score, triggers, tags) ─
+        # ── Validate + dedup (fast, synchronous) ─────────────────────
         valid_faqs, errors = models.validate_and_enrich_faqs(raw_items, client_id)
 
         if errors:
@@ -2938,71 +3687,30 @@ def upload_faqs():
                 'validation_errors': errors[:10],
             }), 400
 
-        # ── AI enrichment + chunking pipeline ────────────────────────
-        if ai_helper and ai_helper.enabled:
-            chunks = ai_helper.enrich_and_chunk(valid_faqs, client_id)
-        else:
-            chunks = []
-            for item in valid_faqs:
-                chunks.append({
-                    'kb_id':      str(uuid.uuid4()),
-                    'title':      item['question'],
-                    'content':    item['answer'],
-                    'type':       'faq',
-                    'category':   item.get('category', 'General'),
-                    'tags':       item.get('tags', []),
-                    'embedding':  [],
-                    'metadata':   {'source': 'upload'},
-                    'quality':    item.get('quality_score', 0.75),
-                })
-
-        if not chunks:
-            return jsonify({'success': False, 'error': 'No valid content to import after processing.'}), 400
-
-        # ── Save to knowledge_base (Phase 2 primary store) ───────────
-        kb_saved = models.save_knowledge_chunks(client_id, chunks)
-
-        # ── Also save to legacy faqs table (backward compat) ─────────
-        faq_saved = 0
-        conn, cursor = models.get_db()
-        try:
-            for chunk in chunks:
-                if chunk.get('type') == 'faq' or True:   # save all types
-                    faq_id = str(uuid.uuid4())
-                    cursor.execute(
-                        '''INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers)
-                           VALUES (%s, %s, %s, %s, %s, %s)''',
-                        (
-                            client_id, faq_id,
-                            chunk['title'],
-                            chunk['content'],
-                            chunk.get('category', 'General'),
-                            json.dumps(chunk.get('tags', []))
-                        )
-                    )
-                    faq_saved += 1
-            conn.commit()
-        except Exception as _e:
-            app.logger.warning(f"[Upload] Legacy FAQ save error (non-critical): {_e}")
-            conn.rollback()
-        finally:
-            cursor.close()
-            conn.close()
-
-        app.logger.info(
-            f"[Upload] client={client_id} kb_saved={kb_saved} faq_saved={faq_saved}"
+        # ── AI enrichment + embed + save → background thread ─────────
+        # enrich_and_chunk calls Gemini once per item (paraphrase + tags +
+        # category) plus one embed call per item and per paraphrase variant.
+        # For 50 FAQs that's 150-200 sequential API calls — it MUST be async.
+        import threading
+        t = threading.Thread(
+            target=_bg_enrich_and_save,
+            args=(client_id, valid_faqs),
+            daemon=True,
         )
-        cache_utils.bump_kb_version(client_id)
-        app.logger.info(f"[Cache] KB invalidated after file upload: client={client_id}")
+        t.start()
+
         response = {
-            'success':   True,
-            'message':   f'Imported {kb_saved} knowledge chunks successfully.',
-            'count':     kb_saved,
-            'faq_count': faq_saved,
+            'success':    True,
+            'message':    (
+                f'Processing {len(valid_faqs)} items — your knowledge base will be '
+                'ready in about 30–60 seconds. Refresh the FAQ Manager to see them.'
+            ),
+            'count':      len(valid_faqs),
+            'processing': True,
         }
         if errors:
             response['skipped']           = len(errors)
-            response['validation_errors'] = errors[:10]  # cap at 10 for the UI
+            response['validation_errors'] = errors[:10]
         return jsonify(response)
 
     except Exception as e:

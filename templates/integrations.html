@@ -1,0 +1,1654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Integrations — Lumvi Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<style>
+/* ── TOKENS ────────────────────────────────────────────────── */
+:root {
+  --bg:          #0b0d12;
+  --surface:     #13161f;
+  --surface-2:   #1a1e2a;
+  --surface-3:   #22273a;
+  --border:      rgba(255,255,255,0.07);
+  --border-hi:   rgba(255,255,255,0.13);
+
+  --ink:         #f0f2f8;
+  --ink-2:       #8b92aa;
+  --ink-3:       #555d78;
+
+  --accent:      #7c5cfc;
+  --accent-dim:  rgba(124,92,252,0.15);
+  --accent-glow: rgba(124,92,252,0.35);
+
+  --green:       #22c97a;
+  --green-dim:   rgba(34,201,122,0.12);
+  --red:         #f04560;
+  --red-dim:     rgba(240,69,96,0.12);
+  --amber:       #f5a623;
+  --amber-dim:   rgba(245,166,35,0.12);
+
+  --shopify:     #96bf48;
+  --shopify-dim: rgba(150,191,72,0.12);
+  --acuity:      #4ab8e8;
+  --acuity-dim:  rgba(74,184,232,0.12);
+
+  --radius:      12px;
+  --radius-sm:   8px;
+  --radius-lg:   18px;
+
+  --shadow:      0 4px 24px rgba(0,0,0,0.35);
+  --shadow-lg:   0 12px 48px rgba(0,0,0,0.5);
+
+  --font:        'DM Sans', sans-serif;
+  --mono:        'DM Mono', monospace;
+
+  --sidebar-w:   240px;
+  --header-h:    60px;
+}
+
+/* ── RESET ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+button { font-family: inherit; cursor: pointer; border: none; outline: none; }
+input, textarea, select { font-family: inherit; outline: none; }
+a { text-decoration: none; color: inherit; }
+
+/* ── LAYOUT ─────────────────────────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: var(--header-h) 1fr;
+  min-height: 100vh;
+}
+
+/* ── SIDEBAR ────────────────────────────────────────────────── */
+.sidebar {
+  grid-row: 1 / -1;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px 24px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--header-h);
+  padding: 0 8px;
+  margin-bottom: 8px;
+}
+.sidebar-logo img {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  object-fit: contain;
+}
+.sidebar-logo span {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--ink);
+}
+
+.sidebar-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 16px 8px 6px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font-size: 13.5px;
+  font-weight: 500;
+  transition: all 0.15s;
+  cursor: pointer;
+  margin-bottom: 1px;
+}
+.nav-item svg { flex-shrink: 0; opacity: 0.7; }
+.nav-item:hover { background: var(--surface-2); color: var(--ink); }
+.nav-item:hover svg { opacity: 1; }
+.nav-item.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.nav-item.active svg { opacity: 1; }
+
+.sidebar-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 12px 0;
+}
+
+.sidebar-bottom {
+  margin-top: auto;
+}
+
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.user-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #a78bfa);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.user-info { flex: 1; min-width: 0; }
+.user-name { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-plan { font-size: 11px; color: var(--ink-3); }
+
+/* ── HEADER ─────────────────────────────────────────────────── */
+.header {
+  grid-column: 2;
+  height: var(--header-h);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.header-title { font-size: 15px; font-weight: 600; color: var(--ink); }
+.header-actions { display: flex; align-items: center; gap: 10px; }
+
+/* ── MAIN ───────────────────────────────────────────────────── */
+.main {
+  grid-column: 2;
+  padding: 32px 28px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ── SECTION HEADER ─────────────────────────────────────────── */
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.section-title { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; color: var(--ink); }
+.section-subtitle { font-size: 13.5px; color: var(--ink-2); margin-top: 3px; }
+
+/* ── CLIENT SELECTOR ─────────────────────────────────────────── */
+.client-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+.client-bar-label { font-size: 12px; color: var(--ink-3); font-weight: 500; white-space: nowrap; }
+.client-select {
+  flex: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238b92aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+.client-select:focus { border-color: var(--accent); }
+
+.client-badge {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 10px;
+  border-radius: 20px;
+  background: var(--green-dim);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 600;
+}
+.client-badge::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+}
+
+/* ── PLATFORM CARDS ──────────────────────────────────────────── */
+.platforms-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.platform-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.platform-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.platform-card.shopify::before { background: radial-gradient(circle at top right, var(--shopify-dim), transparent 60%); }
+.platform-card.acuity::before  { background: radial-gradient(circle at top right, var(--acuity-dim),  transparent 60%); }
+.platform-card:hover { border-color: var(--border-hi); }
+.platform-card:hover::before { opacity: 1; }
+.platform-card.connected.shopify { border-color: rgba(150,191,72,0.25); }
+.platform-card.connected.acuity  { border-color: rgba(74,184,232,0.25); }
+.platform-card.connected.shopify::before { opacity: 1; }
+.platform-card.connected.acuity::before  { opacity: 1; }
+
+.platform-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.platform-icon {
+  width: 48px; height: 48px;
+  border-radius: 13px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.platform-icon.shopify { background: var(--shopify-dim); }
+.platform-icon.acuity  { background: var(--acuity-dim); }
+
+.platform-status {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.platform-status.connected {
+  background: var(--green-dim);
+  color: var(--green);
+}
+.platform-status.connected::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+  animation: pulse-dot 2s infinite;
+}
+.platform-status.not-connected {
+  background: var(--surface-3);
+  color: var(--ink-3);
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.platform-name {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.platform-desc {
+  font-size: 13px;
+  color: var(--ink-2);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.platform-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.meta-tag {
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 500;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  border: 1px solid var(--border);
+}
+.meta-tag.shopify { color: var(--shopify); border-color: rgba(150,191,72,0.2); background: var(--shopify-dim); }
+.meta-tag.acuity  { color: var(--acuity);  border-color: rgba(74,184,232,0.2);  background: var(--acuity-dim); }
+
+.platform-webhook-url {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.webhook-url-label { font-size: 10.5px; color: var(--ink-3); font-weight: 500; white-space: nowrap; }
+.webhook-url-value {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.copy-btn {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--ink-2);
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.copy-btn:hover { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+.copy-btn.copied { background: var(--green-dim); color: var(--green); border-color: var(--green); }
+
+.platform-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── BUTTONS ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 0 0 0 var(--accent-glow);
+}
+.btn-primary:hover {
+  background: #8f70fd;
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--surface-3); color: var(--ink); border-color: var(--border-hi); }
+.btn-danger {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid rgba(240,69,96,0.2);
+}
+.btn-danger:hover { background: rgba(240,69,96,0.2); }
+.btn-ghost {
+  background: transparent;
+  color: var(--ink-2);
+  padding: 7px 10px;
+}
+.btn-ghost:hover { background: var(--surface-2); color: var(--ink); }
+.btn[disabled] { opacity: 0.45; pointer-events: none; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-full { width: 100%; }
+
+/* ── ACTIVITY LOG ────────────────────────────────────────────── */
+.log-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.log-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.log-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+.log-count { font-size: 12px; color: var(--ink-3); }
+
+.log-table { width: 100%; border-collapse: collapse; }
+.log-table th {
+  text-align: left;
+  padding: 10px 20px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.log-table td {
+  padding: 12px 20px;
+  font-size: 13px;
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--border);
+}
+.log-table tr:last-child td { border-bottom: none; }
+.log-table tr:hover td { background: var(--surface-2); }
+
+.log-platform { display: flex; align-items: center; gap: 7px; }
+.log-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.log-dot.shopify { background: var(--shopify); }
+.log-dot.acuity  { background: var(--acuity); }
+
+.log-status {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; border-radius: 5px;
+  font-size: 11.5px; font-weight: 600;
+}
+.log-status.ok     { background: var(--green-dim); color: var(--green); }
+.log-status.error  { background: var(--red-dim);   color: var(--red); }
+.log-status.sig_fail { background: var(--amber-dim); color: var(--amber); }
+
+.log-mono { font-family: var(--mono); font-size: 12px; }
+
+/* ── MODAL ───────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  width: 100%; max-width: 520px;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(12px);
+  transition: transform 0.2s;
+}
+.modal-overlay.open .modal { transform: translateY(0); }
+
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title { font-size: 16px; font-weight: 700; color: var(--ink); }
+.modal-close {
+  background: var(--surface-2); border: 1px solid var(--border);
+  color: var(--ink-2); width: 30px; height: 30px;
+  border-radius: 6px; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; transition: all 0.15s;
+}
+.modal-close:hover { background: var(--surface-3); color: var(--ink); }
+
+.modal-body { padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex; gap: 10px; justify-content: flex-end;
+}
+
+/* ── FORM ────────────────────────────────────────────────────── */
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label {
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  display: flex; align-items: center; gap: 6px;
+}
+.form-label .required { color: var(--red); }
+.form-label .optional { color: var(--ink-3); font-weight: 400; font-size: 11px; }
+
+.form-input {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  padding: 10px 12px;
+  font-size: 13.5px;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+.form-input:focus { border-color: var(--accent); }
+.form-input::placeholder { color: var(--ink-3); }
+.form-input.secret { font-family: var(--mono); letter-spacing: 0.05em; }
+.form-input.error { border-color: var(--red); }
+
+.form-hint { font-size: 12px; color: var(--ink-3); line-height: 1.5; }
+.form-hint a { color: var(--accent); }
+.form-hint.error { color: var(--red); }
+
+.platform-tabs {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.platform-tab {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  display: flex; align-items: center; gap: 10px;
+  cursor: pointer; transition: all 0.15s;
+}
+.platform-tab:hover { border-color: var(--border-hi); }
+.platform-tab.active.shopify { border-color: rgba(150,191,72,0.4); background: var(--shopify-dim); }
+.platform-tab.active.acuity  { border-color: rgba(74,184,232,0.4); background: var(--acuity-dim); }
+.platform-tab-name { font-size: 13px; font-weight: 600; color: var(--ink); }
+.platform-tab-sub  { font-size: 11px; color: var(--ink-3); }
+
+/* ── STEPS (onboarding instructions) ────────────────────────── */
+.steps-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.steps-title { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 2px; }
+.step-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 12.5px; color: var(--ink-2);
+}
+.step-num {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--surface-3); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: var(--ink-3);
+  flex-shrink: 0; margin-top: 1px;
+}
+
+/* ── SUCCESS STATE ───────────────────────────────────────────── */
+.success-box {
+  background: var(--green-dim);
+  border: 1px solid rgba(34,201,122,0.2);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.success-box-title { font-size: 13.5px; font-weight: 700; color: var(--green); display: flex; align-items: center; gap: 8px; }
+.success-url-row { display: flex; align-items: center; gap: 8px; }
+.success-url {
+  flex: 1; font-family: var(--mono); font-size: 12px;
+  background: rgba(0,0,0,0.2); border: 1px solid rgba(34,201,122,0.2);
+  border-radius: 6px; padding: 8px 10px; color: var(--green);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── EMPTY / LOADING ─────────────────────────────────────────── */
+.empty-log {
+  text-align: center; padding: 40px 20px;
+  color: var(--ink-3); font-size: 13px;
+}
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── TOAST ───────────────────────────────────────────────────── */
+.toast-container {
+  position: fixed; bottom: 24px; right: 24px; z-index: 200;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: none;
+}
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  box-shadow: var(--shadow-lg);
+  font-size: 13px; font-weight: 500; color: var(--ink);
+  min-width: 280px; max-width: 380px;
+  pointer-events: all;
+  animation: slide-in 0.25s ease;
+}
+.toast.success { border-left: 3px solid var(--green); }
+.toast.error   { border-left: 3px solid var(--red); }
+@keyframes slide-in { from { opacity: 0; transform: translateX(20px); } }
+@keyframes slide-out { to   { opacity: 0; transform: translateX(20px); } }
+.toast.out { animation: slide-out 0.2s ease forwards; }
+
+/* ── DISCONNECT CONFIRM ──────────────────────────────────────── */
+.danger-zone {
+  background: var(--red-dim);
+  border: 1px solid rgba(240,69,96,0.2);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.danger-zone-text { font-size: 12.5px; color: var(--red); }
+.danger-zone-title { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
+
+/* ── ONBOARDING BANNER ───────────────────────────────────────── */
+.onboarding-banner {
+  display: none;
+  flex-direction: column;
+  gap: 0;
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.35s, transform 0.35s;
+}
+.onboarding-banner.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.onboarding-top {
+  background: linear-gradient(135deg, rgba(124,92,252,0.18) 0%, rgba(124,92,252,0.05) 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 24px 28px 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.onboarding-top-text { flex: 1; }
+.onboarding-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.onboarding-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.onboarding-subtitle {
+  font-size: 13.5px;
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+.onboarding-dismiss {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--ink-3);
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+  cursor: pointer;
+}
+.onboarding-dismiss:hover { background: var(--surface-3); color: var(--ink); }
+
+/* Three steps track */
+.onboarding-steps {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0;
+}
+.onboarding-step {
+  padding: 20px 24px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.onboarding-step:last-child { border-right: none; }
+
+.ob-step-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ob-step-num {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.ob-step-num.done { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,201,122,0.3); }
+.ob-step-num.active { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(124,92,252,0.3); }
+.ob-step-num.upcoming { background: var(--surface-2); color: var(--ink-3); border: 1px solid var(--border); }
+
+.ob-step-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.ob-step-desc  { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+
+.onboarding-footer {
+  padding: 14px 28px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.onboarding-footer-text {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.onboarding-footer-text a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 700px) {
+  .onboarding-steps { grid-template-columns: 1fr; }
+  .onboarding-step  { border-right: none; border-bottom: 1px solid var(--border); }
+  .onboarding-step:last-child { border-bottom: none; }
+}
+
+/* ── RESPONSIVE ──────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .platforms-grid { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .header { grid-column: 1; }
+  .main { grid-column: 1; }
+}
+</style>
+  .platforms-grid { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .header { grid-column: 1; }
+  .main { grid-column: 1; }
+}
+</style>
+<!-- Jinja2 template variables — populated by Flask's render_template() -->
+<!-- In production these are rendered by Flask; in standalone demo they fall back to JS defaults above -->
+<script>
+  /* These vars are set by Flask via render_template('integrations.html', ...) */
+  /* const LUMVI_BASE_URL = "{{ base_url }}"; */
+  /* const LUMVI_CLIENTS  = {{ clients | tojson }}; */
+  /* const LUMVI_PLAN     = "{{ plan_type }}"; */
+</script>
+</head>
+
+<body>
+<div class="layout">
+
+  <!-- ── SIDEBAR ─────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <img src="https://lumvi.net/static/logo.jpg" alt="Lumvi" onerror="this.style.display='none'" />
+      <span>Lumvi</span>
+    </div>
+
+    <div class="sidebar-label">Workspace</div>
+    <div class="nav-item" onclick="navigate('dashboard')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-item" onclick="navigate('clients')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Clients
+    </div>
+    <div class="nav-item" onclick="navigate('chatbots')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Chatbots
+    </div>
+    <div class="nav-item" onclick="navigate('leads')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Leads
+    </div>
+    <div class="nav-item" onclick="navigate('analytics')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Analytics
+    </div>
+
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-label">Settings</div>
+
+    <div class="nav-item active">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      Integrations
+    </div>
+    <div class="nav-item" onclick="navigate('settings')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M16.24 7.76a6 6 0 0 1 0 8.49M4.93 4.93a10 10 0 0 0 0 14.14M7.76 7.76a6 6 0 0 0 0 8.49"/></svg>
+      Branding
+    </div>
+    <div class="nav-item" onclick="navigate('billing')">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+      Billing
+    </div>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-user">
+        <div class="user-avatar">AG</div>
+        <div class="user-info">
+          <div class="user-name">Agency Pro</div>
+          <div class="user-plan">Agency Plan · 7 clients</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── HEADER ──────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-title">Integrations</div>
+    <div class="header-actions">
+      <button class="btn btn-secondary btn-sm" onclick="openModal()">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Connect Platform
+      </button>
+    </div>
+  </header>
+
+  <!-- ── MAIN ────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- Section header -->
+    <div class="section-header">
+      <div>
+        <div class="section-title">Platform Connections</div>
+        <div class="section-subtitle">Connect your clients' stores and booking systems so Lumvi can answer live order and appointment questions.</div>
+      </div>
+    </div>
+
+    <!-- ── ONBOARDING BANNER ──────────────────────────────────── -->
+    <div class="onboarding-banner" id="onboardingBanner">
+      <div class="onboarding-top">
+        <div class="onboarding-top-text">
+          <div class="onboarding-eyebrow">✦ Getting started</div>
+          <div class="onboarding-title">Connect your first platform in 3 steps</div>
+          <div class="onboarding-subtitle">
+            Once connected, Lumvi answers live order and appointment questions automatically —
+            no manual data entry, no copy-pasting. Your clients' chatbots stay accurate 24/7.
+          </div>
+        </div>
+        <button class="onboarding-dismiss" onclick="dismissOnboarding()" title="Dismiss">✕</button>
+      </div>
+
+      <div class="onboarding-steps">
+        <div class="onboarding-step">
+          <div class="ob-step-head">
+            <div class="ob-step-num done">✓</div>
+            <div class="ob-step-title">You're on the right plan</div>
+          </div>
+          <div class="ob-step-desc">
+            Your Pro or Agency plan includes platform integrations. No extra cost — it's included.
+          </div>
+        </div>
+        <div class="onboarding-step">
+          <div class="ob-step-head">
+            <div class="ob-step-num active">2</div>
+            <div class="ob-step-title">Select a client &amp; connect</div>
+          </div>
+          <div class="ob-step-desc">
+            Pick a client from the selector below, then click <strong style="color:var(--ink)">Connect Shopify</strong> or <strong style="color:var(--ink)">Connect Acuity</strong>.
+            Paste in the webhook secret from the platform — takes about 60 seconds.
+          </div>
+        </div>
+        <div class="onboarding-step">
+          <div class="ob-step-head">
+            <div class="ob-step-num upcoming">3</div>
+            <div class="ob-step-title">Test it — ask a live question</div>
+          </div>
+          <div class="ob-step-desc">
+            Once connected, open your client's chatbot and type <em style="color:var(--ink-2)">"where is my order?"</em>
+            or <em style="color:var(--ink-2)">"book an appointment"</em>. Lumvi answers with real data instantly.
+          </div>
+        </div>
+      </div>
+
+      <div class="onboarding-footer">
+        <div class="onboarding-footer-text">
+          Need help? <a href="https://lumvi.net/docs/integrations" target="_blank">Read the integration guide</a>
+          or <a href="mailto:support@lumvi.net">contact support</a>.
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="dismissOnboarding(); openModal(selectedPlatform)">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Connect first platform
+        </button>
+      </div>
+    </div>
+
+    <!-- Client selector -->
+    <div class="client-bar">
+      <span class="client-bar-label">Viewing client:</span>
+      <select class="client-select" id="clientSelect" onchange="onClientChange()">
+        <option value="client_abc123">Bloom Flower Shop (client_abc123)</option>
+        <option value="client_def456">Peak Fitness Studio (client_def456)</option>
+        <option value="client_ghi789">Westside Legal (client_ghi789)</option>
+      </select>
+      <div class="client-badge" id="clientBadge">3 integrations</div>
+    </div>
+
+    <!-- Platform cards -->
+    <div class="platforms-grid" id="platformsGrid">
+
+      <!-- SHOPIFY CARD -->
+      <div class="platform-card shopify connected" id="shopify-card">
+        <div class="platform-top">
+          <div class="platform-icon shopify">🛍️</div>
+          <div class="platform-status connected" id="shopify-status">Connected</div>
+        </div>
+        <div class="platform-name">Shopify</div>
+        <div class="platform-desc">Order status, tracking, and cancellations — answered automatically from your client's live store data.</div>
+        <div class="platform-meta">
+          <span class="meta-tag shopify">orders/created</span>
+          <span class="meta-tag shopify">orders/updated</span>
+          <span class="meta-tag shopify">orders/cancelled</span>
+        </div>
+        <div class="platform-webhook-url" id="shopify-url-row">
+          <span class="webhook-url-label">Webhook URL</span>
+          <span class="webhook-url-value" id="shopify-url">https://app.lumvi.ai/webhooks/shopify/client_abc123</span>
+          <button class="copy-btn" onclick="copyUrl('shopify-url', this)">Copy</button>
+        </div>
+        <div class="platform-actions">
+          <button class="btn btn-secondary btn-sm" onclick="openEditModal('shopify')">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Update Secret
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="openDisconnectModal('shopify')">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+            Disconnect
+          </button>
+        </div>
+      </div>
+
+      <!-- ACUITY CARD -->
+      <div class="platform-card acuity" id="acuity-card">
+        <div class="platform-top">
+          <div class="platform-icon acuity">📅</div>
+          <div class="platform-status not-connected" id="acuity-status">Not connected</div>
+        </div>
+        <div class="platform-name">Acuity Scheduling</div>
+        <div class="platform-desc">Appointment availability, bookings, and rescheduling — synced in real time from your client's calendar.</div>
+        <div class="platform-meta">
+          <span class="meta-tag acuity">appointment.scheduled</span>
+          <span class="meta-tag acuity">appointment.rescheduled</span>
+          <span class="meta-tag acuity">appointment.cancelled</span>
+        </div>
+        <div class="platform-actions" id="acuity-actions">
+          <button class="btn btn-primary btn-sm btn-full" onclick="openModal('acuity')">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Connect Acuity
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Webhook activity log -->
+    <div class="log-section">
+      <div class="log-header">
+        <div class="log-title">Webhook Activity</div>
+        <div class="log-count" id="log-count">Last 20 events</div>
+      </div>
+      <table class="log-table">
+        <thead>
+          <tr>
+            <th>Platform</th>
+            <th>Event</th>
+            <th>Status</th>
+            <th>Reference</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+        <tbody id="log-body">
+          <!-- populated by JS -->
+        </tbody>
+      </table>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── CONNECT / EDIT MODAL ────────────────────────────────────── -->
+<div class="modal-overlay" id="connectModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Connect a Platform</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <!-- Step 1: Pick platform + enter secret -->
+    <div class="modal-body" id="modal-step-1">
+
+      <div class="form-group" id="platform-picker-group">
+        <div class="form-label">Platform</div>
+        <div class="platform-tabs">
+          <div class="platform-tab shopify active" id="tab-shopify" onclick="selectPlatform('shopify')">
+            <span style="font-size:20px">🛍️</span>
+            <div>
+              <div class="platform-tab-name">Shopify</div>
+              <div class="platform-tab-sub">Orders & tracking</div>
+            </div>
+          </div>
+          <div class="platform-tab acuity" id="tab-acuity" onclick="selectPlatform('acuity')">
+            <span style="font-size:20px">📅</span>
+            <div>
+              <div class="platform-tab-name">Acuity</div>
+              <div class="platform-tab-sub">Appointments</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">
+          Webhook Secret
+          <span class="required">*</span>
+        </label>
+        <input type="password" class="form-input secret" id="secret-input"
+               placeholder="Paste the signing secret from the platform…" />
+        <div class="form-hint" id="secret-hint">
+          In Shopify: Settings → Notifications → Webhooks → shown after saving. In Acuity: Integrations → Webhooks → Secret key.
+        </div>
+      </div>
+
+      <!-- Webhook URL preview — copy this BEFORE entering the secret above -->
+      <div class="platform-webhook-url" id="modal-url-preview-row" style="display:none">
+        <span class="webhook-url-label">Your webhook URL</span>
+        <span class="webhook-url-value" id="modal-url-preview"></span>
+        <button class="copy-btn" onclick="(()=>{
+          navigator.clipboard.writeText(document.getElementById('modal-url-preview').textContent);
+          this.textContent='Copied!'; this.classList.add('copied');
+          setTimeout(()=>{this.textContent='Copy';this.classList.remove('copied')},2000);
+        })()">Copy</button>
+      </div>
+
+      <div class="steps-panel" id="steps-panel">
+        <div class="steps-title" id="steps-title">Setup steps — Shopify</div>
+        <div id="steps-list"></div>
+      </div>
+
+    </div>
+
+    <!-- Step 2: Success + webhook URL -->
+    <div class="modal-body" id="modal-step-2" style="display:none">
+      <div class="success-box">
+        <div class="success-box-title">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          Integration connected!
+        </div>
+        <div style="font-size:13px;color:var(--green);opacity:0.8">
+          Copy the webhook URL below and paste it into your client's platform settings to start receiving events.
+        </div>
+        <div class="success-url-row">
+          <div class="success-url" id="success-url-text">—</div>
+          <button class="copy-btn" id="success-copy-btn" onclick="copySuccessUrl()">Copy</button>
+        </div>
+      </div>
+      <div class="steps-panel" id="success-steps-panel">
+        <div class="steps-title">Next: paste the URL into the platform</div>
+        <div id="success-steps-list"></div>
+      </div>
+    </div>
+
+    <div class="modal-footer" id="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="modal-submit-btn" onclick="submitIntegration()">
+        <span id="submit-label">Connect Platform</span>
+        <div class="spinner" id="submit-spinner" style="display:none"></div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── DISCONNECT MODAL ───────────────────────────────────────── -->
+<div class="modal-overlay" id="disconnectModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Disconnect Platform</div>
+      <button class="modal-close" onclick="closeDisconnectModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="danger-zone">
+        <div>
+          <div class="danger-zone-title">⚠️ This will stop syncing data</div>
+          <div class="danger-zone-text">
+            Any future webhooks from this platform will be rejected. Existing order / appointment data already stored in Lumvi will remain intact.
+          </div>
+        </div>
+      </div>
+      <p style="font-size:13px;color:var(--ink-2);line-height:1.6">
+        Are you sure you want to disconnect <strong id="disconnect-platform-name" style="color:var(--ink)"></strong> for this client? You can reconnect at any time.
+      </p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeDisconnectModal()">Keep Connected</button>
+      <button class="btn btn-danger" onclick="confirmDisconnect()">
+        <span id="disconnect-label">Yes, Disconnect</span>
+        <div class="spinner" id="disconnect-spinner" style="display:none"></div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOASTS ─────────────────────────────────────────────────── -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+/* ── CONFIG ────────────────────────────────────────────────────── */
+// Populated by Flask via Jinja — falls back to window vars for demo
+const BASE_URL    = (typeof LUMVI_BASE_URL !== 'undefined') ? LUMVI_BASE_URL : 'https://app.lumvi.ai';
+const CLIENTS     = (typeof LUMVI_CLIENTS !== 'undefined')  ? LUMVI_CLIENTS  : [
+  { client_id: 'client_abc123', company_name: 'Bloom Flower Shop' },
+  { client_id: 'client_def456', company_name: 'Peak Fitness Studio' },
+];
+const USER_PLAN   = (typeof LUMVI_PLAN !== 'undefined') ? LUMVI_PLAN : 'agency';
+
+/* ── STATE ─────────────────────────────────────────────────────── */
+let currentClient    = CLIENTS.length ? CLIENTS[0].client_id : '';
+let selectedPlatform = 'shopify';
+let disconnectTarget = null;
+let isEditMode       = false;
+let integrationCache = {};   // { client_id: { shopify: bool, acuity: bool } }
+
+/* ── INIT ────────────────────────────────────────────────────────*/
+window.addEventListener('DOMContentLoaded', () => {
+  populateClientSelect();
+  if (!currentClient) { showEmptyState(); return; }
+  loadIntegrations(currentClient);
+  loadLog(currentClient);
+  checkOnboarding();
+});
+
+/* ── ONBOARDING ──────────────────────────────────────────────────
+   Show the onboarding banner if:
+   - user has at least one client
+   - no client has any integration yet
+   - they haven't dismissed it this session
+──────────────────────────────────────────────────────────────── */
+function checkOnboarding() {
+  if (sessionStorage.getItem('lumvi_onboarding_dismissed')) return;
+  if (!CLIENTS.length) return;
+  // Show after a short delay so the page loads first
+  setTimeout(() => {
+    const hasAny = Object.values(integrationCache).some(c =>
+      Object.values(c).some(Boolean)
+    );
+    if (!hasAny) showOnboarding();
+  }, 800);
+}
+
+function showOnboarding() {
+  document.getElementById('onboardingBanner').style.display = 'flex';
+  // Staggered entrance
+  requestAnimationFrame(() => {
+    document.getElementById('onboardingBanner').classList.add('visible');
+  });
+}
+
+function dismissOnboarding() {
+  sessionStorage.setItem('lumvi_onboarding_dismissed', '1');
+  const banner = document.getElementById('onboardingBanner');
+  banner.classList.remove('visible');
+  setTimeout(() => { banner.style.display = 'none'; }, 350);
+}
+
+/* ── CLIENT SELECTOR ─────────────────────────────────────────── */
+function populateClientSelect() {
+  const sel = document.getElementById('clientSelect');
+  sel.innerHTML = CLIENTS.map(c =>
+    `<option value="${c.client_id}">${c.company_name} (${c.client_id})</option>`
+  ).join('');
+  if (CLIENTS.length) currentClient = CLIENTS[0].client_id;
+}
+
+function onClientChange() {
+  currentClient = document.getElementById('clientSelect').value;
+  loadIntegrations(currentClient);
+  loadLog(currentClient);
+}
+
+/* ── API: LOAD INTEGRATIONS ──────────────────────────────────── */
+async function loadIntegrations(clientId) {
+  try {
+    const res  = await fetch(`/api/integrations/${clientId}`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    const state = { shopify: false, acuity: false };
+    const urlMap = {};
+
+    for (const i of (data.integrations || [])) {
+      if (i.is_active) {
+        state[i.platform] = true;
+        urlMap[i.platform] = i.webhook_url;
+      }
+    }
+
+    integrationCache[clientId] = state;
+
+    // Count for badge
+    const count = Object.values(state).filter(Boolean).length;
+    document.getElementById('clientBadge').textContent =
+      `${count} integration${count !== 1 ? 's' : ''}`;
+
+    setCardState('shopify', state.shopify, clientId, urlMap.shopify);
+    setCardState('acuity',  state.acuity,  clientId, urlMap.acuity);
+
+  } catch (err) {
+    showToast('Could not load integrations: ' + err.message, 'error');
+    setCardState('shopify', false, clientId);
+    setCardState('acuity',  false, clientId);
+  }
+}
+
+/* ── API: LOAD LOG ───────────────────────────────────────────── */
+async function loadLog(clientId) {
+  const tbody = document.getElementById('log-body');
+  tbody.innerHTML = `<tr><td colspan="5"><div class="empty-log" style="display:flex;align-items:center;gap:8px;justify-content:center"><div class="spinner"></div> Loading…</div></td></tr>`;
+
+  try {
+    const res  = await fetch(`/api/integrations/${clientId}/log`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    renderLog(data.log || []);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-log">Could not load activity log.</div></td></tr>`;
+  }
+}
+
+function renderLog(logs) {
+  const tbody = document.getElementById('log-body');
+  if (!logs.length) {
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-log">No webhook events yet for this client.</div></td></tr>`;
+    document.getElementById('log-count').textContent = '0 events';
+    return;
+  }
+  function timeAgo(iso) {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1)  return 'just now';
+    if (m < 60) return `${m} min ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h} hr ago`;
+    return `${Math.floor(h/24)} day ago`;
+  }
+  tbody.innerHTML = logs.map(l => `
+    <tr>
+      <td>
+        <div class="log-platform">
+          <div class="log-dot ${l.platform}"></div>
+          <span style="font-weight:500;color:var(--ink)">${l.platform === 'shopify' ? 'Shopify' : 'Acuity'}</span>
+        </div>
+      </td>
+      <td class="log-mono">${l.event_type || '—'}</td>
+      <td>
+        <span class="log-status ${l.status}">
+          ${l.status === 'ok' ? '✓ ok' : l.status === 'sig_fail' ? '⚠ sig fail' : '✕ error'}
+        </span>
+      </td>
+      <td class="log-mono" style="color:var(--ink)">${l.ref || '—'}</td>
+      <td style="color:var(--ink-3)">${l.time ? timeAgo(l.time) : '—'}</td>
+    </tr>
+  `).join('');
+  document.getElementById('log-count').textContent = `Last ${logs.length} events`;
+}
+
+/* ── CARD STATES ─────────────────────────────────────────────── */
+function setCardState(platform, connected, clientId, webhookUrl) {
+  const card   = document.getElementById(`${platform}-card`);
+  const status = document.getElementById(`${platform}-status`);
+  const url    = webhookUrl || `${BASE_URL}/webhooks/${platform}/${clientId}`;
+
+  card.classList.toggle('connected', connected);
+
+  if (connected) {
+    status.className   = 'platform-status connected';
+    status.textContent = 'Connected';
+
+    let urlRow = document.getElementById(`${platform}-url-row`);
+    if (!urlRow) {
+      urlRow    = document.createElement('div');
+      urlRow.id = `${platform}-url-row`;
+      urlRow.className = 'platform-webhook-url';
+      const actions = card.querySelector('.platform-actions');
+      card.insertBefore(urlRow, actions);
+    }
+    urlRow.innerHTML = `
+      <span class="webhook-url-label">Webhook URL</span>
+      <span class="webhook-url-value" id="${platform}-url">${url}</span>
+      <button class="copy-btn" onclick="copyUrl('${platform}-url', this)">Copy</button>
+    `;
+
+    const actions = card.querySelector('.platform-actions');
+    if (actions) {
+      actions.id = `${platform}-actions`;
+      actions.innerHTML = `
+        <button class="btn btn-secondary btn-sm" onclick="openEditModal('${platform}')">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Update Secret
+        </button>
+        <button class="btn btn-danger btn-sm" onclick="openDisconnectModal('${platform}')">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+          Disconnect
+        </button>
+      `;
+    }
+
+  } else {
+    status.className   = 'platform-status not-connected';
+    status.textContent = 'Not connected';
+    const urlRow = document.getElementById(`${platform}-url-row`);
+    if (urlRow) urlRow.remove();
+    const actions = card.querySelector('.platform-actions');
+    if (actions) {
+      actions.id = `${platform}-actions`;
+      actions.innerHTML = `
+        <button class="btn btn-primary btn-sm btn-full" onclick="openModal('${platform}')">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Connect ${platform.charAt(0).toUpperCase() + platform.slice(1)}
+        </button>
+      `;
+    }
+  }
+}
+
+/* ── COPY ────────────────────────────────────────────────────── */
+function copyUrl(elemId, btn) {
+  const text = document.getElementById(elemId)?.textContent || '';
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+let successUrlText = '';
+function copySuccessUrl() {
+  const btn = document.getElementById('success-copy-btn');
+  navigator.clipboard.writeText(successUrlText).then(() => {
+    btn.textContent = 'Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+/* ── STEPS ───────────────────────────────────────────────────── */
+const STEPS = {
+  shopify: [
+    'In Shopify admin, go to Settings → Notifications',
+    'Scroll to the bottom → click "Create webhook"',
+    'Paste the Lumvi webhook URL shown below',
+    'Set Format to JSON, subscribe to: orders/created, orders/updated, orders/cancelled',
+    'Save — copy the signing secret shown',
+    'Paste the signing secret in the field above and click Connect',
+  ],
+  acuity: [
+    'In Acuity, go to Integrations → Webhooks',
+    'Click "Add webhook"',
+    'Paste the Lumvi webhook URL shown below',
+    'Check: appointment.scheduled, rescheduled, cancelled',
+    'Save — copy the secret key shown',
+    'Paste the secret key in the field above and click Connect',
+  ],
+};
+
+function renderSteps(platform, containerId) {
+  const steps = STEPS[platform] || [];
+  const el    = document.getElementById(containerId);
+  if (!el) return;
+  el.innerHTML = steps.map((s, i) => `
+    <div class="step-item">
+      <div class="step-num">${i + 1}</div>
+      <span>${s}</span>
+    </div>
+  `).join('');
+}
+
+/* ── MODAL ───────────────────────────────────────────────────── */
+function openModal(platform) {
+  isEditMode = false;
+  document.getElementById('modal-title').textContent    = 'Connect a Platform';
+  document.getElementById('submit-label').textContent   = 'Connect Platform';
+  document.getElementById('modal-step-1').style.display = 'flex';
+  document.getElementById('modal-step-2').style.display = 'none';
+  document.getElementById('modal-footer').style.display = 'flex';
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="modal-submit-btn" onclick="submitIntegration()">
+      <span id="submit-label">Connect Platform</span>
+      <div class="spinner" id="submit-spinner" style="display:none"></div>
+    </button>
+  `;
+  document.getElementById('secret-input').value        = '';
+  document.getElementById('platform-picker-group').style.display = 'block';
+  selectedPlatform = platform || 'shopify';
+  document.getElementById('tab-shopify').classList.toggle('active', selectedPlatform === 'shopify');
+  document.getElementById('tab-acuity').classList.toggle('active',  selectedPlatform === 'acuity');
+  updateSecretHint(selectedPlatform);
+  renderSteps(selectedPlatform, 'steps-list');
+  document.getElementById('steps-title').textContent = `Setup steps — ${selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1)}`;
+
+  // Show the webhook URL so the operator can paste it into the platform BEFORE saving
+  const previewUrl = `${BASE_URL}/webhooks/${selectedPlatform}/${currentClient}`;
+  document.getElementById('modal-url-preview').textContent = previewUrl;
+  document.getElementById('modal-url-preview-row').style.display = 'flex';
+
+  document.getElementById('connectModal').classList.add('open');
+}
+
+function openEditModal(platform) {
+  isEditMode = true;
+  selectedPlatform = platform;
+  const pName = platform.charAt(0).toUpperCase() + platform.slice(1);
+  document.getElementById('modal-title').textContent    = `Update ${pName} Secret`;
+  document.getElementById('modal-step-1').style.display = 'flex';
+  document.getElementById('modal-step-2').style.display = 'none';
+  document.getElementById('modal-footer').style.display = 'flex';
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" id="modal-submit-btn" onclick="submitIntegration()">
+      <span id="submit-label">Save Secret</span>
+      <div class="spinner" id="submit-spinner" style="display:none"></div>
+    </button>
+  `;
+  document.getElementById('secret-input').value = '';
+  document.getElementById('platform-picker-group').style.display = 'none';
+  document.getElementById('modal-url-preview-row').style.display = 'none';
+  updateSecretHint(platform);
+  document.getElementById('steps-title').textContent = `Where to find the ${pName} secret`;
+  renderSteps(platform, 'steps-list');
+  document.getElementById('connectModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('connectModal').classList.remove('open');
+}
+
+function selectPlatform(platform) {
+  selectedPlatform = platform;
+  document.getElementById('tab-shopify').classList.toggle('active', platform === 'shopify');
+  document.getElementById('tab-acuity').classList.toggle('active',  platform === 'acuity');
+  updateSecretHint(platform);
+  document.getElementById('steps-title').textContent =
+    `Setup steps — ${platform.charAt(0).toUpperCase() + platform.slice(1)}`;
+  renderSteps(platform, 'steps-list');
+  const previewUrl = `${BASE_URL}/webhooks/${platform}/${currentClient}`;
+  document.getElementById('modal-url-preview').textContent = previewUrl;
+}
+
+function updateSecretHint(platform) {
+  document.getElementById('secret-hint').textContent = platform === 'shopify'
+    ? 'Found in Shopify: Settings → Notifications → Webhooks → shown after creating a webhook.'
+    : 'Found in Acuity: Integrations → Webhooks → Secret key shown next to each endpoint.';
+}
+
+/* ── SUBMIT (real API) ───────────────────────────────────────── */
+async function submitIntegration() {
+  const secret = document.getElementById('secret-input').value.trim();
+  if (!secret) {
+    document.getElementById('secret-input').classList.add('error');
+    showToast('Please paste the webhook secret first.', 'error');
+    return;
+  }
+  document.getElementById('secret-input').classList.remove('error');
+
+  const submitBtn = document.getElementById('modal-submit-btn');
+  document.getElementById('submit-label').style.display = 'none';
+  document.getElementById('submit-spinner').style.display = 'block';
+  submitBtn.disabled = true;
+
+  try {
+    const res  = await fetch(`/api/integrations/${currentClient}`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        platform:        selectedPlatform,
+        webhook_secret:  secret,
+        platform_config: {},
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to connect platform');
+
+    const webhookUrl = data.webhook_url;
+    successUrlText   = webhookUrl;
+
+    // Show step 2 success state
+    document.getElementById('success-url-text').textContent = webhookUrl;
+    renderSteps(selectedPlatform, 'success-steps-list');
+    document.getElementById('modal-step-1').style.display = 'none';
+    document.getElementById('modal-step-2').style.display = 'flex';
+    document.getElementById('modal-footer').innerHTML =
+      `<button class="btn btn-primary" onclick="finishConnect()">Done — I've pasted the URL</button>`;
+
+    showToast(`${selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1)} connected!`, 'success');
+    dismissOnboarding();
+
+  } catch (err) {
+    showToast(err.message || 'Something went wrong. Please try again.', 'error');
+  } finally {
+    if (document.getElementById('submit-label')) {
+      document.getElementById('submit-label').style.display = 'inline';
+    }
+    if (document.getElementById('submit-spinner')) {
+      document.getElementById('submit-spinner').style.display = 'none';
+    }
+    if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+function finishConnect() {
+  closeModal();
+  loadIntegrations(currentClient);
+  loadLog(currentClient);
+}
+
+/* ── DISCONNECT ──────────────────────────────────────────────── */
+function openDisconnectModal(platform) {
+  disconnectTarget = platform;
+  const name = platform.charAt(0).toUpperCase() + platform.slice(1);
+  document.getElementById('disconnect-platform-name').textContent = name;
+  document.getElementById('disconnectModal').classList.add('open');
+}
+function closeDisconnectModal() {
+  document.getElementById('disconnectModal').classList.remove('open');
+}
+
+async function confirmDisconnect() {
+  const labelEl   = document.getElementById('disconnect-label');
+  const spinnerEl = document.getElementById('disconnect-spinner');
+  labelEl.textContent     = 'Disconnecting…';
+  spinnerEl.style.display = 'block';
+
+  try {
+    const res  = await fetch(`/api/integrations/${currentClient}/${disconnectTarget}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to disconnect');
+
+    closeDisconnectModal();
+    loadIntegrations(currentClient);
+    showToast(`${disconnectTarget.charAt(0).toUpperCase() + disconnectTarget.slice(1)} disconnected.`, 'success');
+
+  } catch (err) {
+    showToast(err.message || 'Failed to disconnect. Please try again.', 'error');
+  } finally {
+    labelEl.textContent     = 'Yes, Disconnect';
+    spinnerEl.style.display = 'none';
+  }
+}
+
+/* ── TOAST ───────────────────────────────────────────────────── */
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  const toast     = document.createElement('div');
+  toast.className = `toast ${type}`;
+  const icon = type === 'success'
+    ? `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`
+    : `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+  toast.innerHTML = `${icon}<span>${message}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('out');
+    setTimeout(() => toast.remove(), 250);
+  }, 3500);
+}
+
+function showEmptyState() {
+  document.getElementById('platformsGrid').innerHTML = `
+    <div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--ink-3)">
+      No clients found. Create a client first from the dashboard.
+    </div>`;
+}
+
+function navigate(page) {
+  window.location.href = '/' + page;
+}
+
+/* Modal overlay close */
+document.getElementById('connectModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+document.getElementById('disconnectModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeDisconnectModal();
+});
+</script>
+
+</body>
+</html>

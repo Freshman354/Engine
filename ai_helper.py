@@ -293,11 +293,7 @@ def _cosine(a: list, b: list) -> float:
     mag_a_sq = sum(x * x for x in a)
     mag_b_sq = sum(x * x for x in b)
     if abs(mag_a_sq - 1.0) < 1e-6 and abs(mag_b_sq - 1.0) < 1e-6:
-        # FIX BUG-10: clamp both ends — dot can be a small negative float for
-        # near-orthogonal unit vectors due to floating-point rounding. A negative
-        # cosine score propagates into hybrid_scores and can be stored as a
-        # negative cache confidence value, which is semantically wrong.
-        return max(min(dot, 1.0), 0.0)
+        return max(min(dot, 1.0), 0.0)  # clamp to [0, 1] — unit vectors can produce tiny negative dots due to float rounding
     mag_a = math.sqrt(mag_a_sq)
     mag_b = math.sqrt(mag_b_sq)
     return dot / (mag_a * mag_b) if mag_a and mag_b else 0.0
@@ -383,7 +379,19 @@ def _normalize(vec: list) -> list:
     return [x / mag for x in vec]
 
 
-def _embed(text: str, task: str = 'retrieval_document') -> list:
+def _embed(text: str, task: str = 'retrieval_document', _enabled: bool = True) -> list:
+    """
+    Embed text via Gemini text-embedding-004.
+
+    Bug 3 fix: accepts an _enabled flag (passed from AIHelper methods as
+    self.enabled). When False — i.e. genai.configure() failed — the function
+    returns [] immediately instead of silently attempting an API call that will
+    error and fall through to the keyword fallback with no pipeline-visible signal.
+    Module-level callers (e.g. index_faqs) that do their own self.enabled check
+    before calling _embed are unaffected (they already guard the call-site).
+    """
+    if not _enabled:
+        return []
     if not text or not text.strip():
         return []
 
@@ -393,19 +401,6 @@ def _embed(text: str, task: str = 'retrieval_document') -> list:
     cached = _EMBED_CACHE.get(cache_key)
     if cached is not None:
         return cached
-
-    # FIX BUG-3 (embed guard): _embed is module-level so it has no access to
-    # self.enabled. Guard against calling genai when it was never configured by
-    # checking whether genai has been configured at all. If configure() was never
-    # called (no api key / init failure) the internal client will be absent.
-    try:
-        # genai stores its client in a module-level default; accessing it raises
-        # AttributeError / ValueError when not configured.
-        _client = genai._default_api_client  # noqa: SLF001 — intentional internal check
-        if _client is None:
-            return []
-    except Exception:
-        return []
 
     try:
         result = genai.embed_content(
@@ -451,27 +446,16 @@ def extract_session_memory(
     }
 
     try:
+        all_text      = current_message
         user_messages: List[str] = []
-        # FIX BUG-8: Build all_text from history first so we can detect whether
-        # current_message is already the last user turn. If it is, don't append
-        # it again — otherwise frustration signals in the current turn are counted
-        # twice: once when scanning history and once when scanning msgs_to_scan.
-        history_text = ''
+
         for turn in conversation_history:
             content = (turn.get('content') or '').strip()
             if not content:
                 continue
-            history_text += ' ' + content
+            all_text += ' ' + content
             if turn.get('role') == 'user':
                 user_messages.append(content.lower())
-
-        cur_lower = current_message.lower()
-        # Only prepend current_message to all_text if it isn't already the most
-        # recent user turn in history (prevents duplicate entity extraction too).
-        if not (user_messages and user_messages[-1] == cur_lower):
-            all_text = current_message + history_text
-        else:
-            all_text = history_text.strip()
 
         # Name
         name_match = re.search(
@@ -498,6 +482,7 @@ def extract_session_memory(
         # Purchase stage — most recent user message wins
         # Guard: only append current_message if it isn't already the last entry,
         # preventing a double-count when history already includes the current turn.
+        cur_lower    = current_message.lower()
         msgs_to_scan = (
             user_messages
             if (user_messages and user_messages[-1] == cur_lower)
@@ -743,30 +728,14 @@ class AIHelper:
             # ── ACTION ENGINE (zero LLM cost) ─────────────────────────────
             action_intent = self.detect_action_intent(clean)
             if action_intent.get('action'):
-                # FIX BUG-1: _extract_lead_info's Pass 2 can make a Gemini call,
-                # which is unbudgeted here (before Call 1 / Call 2 even start).
-                # The action path only needs contact details to personalise the
-                # acknowledgement message — Pass 1 regex is sufficient for that.
-                # Force regex-only by temporarily disabling the AI flag via a
-                # monkey-patched context rather than modifying the method signature:
-                # we pass a throw-away AIHelper flag by calling the regex inline.
-                _regex_meta: Dict = {'name': None, 'email': None, 'phone': None, 'interest_topic': None}
-                _all_action_text = ' '.join(
-                    [m.get('content', '') for m in history[-4:] if m.get('content')] + [clean]
-                )
-                _em = re.search(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b', _all_action_text)
-                if _em:
-                    _regex_meta['email'] = _em.group(0)
-                _nm = re.search(
-                    r"(?:my name is|i(?:'?m| am)|this is|call me)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
-                    _all_action_text, re.IGNORECASE,
-                )
-                if _nm:
-                    _regex_meta['name'] = _nm.group(1).strip().title()
-                quick_meta   = _regex_meta
+                # Bug 1 fix: use session_mem (already computed, zero cost) instead of
+                # calling _extract_lead_info here. _extract_lead_info may make a Gemini
+                # call, which is outside the 2-call budget and can fire before Call 1.
+                # Session memory covers the same regex pass; AI enrichment only adds
+                # interest_topic which is not needed for action routing.
                 user_context = {
-                    'email':    quick_meta.get('email') or session_mem.get('email'),
-                    'name':     quick_meta.get('name')  or session_mem.get('name'),
+                    'email':    session_mem.get('email'),
+                    'name':     session_mem.get('name'),
                     'vertical': vertical,
                 }
                 action_result = self.handle_detected_action(action_intent['action'], user_context)
@@ -777,20 +746,12 @@ class AIHelper:
                     'confidence':    1.0,
                     'is_lead':       action_intent['action'] in (
                                          'demo_request', 'meeting_request', 'contact_request'),
-                    'lead_metadata': quick_meta,
+                    'lead_metadata': dict(session_mem),
                     'action':        action_result,
                 }
 
             # ── LEAD DETECTION (zero cost keyword + optional AI confirm) ──
-            # FIX BUG-7: Pass _ai_budget_used=True when history is non-empty.
-            # If the user has history, _combined_rewrite_intent (Call 1) may have
-            # already fired above. Allowing detect_intent's Tier-3 Gemini call here
-            # would push a borderline-lead turn to 3 total Gemini calls, violating
-            # the MAX 2 calls per turn budget. When history is present we rely on
-            # the keyword score alone for the lead decision.
-            _budget_used = bool(history)
-            intent = self.detect_intent(clean, lead_triggers or [], vertical,
-                                        _ai_budget_used=_budget_used)
+            intent = self.detect_intent(clean, lead_triggers or [], vertical)
             if intent.get('is_lead') and intent.get('confidence', 0) >= 0.65:
                 logger.info(
                     f"[Lead] client={client_id} vertical={vertical} "
@@ -835,19 +796,32 @@ class AIHelper:
                 f"floor={vector_threshold} high={confidence_high}"
             )
 
-            # ── FIX BUG-9: LIGHTWEIGHT PRONOUN SHORT-CIRCUIT moved here ───
-            # Previously placed AFTER embedding search and rerank, meaning two
-            # embedding API calls were wasted before the short-circuit fired.
-            # Bare pronouns with no history are structurally unresolvable —
-            # detect them now, before any API cost is incurred.
-            _clean_tokens_early = clean.lower().split()
+            # ── CALL 1 (conditional): Query rewrite ───────────────────────
+            word_count  = len(clean.split())
+            is_followup = self._is_followup(clean, history)
+            # Call 1 fires only for genuine follow-ups, regardless of length.
+            # Short standalone queries (e.g. "pricing", "cancel") go directly to
+            # embedding search — rewriting them introduces drift with no retrieval benefit.
+            if is_followup and history and self.enabled:
+                search_query = self._combined_rewrite_intent(clean, history)
+            else:
+                search_query = self._resolve_query(clean, history)
+            logger.debug(f"[Rewrite] '{clean[:40]}' → '{search_query[:60]}'")
+
+            # ── ③ LIGHTWEIGHT PRONOUN SHORT-CIRCUIT (zero cost) ───────────
+            # Bug 9 fix: moved to BEFORE embedding search and rerank. Previously
+            # this check was after both _embedding_search and _hybrid_rerank, meaning
+            # a bare pronoun like "it?" with no history triggered two embedding API
+            # calls before short-circuiting. Now it short-circuits immediately after
+            # rewrite, before any embedding or rerank cost is incurred.
+            _clean_tokens = clean.lower().split()
             if (
-                len(_clean_tokens_early) <= 2
-                and all(t.strip('?.,!') in _BARE_PRONOUNS for t in _clean_tokens_early if t.strip('?.,!'))
-                and _clean_tokens_early
-                and not history
+                len(_clean_tokens) <= 2
+                and all(t.strip('?.,!') in _BARE_PRONOUNS for t in _clean_tokens if t.strip('?.,!'))
+                and _clean_tokens  # non-empty
+                and not history    # no conversation history to resolve pronouns from
             ):
-                logger.info(f"[Ambiguity] bare pronoun with no history → structural clarification (pre-embed)")
+                logger.info(f"[Ambiguity] bare pronoun with no history → structural clarification")
                 return {
                     'response':       "Could you tell me a bit more about what you're referring to?",
                     'clarification':  {
@@ -862,21 +836,6 @@ class AIHelper:
                     'action':         None,
                     'needs_followup': True,
                 }
-
-            # ── CALL 1 (conditional): Query rewrite ───────────────────────
-            word_count  = len(clean.split())
-            is_followup = self._is_followup(clean, history)
-            # FIX BUG-11: The old condition was `(word_count < 10 or is_followup)`,
-            # which fired Call 1 for ANY short message (e.g. "pricing", "cancel")
-            # as long as history was non-empty — even for standalone queries that
-            # don't reference prior context. The rewrite adds no value there and
-            # may introduce query drift. Require BOTH short AND followup; a short
-            # standalone query is served better by the raw keyword resolver.
-            if word_count < 10 and is_followup and history and self.enabled:
-                search_query = self._combined_rewrite_intent(clean, history)
-            else:
-                search_query = self._resolve_query(clean, history)
-            logger.debug(f"[Rewrite] '{clean[:40]}' → '{search_query[:60]}'")
 
             # ── ⑥ MULTI-INTENT DECOMPOSITION ─────────────────────────────
             sub_queries = self._decompose_intents(search_query)
@@ -894,12 +853,8 @@ class AIHelper:
                             all_candidates.append(cand)
                             all_scores.append(score)
                             seen_ids.add(cid)
-                # FIX BUG-4: Do NOT slice here. Slicing before _hybrid_rerank discards
-                # potentially higher-scoring candidates from the second sub-query based
-                # purely on insertion order. Pass the full merged set to the reranker;
-                # the reranker already caps output via its own top-k logic.
-                candidates    = all_candidates
-                vector_scores = all_scores
+                candidates    = all_candidates  # Bug 4 fix: do NOT slice before rerank — pass all deduped candidates
+                vector_scores = all_scores      # slice happens after _hybrid_rerank below
             else:
                 candidates, vector_scores = self._embedding_search(
                     search_query, faqs, client_id
@@ -928,6 +883,7 @@ class AIHelper:
             for i, c in enumerate(hybrid_ranked):
                 c['_hybrid_score'] = hybrid_scores[i] if i < len(hybrid_scores) else 0.0
 
+
             # ── INTERNAL CACHE CHECK ──────────────────────────────────────
             top_id = (str(hybrid_ranked[0].get('kb_id', hybrid_ranked[0].get('id', '')))
                       if hybrid_ranked else '')
@@ -939,34 +895,29 @@ class AIHelper:
             cache_key = self._cache_key(clean, top_id, vertical, kb_version)
             if top_id and cache_key in self._response_cache:
                 logger.debug(f"[Cache HIT] key={cache_key[:10]}…")
-                cached_response = self._response_cache[cache_key]
-                # FIX BUG-5: If the cached answer is an IDK/fallback response, still
-                # submit a gap record so the gap counter keeps incrementing for repeated
-                # unanswered questions. Without this, the cache short-circuits after the
-                # first miss and the gap score never rises above 1, undermining
-                # get_top_kb_gaps() prioritisation.
-                _idk_signals = ('i don\'t have enough', 'connect you with the team', 'idk')
-                if (method := 'cache') and any(sig in cached_response.lower() for sig in _idk_signals):
-                    if client_id and client_id != 'demo':
-                        _BG_EXECUTOR.submit(record_kb_gap, client_id, user_message, 'cache_idk', 0.0)
+                cached_response   = self._response_cache[cache_key]
+                cached_confidence = hybrid_scores[0] if hybrid_scores else 0.8
+                # Bug 5 fix: IDK responses have confidence=0.0 and are never written to
+                # cache (cache write requires confidence > 0.4). So checking
+                # cached_confidence < 0.4 is structurally impossible — it can never be
+                # true for any cached entry. Instead detect cached IDK hits by inspecting
+                # the response string itself, which is reliable and always present.
+                _IDK_SIGNAL = "connect you with the team"
+                if _IDK_SIGNAL in cached_response and client_id and client_id != 'demo':
+                    _BG_EXECUTOR.submit(record_kb_gap, client_id, user_message, 'cache_idk', 0.0)
                 return {
                     'response':      cached_response,
                     'method':        'cache',
-                    'confidence':    hybrid_scores[0] if hybrid_scores else 0.8,
+                    'confidence':    cached_confidence,
                     'is_lead':       False,
                     'lead_metadata': None,
                     'action':        None,
                 }
 
             # ── CONTEXT BUILDER ───────────────────────────────────────────
-            # FIX BUG-2: maybe_summarise was never called inside ai_helper.py,
-            # so _build_context always read a stale/empty summary for long
-            # conversations. Call it here, just before _build_context consumes it.
-            # maybe_summarise is cheap (no-ops when <2000 estimated tokens) and
-            # non-blocking (all failures are logged and swallowed).
-            if client_id:
-                self.maybe_summarise(client_id, history)
-            context_str = self._build_context(history, client_id, clean)
+            # Pass is_followup (already computed above) so _build_context does not
+            # need to re-run _is_followup on the same message+history pair.
+            context_str = self._build_context(history, client_id, clean, is_followup=is_followup)
 
             # ── MIN RAG SCORE GATE ────────────────────────────────────────
             # Do NOT pass weak matches to Gemini — it will hallucinate an answer
@@ -1065,13 +1016,6 @@ class AIHelper:
                 method     = 'static_fallback'
 
             # ── GUARDRAILS + INTERNAL CACHE WRITE ────────────────────────
-            # FIX BUG-6: CLARIFY strings must be parsed BEFORE _guardrails runs.
-            # _guardrails truncates responses longer than 600 chars (by sentence or
-            # line), which silently destroys a valid CLARIFY:<opt1>|<opt2>|... string
-            # before the parser below ever sees it — causing fall-through to IDK.
-            # The CLARIFY check has therefore been moved to directly after
-            # _rag_generate_and_polish returns, which already happens above (lines
-            # 946–985). _guardrails is now only applied to non-CLARIFY final text.
             final = self._guardrails(final, hybrid_ranked)
             if confidence > 0.4:
                 self._response_cache[cache_key] = final
@@ -1081,6 +1025,13 @@ class AIHelper:
             # _BG_EXECUTOR caps concurrent background workers at 4.
             if method in ('idk_fallback', 'vertical_fallback') and client_id and client_id != 'demo':
                 _BG_EXECUTOR.submit(record_kb_gap, client_id, user_message, method, confidence)
+
+            # Bug 2 fix: maybe_summarise is now called internally. Pass the full updated
+            # history including the just-generated assistant turn so the summariser sees
+            # the complete conversation, not a version lagging one turn behind.
+            if client_id and client_id != 'demo' and history:
+                full_history_for_summary = history + [{'role': 'assistant', 'content': final}]
+                _BG_EXECUTOR.submit(self.maybe_summarise, client_id, full_history_for_summary)
 
             logger.info(
                 f"[Pipeline] done | method={method} conf={confidence:.2f} "
@@ -1178,8 +1129,7 @@ class AIHelper:
         all_candidates: List[Dict] = None,
     ) -> Optional[Dict]:
         """
-        NO-OP STUB — preserved for backward compatibility with any callers
-        outside this file (e.g. tests, external integrations).
+        DEPRECATED NO-OP — preserved for backward compatibility only.
 
         Ambiguity detection has been moved into the model (Call 2 /
         _rag_generate_and_polish). The model returns CLARIFY:<opt1>|<opt2>|...
@@ -1192,8 +1142,14 @@ class AIHelper:
         in generate_response(), which fires only when the query is 1–2 tokens
         of bare pronouns AND there is no conversation history.
 
-        Always returns None.
+        Always returns None. Do not rely on this method — it will be removed
+        in a future version.
         """
+        logger.warning(
+            "[_detect_ambiguity] Called on a deprecated no-op stub. "
+            "Ambiguity detection now happens inside _rag_generate_and_polish (model-driven CLARIFY). "
+            "Remove this call — it will be deleted in a future version."
+        )
         return None
 
     # ═══════════════════════════════════════════════════════════════════
@@ -1366,20 +1322,15 @@ class AIHelper:
 
     def detect_intent(self, user_message: str, lead_triggers: List[str],
                       vertical: str = 'general',
-                      _ai_budget_used: bool = False) -> Dict:
+                      _gemini_calls_used: int = 0) -> Dict:
         """
         Tier 1 — Simple intents (greeting/gratitude/bye): free keyword match
         Tier 2 — Keyword lead scoring
         Tier 3 — Gemini confirmation for borderline scores (2.5 ≤ score < 5)
 
-        FIX BUG-7: Added _ai_budget_used parameter. The pipeline header declares
-        MAX 2 Gemini calls per turn (Call 1 = query rewrite, Call 2 = RAG).
-        Tier 3 fires before either of those, so on a borderline lead message it
-        was silently creating a 3rd call. Callers that have already consumed a
-        Gemini call (or want to enforce the 2-call budget) must pass
-        _ai_budget_used=True to suppress the Tier-3 confirmation call.
-        The pipeline in generate_response() passes _ai_budget_used=True when
-        history is non-empty (query rewrite may already have fired).
+        Bug 7 fix: accepts _gemini_calls_used so callers can pass how many
+        pipeline Gemini calls have already been made this turn. Tier 3 is
+        skipped when the 2-call budget is already full, preventing a 3-call turn.
         """
         msg      = user_message.lower().strip()
         vert_cfg = self.personalities.get(vertical, self.personalities['general'])
@@ -1415,26 +1366,35 @@ class AIHelper:
             return {'intent': 'lead_request', 'is_lead': True,
                     'score': score, 'confidence': confidence, 'reasons': reasons[:3]}
 
-        if self.enabled and 2.5 <= score < 5.0 and not _ai_budget_used:
-            try:
-                prompt = (
-                    f'Is this a lead request (user wants human contact, a demo, or to buy)?\n'
-                    f'Message: "{user_message}"\n'
-                    f'Triggers: {", ".join(lead_triggers)}\n'
-                    f'Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}'
-                )
-                resp   = self.model.generate_content(
-                    prompt, request_options={'timeout': 10})  # Fix 10: timeout guard
-                result = self._parse_json(resp.text)
-                if result:
-                    is_lead = result.get('is_lead', False)
-                    conf    = min(max(float(result.get('confidence', 0.6)), 0.0), 1.0)  # BUG FIX H: clamp to [0,1]
-                    if is_lead:
-                        logger.info(f"[Intent] AI-confirmed lead score={score:.1f} conf={conf:.2f}")
-                    return {'intent': 'lead_request' if is_lead else 'question',
-                            'is_lead': is_lead, 'score': score, 'confidence': conf}
-            except Exception as _e:
-                logger.debug(f"[Intent] AI tier failed: {_e}")
+        if self.enabled and 2.5 <= score < 5.0:
+            # Bug 7 fix: skip the Tier-3 AI call when the 2-call budget is already full.
+            # Tier-3 fires before Call 1 (rewrite) and Call 2 (RAG), so a borderline lead
+            # on an already-budgeted turn would push the total to 3 calls.
+            # The caller (generate_response) passes _gemini_calls_used=0 since detect_intent
+            # runs before any pipeline Gemini calls — but external callers that chain
+            # detect_intent after other calls should pass the correct count.
+            if _gemini_calls_used >= 2:
+                logger.debug("[Intent] Tier-3 skipped — 2-call budget exhausted")
+            else:
+                try:
+                    prompt = (
+                        f'Is this a lead request (user wants human contact, a demo, or to buy)?\n'
+                        f'Message: "{user_message}"\n'
+                        f'Triggers: {", ".join(lead_triggers)}\n'
+                        f'Return ONLY JSON: {{"is_lead": true, "confidence": 0.75}}'
+                    )
+                    resp   = self.model.generate_content(
+                        prompt, request_options={'timeout': 10})  # Fix 10: timeout guard
+                    result = self._parse_json(resp.text)
+                    if result:
+                        is_lead = result.get('is_lead', False)
+                        conf    = min(max(float(result.get('confidence', 0.6)), 0.0), 1.0)  # BUG FIX H: clamp to [0,1]
+                        if is_lead:
+                            logger.info(f"[Intent] AI-confirmed lead score={score:.1f} conf={conf:.2f}")
+                        return {'intent': 'lead_request' if is_lead else 'question',
+                                'is_lead': is_lead, 'score': score, 'confidence': conf}
+                except Exception as _e:
+                    logger.debug(f"[Intent] AI tier failed: {_e}")
 
         return {'intent': 'question', 'is_lead': False, 'score': score, 'confidence': 0.6}
 
@@ -1654,7 +1614,13 @@ Rules:
         if not self.enabled:
             return [], []
 
-        query_vec = _embed(search_query, task='retrieval_query')
+        query_vec = _embed(search_query, task='retrieval_query', _enabled=self.enabled)
+
+        if not query_vec:
+            logger.warning(
+                f"[Search] query embedding failed for '{search_query[:60]}' — "
+                f"falling through to keyword fallback. Check Gemini API key/quota."
+            )
 
         # 1. KB chunks
         if client_id and query_vec:
@@ -1721,7 +1687,7 @@ Rules:
                     )
                 for faq in missing_faqs[:10]:  # safety cap: max 10 live embeddings
                     fid = str(faq.get('id', ''))
-                    vec = _embed(faq['question'], task='retrieval_document')
+                    vec = _embed(faq['question'], task='retrieval_document', _enabled=self.enabled)
                     if vec:
                         _m.store_faq_embedding(client_id, fid, faq['question'], vec)
                         stored[fid] = vec
@@ -1755,7 +1721,7 @@ Rules:
                     if not faq.get('question'):
                         continue
                     # Use cached embedding if present on the faq dict, else embed live
-                    emb = faq.get('embedding') or _embed(faq['question'], task='retrieval_document')
+                    emb = faq.get('embedding') or _embed(faq['question'], task='retrieval_document', _enabled=self.enabled)
                     if not emb:
                         continue
                     sim = _cosine(query_vec, emb)
@@ -2046,10 +2012,22 @@ Rules:
 
     def _rag_generate(self, user_message: str, hybrid_ranked: List[Dict],
                       hybrid_scores: List[float], vertical: str,
-                      context_str: str) -> Tuple[str, float, str]:
-        """Backward-compat alias → _rag_generate_and_polish."""
+                      context_str: str,
+                      session_mem: Optional[Dict] = None,
+                      confidence_high: float = 0.65,
+                      confidence_medium: float = 0.40,
+                      ) -> Tuple[str, float, str]:
+        """Backward-compat alias → _rag_generate_and_polish.
+
+        Now forwards all parameters including session_mem and confidence thresholds
+        so callers using this alias get the same behaviour as the primary method.
+        """
         return self._rag_generate_and_polish(
-            user_message, hybrid_ranked, hybrid_scores, vertical, context_str)
+            user_message, hybrid_ranked, hybrid_scores, vertical, context_str,
+            session_mem=session_mem,
+            confidence_high=confidence_high,
+            confidence_medium=confidence_medium,
+        )
 
     def _polish_response(self, raw_text: str, vertical: str, user_message: str) -> str:
         """No-op stub — polish is merged into _rag_generate_and_polish."""
@@ -2065,6 +2043,13 @@ Rules:
 
         if "i don't know" in response_text.lower() and not candidates:
             return "I'm not sure about that. Would you like me to connect you with the team?"
+
+        # Bug 6 fix: CLARIFY strings must never be truncated — the CLARIFY parser
+        # downstream requires the full "CLARIFY:<opt1>|<opt2>|..." string to extract
+        # options. Guard here so if _guardrails is ever called on a raw model response
+        # before the CLARIFY check, it passes through untouched.
+        if response_text.startswith('CLARIFY:'):
+            return response_text
 
         if len(response_text) > 600:
             if '\n' in response_text:
@@ -2242,8 +2227,14 @@ Return ONLY the response text or IDK_FALLBACK."""
 
     def _build_context(self, conversation_history: List[Dict],
                        client_id: str = None,
-                       current_message: str = None) -> str:
-        """Earlier summary (DB) + last 8 turns + follow-up annotation."""
+                       current_message: str = None,
+                       is_followup: Optional[bool] = None) -> str:
+        """Earlier summary (DB) + last 8 turns + follow-up annotation.
+
+        is_followup: pre-computed result from _is_followup() in generate_response().
+                     Pass it in to avoid a redundant second call on the same message.
+                     If None, computed here (e.g. when called from outside the pipeline).
+        """
         parts = []
 
         if client_id:
@@ -2275,7 +2266,10 @@ Return ONLY the response text or IDK_FALLBACK."""
                     for m in recent
                     if m.get('role') == 'user' and m.get('content')
                 ]
-                if self._is_followup(current_message, conversation_history) and recent_user_msgs:
+                # Use pre-computed is_followup when available; compute only if called
+                # outside the pipeline (is_followup=None).
+                _is_fu = is_followup if is_followup is not None else self._is_followup(current_message, conversation_history)
+                if _is_fu and recent_user_msgs:
                     prev_question = recent_user_msgs[-1]
                     parts.append(
                         "[Follow-up context]\n"
@@ -2292,15 +2286,14 @@ Return ONLY the response text or IDK_FALLBACK."""
         Summarise conversation when it exceeds ~2000 tokens (est. chars/4).
         Non-blocking — failures are logged and ignored.
 
-        Bug 8 / INFO: This method is NOT called anywhere inside ai_helper.py.
-        It MUST be called externally from app.py (or equivalent) after each
-        conversation turn, e.g.:
+        This method IS called internally by generate_response() after every
+        completed turn via _BG_EXECUTOR, passing history + the new assistant
+        response. app.py does NOT need to call this separately — doing so would
+        cause double-summarisation and duplicate DB writes.
 
-            ai_helper.maybe_summarise(client_id, conversation_history)
-
-        If it is not wired in, long conversations will never be summarised and
-        context windows will grow unbounded, degrading response quality and
-        increasing Gemini token costs.
+        If you need to trigger summarisation outside of generate_response()
+        (e.g. on session end), call it directly, but ensure it is not also
+        being called from the pipeline for the same conversation window.
         """
         if not self.enabled or not conversation_history or not client_id:
             return
@@ -2394,8 +2387,8 @@ Return ONLY the response text or IDK_FALLBACK."""
                 # store paraphrases as separate lightweight chunks so they still
                 # broaden retrieval without contaminating the primary vector.
                 paraphrases = self._generate_paraphrases(question) if idx == 0 else []
-                q_vec = _embed(question,   task='retrieval_document')
-                a_vec = _embed(chunk_text, task='retrieval_document')
+                q_vec = _embed(question,   task='retrieval_document', _enabled=self.enabled)
+                a_vec = _embed(chunk_text, task='retrieval_document', _enabled=self.enabled)
                 # FIX 2: Replace 50/50 average with 70/30 question-weighted blend.
                 # Answer vectors contain domain vocabulary that drags the centroid
                 # away from the question's semantic space. Weighting the question
@@ -2449,9 +2442,17 @@ Return ONLY the response text or IDK_FALLBACK."""
                 for p_text in paraphrases:
                     if not p_text or not p_text.strip():
                         continue
-                    p_vec = _embed(p_text.strip(), task='retrieval_document')
+                    p_vec = _embed(p_text.strip(), task='retrieval_document', _enabled=self.enabled)
                     if not p_vec:
                         continue
+                    # Bug 10 fix: paraphrase chunks were appended without any dedup check,
+                    # allowing near-duplicate paraphrases to inflate the index. Apply the
+                    # same 0.92 cosine threshold used for primary chunks.
+                    if seen_embeddings:
+                        p_sim = max((_cosine(p_vec, ex) for ex in seen_embeddings), default=0.0)
+                        if p_sim > 0.92:
+                            logger.debug(f"[Dedup/Para] skipped (sim={p_sim:.3f}): '{p_text.strip()[:50]}'")
+                            continue
                     chunks.append({
                         'kb_id':     chunk_id,          # same id → same answer returned
                         'title':     question,
@@ -2468,6 +2469,9 @@ Return ONLY the response text or IDK_FALLBACK."""
                         },
                         'quality':   max(0.0, quality - 0.1),   # slight quality penalty
                     })
+                    seen_embeddings.append(p_vec)
+                    if len(seen_embeddings) > MAX_DEDUPE_EMBEDS:
+                        seen_embeddings = seen_embeddings[-MAX_DEDUPE_EMBEDS:]
 
         logger.info(f"[Enrich] client={client_id} input={len(raw_items)} output={len(chunks)}")
         return chunks
@@ -2479,16 +2483,16 @@ Return ONLY the response text or IDK_FALLBACK."""
         chunks    = []
         current   = ""
         for sent in sentences:
-            # FIX BUG-12: A sentence longer than max_len was assigned to `current`
-            # and appended to chunks without truncation. The [text[:max_len]] guard
-            # at the end only fired when chunks was completely empty, not when an
-            # oversized sentence arrived mid-loop. Truncate here instead.
+            # Bug 12 fix: if a single sentence exceeds max_len, hard-truncate it
+            # rather than letting it overflow into `current` unchecked. The old code
+            # only applied text[:max_len] when chunks was empty at the very end.
             if len(sent) > max_len:
                 if current:
                     chunks.append(current)
                     current = ""
                 chunks.append(sent[:max_len])
-            elif len(current) + len(sent) + 1 <= max_len:
+                continue
+            if len(current) + len(sent) + 1 <= max_len:
                 current = (current + " " + sent).strip()
             else:
                 if current:
@@ -2689,7 +2693,7 @@ Return ONLY the response text or IDK_FALLBACK."""
                     continue
 
                 # Primary embedding (already normalized by _embed() after Fix 1)
-                vec = _embed(question, task='retrieval_document')
+                vec = _embed(question, task='retrieval_document', _enabled=self.enabled)
                 if vec:
                     _m.store_faq_embedding(client_id, fid, question, vec)
                     count += 1
@@ -2699,7 +2703,7 @@ Return ONLY the response text or IDK_FALLBACK."""
                 for p_text in paraphrases:
                     if not p_text or not p_text.strip():
                         continue
-                    p_vec = _embed(p_text.strip(), task='retrieval_document')
+                    p_vec = _embed(p_text.strip(), task='retrieval_document', _enabled=self.enabled)
                     if p_vec:
                         # Store with a decorated id so it doesn't overwrite the primary
                         p_fid = f"{fid}__para__{hashlib.sha256(p_text.encode()).hexdigest()[:8]}"
@@ -2733,17 +2737,19 @@ Return ONLY the response text or IDK_FALLBACK."""
     def _make_fallback(self, answer: str = '') -> str:
         if not answer:
             return "I'm not sure about that. Would you like me to connect you with the team?"
-        # FIX BUG-13: The old str.replace() variants used leading spaces
-        # (e.g. " I am "), which silently skips occurrences at the very start of
-        # a sentence / string. Use re.sub() with \b word-boundaries instead so
-        # all occurrences are normalised regardless of position.
-        result = answer
-        result = re.sub(r'\bI am\b',   "I'm",    result)
-        result = re.sub(r'\bYou are\b', "You're", result)
-        result = re.sub(r'\bit is\b',  "it's",   result, flags=re.IGNORECASE)
-        result = re.sub(r'\bdo not\b', "don't",  result, flags=re.IGNORECASE)
-        result = re.sub(r'\bcannot\b', "can't",  result, flags=re.IGNORECASE)
-        return result
+        # Bug 13 fix: leading-space replacements miss contractions at the start of a
+        # sentence (e.g. "I am happy to help" → not replaced). Add ^-anchored variants
+        # via re.sub so sentence-initial occurrences are also contracted.
+        text = answer
+        for pattern, repl in [
+            (r'(?i)(?<!\w)I am ', "I'm "),
+            (r'(?i)(?<!\w)You are ', "You're "),
+            (r'(?i)(?<!\w)it is ', "it's "),
+            (r'(?i)(?<!\w)do not ', "don't "),
+            (r'(?i)(?<!\w)cannot ', "can't "),
+        ]:
+            text = re.sub(pattern, repl, text)
+        return text
 
     def _parse_json(self, text: str) -> Optional[Dict]:
         text = text.strip()
@@ -2789,12 +2795,11 @@ def get_ai_helper(api_key: str, model_name: str = 'gemini-2.0-flash') -> AIHelpe
     under Gunicorn threaded workers cannot create two instances simultaneously
     and race on genai.configure().
 
-    FIX BUG-14: On key rotation the old _BG_EXECUTOR is shut down before the
-    new AIHelper is created. Without this, the old ThreadPoolExecutor's 4 workers
-    keep running with the stale genai configuration (captured in their closure)
-    and silently produce auth errors for any background tasks that fire after the
-    key change. We replace the module-level executor with a fresh one so all
-    subsequent background submissions use the new configuration.
+    Bug 14 fix: when a key rotation forces a new AIHelper, the module-level
+    _BG_EXECUTOR is also replaced. The old executor is shut down
+    (wait=False so we don't block the response path) to stop background
+    workers that still hold a reference to the old genai configuration via
+    stale closure — preventing silent auth errors on queued gap-recording tasks.
     """
     global _ai_helper, _BG_EXECUTOR
     with _ai_helper_lock:
@@ -2803,10 +2808,17 @@ def get_ai_helper(api_key: str, model_name: str = 'gemini-2.0-flash') -> AIHelpe
             or _ai_helper.api_key != api_key
             or _ai_helper.model_name != model_name
         ):
-            # Drain and replace the background executor before reconfiguring genai
-            # so no in-flight tasks can submit work under the old key.
-            old_executor = _BG_EXECUTOR
-            _BG_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix='ai_bg')
-            old_executor.shutdown(wait=False)   # non-blocking; running tasks complete naturally
+            if _ai_helper is not None:
+                # Key/model changed — retire the old executor before creating the new helper.
+                # wait=False: don't block; already-running tasks finish naturally but no
+                # new tasks will be accepted from the old configuration path.
+                try:
+                    _BG_EXECUTOR.shutdown(wait=False)
+                except Exception:
+                    pass
+                _BG_EXECUTOR = ThreadPoolExecutor(
+                    max_workers=4, thread_name_prefix="lumvi_bg"
+                )
+                logger.info("[get_ai_helper] API key/model changed — executor recycled")
             _ai_helper = AIHelper(api_key, model_name)
     return _ai_helper

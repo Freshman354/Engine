@@ -288,6 +288,34 @@ def init_db():
         )
     ''')
 
+    # ── PHASE 3: Persistent session memory ───────────────────────────────
+    # Keyed by (client_id, session_id). Accumulates name, email,
+    # purchase_stage, frustration_score, and turn_count across the full
+    # conversation so the AI never re-asks for info already given.
+    # session_data is a JSONB blob — adding new fields never requires a
+    # schema migration; update upsert_session() and load_session() only.
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            id                SERIAL      PRIMARY KEY,
+            client_id         TEXT        NOT NULL,
+            session_id        TEXT        NOT NULL,
+            name              TEXT,
+            email             TEXT,
+            phone             TEXT,
+            purchase_stage    TEXT,
+            frustration_score INTEGER     DEFAULT 0,
+            turn_count        INTEGER     DEFAULT 0,
+            session_data      JSONB       DEFAULT '{}',
+            created_at        TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+            updated_at        TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT chat_sessions_client_session_uq UNIQUE (client_id, session_id)
+        )
+    ''')
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_chat_sessions_client "
+        "ON chat_sessions (client_id, updated_at DESC)"
+    )
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -297,7 +325,8 @@ def init_db():
     # without needing a separate startup call.
     migrate_faqs_table()
     migrate_faq_to_knowledge_base()
-    migrate_kb_gaps()  # adds UNIQUE(client_id, question) for upsert counting
+    migrate_kb_gaps()       # adds UNIQUE(client_id, question) for upsert counting
+    migrate_chat_sessions() # Phase 3 — persistent session memory
 
 
 def migrate_clients_table():
@@ -2855,6 +2884,212 @@ def migrate_kb_gaps():
         print("✅ migrate_kb_gaps complete")
     except Exception as e:
         print(f"⚠️  migrate_kb_gaps: {e}")
+
+
+# =====================================================================
+# PHASE 3 — PERSISTENT SESSION MEMORY
+# =====================================================================
+
+def migrate_chat_sessions():
+    """
+    Create chat_sessions table if it doesn't exist.
+    Safe to call on every startup — fully idempotent.
+    Also adds the UNIQUE constraint via SAVEPOINT so repeated calls
+    don't abort the transaction if the constraint already exists.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                id                SERIAL      PRIMARY KEY,
+                client_id         TEXT        NOT NULL,
+                session_id        TEXT        NOT NULL,
+                name              TEXT,
+                email             TEXT,
+                phone             TEXT,
+                purchase_stage    TEXT,
+                frustration_score INTEGER     DEFAULT 0,
+                turn_count        INTEGER     DEFAULT 0,
+                session_data      JSONB       DEFAULT '{}',
+                created_at        TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+                updated_at        TIMESTAMP   DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_sessions_client "
+            "ON chat_sessions (client_id, updated_at DESC)"
+        )
+        # UNIQUE constraint — wrapped in SAVEPOINT so a duplicate-constraint
+        # error only rolls back this one statement, not the whole transaction.
+        cursor.execute("SAVEPOINT sp_cs_uq")
+        try:
+            cursor.execute(
+                "ALTER TABLE chat_sessions ADD CONSTRAINT "
+                "chat_sessions_client_session_uq UNIQUE (client_id, session_id)"
+            )
+            cursor.execute("RELEASE SAVEPOINT sp_cs_uq")
+        except Exception:
+            cursor.execute("ROLLBACK TO SAVEPOINT sp_cs_uq")
+        conn.commit()
+        print("✅ migrate_chat_sessions complete")
+    except Exception as e:
+        print(f"⚠️  migrate_chat_sessions: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def load_session(client_id: str, session_id: str) -> dict:
+    """
+    Load a persistent session from PostgreSQL.
+
+    Returns a dict with these guaranteed keys (safe defaults when missing):
+        name              str | None
+        email             str | None
+        phone             str | None
+        purchase_stage    str | None
+        frustration_score int   (0)
+        turn_count        int   (0)
+        session_data      dict  ({})   — arbitrary extra fields
+
+    Never raises. Returns all-default dict on any DB failure so the
+    caller can treat a missing session identically to a fresh one.
+    """
+    _defaults = {
+        'name':              None,
+        'email':             None,
+        'phone':             None,
+        'purchase_stage':    None,
+        'frustration_score': 0,
+        'turn_count':        0,
+        'session_data':      {},
+    }
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """SELECT name, email, phone, purchase_stage,
+                      frustration_score, turn_count, session_data
+               FROM chat_sessions
+               WHERE client_id = %s AND session_id = %s""",
+            (client_id, session_id)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not row:
+            return dict(_defaults)
+        result = dict(_defaults)
+        result['name']              = row['name']
+        result['email']             = row['email']
+        result['phone']             = row['phone']
+        result['purchase_stage']    = row['purchase_stage']
+        result['frustration_score'] = int(row['frustration_score'] or 0)
+        result['turn_count']        = int(row['turn_count'] or 0)
+        # session_data is JSONB — psycopg2 returns it as a dict already
+        raw_sd = row['session_data']
+        if isinstance(raw_sd, str):
+            try:
+                raw_sd = json.loads(raw_sd)
+            except Exception:
+                raw_sd = {}
+        result['session_data'] = raw_sd or {}
+        return result
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"[load_session] {e}")
+        return dict(_defaults)
+
+
+def upsert_session(client_id: str, session_id: str, updates: dict) -> bool:
+    """
+    Create or update a chat session row with the supplied field values.
+
+    `updates` may contain any subset of the named columns plus arbitrary
+    keys which are merged into session_data (the JSONB blob).
+
+    Named columns handled explicitly:
+        name, email, phone, purchase_stage,
+        frustration_score, turn_count
+
+    Any other key in `updates` is merged into session_data so callers
+    can store arbitrary per-session state without a schema migration.
+
+    Strategy: INSERT … ON CONFLICT DO UPDATE so both create and update
+    are a single round-trip. turn_count is always incremented by 1.
+    frustration_score accumulates (not overwritten) to prevent a single
+    calm message from wiping a prior frustration signal.
+
+    Returns True on success, False on failure (always non-blocking).
+    """
+    try:
+        conn, cursor = get_db()
+
+        # Separate named columns from extra payload
+        named = ('name', 'email', 'phone', 'purchase_stage',
+                 'frustration_score', 'turn_count')
+        col_vals = {k: updates[k] for k in named if k in updates}
+        extra    = {k: v for k, v in updates.items() if k not in named}
+
+        cursor.execute(
+            """
+            INSERT INTO chat_sessions
+                (client_id, session_id, name, email, phone,
+                 purchase_stage, frustration_score, turn_count,
+                 session_data, updated_at)
+            VALUES
+                (%s, %s, %s, %s, %s, %s, %s, 1, %s, NOW())
+            ON CONFLICT ON CONSTRAINT chat_sessions_client_session_uq
+            DO UPDATE SET
+                name              = COALESCE(EXCLUDED.name,           chat_sessions.name),
+                email             = COALESCE(EXCLUDED.email,          chat_sessions.email),
+                phone             = COALESCE(EXCLUDED.phone,          chat_sessions.phone),
+                purchase_stage    = COALESCE(EXCLUDED.purchase_stage, chat_sessions.purchase_stage),
+                frustration_score = chat_sessions.frustration_score
+                                    + GREATEST(EXCLUDED.frustration_score, 0),
+                turn_count        = chat_sessions.turn_count + 1,
+                session_data      = chat_sessions.session_data || EXCLUDED.session_data,
+                updated_at        = NOW()
+            """,
+            (
+                client_id,
+                session_id,
+                col_vals.get('name'),
+                col_vals.get('email'),
+                col_vals.get('phone'),
+                col_vals.get('purchase_stage'),
+                max(int(col_vals.get('frustration_score', 0)), 0),
+                json.dumps(extra) if extra else json.dumps({}),
+            )
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"[upsert_session] {e}")
+        return False
+
+
+def delete_session(client_id: str, session_id: str) -> bool:
+    """
+    Hard-delete a single session row. Call when a conversation ends
+    or a widget reset is triggered. Returns True on success.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "DELETE FROM chat_sessions WHERE client_id = %s AND session_id = %s",
+            (client_id, session_id)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"[delete_session] {e}")
+        return False
 
 
 def get_recent_conversations(client_id: str, limit: int = 15) -> list:
