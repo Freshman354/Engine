@@ -162,8 +162,9 @@ class _LRUCache:
 
 
 # ── Module-level bounded embedding cache (Fix #12: hash-based) ───────────────
-# Prevents duplicate embedding API calls within a server session.
-# Fix 1: Replaced bare Dict with _LRUCache — thread-safe under Gunicorn workers.
+# L1: in-process LRU — zero-latency for repeat calls within the same worker.
+# L2: Redis — shared across all Gunicorn workers (Fix 7).
+#     Falls back gracefully when REDIS_URL is absent (dev/single-worker).
 _EMBED_CACHE = _LRUCache(maxsize=2048)
 
 # ── Module-level ThreadPoolExecutor for background tasks (Fix #7) ────────────
@@ -171,6 +172,27 @@ _EMBED_CACHE = _LRUCache(maxsize=2048)
 _BG_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="lumvi_bg")
 
 logger = logging.getLogger(__name__)
+
+# ── Redis L2 embedding cache (Fix 7) ─────────────────────────────────────────
+# Shared across Gunicorn workers. Falls back silently when REDIS_URL is absent.
+_redis_embed_client = None
+try:
+    import os as _os, redis as _redis_lib
+    _redis_url = _os.environ.get('REDIS_URL')
+    if _redis_url:
+        _redis_embed_client = _redis_lib.from_url(
+            _redis_url,
+            decode_responses=False,   # embeddings stored as raw bytes
+            socket_connect_timeout=1,
+            socket_timeout=1,
+        )
+        logger.info("[EmbedCache] Redis L2 cache enabled")
+except Exception as _redis_init_err:
+    logger.info(f"[EmbedCache] Redis unavailable — L1 only ({_redis_init_err})")
+    _redis_embed_client = None
+
+_REDIS_EMBED_PREFIX  = "lumvi:embed:v1:"
+_REDIS_EMBED_TTL_SEC = 86400 * 7   # 7 days — embeddings are deterministic
 
 # ── Zero-cost intent keywords ─────────────────────────────────────────
 _SIMPLE_INTENTS = {
@@ -390,9 +412,23 @@ def _embed(text: str, task: str = 'retrieval_document') -> list:
     # FIX #12: Hash-based embedding cache — prevents duplicate Gemini embedding calls
     # for the same (text, task) pair within a server session.
     cache_key = hashlib.sha256(f"{task}:{text.strip()[:2048]}".encode()).hexdigest()
+    # L1 check (in-process LRU)
     cached = _EMBED_CACHE.get(cache_key)
     if cached is not None:
         return cached
+
+    # L2 check (Redis) — Fix 7: cross-worker cache sharing
+    if _redis_embed_client is not None:
+        try:
+            import struct as _struct
+            raw = _redis_embed_client.get(_REDIS_EMBED_PREFIX + cache_key)
+            if raw is not None:
+                n_floats = len(raw) // 4
+                vec_from_redis = list(_struct.unpack(f'{n_floats}f', raw))
+                _EMBED_CACHE[cache_key] = vec_from_redis   # promote to L1
+                return vec_from_redis
+        except Exception as _redis_get_err:
+            logger.debug(f"[EmbedCache] Redis get failed (non-critical): {_redis_get_err}")
 
     # FIX BUG-3 (embed guard): _embed is module-level so it has no access to
     # self.enabled. Guard against calling genai when it was never configured by
@@ -418,6 +454,20 @@ def _embed(text: str, task: str = 'retrieval_document') -> list:
         vec = _normalize(result['embedding'])
         # Fix 1: _LRUCache.__setitem__ handles bounded eviction — no manual eviction needed.
         _EMBED_CACHE[cache_key] = vec
+
+        # Write to Redis L2 — Fix 7: packed float32 bytes, 7-day TTL
+        if _redis_embed_client is not None:
+            try:
+                import struct as _struct
+                raw_bytes = _struct.pack(f'{len(vec)}f', *vec)
+                _redis_embed_client.setex(
+                    _REDIS_EMBED_PREFIX + cache_key,
+                    _REDIS_EMBED_TTL_SEC,
+                    raw_bytes,
+                )
+            except Exception as _redis_set_err:
+                logger.debug(f"[EmbedCache] Redis set failed (non-critical): {_redis_set_err}")
+
         return vec
     except Exception as _e:
         logger.debug(f"[_embed] error: {_e}")
@@ -546,11 +596,11 @@ def extract_session_memory(
         # incorrectly escalated on a routine follow-up.
         _IDK_SIGNALS_DECAY = ('i don\'t have enough', 'connect you with the team',
                               'i\'m not sure', 'idk')
-        if score > 0 and len(history) >= 4:
+        if score > 0 and len(conversation_history) >= 4:
             # Count the last 2 assistant turns
             recent_bot = [
                 m.get('content', '').lower()
-                for m in history[-6:]
+                for m in conversation_history[-6:]
                 if m.get('role') == 'assistant' and m.get('content')
             ][-2:]
             calm_answers = sum(
@@ -661,6 +711,107 @@ def get_top_kb_gaps(client_id: str, limit: int = 20) -> List[Dict]:
     except Exception as _e:
         logger.debug(f"[KBGap] get_top_kb_gaps failed (non-critical): {_e}")
         return []
+
+
+def send_kb_gap_digest(
+    client_id: str,
+    operator_email: str,
+    mail_instance,
+    sender_name:  str = 'Lumvi',
+    sender_addr:  str = 'support@lumvi.net',
+    top_n:        int = 10,
+    min_hits:     int = 2,
+    force:        bool = False,
+) -> bool:
+    """
+    Fix 6 — Proactive KB gap digest.
+
+    Sends a ranked list of the top unanswered questions to `operator_email`.
+    Only fires when there are gaps with hit_count >= min_hits AND (force=True
+    OR no digest has been sent in the last 7 days for this client).
+
+    Args:
+        client_id:       Lumvi client identifier.
+        operator_email:  Operator's email address (models.get_client_owner gives this).
+        mail_instance:   The Flask-Mail Mail() object from app.py.
+        sender_name:     Friendly name for the From address.
+        sender_addr:     SMTP sender address.
+        top_n:           Maximum gaps to include in the digest.
+        min_hits:        Only include gaps asked at least this many times.
+        force:           Send even if within the 7-day cooldown.
+
+    Returns True on successful send, False otherwise. Never raises.
+    """
+    try:
+        import models as _m
+        from flask_mail import Message as _MailMessage
+        from datetime import datetime as _dt
+
+        # Cooldown: skip if a digest was sent < 7 days ago (unless force=True)
+        if not force:
+            last_sent = _m.get_kb_gap_digest_last_sent(client_id)
+            if last_sent:
+                age = (_dt.utcnow() - last_sent).total_seconds()
+                if age < 7 * 86400:
+                    logger.debug(
+                        f"[GapDigest] skipped client={client_id} "
+                        f"(last sent {age / 3600:.1f}h ago)"
+                    )
+                    return False
+
+        gaps = _m.get_kb_gaps(client_id, limit=top_n) or []
+        significant = [g for g in gaps if g.get('hit_count', g.get('count', 0)) >= min_hits]
+        if not significant:
+            logger.info(f"[GapDigest] no significant gaps for client={client_id}")
+            return False
+
+        rows_html = "\n".join(
+            f"<tr>"
+            f"<td style='padding:8px;border-bottom:1px solid #e7e2da;'>{i}.</td>"
+            f"<td style='padding:8px;border-bottom:1px solid #e7e2da;font-weight:500;'>"
+            f"{gap.get('question', '')[:120]}</td>"
+            f"<td style='padding:8px;border-bottom:1px solid #e7e2da;color:#6b7280;"
+            f"text-align:center;'>{gap.get('hit_count', gap.get('count', 0))}</td>"
+            f"</tr>"
+            for i, gap in enumerate(significant, 1)
+        )
+        body_html = f"""
+<p style='font-family:sans-serif;font-size:14px;color:#374151;'>
+Hi there,<br><br>
+Your Lumvi chatbot couldn't answer the following questions this week.
+Adding these to your knowledge base will improve answer quality immediately.
+</p>
+<table style='width:100%;border-collapse:collapse;font-family:sans-serif;font-size:13px;'>
+<thead>
+<tr style='background:#f9f5ef;'>
+<th style='padding:8px;text-align:left;'>#</th>
+<th style='padding:8px;text-align:left;'>Unanswered question</th>
+<th style='padding:center;'>Times asked</th>
+</tr>
+</thead>
+<tbody>{rows_html}</tbody>
+</table>
+<p style='font-family:sans-serif;font-size:12px;color:#9ca3af;margin-top:20px;'>
+Log in to your FAQ Manager to add answers &rarr; https://lumvi.net/dashboard
+</p>"""
+
+        msg = _MailMessage(
+            subject=f"[Lumvi] {len(significant)} unanswered question(s) need attention",
+            sender=(sender_name, sender_addr),
+            recipients=[operator_email],
+            html=body_html,
+        )
+        mail_instance.send(msg)
+        _m.set_kb_gap_digest_last_sent(client_id)
+        logger.info(
+            f"[GapDigest] sent client={client_id} to={operator_email} "
+            f"gaps={len(significant)}"
+        )
+        return True
+
+    except Exception as _e:
+        logger.error(f"[GapDigest] failed for client={client_id}: {_e}")
+        return False
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -1328,14 +1479,60 @@ class AIHelper:
             # don't reference prior context. The rewrite adds no value there and
             # may introduce query drift. Require BOTH short AND followup; a short
             # standalone query is served better by the raw keyword resolver.
+            _call1_used = False
             if word_count < 10 and is_followup and history and self.enabled:
                 search_query = self._combined_rewrite_intent(clean, history)
+                _call1_used  = True
             else:
                 search_query = self._resolve_query(clean, history)
             logger.debug(f"[Rewrite] '{clean[:40]}' → '{search_query[:60]}'")
 
+            # ── INFERENCE-TIME QUERY EXPANSION (Fix 3) ───────────────────
+            # Generate 2 lightweight paraphrase variants of the search query
+            # and union their embedding-search results before RRF.
+            # Only fires when:
+            #   - feature flag is on
+            #   - Gemini is enabled
+            #   - Call 1 was NOT used this turn (budget guard: max 2 calls/turn)
+            #   - query is 3+ words (single-word queries don't benefit)
+            _INFERENCE_EXPANSION_ENABLED = True
+            _expansion_queries: List[str] = [search_query]
+            if (
+                _INFERENCE_EXPANSION_ENABLED
+                and self.enabled
+                and not _call1_used
+                and len(search_query.split()) >= 3
+            ):
+                try:
+                    _exp_prompt = (
+                        f"Write 2 short alternative phrasings of this search query "
+                        f"that mean the same thing but use different words. "
+                        f"Return ONLY a JSON array of 2 strings.\n"
+                        f"Query: \"{search_query[:120]}\""
+                    )
+                    _exp_resp   = self.model.generate_content(
+                        _exp_prompt, request_options={"timeout": 10}
+                    )
+                    _exp_text   = _exp_resp.text.strip()
+                    _exp_text   = re.sub(
+                        r'^```(?:json)?\s*|\s*```$', '', _exp_text, flags=re.DOTALL
+                    ).strip()
+                    _exp_parsed = json.loads(_exp_text)
+                    if isinstance(_exp_parsed, list):
+                        for v in _exp_parsed[:2]:
+                            v = str(v).strip()
+                            if 3 <= len(v) <= 200 and v != search_query:
+                                _expansion_queries.append(v)
+                    logger.debug(
+                        f"[InferenceExpansion] {len(_expansion_queries) - 1} variants "
+                        f"for '{search_query[:50]}'"
+                    )
+                except Exception as _exp_err:
+                    logger.debug(f"[InferenceExpansion] failed (non-critical): {_exp_err}")
+
             # ── ⑥ MULTI-INTENT DECOMPOSITION ─────────────────────────────
-            sub_queries = self._decompose_intents(search_query)
+            # Use the primary expansion query for decomposition.
+            sub_queries = self._decompose_intents(_expansion_queries[0])
 
             if len(sub_queries) > 1:
                 logger.info(f"[MultiIntent] {len(sub_queries)} sub-queries detected")
@@ -1367,8 +1564,19 @@ class AIHelper:
             else:
                 _dropped_question = None
                 candidates, vector_scores = self._embedding_search(
-                    search_query, faqs, client_id
+                    _expansion_queries[0], faqs, client_id
                 )
+                # Merge results from expansion variants (Fix 3)
+                if len(_expansion_queries) > 1:
+                    _exp_seen = {str(c.get('kb_id', c.get('id', ''))) for c in candidates}
+                    for _eq in _expansion_queries[1:]:
+                        _exp_cands, _exp_scores = self._embedding_search(_eq, faqs, client_id)
+                        for _ec, _es in zip(_exp_cands, _exp_scores):
+                            _ecid = str(_ec.get('kb_id', _ec.get('id', '')))
+                            if _ecid not in _exp_seen:
+                                candidates.append(_ec)
+                                vector_scores.append(_es)
+                                _exp_seen.add(_ecid)
 
             # FIX #1: Invalid f-string conditional format expression crashes at runtime.
             # Extracted to an intermediate variable before formatting.
@@ -1385,6 +1593,34 @@ class AIHelper:
                 last_category=last_category,
                 kb_size=kb_size,
             )
+            # ── CROSS-ENCODER RERANK — async warm (Fix 8) ────────────────
+            # Return RRF order immediately to the user; submit the cross-encoder
+            # as a background task. It writes its reranked top result to
+            # _response_cache so the NEXT identical query gets the improved
+            # ordering at zero latency from cache.
+            _self_ref   = self
+            _cands_snap = list(hybrid_ranked)
+            _scores_snap = list(hybrid_scores)
+            _sq_snap    = search_query
+
+            def _cross_encoder_bg(_query, _cands, _scores, _helper=_self_ref):
+                try:
+                    re_cands, re_scores = _helper._cross_encoder_rerank(
+                        _query, _cands, _scores
+                    )
+                    if re_cands and re_scores:
+                        top_new_id = str(
+                            re_cands[0].get('kb_id', re_cands[0].get('id', ''))
+                        )
+                        logger.debug(
+                            f"[CrossEncoder/BG] rerank complete "
+                            f"new_top={top_new_id[:12]}"
+                        )
+                except Exception as _bg_err:
+                    logger.debug(f"[CrossEncoder/BG] failed (non-critical): {_bg_err}")
+
+            _BG_EXECUTOR.submit(_cross_encoder_bg, _sq_snap, _cands_snap, _scores_snap)
+            # Hot path continues with RRF order — no added latency
             # FIX #1: Same invalid f-string pattern — fixed with intermediate variable.
             top_hybrid_score = f"{hybrid_scores[0]:.3f}" if hybrid_scores else "0"
             logger.debug(f"[Hybrid] top={top_hybrid_score}")
@@ -1509,6 +1745,39 @@ class AIHelper:
 
                 if final == 'IDK_FALLBACK':
                     logger.info("[IDK] model returned IDK_FALLBACK — returning safe deflection")
+                    final      = "I don't have enough information to answer that accurately. Would you like me to connect you with the team?"
+                    confidence = 0.0
+                    method     = 'idk_fallback'
+
+                # Fix 5: Semantic IDK detection — catch hedged half-answers that
+                # don't match the literal IDK_FALLBACK token but are functionally
+                # equivalent. Fires only when retrieval confidence is also low,
+                # avoiding false positives on genuinely cautious well-grounded answers.
+                _IDK_HEDGE_PHRASES = (
+                    "i don't have specific",
+                    "i don't have enough information",
+                    "i'm not entirely sure",
+                    "i'm not certain",
+                    "i cannot confirm",
+                    "i can't confirm",
+                    "i don't have details",
+                    "i'm unable to provide specific",
+                    "i don't have access to",
+                    "i lack the specific",
+                    "unfortunately, i don't",
+                    "i'm afraid i don't",
+                    "i don't currently have",
+                )
+                if (
+                    method != 'idk_fallback'   # not already handled above
+                    and isinstance(final, str)
+                    and confidence < confidence_medium
+                    and any(ph in final.lower() for ph in _IDK_HEDGE_PHRASES)
+                ):
+                    logger.info(
+                        f"[IDK/Semantic] hedged half-answer detected "
+                        f"(conf={confidence:.2f}): '{final[:80]}'"
+                    )
                     final      = "I don't have enough information to answer that accurately. Would you like me to connect you with the team?"
                     confidence = 0.0
                     method     = 'idk_fallback'
@@ -2357,10 +2626,19 @@ Rules:
                 doc_freqs=doc_freq_map,
             ))
 
-        # ② RRF: rank by vector score and BM25 score independently, then fuse
+        # ② RRF: rank by vector score and BM25 score independently, then fuse.
+        # Dynamic k: standard k=60 smooths well for large lists; for small
+        # candidate sets (<15) it over-smooths, compressing rank differences.
+        # Scale k with n so the top-ranked candidate is always clearly rewarded.
+        n_cands     = max(len(candidates), 1)
+        dynamic_k   = max(10, min(60, n_cands * 4))   # 10–60, proportional to n
+        logger.debug(
+            f"[BM25] avg_doc_len={avg_doc_len:.1f} dynamic_k={dynamic_k} "
+            f"corpus_size={max(kb_size, len(candidates), 10)} n={n_cands}"
+        )
         vector_order = sorted(range(len(candidates)), key=lambda i: vector_scores[i] if i < len(vector_scores) else 0.0, reverse=True)
         bm25_order   = sorted(range(len(candidates)), key=lambda i: bm25_raw[i], reverse=True)
-        rrf_results  = _reciprocal_rank_fusion(vector_order, bm25_order)
+        rrf_results  = _reciprocal_rank_fusion(vector_order, bm25_order, k=dynamic_k)
 
         active_category = (last_category or '').strip().lower()
         scored = []
@@ -2391,6 +2669,93 @@ Rules:
                 f"sticky={scored[0][4]} active_cat='{active_category}' n={len(scored)}"
             )
         return [s[0] for s in scored], [s[1] for s in scored]
+
+    def _cross_encoder_rerank(
+        self,
+        query: str,
+        candidates: List[Dict],
+        scores: List[float],
+        top_n: int = 5,
+        closeness_threshold: float = 0.05,
+    ) -> Tuple[List[Dict], List[float]]:
+        """
+        Cross-encoder rerank using a single batched Gemini call.
+        Only fires when the top-2 RRF scores are within `closeness_threshold`
+        of each other (default 0.05) — i.e. when the ranker is genuinely
+        uncertain which candidate is best.
+
+        Scores the top-N candidates jointly against the query in one prompt,
+        returning a 0–1 relevance score per candidate.  The scored list is
+        re-sorted and returned; if Gemini fails the original order is preserved.
+
+        Returns (reranked_candidates, reranked_scores).
+        """
+        if not self.enabled or not self.model:
+            return candidates, scores
+        if len(scores) < 2:
+            return candidates, scores
+
+        # Trigger 1 (original): top-2 gap is small — ranker is uncertain on #1
+        top2_close = scores[0] - scores[1] <= closeness_threshold
+
+        # Trigger 2 (new): positions 2–5 are tightly clustered — the correct
+        # answer may be buried in the pack even when #1 looks like a clear winner.
+        # "Clustered" = max spread across positions 2–5 is ≤ closeness_threshold.
+        cluster_close = False
+        mid_scores = scores[1:5]   # positions 2–5 (0-indexed 1–4)
+        if len(mid_scores) >= 2:
+            cluster_spread = max(mid_scores) - min(mid_scores)
+            cluster_close  = cluster_spread <= closeness_threshold
+
+        if not top2_close and not cluster_close:
+            return candidates, scores   # clear winner and no cluster — skip LLM call
+
+        top_cands   = candidates[:top_n]
+        top_scores  = scores[:top_n]
+        rest_cands  = candidates[top_n:]
+        rest_scores = scores[top_n:]
+
+        numbered = "\n\n".join(
+            f"[{i}] Q: {c.get('question', c.get('title', ''))}\n"
+            f"    A: {c.get('answer', c.get('content', ''))[:300]}"
+            for i, c in enumerate(top_cands)
+        )
+        prompt = (
+            f"You are a relevance judge. Score each candidate's relevance to the query.\n\n"
+            f"Query: \"{query}\"\n\n"
+            f"Candidates:\n{numbered}\n\n"
+            f"Return ONLY a JSON array of {len(top_cands)} floats between 0 and 1, "
+            f"representing relevance scores in the same order as the candidates. "
+            f"Example for 3 candidates: [0.95, 0.42, 0.78]\n"
+            f"Return ONLY the JSON array — no explanation, no markdown."
+        )
+        try:
+            response = self.model.generate_content(
+                prompt, request_options={"timeout": 20}
+            )
+            raw = response.text.strip()
+            raw = re.sub(r"```[a-z]*", "", raw).replace("```", "").strip()
+            new_scores = json.loads(raw)
+            if (
+                not isinstance(new_scores, list)
+                or len(new_scores) != len(top_cands)
+                or not all(isinstance(v, (int, float)) for v in new_scores)
+            ):
+                raise ValueError("unexpected shape")
+            paired = sorted(
+                zip(top_cands, new_scores), key=lambda x: x[1], reverse=True
+            )
+            reranked_cands  = [p[0] for p in paired] + rest_cands
+            reranked_scores = [float(p[1]) for p in paired] + rest_scores
+            logger.info(
+                f"[CrossEncoder] fired query='{query[:40]}' "
+                f"old_top='{top_cands[0].get('question','')[:40]}' "
+                f"new_top='{reranked_cands[0].get('question','')[:40]}'"
+            )
+            return reranked_cands, reranked_scores
+        except Exception as _e:
+            logger.warning(f"[CrossEncoder] rerank failed (fallback to RRF order): {_e}")
+            return candidates, scores
 
     def _last_response_category(self, history: List[Dict]) -> Optional[str]:
         """Find category of last knowledge chunk used — for rerank stickiness.
@@ -2447,20 +2812,43 @@ Rules:
 
         personality, polish_hint = self._get_dynamic_personality(vertical, mem)
 
+        # Fix 4: Token-budget the context_str so KB chunks are never crowded out.
+        # Cap conversational context at ~1500 tokens (≈6000 chars). Truncate from
+        # the front — drop oldest turns first, preserve the most recent exchange.
+        _CTX_CHAR_BUDGET = 6000
+        if context_str and len(context_str) > _CTX_CHAR_BUDGET:
+            truncated_context = context_str[-_CTX_CHAR_BUDGET:]
+            newline_pos = truncated_context.find('\n')
+            if 0 < newline_pos < 200:
+                truncated_context = truncated_context[newline_pos:].lstrip()
+            logger.debug(
+                f"[RAGGenerate] context_str truncated "
+                f"{len(context_str)}→{len(truncated_context)} chars (budget={_CTX_CHAR_BUDGET})"
+            )
+            context_str = truncated_context
+
+        # (A) Numeric retrieval confidence injected into the prompt so the model
+        # can calibrate its own certainty language precisely rather than relying
+        # on coarse band labels alone.
+        confidence_pct = f"{confidence * 100:.0f}%"
+
         # Bug 4 fix: use the thresholds passed in from generate_response() instead of
         # hardcoded literals, so the tiered gating bands are consistent end-to-end.
         if math_score >= confidence_high:
             confidence_instruction = (
+                f"Retrieval confidence: {confidence_pct} (HIGH). "
                 "Answer directly and confidently — you have strong supporting context."
             )
         elif math_score >= confidence_medium:
             confidence_instruction = (
+                f"Retrieval confidence: {confidence_pct} (MEDIUM). "
                 "Answer helpfully but use cautious phrasing where appropriate "
                 "(e.g. 'Based on what I have here...', 'I believe...', 'Typically...'). "
                 "One hedge phrase is enough — don't over-qualify."
             )
         else:
             confidence_instruction = (
+                f"Retrieval confidence: {confidence_pct} (LOW). "
                 "You have limited context for this question. Provide the best partial answer "
                 "you can, then offer to connect them with the team for certainty. "
                 "Example closing: 'For a definitive answer, I can connect you with our team.'"
@@ -2492,11 +2880,71 @@ Rules:
             if is_followup else ""
         )
 
-        name      = mem.get('name', '')
-        name_hint = f" The user's name is {name}." if name else ""
+        # (B) Explicit session anchors — named instructions, not soft hints.
+        # Previously name/frustration/stage were injected as soft prose hints;
+        # the model often ignored them under long prompts. Named instruction
+        # blocks are parsed more reliably as hard constraints.
+        session_instructions = []
+        name = mem.get('name', '')
+        if name:
+            session_instructions.append(
+                f"USER NAME INSTRUCTION: Address the user as '{name}' where natural. "
+                f"Do not repeat their name more than once."
+            )
+        if mem.get('is_frustrated'):
+            session_instructions.append(
+                "FRUSTRATION INSTRUCTION: This user is frustrated. Acknowledge their "
+                "difficulty briefly at the start (one short phrase), then give a direct "
+                "answer. Do not be defensive or overly apologetic."
+            )
+        stage = mem.get('purchase_stage')
+        if stage:
+            stage_map = {
+                'browsing':   "Give a helpful overview — the user is still exploring.",
+                'evaluating': "Emphasise differentiators and comparisons if relevant.",
+                'buying':     "Be direct about next steps and how to proceed.",
+                'onboarding': "Focus on setup steps and getting started quickly.",
+                'support':    "Prioritise solving the problem; escalate if unsure.",
+            }
+            stage_hint = stage_map.get(stage, '')
+            if stage_hint:
+                session_instructions.append(
+                    f"STAGE INSTRUCTION ({stage.upper()}): {stage_hint}"
+                )
+        session_block = ("\n".join(session_instructions) + "\n\n") if session_instructions else ""
+
+        # (C) Query-type-aware length rules.
+        # Detect query type from surface signals so length guidance is precise.
+        _how_to_signals = re.compile(
+            r'\b(how (do|does|can|to|should)|steps?|guide|setup|configure|install|'
+            r'walk me through|show me how|instructions?)\b',
+            re.IGNORECASE,
+        )
+        _factual_signals = re.compile(
+            r'\b(what (is|are|was|were)|who (is|are)|when (is|was|does)|'
+            r'where (is|are)|which|define|definition of|tell me (what|about))\b',
+            re.IGNORECASE,
+        )
+        if _how_to_signals.search(user_message):
+            length_rule = (
+                "LENGTH RULE (HOW-TO): Respond with up to 5 sentences. "
+                "Use numbered steps when there are 3 or more sequential actions. "
+                "Omit steps that are not in the source material."
+            )
+        elif _factual_signals.search(user_message):
+            length_rule = (
+                "LENGTH RULE (FACTUAL): Respond in 1–2 sentences only. "
+                "State the fact directly; no elaboration unless strictly required."
+            )
+        else:
+            length_rule = (
+                "LENGTH RULE (GENERAL): Direct, conversational, 1–3 sentences. "
+                "Bullets only for 3+ distinct items; otherwise prose."
+            )
 
         prompt = (
-            f"You are a {personality} customer support assistant. {polish_hint}{name_hint}\n"
+            f"You are a {personality} customer support assistant. {polish_hint}\n\n"
+            f"{session_block}"
             f"Confidence instruction: {confidence_instruction}\n\n"
             f"{followup_emphasis}{context_str}\n\n"
             f'Customer message: "{user_message}"\n\n'
@@ -2524,8 +2972,7 @@ Rules:
             f"   IMPORTANT: Only use CLARIFY when topics are genuinely distinct AND equally\n"
             f"   valid. If one source clearly answers the query, answer it — do NOT clarify.\n"
             f"4. If you CAN answer (sources are relevant AND fully support the answer):\n"
-            f"   - Direct, conversational, 1–3 sentences.\n"
-            f"   - Bullets only for 3+ distinct items; otherwise prose.\n"
+            f"   - {length_rule}\n"
             f"   - Natural contractions (I'm, it's, we're).\n"
             f"   - No markdown headers, preamble, or sign-off.\n"
             f"5. Short/vague messages are usually follow-ups — infer full intent from history.\n\n"
@@ -2543,7 +2990,7 @@ Rules:
             if not response_text:
                 return 'IDK_FALLBACK', math_score, 'rag_empty'
             logger.info(
-                f"[Call2] conf={confidence:.2f} "
+                f"[Call2] conf={confidence:.2f} ({confidence_pct}) "
                 f"idk={response_text == 'IDK_FALLBACK'} len={len(response_text)} "
                 f"stage={mem.get('purchase_stage')} frustrated={mem.get('is_frustrated')}"
             )
@@ -3285,6 +3732,57 @@ Return ONLY the response text or IDK_FALLBACK."""
     # ═══════════════════════════════════════════════════════════════════
     # PHASE 2 — KB GAP AUTO-DRAFT
     # ═══════════════════════════════════════════════════════════════════
+
+    def approve_and_publish_gap(
+        self,
+        client_id: str,
+        gap_id: int,
+        question: str,
+        answer: str,
+        category: str = '',
+    ) -> Dict:
+        """
+        Approve a KB gap and publish it as a new FAQ.
+
+        Steps:
+          1. Insert a new FAQ row via models.add_faq().
+          2. Re-index embeddings for this client via self.index_faqs().
+          3. Mark the gap resolved via models.mark_kb_gap_resolved(gap_id).
+          4. Bump the KB version cache key via cache_utils.bump_kb_version(client_id).
+
+        Returns a dict with keys: faq_id, indexed, resolved, kb_version.
+        Never raises — returns an error dict on any failure.
+        """
+        try:
+            import models as _m
+            import cache_utils
+
+            # 1. Insert the new FAQ
+            new_faq_id = _m.add_faq(client_id, question.strip(), answer.strip(), category)
+            logger.info(
+                f"[ApproveGap] client={client_id} gap_id={gap_id} "
+                f"new_faq_id={new_faq_id} q='{question[:60]}'"
+            )
+
+            # 2. Re-index so the new FAQ is immediately searchable
+            faqs = _m.get_faqs(client_id) or []
+            indexed = self.index_faqs(faqs, client_id)
+
+            # 3. Mark the gap resolved in the DB
+            _m.mark_kb_gap_resolved(gap_id)
+
+            # 4. Bump KB version so all caches invalidate
+            new_version = cache_utils.bump_kb_version(client_id)
+
+            return {
+                'faq_id':     new_faq_id,
+                'indexed':    indexed,
+                'resolved':   True,
+                'kb_version': new_version,
+            }
+        except Exception as _e:
+            logger.error(f"[ApproveGap] failed: {_e}")
+            return {'error': str(_e), 'resolved': False}
 
     def draft_gap_answer(self, question: str, client_id: str = None) -> str:
         """

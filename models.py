@@ -2808,25 +2808,41 @@ def record_kb_gap(client_id: str, question: str, method: str, confidence: float)
         logging.getLogger(__name__).debug(f"[record_kb_gap] non-critical: {e}")
 
 
-def get_kb_gaps(client_id: str, limit: int = 20) -> list:
+def get_kb_gaps(client_id: str, limit: int = 20, status: str = 'open') -> list:
     """
     Return the top unanswered questions for a client ordered by hit count.
     Used by ai_helper.get_top_kb_gaps() to surface the FAQ Manager's
     'Suggested FAQs' panel.
 
+    Args:
+        client_id: Lumvi client identifier.
+        limit:     Maximum number of rows to return.
+        status:    Filter by gap status ('open', 'resolved', or None for all).
+                   Defaults to 'open' so callers only see actionable gaps.
+
     Returns [] on any failure — never raises.
-    Each dict has: question, count, confidence, last_seen, method.
+    Each dict has: id, question, count, confidence, last_seen, method, status.
     """
     try:
         conn, cursor = get_db()
-        cursor.execute(
-            """SELECT question, count, confidence, last_seen, method
-               FROM kb_gaps
-               WHERE client_id = %s
-               ORDER BY count DESC, last_seen DESC
-               LIMIT %s""",
-            (client_id, limit)
-        )
+        if status:
+            cursor.execute(
+                """SELECT id, question, count, confidence, last_seen, method, status
+                   FROM kb_gaps
+                   WHERE client_id = %s AND status = %s
+                   ORDER BY count DESC, last_seen DESC
+                   LIMIT %s""",
+                (client_id, status, limit)
+            )
+        else:
+            cursor.execute(
+                """SELECT id, question, count, confidence, last_seen, method, status
+                   FROM kb_gaps
+                   WHERE client_id = %s
+                   ORDER BY count DESC, last_seen DESC
+                   LIMIT %s""",
+                (client_id, limit)
+            )
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
@@ -2841,6 +2857,46 @@ def get_kb_gaps(client_id: str, limit: int = 20) -> list:
         import logging
         logging.getLogger(__name__).debug(f"[get_kb_gaps] {e}")
         return []
+
+
+def get_kb_gap_digest_last_sent(client_id: str):
+    """
+    Fix 6 — Return the UTC datetime of the last gap digest sent for this
+    client, or None if no digest has ever been sent.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "SELECT gap_digest_last_sent FROM clients WHERE client_id = %s",
+            (client_id,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return row['gap_digest_last_sent'] if row else None
+    except Exception:
+        return None
+
+
+def set_kb_gap_digest_last_sent(client_id: str) -> None:
+    """
+    Fix 6 — Stamp the current UTC time as the last digest send time for
+    this client. Called immediately after a successful digest email send.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "UPDATE clients SET gap_digest_last_sent = NOW() WHERE client_id = %s",
+            (client_id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as _e:
+        import logging
+        logging.getLogger(__name__).debug(
+            f"[set_kb_gap_digest_last_sent] non-critical: {_e}"
+        )
 
 
 # =====================================================================
@@ -3152,6 +3208,79 @@ def migrate_kb_gaps():
         print("✅ migrate_kb_gaps complete")
     except Exception as e:
         print(f"⚠️  migrate_kb_gaps: {e}")
+
+
+def migrate_kb_gap_status():
+    """
+    Add status and resolved_at columns to kb_gaps, plus a covering index.
+
+    Adds:
+      - status TEXT DEFAULT 'open'   — allows filtering resolved vs open gaps
+      - resolved_at TIMESTAMP        — set when a gap is approved and published
+      - INDEX ON (client_id, status) — fast filtered queries in get_kb_gaps()
+
+    Safe to call every startup — each ALTER uses a SAVEPOINT so it is a
+    no-op if the column already exists.
+    """
+    try:
+        conn, cursor = get_db()
+
+        for col_sql in [
+            "ALTER TABLE kb_gaps ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'open'",
+            "ALTER TABLE kb_gaps ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP",
+        ]:
+            cursor.execute("SAVEPOINT sp_kb_gap_status")
+            try:
+                cursor.execute(col_sql)
+                cursor.execute("RELEASE SAVEPOINT sp_kb_gap_status")
+            except Exception:
+                cursor.execute("ROLLBACK TO SAVEPOINT sp_kb_gap_status")
+
+        # Index for fast status-filtered lookups per client
+        cursor.execute("SAVEPOINT sp_kb_gap_status_idx")
+        try:
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_kb_gaps_client_status "
+                "ON kb_gaps (client_id, status)"
+            )
+            cursor.execute("RELEASE SAVEPOINT sp_kb_gap_status_idx")
+        except Exception:
+            cursor.execute("ROLLBACK TO SAVEPOINT sp_kb_gap_status_idx")
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("✅ migrate_kb_gap_status complete")
+    except Exception as e:
+        print(f"⚠️  migrate_kb_gap_status: {e}")
+
+
+def mark_kb_gap_resolved(gap_id: int) -> None:
+    """
+    Mark a kb_gaps row as resolved and record the timestamp.
+
+    Sets status='resolved' and resolved_at=NOW() for the given gap_id.
+    Called by ai_helper.approve_and_publish_gap() after a new FAQ is inserted.
+    Never raises — errors are logged and swallowed.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """UPDATE kb_gaps
+               SET status = 'resolved', resolved_at = NOW()
+               WHERE id = %s""",
+            (gap_id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        import logging
+        logging.getLogger(__name__).info(
+            f"[mark_kb_gap_resolved] gap_id={gap_id} marked resolved"
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"[mark_kb_gap_resolved] non-critical: {e}")
 
 
 def get_recent_conversations(client_id: str, limit: int = 15) -> list:
