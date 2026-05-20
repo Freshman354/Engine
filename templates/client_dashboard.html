@@ -1188,9 +1188,9 @@
           <div class="stat-icon purple">
             <svg width="18" height="18" viewBox="0 0 20 20" fill="var(--purple)"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
           </div>
-          <div class="stat-value">1.8s</div>
+          <div class="stat-value" id="stat-avg-response">—</div>
           <div class="stat-label">Avg Response Time</div>
-          <div class="stat-trend up">↑ faster this week</div>
+          <div class="stat-trend neutral">AI powered</div>
         </div>
         <div class="stat-card">
           <div class="stat-icon orange">
@@ -1265,9 +1265,8 @@
             <span class="panel-title">🧠 Latest AI Coach Insight</span>
             <a href="#" style="font-size:12px;color:var(--gold);text-decoration:none;">View all →</a>
           </div>
-          <div style="padding:16px 20px;font-size:13.5px;color:var(--text-secondary);line-height:1.6;">
-            <strong style="color:var(--text-primary);">Pricing questions are your biggest missed opportunity.</strong> Users asked about pricing 14 times this week without a satisfying answer — leading to an estimated 6 dropped leads. Consider adding a clear pricing FAQ or a "Get a Quote" button to your chatbot.
-            <span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:12px;color:var(--orange);font-weight:600;">⚡ High impact</span>
+          <div id="coach-teaser" style="padding:16px 20px;font-size:13.5px;color:var(--text-secondary);line-height:1.6;">
+            Loading insight…
           </div>
         </div>
       </div>
@@ -1495,120 +1494,19 @@
       <div class="section-header">
         <div>
           <h2 class="section-title">AI Training Suggestions</h2>
-          <p class="section-subtitle">Smart gaps detected in your knowledge base — fix them in one click</p>
+          <p class="section-subtitle">Knowledge gaps detected from real unanswered conversations — fix in one click</p>
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="showToast('Refreshing analysis…','info')">
+        <button class="btn btn-ghost btn-sm" onclick="loadSuggestions()">
           <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
           Refresh
         </button>
       </div>
 
-      <div class="tabs">
-        <button class="tab active" onclick="switchTab('sugg','all',this)">All (4)</button>
-        <button class="tab" onclick="switchTab('sugg','high',this)">High Priority (2)</button>
-        <button class="tab" onclick="switchTab('sugg','answered',this)">Unanswered (3)</button>
-        <button class="tab" onclick="switchTab('sugg','low-conf',this)">Low Confidence (1)</button>
-      </div>
-
-      <div class="suggestions-list">
-
-        <div class="suggestion-card priority-high">
-          <div class="suggestion-header">
-            <div class="suggestion-icon-wrap">
-              <div class="suggestion-icon red">
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="var(--red)"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-              </div>
-              <div class="suggestion-text">Users asked about <strong>pricing</strong> 14 times this week — your bot had no satisfying answer, likely costing you 6+ leads.</div>
-            </div>
-          </div>
-          <div class="suggestion-meta">
-            <div class="confidence-wrap">
-              <span class="confidence-label">Confidence:</span>
-              <div class="confidence-bar-bg"><div class="confidence-bar-fill conf-low" style="width:20%"></div></div>
-              <span class="confidence-label">20%</span>
-            </div>
-            <span class="tag tag-hot">High impact</span>
-          </div>
-          <div class="suggested-answer">
-            <strong>Suggested Answer</strong>
-            Our plans start at $29/month (Starter) and $79/month (Pro). The Starter plan includes up to 500 conversations per month, while Pro is unlimited. Annual billing saves 20%. Visit our pricing page for a full breakdown or chat with our team.
-          </div>
-          <div class="suggestion-actions">
-            <button class="btn btn-primary btn-sm" onclick="showToast('Added to Knowledge Base ✓','success')">
-              <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
-              Add to KB
-            </button>
-            <button class="btn btn-ghost btn-sm" onclick="showToast('Opening editor…','info')">✏ Improve Answer</button>
-            <button class="btn btn-ghost btn-sm" onclick="this.closest('.suggestion-card').style.opacity='0.4'">✕ Ignore</button>
-          </div>
+      <div id="suggestions-container">
+        <div style="padding:40px;text-align:center;color:var(--text-muted);font-size:13px;">
+          <div class="cdash-spinner" style="width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;margin-bottom:10px;"></div>
+          <br>Loading suggestions from your conversation data…
         </div>
-
-        <div class="suggestion-card priority-high">
-          <div class="suggestion-header">
-            <div class="suggestion-icon-wrap">
-              <div class="suggestion-icon orange">
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="var(--orange)"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
-              </div>
-              <div class="suggestion-text"><strong>Refund policy questions</strong> have a 28% confidence score — visitors are leaving unsatisfied.</div>
-            </div>
-          </div>
-          <div class="suggestion-meta">
-            <div class="confidence-wrap">
-              <span class="confidence-label">Confidence:</span>
-              <div class="confidence-bar-bg"><div class="confidence-bar-fill conf-low" style="width:28%"></div></div>
-              <span class="confidence-label">28%</span>
-            </div>
-          </div>
-          <div class="suggested-answer">
-            <strong>Suggested Improvement</strong>
-            We offer a 30-day money-back guarantee on all plans. If you're not satisfied, contact support@yourdomain.com within 30 days and we'll process a full refund — no questions asked.
-          </div>
-          <div class="suggestion-actions">
-            <button class="btn btn-primary btn-sm" onclick="showToast('Added to Knowledge Base ✓','success')">Add to KB</button>
-            <button class="btn btn-ghost btn-sm">✏ Improve Answer</button>
-            <button class="btn btn-ghost btn-sm" onclick="this.closest('.suggestion-card').style.opacity='0.4'">✕ Ignore</button>
-          </div>
-        </div>
-
-        <div class="suggestion-card priority-med">
-          <div class="suggestion-header">
-            <div class="suggestion-icon-wrap">
-              <div class="suggestion-icon blue">
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="var(--blue)"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd"/></svg>
-              </div>
-              <div class="suggestion-text">Your <strong>"Hours of Operation"</strong> FAQ appears outdated — it mentions hours that no longer match your current schedule.</div>
-            </div>
-          </div>
-          <div class="suggestion-meta">
-            <span class="tag" style="background:var(--blue-dim);color:var(--blue);">Outdated content</span>
-          </div>
-          <div class="suggestion-actions">
-            <button class="btn btn-ghost btn-sm" onclick="showToast('Opening FAQ editor…','info')">✏ Update FAQ</button>
-            <button class="btn btn-ghost btn-sm" onclick="this.closest('.suggestion-card').style.opacity='0.4'">✕ Ignore</button>
-          </div>
-        </div>
-
-        <div class="suggestion-card priority-low">
-          <div class="suggestion-header">
-            <div class="suggestion-icon-wrap">
-              <div class="suggestion-icon gold">
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="var(--gold)"><path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.018.028-.036.038-.054a4 4 0 10-4.071-.001.075.075 0 01.033.055V14h4z"/></svg>
-              </div>
-              <div class="suggestion-text"><strong>"International shipping"</strong> was asked 9 times with no answer. Consider adding this to your knowledge base.</div>
-            </div>
-          </div>
-          <div class="suggestion-meta">
-            <div class="confidence-wrap">
-              <span class="confidence-label">Requested:</span>
-              <span style="font-size:12px;color:var(--text-secondary);font-weight:600;">9 times</span>
-            </div>
-          </div>
-          <div class="suggestion-actions">
-            <button class="btn btn-primary btn-sm" onclick="showToast('Draft generated — check KB editor.','success')">✨ Generate Answer</button>
-            <button class="btn btn-ghost btn-sm" onclick="this.closest('.suggestion-card').style.opacity='0.4'">✕ Ignore</button>
-          </div>
-        </div>
-
       </div>
     </section>
 
@@ -1616,46 +1514,33 @@
     <section class="section" id="section-crm">
       <div class="section-header">
         <div>
-          <h2 class="section-title">CRM Pipeline</h2>
-          <p class="section-subtitle">Drag leads through the sales funnel and track conversion</p>
+          <h2 class="section-title">CRM Pipeline {% if lead_count %}<span class="pill-count">{{ lead_count }}</span>{% endif %}</h2>
+          <p class="section-subtitle">All chatbot leads — move them through your sales funnel</p>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="showToast('Add lead feature coming soon.','info')">
-          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
-          Add Lead
-        </button>
       </div>
 
+      {% if leads %}
       <div class="crm-board">
-        <!-- New -->
+        <!-- New — all real leads land here -->
         <div class="crm-col stage-new">
           <div class="crm-col-header">
             <span class="crm-col-title">New</span>
-            <span class="crm-col-count">3</span>
+            <span class="crm-col-count">{{ leads|length }}</span>
           </div>
           <div class="crm-cards">
-            {% if leads %}
-              {% for lead in leads[:2] %}
-              <div class="crm-card" onclick="openLeadModal()" draggable="true">
-                <div class="crm-card-priority-strip prio-high"></div>
-                <div class="crm-card-name">{{ lead.name or lead.email or 'Anonymous' }}</div>
-                <div class="crm-card-source">Chatbot · Web</div>
-                <div class="crm-card-footer">
-                  <div class="lead-score">★ 8.2</div>
-                  <div class="crm-card-time">2h ago</div>
+            {% for lead in leads %}
+            <div class="crm-card" onclick="openLeadDetailModal({{ loop.index0 }})" draggable="true"
+                 data-lead-index="{{ loop.index0 }}">
+              <div class="crm-card-priority-strip prio-high"></div>
+              <div class="crm-card-name">{{ lead.name or lead.email or 'Anonymous' }}</div>
+              <div class="crm-card-source">Chatbot{% if lead.message %} · {{ (lead.message or '')[:30] }}{% if (lead.message or '')|length > 30 %}…{% endif %}{% endif %}</div>
+              <div class="crm-card-footer">
+                <div class="lead-score" style="color:var(--text-muted);font-size:11px;">
+                  {{ lead.created_at[:10] if lead.created_at else '—' }}
                 </div>
               </div>
-              {% endfor %}
-            {% endif %}
-            <div class="crm-card" onclick="openLeadModal()" draggable="true">
-              <div class="crm-card-priority-strip prio-high"></div>
-              <div class="crm-card-name">Sarah M.</div>
-              <div class="crm-card-source">Chatbot · Pricing query</div>
-              <div class="crm-card-footer">
-                <div class="lead-score">★ 9.1</div>
-                <div class="crm-card-time">2m ago</div>
-              </div>
             </div>
-            <button class="crm-add-btn">+ Add lead</button>
+            {% endfor %}
           </div>
         </div>
 
@@ -1663,28 +1548,12 @@
         <div class="crm-col stage-contact">
           <div class="crm-col-header">
             <span class="crm-col-title">Contacted</span>
-            <span class="crm-col-count">2</span>
+            <span class="crm-col-count">0</span>
           </div>
           <div class="crm-cards">
-            <div class="crm-card" onclick="openLeadModal()" draggable="true">
-              <div class="crm-card-priority-strip prio-med"></div>
-              <div class="crm-card-name">James K.</div>
-              <div class="crm-card-source">Chatbot · Delivery</div>
-              <div class="crm-card-footer">
-                <div class="lead-score">★ 7.4</div>
-                <div class="crm-card-time">18m ago</div>
-              </div>
+            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);">
+              Drag leads here after first contact
             </div>
-            <div class="crm-card" onclick="openLeadModal()" draggable="true">
-              <div class="crm-card-priority-strip prio-low"></div>
-              <div class="crm-card-name">Daniel F.</div>
-              <div class="crm-card-source">Direct link</div>
-              <div class="crm-card-footer">
-                <div class="lead-score">★ 6.8</div>
-                <div class="crm-card-time">1d ago</div>
-              </div>
-            </div>
-            <button class="crm-add-btn">+ Add lead</button>
           </div>
         </div>
 
@@ -1692,19 +1561,12 @@
         <div class="crm-col stage-qual">
           <div class="crm-col-header">
             <span class="crm-col-title">Qualified</span>
-            <span class="crm-col-count">1</span>
+            <span class="crm-col-count">0</span>
           </div>
           <div class="crm-cards">
-            <div class="crm-card" onclick="openLeadModal()" draggable="true">
-              <div class="crm-card-priority-strip prio-med"></div>
-              <div class="crm-card-name">Priya T.</div>
-              <div class="crm-card-source">Web embed · Onboarding</div>
-              <div class="crm-card-footer">
-                <div class="lead-score">★ 8.9</div>
-                <div class="crm-card-time">3h ago</div>
-              </div>
+            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);">
+              Leads confirmed as a good fit
             </div>
-            <button class="crm-add-btn">+ Add lead</button>
           </div>
         </div>
 
@@ -1712,19 +1574,12 @@
         <div class="crm-col stage-prop">
           <div class="crm-col-header">
             <span class="crm-col-title">Proposal</span>
-            <span class="crm-col-count">1</span>
+            <span class="crm-col-count">0</span>
           </div>
           <div class="crm-cards">
-            <div class="crm-card" onclick="openLeadModal()" draggable="true">
-              <div class="crm-card-priority-strip prio-high"></div>
-              <div class="crm-card-name">Olu A.</div>
-              <div class="crm-card-source">Referral</div>
-              <div class="crm-card-footer">
-                <div class="lead-score">★ 9.5</div>
-                <div class="crm-card-time">2d ago</div>
-              </div>
+            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);">
+              Quote or proposal sent
             </div>
-            <button class="crm-add-btn">+ Add lead</button>
           </div>
         </div>
 
@@ -1732,19 +1587,12 @@
         <div class="crm-col stage-closed">
           <div class="crm-col-header">
             <span class="crm-col-title">Closed ✓</span>
-            <span class="crm-col-count">3</span>
+            <span class="crm-col-count">0</span>
           </div>
           <div class="crm-cards">
-            <div class="crm-card" draggable="true" style="opacity:0.7;">
-              <div class="crm-card-priority-strip prio-low"></div>
-              <div class="crm-card-name">Maria S.</div>
-              <div class="crm-card-source">Web embed</div>
-              <div class="crm-card-footer">
-                <div class="lead-score" style="color:var(--green);">✓ Won</div>
-                <div class="crm-card-time">5d ago</div>
-              </div>
+            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);">
+              Won deals
             </div>
-            <button class="crm-add-btn">+ Add lead</button>
           </div>
         </div>
 
@@ -1752,22 +1600,30 @@
         <div class="crm-col stage-lost">
           <div class="crm-col-header">
             <span class="crm-col-title">Lost</span>
-            <span class="crm-col-count">2</span>
+            <span class="crm-col-count">0</span>
           </div>
           <div class="crm-cards">
-            <div class="crm-card" draggable="true" style="opacity:0.6;">
-              <div class="crm-card-priority-strip" style="background:var(--text-muted);"></div>
-              <div class="crm-card-name">Tom H.</div>
-              <div class="crm-card-source">Web embed · Pricing</div>
-              <div class="crm-card-footer">
-                <div class="lead-score" style="color:var(--red);">✕ Lost</div>
-                <div class="crm-card-time">1w ago</div>
-              </div>
+            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);">
+              Closed — not won
             </div>
-            <button class="crm-add-btn">+ Add lead</button>
           </div>
         </div>
       </div>
+
+      {# Embed leads data for modal JS #}
+      <script>
+        var LEADS_DATA = {{ leads | tojson }};
+      </script>
+
+      {% else %}
+      <div class="table-wrap">
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <h3>No leads yet</h3>
+          <p>Leads captured by your chatbot will appear here for pipeline management.</p>
+        </div>
+      </div>
+      {% endif %}
     </section>
 
     <!-- ════════════════ LEADS ════════════════ -->
@@ -2044,144 +1900,21 @@
     </section>
 
     <!-- ════════════════ AI COACH ════════════════ -->
+    <!-- ════════════════ AI COACH ════════════════ -->
     <section class="section" id="section-coach">
       <div class="coach-header">
         <div class="coach-title">🧠 AI Business Coach</div>
-        <div class="coach-sub">Intelligent insights generated from your conversations, leads, and performance data.</div>
+        <div class="coach-sub">Intelligent insights generated from your real conversations, leads, and performance data.</div>
         <div class="coach-meta">
-          <div class="coach-meta-item">Last analyzed: <strong>Just now</strong></div>
           <div class="coach-meta-item">Data window: <strong>Last 7 days</strong></div>
-          <div class="coach-meta-item">Insights: <strong>6 active</strong></div>
+          <div class="coach-meta-item" id="coach-insight-count">Insights: <strong>loading…</strong></div>
         </div>
       </div>
-
-      <div class="coach-insights">
-
-        <div class="coach-card">
-          <div class="coach-card-accent accent-critical"></div>
-          <div class="coach-card-inner">
-            <div class="coach-card-header">
-              <div class="coach-card-title">You lost an estimated 12 leads this week because pricing questions lacked clear answers.</div>
-              <span class="coach-priority prio-critical">🔴 Critical</span>
-            </div>
-            <div class="coach-card-body">
-              Users who ask about pricing convert at 2.8× the average rate — but your chatbot currently scores only 20% confidence on pricing queries. 14 users asked this week, most left without a clear answer. Adding a direct pricing FAQ could recover these opportunities immediately.
-            </div>
-            <div class="coach-impact">
-              <span class="coach-impact-icon">📈</span>
-              <span class="coach-impact-text">Estimated impact: <strong>+6–12 leads/week</strong> by fixing pricing FAQ alone.</span>
-            </div>
-            <div class="coach-card-actions">
-              <button class="btn btn-primary btn-sm" onclick="showSection('suggestions',document.querySelector('[data-section=suggestions]'))">Fix in AI Suggestions</button>
-              <button class="btn btn-ghost btn-sm">View conversations</button>
-            </div>
-          </div>
+      <div class="coach-insights" id="coach-insights-container">
+        <div style="padding:40px;text-align:center;color:var(--text-muted);font-size:13px;">
+          <div class="cdash-spinner" style="width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;margin-bottom:10px;"></div>
+          <br>Analysing your performance data…
         </div>
-
-        <div class="coach-card">
-          <div class="coach-card-accent accent-positive"></div>
-          <div class="coach-card-inner">
-            <div class="coach-card-header">
-              <div class="coach-card-title">Users who ask about delivery timelines convert 32% better than average.</div>
-              <span class="coach-priority prio-positive">✅ Opportunity</span>
-            </div>
-            <div class="coach-card-body">
-              Conversations that include delivery-related questions have a significantly higher lead conversion rate. Your chatbot handles these questions well (confidence: 84%). Consider adding a prominent "Delivery & Shipping" prompt chip to your widget to proactively surface this topic.
-            </div>
-            <div class="coach-impact">
-              <span class="coach-impact-icon">💡</span>
-              <span class="coach-impact-text">Adding a delivery prompt chip could drive <strong>+8% overall conversion</strong>.</span>
-            </div>
-            <div class="coach-card-actions">
-              <button class="btn btn-primary btn-sm" onclick="showSection('customize',document.querySelector('[data-section=customize]'))">Add Prompt Chip</button>
-              <button class="btn btn-ghost btn-sm">Dismiss</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="coach-card">
-          <div class="coach-card-accent accent-high"></div>
-          <div class="coach-card-inner">
-            <div class="coach-card-header">
-              <div class="coach-card-title">Your chatbot performs best between 6 PM–9 PM. Only 12% of traffic occurs then.</div>
-              <span class="coach-priority prio-high">🟠 Insight</span>
-            </div>
-            <div class="coach-card-body">
-              Evening engagement shows 3× higher lead capture rates compared to morning hours. This may indicate your audience is predominantly B2C consumers browsing after work hours. Consider scheduling promotional campaigns or social posts to drive traffic during this peak window.
-            </div>
-            <div class="coach-impact">
-              <span class="coach-impact-icon">⏰</span>
-              <span class="coach-impact-text">Shifting 20% of traffic to peak hours could improve lead quality by <strong>~18%</strong>.</span>
-            </div>
-            <div class="coach-card-actions">
-              <button class="btn btn-ghost btn-sm" onclick="showSection('analytics',document.querySelector('[data-section=analytics]'))">View Peak Hours Chart</button>
-              <button class="btn btn-ghost btn-sm">Dismiss</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="coach-card">
-          <div class="coach-card-accent accent-medium"></div>
-          <div class="coach-card-inner">
-            <div class="coach-card-header">
-              <div class="coach-card-title">Response confidence dropped 12 points after your most recent knowledge base edits.</div>
-              <span class="coach-priority prio-medium">🟡 Warning</span>
-            </div>
-            <div class="coach-card-body">
-              Last Tuesday's KB edit session appears to have introduced conflicting answers for FAQ entries about "contact support" and "business hours." The AI is now splitting confidence between two contradictory answers, leading to low-quality responses for these topics.
-            </div>
-            <div class="coach-impact">
-              <span class="coach-impact-icon">⚠️</span>
-              <span class="coach-impact-text">Resolving this conflict could restore <strong>+11% confidence</strong> on support queries.</span>
-            </div>
-            <div class="coach-card-actions">
-              <button class="btn btn-primary btn-sm" onclick="showSection('faqs',document.querySelector('[data-section=faqs]'))">Review Knowledge Base</button>
-              <button class="btn btn-ghost btn-sm">Dismiss</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="coach-card">
-          <div class="coach-card-accent accent-low"></div>
-          <div class="coach-card-inner">
-            <div class="coach-card-header">
-              <div class="coach-card-title">2 leads in your CRM pipeline have had no activity for 5+ days — they may go cold.</div>
-              <span class="coach-priority prio-low">🔵 Reminder</span>
-            </div>
-            <div class="coach-card-body">
-              Tom H. and Daniel F. both showed strong initial interest but haven't been progressed in the pipeline. Historically, leads that go 7 days without follow-up have a 60% lower close rate. A quick follow-up message now could recover these opportunities.
-            </div>
-            <div class="coach-impact">
-              <span class="coach-impact-icon">📧</span>
-              <span class="coach-impact-text">Following up within 48 hours historically improves close rate by <strong>+40%</strong>.</span>
-            </div>
-            <div class="coach-card-actions">
-              <button class="btn btn-primary btn-sm" onclick="showSection('crm',document.querySelector('[data-section=crm]'))">View in CRM</button>
-              <button class="btn btn-ghost btn-sm">Dismiss</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="coach-card">
-          <div class="coach-card-accent accent-positive"></div>
-          <div class="coach-card-inner">
-            <div class="coach-card-header">
-              <div class="coach-card-title">Your chatbot is performing in the top 22% of comparable businesses in your industry.</div>
-              <span class="coach-priority prio-positive">🏆 Great work</span>
-            </div>
-            <div class="coach-card-body">
-              Based on your 87% AI success rate and 1.8s average response time, your bot is outperforming most peers. The biggest remaining growth lever is fixing unanswered questions — resolving the top 4 gaps could push you into the top 10%.
-            </div>
-            <div class="coach-impact">
-              <span class="coach-impact-icon">🎯</span>
-              <span class="coach-impact-text">You're close to top-tier performance. Address 4 knowledge gaps to get there.</span>
-            </div>
-            <div class="coach-card-actions">
-              <button class="btn btn-primary btn-sm" onclick="showSection('suggestions',document.querySelector('[data-section=suggestions]'))">Fix Knowledge Gaps</button>
-            </div>
-          </div>
-        </div>
-
       </div>
     </section>
 
@@ -2200,38 +1933,31 @@
     <div class="modal-body">
       <div class="detail-row">
         <div class="detail-key">Name</div>
-        <div class="detail-val">Sarah M.</div>
+        <div class="detail-val" id="modal-lead-name">—</div>
       </div>
       <div class="detail-row">
         <div class="detail-key">Email</div>
-        <div class="detail-val">sarah@email.com</div>
+        <div class="detail-val" id="modal-lead-email">—</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">Phone</div>
+        <div class="detail-val" id="modal-lead-phone">—</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">Company</div>
+        <div class="detail-val" id="modal-lead-company">—</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">Message</div>
+        <div class="detail-val" id="modal-lead-message">—</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-key">Captured</div>
+        <div class="detail-val" id="modal-lead-date">—</div>
       </div>
       <div class="detail-row">
         <div class="detail-key">Source</div>
-        <div class="detail-val">Website chatbot embed</div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-key">Lead Score</div>
-        <div class="detail-val" style="color:var(--gold);font-weight:600;">★ 9.1 / 10</div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-key">Tags</div>
-        <div class="detail-val"><span class="tag tag-hot">🔥 Hot</span> <span class="tag tag-default">pricing</span></div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-key">AI Summary</div>
-        <div class="detail-val">High-intent buyer who asked about pricing multiple times. Showed frustration when answers were unclear. Likely comparing options. Strong candidate for direct outreach with a clear pricing offer.</div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-key">Sentiment</div>
-        <div class="detail-val">
-          <div class="sentiment-bar">
-            <div class="sentiment-pos" style="width:30%"></div>
-            <div class="sentiment-neu" style="width:35%"></div>
-            <div class="sentiment-neg" style="width:35%"></div>
-          </div>
-          <div class="sentiment-labels"><span>Positive 30%</span><span>Neutral 35%</span><span>Negative 35%</span></div>
-        </div>
+        <div class="detail-val">Website chatbot</div>
       </div>
       <div class="detail-row">
         <div class="detail-key">Stage</div>
@@ -2291,7 +2017,35 @@
     const titleEl = document.getElementById('page-title-text');
     if (titleEl) titleEl.textContent = sectionTitles[id] || id;
 
-    if (id === 'analytics') { renderCharts(); loadAnalytics('week'); }
+    if (id === 'analytics')   { renderCharts(); loadAnalytics('week'); }
+    if (id === 'suggestions') { loadSuggestions(); }
+    if (id === 'coach')       { loadCoach(); }
+  }
+
+  // Auto-load overview data on page ready
+  document.addEventListener('DOMContentLoaded', function() {
+    if (!CLIENT_ID) return;
+    // Load overview stats from analytics API
+    fetch(`/api/admin/analytics?client_id=${CLIENT_ID}&range=week`).then(r => r.json()).then(data => {
+      if (!data.success) return;
+      const a = data.analytics;
+      // Coach teaser — show top insight
+      const teaser = document.getElementById('coach-teaser');
+      if (teaser) {
+        const unanswered = a.unanswered || [];
+        const uCount     = a.unanswered_count || 0;
+        const rate       = a.answer_rate || 0;
+        if (uCount > 0 && unanswered.length > 0) {
+          const topGap = unanswered[0].question || '';
+          teaser.innerHTML = `<strong style="color:var(--text-primary);">Your bot missed "${escHtml(topGap)}" ${unanswered[0].count}× this week.</strong> With ${uCount} unanswered question${uCount !== 1 ? 's' : ''} and a ${rate}% success rate, fixing these gaps is your highest-impact next step. <span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;font-size:12px;color:var(--orange);font-weight:600;">⚡ High impact</span>`;
+        } else if (rate >= 85) {
+          teaser.innerHTML = `<strong style="color:var(--text-primary);">Your AI success rate is ${rate}% — great work!</strong> Your bot answered every question this week with no gaps detected. Check your CRM for leads to follow up on.`;
+        } else {
+          teaser.innerHTML = `<strong style="color:var(--text-primary);">AI success rate: ${rate}%.</strong> Open the AI Coach for a full breakdown of your chatbot's performance and personalised improvement steps.`;
+        }
+      }
+    }).catch(() => {});
+  });
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -2514,6 +2268,290 @@
         <div class="unanswered-text">"${escHtml(u.question)}"</div>
         <div class="unanswered-count">${u.count}×</div>
       </div>`).join('');
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     CRM — open real lead detail modal
+  ══════════════════════════════════════════════════════════════ */
+  function openLeadDetailModal(index) {
+    const lead = (typeof LEADS_DATA !== 'undefined') ? LEADS_DATA[index] : null;
+    if (!lead) { openLeadModal(); return; }
+    // Populate modal fields if they exist
+    const setField = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || '—'; };
+    setField('modal-lead-name',    lead.name);
+    setField('modal-lead-email',   lead.email);
+    setField('modal-lead-phone',   lead.phone);
+    setField('modal-lead-company', lead.company);
+    setField('modal-lead-message', lead.message || lead.conversation_snippet);
+    setField('modal-lead-date',    (lead.created_at || '').slice(0, 16).replace('T', ' '));
+    document.getElementById('lead-modal').classList.add('open');
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     AI SUGGESTIONS — load from real unanswered questions
+  ══════════════════════════════════════════════════════════════ */
+  async function loadSuggestions() {
+    const container = document.getElementById('suggestions-container');
+    if (!container || !CLIENT_ID) return;
+    container.innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-muted);font-size:13px;"><div class="cdash-spinner" style="width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;margin-bottom:10px;"></div><br>Loading from conversation data…</div>';
+    try {
+      const res = await fetch(`/api/admin/analytics?client_id=${CLIENT_ID}&range=month`);
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      const unanswered = (data.analytics || {}).unanswered || [];
+
+      if (!unanswered.length) {
+        container.innerHTML = `
+          <div class="empty-state" style="padding:60px 20px;">
+            <div class="empty-icon">🎉</div>
+            <h3>No gaps found</h3>
+            <p>Your bot answered every question in the last 30 days. Check back as traffic grows.</p>
+          </div>`;
+        return;
+      }
+
+      const priorityColors = ['red','red','orange','orange','gold','blue'];
+      const priorityLabels = ['🔴 Critical','🔴 Critical','🟠 High','🟠 High','🟡 Medium','🔵 Low'];
+      const priorityClasses = ['priority-high','priority-high','priority-high','priority-med','priority-med','priority-low'];
+
+      const cards = unanswered.map((item, i) => {
+        const pClass  = priorityClasses[Math.min(i, priorityClasses.length - 1)];
+        const pLabel  = priorityLabels[Math.min(i, priorityLabels.length - 1)];
+        const pColor  = priorityColors[Math.min(i, priorityColors.length - 1)];
+        const q       = escHtml(item.question || '');
+        const cnt     = item.count || 0;
+        return `
+        <div class="suggestion-card ${pClass}" id="sugg-card-${i}">
+          <div class="suggestion-header">
+            <div class="suggestion-icon-wrap">
+              <div class="suggestion-icon ${pColor}">
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="var(--${pColor})"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+              </div>
+              <div class="suggestion-text">
+                Visitors asked <strong>"${q}"</strong> — your bot had no answer
+                <strong>${cnt} time${cnt !== 1 ? 's' : ''}</strong> this month.
+              </div>
+            </div>
+          </div>
+          <div class="suggestion-meta">
+            <span class="tag tag-hot">${pLabel}</span>
+            <span style="font-size:12px;color:var(--text-muted);">${cnt}× unanswered</span>
+          </div>
+          <div class="suggestion-actions">
+            <button class="btn btn-primary btn-sm" onclick="addToKB(${i}, '${q.replace(/'/g,"\\'")}')">
+              <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
+              Add to KB
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('sugg-card-${i}').style.opacity='0.4';document.getElementById('sugg-card-${i}').style.pointerEvents='none';">✕ Ignore</button>
+          </div>
+        </div>`;
+      }).join('');
+
+      container.innerHTML = `
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;padding:0 2px;">
+          ${unanswered.length} unanswered question${unanswered.length !== 1 ? 's' : ''} detected in the last 30 days. Fix them to improve your AI success rate.
+        </div>
+        <div class="suggestions-list">${cards}</div>`;
+
+    } catch(e) {
+      container.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted);font-size:13px;">Could not load suggestions. <a href="#" onclick="loadSuggestions();return false;">Retry</a></div>`;
+    }
+  }
+
+  async function addToKB(index, question) {
+    const btn = event.target.closest('button');
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+    try {
+      // 1. Fetch existing FAQs
+      const existing = await fetch(`/api/faqs?client_id=${CLIENT_ID}`);
+      const existingData = await existing.json();
+      const currentFaqs = (existingData.faqs || []).map(f => ({
+        question: f.question,
+        answer:   f.answer,
+        triggers: f.triggers || [],
+        is_active: f.is_active !== false
+      }));
+      // 2. Append new stub
+      currentFaqs.push({
+        question: question,
+        answer:   '',   // user fills in the KB editor
+        triggers: [question.toLowerCase()],
+        is_active: false   // draft — not live until answered
+      });
+      // 3. POST updated list
+      const save = await fetch('/api/faqs', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ client_id: CLIENT_ID, faqs: currentFaqs })
+      });
+      const saveData = await save.json();
+      if (saveData.success) {
+        showToast('Added to Knowledge Base — go to FAQs to write the answer ✓', 'success');
+        if (btn) { btn.textContent = '✓ Added'; btn.style.background = 'var(--green)'; }
+      } else {
+        throw new Error(saveData.error || 'Save failed');
+      }
+    } catch(e) {
+      showToast('Could not add to KB: ' + e.message, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = 'Add to KB'; }
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     AI COACH — generate real insights from analytics data
+  ══════════════════════════════════════════════════════════════ */
+  async function loadCoach() {
+    const container = document.getElementById('coach-insights-container');
+    const countEl   = document.getElementById('coach-insight-count');
+    if (!container || !CLIENT_ID) return;
+
+    try {
+      const [weekRes, todayRes] = await Promise.all([
+        fetch(`/api/admin/analytics?client_id=${CLIENT_ID}&range=week`),
+        fetch(`/api/admin/analytics?client_id=${CLIENT_ID}&range=today`)
+      ]);
+      const weekData  = weekRes.ok  ? (await weekRes.json()).analytics  || {} : {};
+      const todayData = todayRes.ok ? (await todayRes.json()).analytics || {} : {};
+
+      const totalConv    = weekData.total_conversations  || 0;
+      const totalLeads   = weekData.total_leads          || 0;
+      const answerRate   = weekData.answer_rate          || 0;
+      const unanswered   = weekData.unanswered           || [];
+      const topQ         = weekData.top_questions        || [];
+      const unanswCount  = weekData.unanswered_count     || 0;
+      const todayConv    = todayData.total_conversations || 0;
+      const todayLeads   = todayData.total_leads         || 0;
+
+      const insights = [];
+
+      // ── Insight 1: Unanswered gaps (critical if >0) ──
+      if (unanswCount > 0 && unanswered.length > 0) {
+        const topGap   = unanswered[0].question || 'unknown topic';
+        const topCount = unanswered[0].count    || unanswCount;
+        const severity = unanswCount > 10 ? 'critical' : unanswCount > 4 ? 'high' : 'medium';
+        const accent   = severity === 'critical' ? 'accent-critical' : severity === 'high' ? 'accent-high' : 'accent-medium';
+        const badge    = severity === 'critical' ? '🔴 Critical' : severity === 'high' ? '🟠 High priority' : '🟡 Worth fixing';
+        insights.push({
+          accent, badge,
+          title:  `Your bot failed to answer ${unanswCount} question${unanswCount !== 1 ? 's' : ''} this week — the most common was "${escHtml(topGap)}" (${topCount}×).`,
+          body:   `Unanswered questions are your biggest conversion leak. Each one is a visitor who left without getting help. Adding FAQ answers for these gaps will directly improve your AI success rate (currently ${answerRate}%).`,
+          impact: `Fixing the top ${Math.min(unanswered.length, 3)} gaps could push your success rate above ${Math.min(answerRate + 10, 99)}%.`,
+          icon:   '📈',
+          action: `<button class="btn btn-primary btn-sm" onclick="showSection('suggestions',document.querySelector('[data-section=suggestions]'))">Fix in AI Suggestions</button>`
+        });
+      }
+
+      // ── Insight 2: Answer rate status ──
+      if (answerRate >= 85) {
+        insights.push({
+          accent: 'accent-positive', badge: '✅ Great work',
+          title:  `Your AI success rate is ${answerRate}% — well above average.`,
+          body:   `Your bot is successfully answering ${answerRate}% of all questions this week across ${totalConv} conversations. This puts you in a strong position. The remaining ${100 - answerRate}% unanswered rate represents your next growth opportunity.`,
+          impact: `You're close to top performance. Addressing ${unanswered.length} remaining gaps is the next step.`,
+          icon:   '🏆',
+          action: `<button class="btn btn-primary btn-sm" onclick="showSection('suggestions',document.querySelector('[data-section=suggestions]'))">Fix Remaining Gaps</button>`
+        });
+      } else if (answerRate > 0) {
+        insights.push({
+          accent: 'accent-high', badge: '🟠 Needs attention',
+          title:  `Your AI success rate is ${answerRate}% — there's room to improve.`,
+          body:   `Your bot answered ${answerRate}% of ${totalConv} conversations this week. The industry target is 85%+. Each unanswered conversation is a missed opportunity to capture a lead or resolve a customer query.`,
+          impact: `Reaching 85% success rate from ${answerRate}% means fixing approximately ${unanswCount} knowledge gaps.`,
+          icon:   '🎯',
+          action: `<button class="btn btn-primary btn-sm" onclick="showSection('faqs',document.querySelector('[data-section=faqs]'))">Improve Knowledge Base</button>`
+        });
+      }
+
+      // ── Insight 3: Lead capture health ──
+      if (totalLeads > 0) {
+        const convToLeadRate = totalConv > 0 ? Math.round((totalLeads / totalConv) * 100) : 0;
+        insights.push({
+          accent: convToLeadRate >= 10 ? 'accent-positive' : 'accent-medium',
+          badge:  convToLeadRate >= 10 ? '✅ Good conversion' : '🟡 Room to grow',
+          title:  `You captured ${totalLeads} lead${totalLeads !== 1 ? 's' : ''} from ${totalConv} conversation${totalConv !== 1 ? 's' : ''} this week (${convToLeadRate}% conversion).`,
+          body:   convToLeadRate >= 10
+            ? `A ${convToLeadRate}% conversation-to-lead rate is healthy. Your chatbot is effectively qualifying visitors. Review new leads in your CRM pipeline to follow up while they're warm.`
+            : `A ${convToLeadRate}% conversation-to-lead rate suggests your bot may not be prompting for contact details at the right moment. Consider adjusting your lead capture trigger in the settings.`,
+          impact: convToLeadRate >= 10
+            ? `Keep momentum — check your CRM for leads awaiting follow-up.`
+            : `Improving lead capture triggers could double your current conversion rate.`,
+          icon:   '📧',
+          action: `<button class="btn btn-primary btn-sm" onclick="showSection('crm',document.querySelector('[data-section=crm]'))">View in CRM</button>`
+        });
+      } else if (totalConv > 0) {
+        insights.push({
+          accent: 'accent-high', badge: '🟠 No leads yet',
+          title:  `${totalConv} conversation${totalConv !== 1 ? 's' : ''} this week — but 0 leads captured.`,
+          body:   `Visitors are chatting but not leaving their contact details. This usually means your lead capture form isn't triggering, or it's appearing too late or too early in the conversation. Review your lead capture settings.`,
+          impact: `Even a 5% conversion rate on ${totalConv} conversations would mean ${Math.ceil(totalConv * 0.05)} new leads this week.`,
+          icon:   '🎯',
+          action: `<button class="btn btn-primary btn-sm" onclick="showSection('customize',document.querySelector('[data-section=customize]'))">Review Lead Capture Settings</button>`
+        });
+      }
+
+      // ── Insight 4: Today's activity ──
+      if (todayConv > 0) {
+        insights.push({
+          accent: 'accent-low', badge: '🔵 Today',
+          title:  `${todayConv} conversation${todayConv !== 1 ? 's' : ''} so far today${todayLeads > 0 ? `, including ${todayLeads} new lead${todayLeads !== 1 ? 's' : ''}` : ''}.`,
+          body:   `Your chatbot is active. ${todayLeads > 0 ? `You have ${todayLeads} fresh lead${todayLeads !== 1 ? 's' : ''} from today — follow up quickly while interest is high.` : 'No leads captured yet today. Check your lead capture trigger is working correctly.'}`,
+          impact: `Early follow-up (within 1 hour) increases close rates by up to 7×.`,
+          icon:   '⚡',
+          action: todayLeads > 0
+            ? `<button class="btn btn-primary btn-sm" onclick="showSection('crm',document.querySelector('[data-section=crm]'))">View Today's Leads</button>`
+            : `<button class="btn btn-ghost btn-sm" onclick="showSection('conversations',document.querySelector('[data-section=conversations]'))">View Conversations</button>`
+        });
+      }
+
+      // ── Insight 5: Top performing question (if any answered) ──
+      if (topQ.length > 0) {
+        const top = topQ[0];
+        insights.push({
+          accent: 'accent-positive', badge: '✅ Top performer',
+          title:  `Your most-answered question this week: "${escHtml(top.question)}" (${top.count}×).`,
+          body:   `This is your most active FAQ — your bot handled it ${top.count} times successfully. If visitors keep asking this, it may be worth adding a prompt chip to your widget so users can tap it directly without typing.`,
+          impact: `Surfacing top questions as prompt chips can increase engagement by 20–30%.`,
+          icon:   '💡',
+          action: `<button class="btn btn-ghost btn-sm" onclick="showSection('customize',document.querySelector('[data-section=customize]'))">Add as Prompt Chip</button>`
+        });
+      }
+
+      // ── No data fallback ──
+      if (insights.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state" style="padding:60px 20px;">
+            <div class="empty-icon">🧠</div>
+            <h3>Not enough data yet</h3>
+            <p>Once your chatbot has conversations, the AI Coach will generate personalised insights here.</p>
+          </div>`;
+        if (countEl) countEl.innerHTML = 'Insights: <strong>0 active</strong>';
+        return;
+      }
+
+      if (countEl) countEl.innerHTML = `Insights: <strong>${insights.length} active</strong>`;
+      container.innerHTML = insights.map(ins => `
+        <div class="coach-card">
+          <div class="coach-card-accent ${ins.accent}"></div>
+          <div class="coach-card-inner">
+            <div class="coach-card-header">
+              <div class="coach-card-title">${ins.title}</div>
+              <span class="coach-priority">${ins.badge}</span>
+            </div>
+            <div class="coach-card-body">${ins.body}</div>
+            <div class="coach-impact">
+              <span class="coach-impact-icon">${ins.icon}</span>
+              <span class="coach-impact-text">${ins.impact}</span>
+            </div>
+            <div class="coach-card-actions">
+              ${ins.action}
+              <button class="btn btn-ghost btn-sm" onclick="this.closest('.coach-card').style.opacity='0.4';this.closest('.coach-card').style.pointerEvents='none';">Dismiss</button>
+            </div>
+          </div>
+        </div>`).join('');
+
+    } catch(e) {
+      container.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted);font-size:13px;">Could not load insights. <a href="#" onclick="loadCoach();return false;">Retry</a></div>`;
+    }
   }
 
   /* ══════════════════════════════════════════════════════════════
