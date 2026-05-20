@@ -573,17 +573,19 @@ document.addEventListener('keydown', e => {
 
 async function loadCdashData(cid, name) {
   try {
-    const [leadsR, statsR] = await Promise.all([
-      fetch(`/api/admin/leads?client_id=${cid}`),
-      fetch(`/api/config?client_id=${cid}`),
+    const [analyticsR, faqsR] = await Promise.all([
+      fetch(`/api/admin/analytics?client_id=${cid}&range=month`),
+      fetch(`/api/faqs?client_id=${cid}`),
     ]);
-    const leads = leadsR.ok ? await leadsR.json() : {leads: []};
-    const stats = statsR.ok ? await statsR.json() : {config: {}};
+    if (!analyticsR.ok) throw new Error(`Analytics API ${analyticsR.status}`);
+    const analyticsData = await analyticsR.json();
+    const faqsData      = faqsR.ok ? await faqsR.json() : {faqs: []};
 
-    const leadList = leads.leads || [];
-    const cfg      = stats.config  || {};
-    const faqs     = cfg.faqs_count ?? '—';
-    const msgs     = cfg.daily_msgs ?? '—';
+    const analytics  = analyticsData.analytics || {};
+    const leadList   = analytics.leads_captured || [];
+    const totalLeads = analytics.total_leads ?? leadList.length;
+    const faqs       = (faqsData.faqs || []).length;
+    const msgs       = analytics.total_conversations ?? 0;
 
     const leadsHtml = leadList.length
       ? leadList.slice(0, 8).map(l => `
@@ -598,9 +600,9 @@ async function loadCdashData(cid, name) {
 
     document.getElementById('cdashBody').innerHTML = `
       <div class="cdash-stats">
-        <div class="cdash-stat"><div class="cdash-stat-val">${leadList.length}</div><div class="cdash-stat-lbl">Leads</div></div>
+        <div class="cdash-stat"><div class="cdash-stat-val">${totalLeads}</div><div class="cdash-stat-lbl">Leads</div></div>
         <div class="cdash-stat"><div class="cdash-stat-val">${faqs}</div><div class="cdash-stat-lbl">FAQs</div></div>
-        <div class="cdash-stat"><div class="cdash-stat-val">${msgs}</div><div class="cdash-stat-lbl">Today</div></div>
+        <div class="cdash-stat"><div class="cdash-stat-val">${msgs}</div><div class="cdash-stat-lbl">Convos Today</div></div>
       </div>
       <div class="cdash-section">
         <div class="cdash-section-title">Quick Links</div>

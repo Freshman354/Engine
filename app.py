@@ -40,6 +40,19 @@ if not _secret:
 app.config['SECRET_KEY'] = _secret
 app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB max request body
 
+# ── Session security ─────────────────────────────────────────────────
+# Without these, Flask uses browser-session cookies with no security
+# flags — sessions expire on tab close, accessible to JS (XSS risk),
+# no CSRF protection. These apply globally to every logged-in user.
+app.config['PERMANENT_SESSION_LIFETIME']  = timedelta(days=30)
+app.config['SESSION_COOKIE_SECURE']       = True   # HTTPS only — never sent over HTTP
+app.config['SESSION_COOKIE_HTTPONLY']     = True   # not accessible to JavaScript
+app.config['SESSION_COOKIE_SAMESITE']     = 'Lax'  # CSRF protection on cross-origin forms
+app.config['SESSION_COOKIE_NAME']         = 'lumvi_session'
+app.config['REMEMBER_COOKIE_DURATION']    = timedelta(days=30)
+app.config['REMEMBER_COOKIE_SECURE']      = True
+app.config['REMEMBER_COOKIE_HTTPONLY']    = True
+
 # Admin blueprint — registered AFTER SECRET_KEY is configured
 from admin_routes import admin_bp
 app.register_blueprint(admin_bp)
@@ -367,6 +380,14 @@ try:
     if hasattr(models, 'migrate_kb_gaps'):
         models.migrate_kb_gaps()
 
+    # Weekly digest preferences — adds digest_enabled column to users table.
+    # Defaults TRUE so all existing paid users are opted in automatically.
+    try:
+        from weekly_digest import migrate_digest_preferences
+        migrate_digest_preferences()
+    except Exception as _digest_err:
+        print(f'⚠️  migrate_digest_preferences failed: {_digest_err}')
+
     # ── System 1: Agent tool tables (orders, appointment_slots, appointments, human_inbox) ──
     try:
         from tools import migrate_agent_tables
@@ -389,15 +410,21 @@ try:
         conn, cursor = models.get_db()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS conversations (
-                id SERIAL PRIMARY KEY,
-                client_id TEXT NOT NULL,
-                user_message TEXT NOT NULL,
-                bot_response TEXT NOT NULL,
-                matched BOOLEAN DEFAULT FALSE,
-                method TEXT,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                id           SERIAL      PRIMARY KEY,
+                client_id    TEXT        NOT NULL,
+                user_message TEXT        NOT NULL,
+                bot_response TEXT        NOT NULL,
+                matched      BOOLEAN     DEFAULT FALSE,
+                method       TEXT,
+                session_id   TEXT,
+                timestamp    TIMESTAMP   DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Index for inbox transcript lookup by session_id
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_client_session "
+            "ON conversations (client_id, session_id) WHERE session_id IS NOT NULL"
+        )
         conn.commit()
         cursor.close()
         conn.close()
@@ -405,10 +432,20 @@ try:
         print(f"⚠️  conversations table migration failed: {_conv_err}")
 
     print("✅ Database initialized/migrated successfully!")
-    # ── Startup enforcement: runs 5s after DB is confirmed ready ──────
-    # Delay is intentional — gives the connection pool time to settle.
-    # Moved here from module top-level so it never fires before init_db().
-    print("✅ Startup enforcement scheduled (T+5s)")
+
+    # ── Startup enforcement: actually schedule the timer ──────────────
+    # The comment previously described this but it was never implemented.
+    # Now it fires 10 seconds after startup — gives workers time to settle.
+    import threading as _threading
+    def _startup_enforce():
+        try:
+            with app.app_context():
+                enforce_subscriptions()
+                app.logger.info("[Startup] subscription enforcement complete")
+        except Exception as _se:
+            app.logger.error(f"[Startup] enforcement error: {_se}")
+    _threading.Timer(10.0, _startup_enforce).start()
+    print("✅ Startup enforcement scheduled (T+10s)")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
     # DB failed — don't schedule enforcement, it would fail too
@@ -1529,7 +1566,8 @@ def signup():
 
         user_data = models.get_user_by_id(user_id)
         user = User(user_data)
-        login_user(user)
+        session.permanent = True
+        login_user(user, remember=True)
         models.track_event('signup', user_id=user_id, metadata={'email': email, 'plan': initial_plan})
         send_welcome_email(email)
 
@@ -1660,7 +1698,8 @@ def login():
 
             user = User(user_data)
             session.pop('_user_cache', None)  # bust cache so load_user re-fetches on next request
-            login_user(user)
+            session.permanent = True          # apply PERMANENT_SESSION_LIFETIME (30 days)
+            login_user(user, remember=True)
             models.track_event('login', user_id=user_data['id'], metadata={'email': email})
 
             # Pass subscription status to dashboard via session
@@ -3867,10 +3906,12 @@ def create_paypal_payment():
         data = request.json
         plan = data.get('plan')
 
+        # FIX: 'solo' was missing — caused a 400 "Invalid plan" error for solo users paying via PayPal.
         PLAN_PRICES = {
+            'solo':    19.00,
             'starter': 49.00,
-            'pro': 99.00,
-            'agency': 299.00
+            'pro':     99.00,
+            'agency':  299.00,
         }
 
         amount = PLAN_PRICES.get(plan)
@@ -4056,11 +4097,21 @@ def flutterwave_callback():
     paid_amount  = float(txn.get('amount', 0))
     paid_currency = txn.get('currency', 'USD')
 
-    # Amount check (USD only)
+    # Amount check.
+    # FIX: Previously only validated USD payments — non-USD (NGN, GHS, KES etc.)
+    # bypassed the check entirely, allowing underpayment in any other currency.
+    # Now non-USD payments are logged as warnings for manual review.
+    # Replace the warning block with a hard reject if you add currency conversion.
     if paid_currency == 'USD' and paid_amount < expected_amt:
-        app.logger.error(f"Flutterwave amount mismatch: expected {expected_amt}, got {paid_amount}")
+        app.logger.error(f"Flutterwave amount mismatch: expected {expected_amt}, got {paid_amount} {paid_currency}")
         flash("Payment amount mismatch. Contact support@lumvi.net.", 'error')
         return redirect(url_for('upgrade_page'))
+    elif paid_currency != 'USD':
+        app.logger.warning(
+            f"[FLW] Non-USD payment — skipping amount check: "
+            f"user={current_user.id} plan={plan} currency={paid_currency} "
+            f"amount={paid_amount} txn={transaction_id} — review manually."
+        )
 
     # Upgrade user with recurring subscription fields
     models.update_user_subscription(
@@ -4136,7 +4187,8 @@ def flutterwave_webhook():
         app.logger.error(f"Flutterwave webhook: unknown plan/user tx_ref='{tx_ref}'")
         return jsonify({'status': 'unknown plan'}), 200
 
-    # Amount validation — same check as the callback route
+    # Amount validation — same fix as callback route.
+    # Non-USD payments are logged for manual review instead of being silently accepted.
     is_annual    = (cycle == 'annual')
     expected_amt = PLAN_PRICES_FLW[plan]['annual'] if is_annual else PLAN_PRICES_FLW[plan]['monthly']
     if currency == 'USD' and amount < expected_amt:
@@ -4145,6 +4197,12 @@ def flutterwave_webhook():
             f"expected {expected_amt}, got {amount} tx_ref='{tx_ref}'"
         )
         return jsonify({'status': 'amount mismatch'}), 200
+    elif currency != 'USD':
+        app.logger.warning(
+            f"[Webhook] Non-USD payment — skipping amount check: "
+            f"user={user_id} plan={plan} currency={currency} amount={amount} "
+            f"tx_ref='{tx_ref}' — review manually."
+        )
 
     # Duplicate check
     conn, cursor = models.get_db()
@@ -4234,6 +4292,45 @@ def cancel_subscription():
                     app.logger.warning(f"PayPal cancel API call failed: {_e}")
 
             models.track_event('subscription_cancelled', user_id=current_user.id)
+
+            # Send cancellation confirmation email — gives user a record of
+            # when access ends, prevents the majority of support disputes.
+            try:
+                _user_fresh  = models.get_user_by_id(current_user.id)
+                _sub_info    = get_subscription_status(_user_fresh) if _user_fresh else {}
+                _expires     = _sub_info.get('expires_at')
+                _access_ends = (
+                    _expires.strftime('%B %d, %Y')
+                    if _expires and hasattr(_expires, 'strftime')
+                    else 'the end of your current billing period'
+                )
+                _cancel_msg = Message(
+                    subject="Your Lumvi subscription has been cancelled",
+                    sender="Lumvi <support@lumvi.net>",
+                    recipients=[current_user.email],
+                    html=f"""
+                    <div style="font-family:'DM Sans',sans-serif;max-width:520px;margin:0 auto;
+                                background:#F7F4EF;padding:36px;border-radius:16px;">
+                      <h2 style="font-size:20px;font-weight:700;color:#1C1917;margin-bottom:8px;">
+                        Subscription Cancelled</h2>
+                      <p style="color:#57534E;font-size:14px;line-height:1.6;margin-bottom:16px;">
+                        Your Lumvi subscription has been cancelled. You will retain full access
+                        until <strong>{_access_ends}</strong>. After that, your account will
+                        revert to the free plan automatically — no further charges will be made.</p>
+                      <p style="color:#57534E;font-size:14px;line-height:1.6;margin-bottom:24px;">
+                        Changed your mind? You can resubscribe at any time from your
+                        <a href="https://lumvi.net/upgrade" style="color:#B8924A;">upgrade page</a>.
+                        Your data and clients will be waiting for you.</p>
+                      <p style="color:#A8A29E;font-size:12px;">
+                        Questions? Contact
+                        <a href="mailto:support@lumvi.net" style="color:#B8924A;">support@lumvi.net</a>.
+                      </p>
+                    </div>"""
+                )
+                mail.send(_cancel_msg)
+            except Exception as _mail_err:
+                app.logger.warning(f"[Cancel] confirmation email failed: {_mail_err}")
+
             flash("Your subscription has been cancelled. You will retain access until the end of your current billing period.", 'success')
             return redirect(url_for('dashboard'))
         else:
@@ -5076,9 +5173,8 @@ def client_dashboard_router():
         leads    = models.get_leads(client_id_param)
         faqs     = models.get_faqs(client_id_param)
         articles = models.get_articles(client_id_param)
-        for lead in leads:
-            if lead.get('created_at') and not isinstance(lead['created_at'], str):
-                lead['created_at'] = lead['created_at'].isoformat()
+        # ── Fetch live conversations for the Conversations tab ──
+        conversations = models.get_conversations(client_id_param)
         branding = {}
         if client.get('branding_settings'):
             try:
@@ -5093,6 +5189,8 @@ def client_dashboard_router():
             leads=leads,
             faqs=faqs,
             articles=articles,
+            conversations=conversations,
+            conversation_count=len(conversations),
             client_user_name=current_user.email,
             client_user_email=current_user.email,
             faq_count=len(faqs),
@@ -5112,10 +5210,8 @@ def client_dashboard_client():
     leads       = models.get_leads(client_id)
     faqs        = models.get_faqs(client_id)
     articles    = models.get_articles(client_id)
-    # Serialize datetimes
-    for lead in leads:
-        if lead.get('created_at') and not isinstance(lead['created_at'], str):
-            lead['created_at'] = lead['created_at'].isoformat()
+    # ── Fetch live conversations for the Conversations tab ──
+    conversations = models.get_conversations(client_id)
     branding = {}
     if client and client.get('branding_settings'):
         try:
@@ -5130,6 +5226,8 @@ def client_dashboard_client():
         leads=leads,
         faqs=faqs,
         articles=articles,
+        conversations=conversations,
+        conversation_count=len(conversations),
         client_user_name=session.get('client_user_name'),
         client_user_email=session.get('client_user_email'),
         faq_count=len(faqs),
@@ -5326,14 +5424,80 @@ def cron_enforce_subscriptions():
 
     # Run enforcement
     downgraded = enforce_subscriptions()
-    # Note: user emails are intentionally excluded from the response body.
-    # They are logged server-side by enforce_subscriptions() itself.
-    # This prevents email leakage into external pinger logs (UptimeRobot etc).
+    # User IDs intentionally excluded from response — they are logged
+    # server-side. Including them here would leak identifiers into
+    # external pinger logs (UptimeRobot, cron-job.org, etc.).
     return jsonify({
-        'success':           True,
-        'ran_at':            datetime.utcnow().isoformat(),
-        'downgraded_count':  len(downgraded),
-        'downgraded_ids':    [u['id'] for u in downgraded],
+        'success':          True,
+        'ran_at':           datetime.utcnow().isoformat(),
+        'downgraded_count': len(downgraded),
+    })
+
+
+# =====================================================================
+# WEEKLY DIGEST — CRON + ADMIN ENDPOINTS
+# =====================================================================
+
+def _run_weekly_digest_bg():
+    """Runs send_weekly_digests() in a background daemon thread."""
+    try:
+        from weekly_digest import send_weekly_digests
+        return send_weekly_digests(mail=mail, app_context=app)
+    except Exception as e:
+        app.logger.error(f"[WeeklyDigest] Runner error: {e}")
+        return {'sent': 0, 'skipped': 0, 'errors': 1, 'total_users': 0}
+
+
+@app.route('/cron/weekly-digest', methods=['GET', 'POST'])
+def cron_weekly_digest():
+    """
+    External cron — triggers the weekly digest email send.
+    Schedule once per week (Monday morning recommended).
+    Secured by the same CRON_SECRET as enforce-subscriptions.
+
+      GET  /cron/weekly-digest?secret=YOUR_CRON_SECRET
+      POST /cron/weekly-digest  {"secret": "YOUR_CRON_SECRET"}
+
+    Returns 202 immediately; email send runs in a background thread
+    so the pinger never times out waiting for bulk email delivery.
+    """
+    cron_secret = os.environ.get('CRON_SECRET', '').strip()
+    if not cron_secret:
+        app.logger.error("[WeeklyDigest/Cron] CRON_SECRET not set — endpoint disabled.")
+        return jsonify({'error': 'Cron not configured'}), 503
+
+    provided = (
+        request.args.get('secret', '') or
+        (request.get_json(silent=True) or {}).get('secret', '')
+    )
+    if not __import__("hmac").compare_digest(provided, cron_secret):
+        app.logger.warning(f"[WeeklyDigest/Cron] Unauthorized from {request.remote_addr}")
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    import threading as _dthread
+    _dthread.Thread(target=_run_weekly_digest_bg, daemon=True).start()
+    app.logger.info("[WeeklyDigest/Cron] Digest job started via cron.")
+    return jsonify({
+        'success':      True,
+        'message':      'Weekly digest job started in background.',
+        'triggered_at': datetime.utcnow().isoformat(),
+    }), 202
+
+
+@app.route('/api/admin/send-weekly-digest', methods=['POST'])
+@login_required
+def admin_send_weekly_digest():
+    """Admin manual trigger — fires the weekly digest immediately for testing."""
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Admin only'}), 403
+
+    import threading as _dthread
+    _dthread.Thread(target=_run_weekly_digest_bg, daemon=True).start()
+    app.logger.info(f"[WeeklyDigest/Admin] Triggered by admin {current_user.id}")
+    return jsonify({
+        'success':      True,
+        'message':      'Digest job started. Check server logs for progress.',
+        'triggered_at': datetime.utcnow().isoformat(),
     })
 
 

@@ -1022,7 +1022,7 @@
           <path fill-rule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clip-rule="evenodd"/>
         </svg>
         Conversations
-        <span class="nav-badge">3</span>
+        {% if conversation_count %}<span class="nav-badge">{{ conversation_count }}</span>{% endif %}
       </a>
 
       <a class="nav-item" href="#" data-section="crm" onclick="showSection('crm',this);return false;">
@@ -1172,9 +1172,9 @@
           <div class="stat-icon blue">
             <svg width="18" height="18" viewBox="0 0 20 20" fill="var(--blue)"><path fill-rule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clip-rule="evenodd"/></svg>
           </div>
-          <div class="stat-value" id="stat-conversations">—</div>
+          <div class="stat-value" id="stat-conversations">{{ conversation_count or 0 }}</div>
           <div class="stat-label">Conversations</div>
-          <div class="stat-trend up">↑ 8 today</div>
+          <div class="stat-trend neutral" id="stat-conversations-trend">All time</div>
         </div>
         <div class="stat-card">
           <div class="stat-icon red">
@@ -1292,35 +1292,25 @@
       <!-- KPI row -->
       <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:24px;">
         <div class="stat-card">
-          <div class="stat-value">342</div>
+          <div class="stat-value" id="analytics-total-conv">—</div>
           <div class="stat-label">Total Conversations</div>
-          <div class="stat-trend up">↑ 18%</div>
           <div class="sparkline" id="spark-conv"></div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">28</div>
+          <div class="stat-value" id="analytics-today">—</div>
           <div class="stat-label">Today</div>
-          <div class="stat-trend up">↑ vs 19 yesterday</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">87%</div>
+          <div class="stat-value" id="analytics-answer-rate">—</div>
           <div class="stat-label">AI Success Rate</div>
-          <div class="stat-trend down">↓ 3%</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">7</div>
-          <div class="stat-label">Handoffs to Human</div>
-          <div class="stat-trend neutral">— stable</div>
+          <div class="stat-value" id="analytics-unanswered">—</div>
+          <div class="stat-label">Unanswered</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value">63%</div>
-          <div class="stat-label">New vs Returning</div>
-          <div class="stat-trend up">↑ 5% new</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value">1.8s</div>
-          <div class="stat-label">Avg Response Time</div>
-          <div class="stat-trend up">Faster</div>
+          <div class="stat-value" id="analytics-total-leads">—</div>
+          <div class="stat-label">Total Leads</div>
         </div>
       </div>
 
@@ -1355,39 +1345,10 @@
         <div class="panel">
           <div class="panel-head">
             <span class="panel-title">Top Questions Asked</span>
-            <span style="font-size:11px;color:var(--text-muted);">This week</span>
+            <span style="font-size:11px;color:var(--text-muted);">This period</span>
           </div>
-          <div class="top-questions-list">
-            <div class="tq-item">
-              <div class="tq-rank">1</div>
-              <div class="tq-text">What are your pricing plans?</div>
-              <div class="tq-bar-wrap"><div class="tq-bar" style="width:100%"></div></div>
-              <div class="tq-count">47</div>
-            </div>
-            <div class="tq-item">
-              <div class="tq-rank">2</div>
-              <div class="tq-text">How do I contact support?</div>
-              <div class="tq-bar-wrap"><div class="tq-bar" style="width:72%"></div></div>
-              <div class="tq-count">34</div>
-            </div>
-            <div class="tq-item">
-              <div class="tq-rank">3</div>
-              <div class="tq-text">What's your refund policy?</div>
-              <div class="tq-bar-wrap"><div class="tq-bar" style="width:55%"></div></div>
-              <div class="tq-count">26</div>
-            </div>
-            <div class="tq-item">
-              <div class="tq-rank">4</div>
-              <div class="tq-text">Do you offer free trials?</div>
-              <div class="tq-bar-wrap"><div class="tq-bar" style="width:40%"></div></div>
-              <div class="tq-count">19</div>
-            </div>
-            <div class="tq-item">
-              <div class="tq-rank">5</div>
-              <div class="tq-text">How long does delivery take?</div>
-              <div class="tq-bar-wrap"><div class="tq-bar" style="width:30%"></div></div>
-              <div class="tq-count">14</div>
-            </div>
+          <div class="top-questions-list" id="top-questions-dynamic">
+            <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">Loading…</div>
           </div>
         </div>
 
@@ -1395,29 +1356,10 @@
         <div class="panel">
           <div class="panel-head">
             <span class="panel-title">Unanswered Questions</span>
-            <span style="font-size:11px;background:var(--red-dim);color:var(--red);padding:2px 7px;border-radius:4px;font-weight:600;">4 gaps</span>
+            <span id="unanswered-badge" style="font-size:11px;background:var(--red-dim);color:var(--red);padding:2px 7px;border-radius:4px;font-weight:600;">—</span>
           </div>
-          <div>
-            <div class="unanswered-item">
-              <div class="unanswered-dot"></div>
-              <div class="unanswered-text">"Can I pay with crypto?"</div>
-              <div class="unanswered-count">12×</div>
-            </div>
-            <div class="unanswered-item">
-              <div class="unanswered-dot"></div>
-              <div class="unanswered-text">"Do you ship internationally?"</div>
-              <div class="unanswered-count">9×</div>
-            </div>
-            <div class="unanswered-item">
-              <div class="unanswered-dot"></div>
-              <div class="unanswered-text">"Is there a mobile app?"</div>
-              <div class="unanswered-count">7×</div>
-            </div>
-            <div class="unanswered-item">
-              <div class="unanswered-dot"></div>
-              <div class="unanswered-text">"What languages do you support?"</div>
-              <div class="unanswered-count">5×</div>
-            </div>
+          <div id="unanswered-dynamic">
+            <div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">Loading…</div>
           </div>
           <div style="padding:12px 20px;border-top:1px solid var(--border);">
             <button class="btn btn-primary btn-sm" onclick="showSection('suggestions',document.querySelector('[data-section=suggestions]'))">
@@ -1463,15 +1405,16 @@
     <section class="section" id="section-conversations">
       <div class="section-header">
         <div>
-          <h2 class="section-title">Conversations <span class="pill-count">3 active</span></h2>
-          <p class="section-subtitle">Live inbox — real-time chat history and management</p>
+          <h2 class="section-title">Conversations {% if conversation_count %}<span class="pill-count">{{ conversation_count }}</span>{% endif %}</h2>
+          <p class="section-subtitle">Live chat history — most recent first</p>
         </div>
-        <button class="btn btn-ghost btn-sm">
+        <button class="btn btn-ghost btn-sm" onclick="window.location.reload()">
           <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
           Refresh
         </button>
       </div>
 
+      {% if conversations %}
       <div class="inbox-layout">
         <!-- Sidebar list -->
         <div class="inbox-sidebar">
@@ -1480,66 +1423,22 @@
               <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>
               <input type="text" placeholder="Search conversations…" oninput="filterConversations(this.value)"/>
             </div>
-            <div class="inbox-filters">
-              <button class="inbox-filter active" onclick="setInboxFilter('all',this)">All</button>
-              <button class="inbox-filter" onclick="setInboxFilter('ai',this)">AI</button>
-              <button class="inbox-filter" onclick="setInboxFilter('human',this)">Human</button>
-              <button class="inbox-filter" onclick="setInboxFilter('hot',this)">🔥 Hot</button>
-              <button class="inbox-filter" onclick="setInboxFilter('resolved',this)">Done</button>
-            </div>
           </div>
           <div class="inbox-list" id="inbox-list">
-            <!-- Demo conversations -->
-            <div class="inbox-item active" data-status="needs-human" onclick="openConversation(this,'Sarah M.','Sarah@email.com','Sarah asked about pricing three times without a clear answer. Likely high-intent buyer.')">
+            {% for convo in conversations %}
+            <div class="inbox-item {% if loop.first %}active{% endif %}"
+                 data-index="{{ loop.index0 }}"
+                 onclick="openConversationReal(this, {{ loop.index0 }})">
               <div class="inbox-item-top">
-                <span class="inbox-item-name">Sarah M.</span>
-                <span class="inbox-item-time">2m ago</span>
+                <span class="inbox-item-name">Session {{ convo.session_id[:8] if convo.session_id and convo.session_id != '—' else 'Anonymous' }}</span>
+                <span class="inbox-item-time">{{ convo.timestamp[:10] if convo.timestamp else '—' }}</span>
               </div>
-              <div class="inbox-item-preview">I still don't understand the pricing, can someone help?</div>
-              <div class="inbox-item-meta">
-                <span class="inbox-ai-badge badge-needs-human">⚠ Needs human</span>
-                <span class="inbox-ai-badge badge-hot">🔥 Hot lead</span>
-              </div>
-              <div class="inbox-unread"></div>
-            </div>
-            <div class="inbox-item" data-status="ai" onclick="openConversation(this,'James K.','james@company.com','James is asking about delivery timelines. AI handled well.')">
-              <div class="inbox-item-top">
-                <span class="inbox-item-name">James K.</span>
-                <span class="inbox-item-time">18m ago</span>
-              </div>
-              <div class="inbox-item-preview">Thanks, that's really helpful! One more thing…</div>
+              <div class="inbox-item-preview">{{ (convo.user_message or '')[:80] }}{% if (convo.user_message or '')|length > 80 %}…{% endif %}</div>
               <div class="inbox-item-meta">
                 <span class="inbox-ai-badge badge-ai">🤖 AI handled</span>
               </div>
             </div>
-            <div class="inbox-item" data-status="resolved" onclick="openConversation(this,'Priya T.','priya@startup.io','Resolved conversation about onboarding process.')">
-              <div class="inbox-item-top">
-                <span class="inbox-item-name">Priya T.</span>
-                <span class="inbox-item-time">1h ago</span>
-              </div>
-              <div class="inbox-item-preview">Perfect, I'll get started. Thank you!</div>
-              <div class="inbox-item-meta">
-                <span class="inbox-ai-badge badge-resolved">✓ Resolved</span>
-              </div>
-            </div>
-            <div class="inbox-item" data-status="ai" onclick="openConversation(this,'Anonymous','—','New visitor browsing product info.')">
-              <div class="inbox-item-top">
-                <span class="inbox-item-name">Anonymous</span>
-                <span class="inbox-item-time">3h ago</span>
-              </div>
-              <div class="inbox-item-preview">What features do you offer?</div>
-              <div class="inbox-item-meta">
-                <span class="inbox-ai-badge badge-ai">🤖 AI handled</span>
-              </div>
-            </div>
-
-            {% if not leads %}
-            <div class="empty-state" style="padding:40px 16px;">
-              <div class="empty-icon">💬</div>
-              <h3>No conversations yet</h3>
-              <p>Conversations will appear here as visitors chat with your bot.</p>
-            </div>
-            {% endif %}
+            {% endfor %}
           </div>
         </div>
 
@@ -1547,78 +1446,48 @@
         <div class="inbox-main" id="inbox-main">
           <div class="inbox-main-header">
             <div>
-              <div class="inbox-main-title" id="convo-name">Sarah M.</div>
-              <div class="inbox-main-sub" id="convo-sub">sarah@email.com · Hot lead · Needs human</div>
-            </div>
-            <div class="inbox-main-actions">
-              <button class="btn btn-ghost btn-sm" onclick="showToast('Takeover initiated — you are now live.','info')">
-                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/></svg>
-                Take Over
-              </button>
-              <button class="btn btn-success btn-sm" onclick="showToast('Conversation marked as resolved.','success')">✓ Resolve</button>
-              <button class="btn btn-ghost btn-sm" onclick="openLeadModal()">View Lead</button>
+              <div class="inbox-main-title" id="convo-name">Select a conversation</div>
+              <div class="inbox-main-sub" id="convo-sub">Click a session on the left to view the exchange</div>
             </div>
           </div>
-
           <div class="chat-history" id="chat-history">
-            <div class="chat-msg user">
-              <div class="chat-avatar user">S</div>
-              <div>
-                <div class="chat-bubble">Hi, I'm interested in your service. Can you tell me about pricing?</div>
-                <div class="chat-time">2:14 PM</div>
-              </div>
-            </div>
-            <div class="chat-msg ai">
-              <div class="chat-avatar ai">🤖</div>
-              <div>
-                <div class="chat-bubble">Hi there! Thanks for reaching out. We offer flexible plans starting from $29/month. Would you like me to walk you through the options?</div>
-                <div class="chat-time">2:14 PM · AI</div>
-              </div>
-            </div>
-            <div class="chat-msg user">
-              <div class="chat-avatar user">S</div>
-              <div>
-                <div class="chat-bubble">What's included in the basic plan? And do you have annual pricing?</div>
-                <div class="chat-time">2:16 PM</div>
-              </div>
-            </div>
-            <div class="chat-msg ai">
-              <div class="chat-avatar ai">🤖</div>
-              <div>
-                <div class="chat-bubble">The basic plan includes up to 500 conversations/month, AI chat support, and basic analytics. I don't have confirmed annual pricing details — would you like me to connect you with our team?</div>
-                <div class="chat-time">2:16 PM · AI</div>
-              </div>
-            </div>
-            <div class="chat-msg user">
-              <div class="chat-avatar user">S</div>
-              <div>
-                <div class="chat-bubble">I still don't understand the pricing, can someone help?</div>
-                <div class="chat-time">2:18 PM</div>
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px;padding:4px 0;">
-              <div style="flex:1;height:1px;background:var(--border);"></div>
-              <span style="font-size:11px;color:var(--red);font-weight:500;white-space:nowrap;">⚠ AI confidence dropped — human handoff suggested</span>
-              <div style="flex:1;height:1px;background:var(--border);"></div>
-            </div>
-          </div>
-
-          <div class="inbox-meta-bar">
-            <span style="font-size:12px;color:var(--text-muted);font-weight:500;">Internal Note:</span>
-            <textarea class="notes-area" rows="2" placeholder="Add a private note about this conversation (not visible to user)…" style="margin-top:0;width:auto;flex:1;"></textarea>
-            <div style="display:flex;gap:6px;align-items:flex-end;">
-              <div>
-                <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">Tags</div>
-                <div style="display:flex;gap:4px;">
-                  <span class="tag tag-hot">🔥 Hot</span>
-                  <span class="tag tag-default">pricing</span>
+            {% if conversations %}
+              {% set first = conversations[0] %}
+              <div class="chat-msg user">
+                <div class="chat-avatar user">U</div>
+                <div>
+                  <div class="chat-bubble">{{ first.user_message or '—' }}</div>
+                  <div class="chat-time">{{ first.timestamp[11:16] if first.timestamp and first.timestamp|length > 15 else '' }}</div>
                 </div>
               </div>
-              <button class="btn btn-primary btn-sm" onclick="showToast('Note saved.','success')">Save</button>
-            </div>
+              {% if first.bot_response %}
+              <div class="chat-msg ai">
+                <div class="chat-avatar ai">🤖</div>
+                <div>
+                  <div class="chat-bubble">{{ first.bot_response }}</div>
+                  <div class="chat-time">{{ first.timestamp[11:16] if first.timestamp and first.timestamp|length > 15 else '' }} · AI</div>
+                </div>
+              </div>
+              {% endif %}
+            {% endif %}
           </div>
         </div>
       </div>
+
+      {# Embed conversations data for JS to use #}
+      <script>
+        var CONVERSATIONS_DATA = {{ conversations | tojson }};
+      </script>
+
+      {% else %}
+      <div class="table-wrap">
+        <div class="empty-state">
+          <div class="empty-icon">💬</div>
+          <h3>No conversations yet</h3>
+          <p>Conversations will appear here as visitors chat with your bot.</p>
+        </div>
+      </div>
+      {% endif %}
     </section>
 
     <!-- ════════════════ AI SUGGESTIONS ════════════════ -->
@@ -2422,7 +2291,7 @@
     const titleEl = document.getElementById('page-title-text');
     if (titleEl) titleEl.textContent = sectionTitles[id] || id;
 
-    if (id === 'analytics') renderCharts();
+    if (id === 'analytics') { renderCharts(); loadAnalytics('week'); }
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -2494,14 +2363,157 @@
   }
 
   /* ══════════════════════════════════════════════════════════════
-     CONVERSATION OPEN
+     CONVERSATION OPEN (real data)
   ══════════════════════════════════════════════════════════════ */
+  function openConversationReal(el, index) {
+    document.querySelectorAll('.inbox-item').forEach(i => i.classList.remove('active'));
+    el.classList.add('active');
+
+    const convo = (typeof CONVERSATIONS_DATA !== 'undefined') ? CONVERSATIONS_DATA[index] : null;
+    if (!convo) return;
+
+    const sid = convo.session_id && convo.session_id !== '—' ? convo.session_id : 'Anonymous';
+    document.getElementById('convo-name').textContent = 'Session ' + sid.slice(0, 12);
+    document.getElementById('convo-sub').textContent = convo.timestamp ? convo.timestamp.slice(0, 16).replace('T', ' ') : '—';
+
+    const hist = document.getElementById('chat-history');
+    hist.innerHTML = '';
+
+    // User message
+    const userMsg = document.createElement('div');
+    userMsg.className = 'chat-msg user';
+    userMsg.innerHTML = `
+      <div class="chat-avatar user">U</div>
+      <div>
+        <div class="chat-bubble">${escHtml(convo.user_message || '—')}</div>
+        <div class="chat-time">${(convo.timestamp || '').slice(11,16)}</div>
+      </div>`;
+    hist.appendChild(userMsg);
+
+    // Bot response
+    if (convo.bot_response) {
+      const botMsg = document.createElement('div');
+      botMsg.className = 'chat-msg ai';
+      botMsg.innerHTML = `
+        <div class="chat-avatar ai">🤖</div>
+        <div>
+          <div class="chat-bubble">${escHtml(convo.bot_response)}</div>
+          <div class="chat-time">${(convo.timestamp || '').slice(11,16)} · AI</div>
+        </div>`;
+      hist.appendChild(botMsg);
+    }
+
+    hist.scrollTop = hist.scrollHeight;
+  }
+
+  function escHtml(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* Legacy stub — kept so any remaining onclick="openConversation(...)" calls don't error */
   function openConversation(el, name, email, note) {
     document.querySelectorAll('.inbox-item').forEach(i => i.classList.remove('active'));
     el.classList.add('active');
-    el.querySelector('.inbox-unread')?.remove();
     document.getElementById('convo-name').textContent = name;
-    document.getElementById('convo-sub').textContent = email + ' · ' + note.slice(0, 60) + '…';
+    document.getElementById('convo-sub').textContent = email;
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     ANALYTICS — load real data from API
+  ══════════════════════════════════════════════════════════════ */
+  const CLIENT_ID = {{ (client.client_id if client else '') | tojson }};
+
+  async function loadAnalytics(range) {
+    if (!CLIENT_ID) return;
+    try {
+      const res = await fetch(`/api/admin/analytics?client_id=${CLIENT_ID}&range=${range || 'week'}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.success) return;
+      const a = data.analytics;
+
+      // KPI cards
+      setEl('analytics-total-conv',   a.total_conversations ?? '—');
+      setEl('analytics-answer-rate',  (a.answer_rate ?? '—') + '%');
+      setEl('analytics-total-leads',  a.total_leads ?? '—');
+      setEl('analytics-unanswered',   a.unanswered_count ?? '—');
+
+      // "Today" — re-fetch with today range for that one card
+      fetch(`/api/admin/analytics?client_id=${CLIENT_ID}&range=today`).then(r => r.json()).then(d => {
+        if (d.success) setEl('analytics-today', d.analytics.total_conversations ?? '—');
+      }).catch(() => {});
+
+      // Timeline chart
+      if (a.timeline && a.timeline.length) renderTimelineChart(a.timeline);
+
+      // Top questions
+      renderTopQuestions(a.top_questions || []);
+
+      // Unanswered
+      renderUnanswered(a.unanswered || []);
+
+    } catch(e) { console.error('[analytics]', e); }
+  }
+
+  function setEl(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+
+  function renderTimelineChart(timeline) {
+    const convEl = document.getElementById('chart-conversations');
+    const convLabels = document.getElementById('chart-conv-labels');
+    if (!convEl) return;
+    convEl.innerHTML = '';
+    convLabels.innerHTML = '';
+    const max = Math.max(...timeline.map(t => t.count || 0), 1);
+    timeline.forEach(t => {
+      const pct = Math.max((t.count / max) * 100, 2);
+      const col = document.createElement('div');
+      col.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;';
+      const bar = document.createElement('div');
+      bar.style.cssText = `width:100%;height:${pct}%;background:var(--gold);border-radius:5px 5px 0 0;min-height:4px;cursor:pointer;transition:opacity 0.2s;`;
+      bar.title = `${t.date}: ${t.count} conversations`;
+      bar.onmouseenter = () => bar.style.opacity = '0.7';
+      bar.onmouseleave = () => bar.style.opacity = '1';
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'font-size:10px;color:var(--text-muted);';
+      lbl.textContent = t.count;
+      col.appendChild(bar); col.appendChild(lbl);
+      convEl.appendChild(col);
+      const dl = document.createElement('div');
+      dl.style.cssText = 'flex:1;font-size:10px;color:var(--text-muted);text-align:center;';
+      dl.textContent = t.date.slice(5); // MM-DD
+      convLabels.appendChild(dl);
+    });
+  }
+
+  function renderTopQuestions(questions) {
+    const el = document.getElementById('top-questions-dynamic');
+    if (!el) return;
+    if (!questions.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No data yet</div>'; return; }
+    const max = questions[0].count || 1;
+    el.innerHTML = questions.slice(0,6).map((q, i) => `
+      <div class="tq-item">
+        <div class="tq-rank">${i+1}</div>
+        <div class="tq-text">${escHtml(q.question)}</div>
+        <div class="tq-bar-wrap"><div class="tq-bar" style="width:${Math.round(q.count/max*100)}%"></div></div>
+        <div class="tq-count">${q.count}</div>
+      </div>`).join('');
+  }
+
+  function renderUnanswered(unanswered) {
+    const el = document.getElementById('unanswered-dynamic');
+    if (!el) return;
+    if (!unanswered.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);font-size:13px;">No gaps found 🎉</div>'; return; }
+    const badge = document.getElementById('unanswered-badge');
+    if (badge) badge.textContent = unanswered.length + ' gaps';
+    el.innerHTML = unanswered.slice(0,6).map(u => `
+      <div class="unanswered-item">
+        <div class="unanswered-dot"></div>
+        <div class="unanswered-text">"${escHtml(u.question)}"</div>
+        <div class="unanswered-count">${u.count}×</div>
+      </div>`).join('');
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -2650,8 +2662,10 @@
   }
 
   function updateCharts(range) {
+    const rangeMap = {'Last 7 days': 'week', 'Last 30 days': 'month', 'Last 90 days': 'all'};
+    const apiRange = rangeMap[range] || 'week';
     showToast('Chart updated for: ' + range, 'info');
-    renderCharts();
+    loadAnalytics(apiRange);
   }
 </script>
 

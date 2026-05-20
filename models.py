@@ -162,16 +162,26 @@ def init_db():
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS conversations (
-            id SERIAL PRIMARY KEY,
-            client_id TEXT NOT NULL,
-            user_message TEXT NOT NULL,
-            bot_response TEXT NOT NULL,
-            matched BOOLEAN DEFAULT FALSE,
-            method TEXT,
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            id           SERIAL      PRIMARY KEY,
+            client_id    TEXT        NOT NULL,
+            user_message TEXT        NOT NULL,
+            bot_response TEXT        NOT NULL,
+            matched      BOOLEAN     DEFAULT FALSE,
+            method       TEXT,
+            -- FIX IMPROVE-10: session_id added here (not just in migrate_agent_tables)
+            -- so fresh deploys have the column from the very first INSERT, eliminating
+            -- the race condition where a chat request fires before migrate_agent_tables
+            -- runs. The ALTER TABLE in migrate_agent_tables is still present for
+            -- existing deployments and is idempotent (ADD COLUMN IF NOT EXISTS).
+            session_id   TEXT,
+            timestamp    TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (client_id) REFERENCES clients (client_id)
         )
     ''')
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_conversations_client_session "
+        "ON conversations (client_id, session_id) WHERE session_id IS NOT NULL"
+    )
     
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS affiliates (
@@ -288,34 +298,6 @@ def init_db():
         )
     ''')
 
-    # ── PHASE 3: Persistent session memory ───────────────────────────────
-    # Keyed by (client_id, session_id). Accumulates name, email,
-    # purchase_stage, frustration_score, and turn_count across the full
-    # conversation so the AI never re-asks for info already given.
-    # session_data is a JSONB blob — adding new fields never requires a
-    # schema migration; update upsert_session() and load_session() only.
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS chat_sessions (
-            id                SERIAL      PRIMARY KEY,
-            client_id         TEXT        NOT NULL,
-            session_id        TEXT        NOT NULL,
-            name              TEXT,
-            email             TEXT,
-            phone             TEXT,
-            purchase_stage    TEXT,
-            frustration_score INTEGER     DEFAULT 0,
-            turn_count        INTEGER     DEFAULT 0,
-            session_data      JSONB       DEFAULT '{}',
-            created_at        TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
-            updated_at        TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT chat_sessions_client_session_uq UNIQUE (client_id, session_id)
-        )
-    ''')
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_chat_sessions_client "
-        "ON chat_sessions (client_id, updated_at DESC)"
-    )
-
     conn.commit()
     cursor.close()
     conn.close()
@@ -327,6 +309,7 @@ def init_db():
     migrate_faq_to_knowledge_base()
     migrate_kb_gaps()       # adds UNIQUE(client_id, question) for upsert counting
     migrate_chat_sessions() # Phase 3 — persistent session memory
+    migrate_poor_answers()  # Phase 6 — poor answer feedback loop
 
 
 def migrate_clients_table():
@@ -2860,6 +2843,291 @@ def get_kb_gaps(client_id: str, limit: int = 20) -> list:
         return []
 
 
+# =====================================================================
+# FIX IMPROVE-9 — POOR ANSWER FEEDBACK LOOP
+# =====================================================================
+
+def migrate_poor_answers():
+    """
+    Create the poor_answers table if it doesn't exist.
+    Safe to call every startup — fully idempotent.
+    Called from init_db() alongside the other migrate_* functions.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS poor_answers (
+                id           SERIAL      PRIMARY KEY,
+                client_id    TEXT        NOT NULL,
+                question     TEXT        NOT NULL,
+                bot_answer   TEXT        NOT NULL,
+                confidence   REAL        DEFAULT 0.0,
+                method       TEXT,
+                session_id   TEXT,
+                hit_count    INTEGER     DEFAULT 1,
+                first_seen   TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+                last_seen    TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT poor_answers_client_question_uq
+                    UNIQUE (client_id, question)
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_poor_answers_client "
+            "ON poor_answers (client_id, hit_count DESC)"
+        )
+        conn.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"[migrate_poor_answers] {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def record_poor_answer(client_id: str, question: str, bot_answer: str,
+                       confidence: float, method: str,
+                       session_id: str = None) -> None:
+    """
+    Upsert a thumbs-down record into poor_answers.
+    On conflict (same client + question), increments hit_count and
+    updates last_seen — never creates duplicates.
+    Never raises.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """
+            INSERT INTO poor_answers
+                (client_id, question, bot_answer, confidence, method, session_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT ON CONSTRAINT poor_answers_client_question_uq
+            DO UPDATE SET
+                hit_count  = poor_answers.hit_count + 1,
+                last_seen  = NOW(),
+                -- Update answer/confidence/method to the most recent occurrence
+                bot_answer = EXCLUDED.bot_answer,
+                confidence = EXCLUDED.confidence,
+                method     = EXCLUDED.method,
+                session_id = COALESCE(EXCLUDED.session_id, poor_answers.session_id)
+            """,
+            (client_id, question[:500], bot_answer[:2000],
+             float(confidence), method, session_id)
+        )
+        conn.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"[record_poor_answer] {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def get_poor_answers(client_id: str, limit: int = 20) -> list:
+    """
+    Return poor answers for a client ordered by hit_count descending.
+    Used by the FAQ Manager "Needs Review" panel.
+    Returns [] on any failure.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """
+            SELECT question, bot_answer, confidence, method,
+                   hit_count, first_seen, last_seen
+            FROM poor_answers
+            WHERE client_id = %s
+            ORDER BY hit_count DESC, last_seen DESC
+            LIMIT %s
+            """,
+            (client_id, limit)
+        )
+        rows = cursor.fetchall()
+        return [
+            {
+                'question':   row['question'],
+                'bot_answer': row['bot_answer'],
+                'confidence': row['confidence'],
+                'method':     row['method'],
+                'hit_count':  row['hit_count'],
+                'first_seen': str(row.get('first_seen', '')),
+                'last_seen':  str(row.get('last_seen',  '')),
+            }
+            for row in rows
+        ]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"[get_poor_answers] {e}")
+        return []
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def migrate_chat_sessions():
+    """
+    Create chat_sessions table if it doesn't exist. Fully idempotent.
+    Keyed by (client_id, session_id). Accumulates name, email,
+    purchase_stage, frustration_score, and turn_count across the
+    full conversation. session_data is JSONB — new fields never need
+    a schema migration, only updates to upsert_session().
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                id                SERIAL      PRIMARY KEY,
+                client_id         TEXT        NOT NULL,
+                session_id        TEXT        NOT NULL,
+                name              TEXT,
+                email             TEXT,
+                phone             TEXT,
+                purchase_stage    TEXT,
+                frustration_score INTEGER     DEFAULT 0,
+                turn_count        INTEGER     DEFAULT 0,
+                session_data      JSONB       DEFAULT '{}',
+                created_at        TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+                updated_at        TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT chat_sessions_client_session_uq
+                    UNIQUE (client_id, session_id)
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chat_sessions_client "
+            "ON chat_sessions (client_id, updated_at DESC)"
+        )
+        conn.commit()
+        print('✅ migrate_chat_sessions complete')
+    except Exception as e:
+        print(f'⚠️  migrate_chat_sessions: {e}')
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def load_session(client_id: str, session_id: str) -> dict:
+    """
+    Load a persistent session from PostgreSQL.
+    Returns a dict with guaranteed keys (safe defaults when row missing).
+    Never raises — returns all-default dict on any DB failure.
+    """
+    import json as _json
+    _defaults = {
+        'name': None, 'email': None, 'phone': None,
+        'purchase_stage': None, 'frustration_score': 0,
+        'turn_count': 0, 'session_data': {},
+    }
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """SELECT name, email, phone, purchase_stage,
+                      frustration_score, turn_count, session_data
+               FROM chat_sessions
+               WHERE client_id = %s AND session_id = %s""",
+            (client_id, session_id)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return dict(_defaults)
+        result = dict(_defaults)
+        result['name']              = row['name']
+        result['email']             = row['email']
+        result['phone']             = row['phone']
+        result['purchase_stage']    = row['purchase_stage']
+        result['frustration_score'] = int(row['frustration_score'] or 0)
+        result['turn_count']        = int(row['turn_count'] or 0)
+        raw_sd = row['session_data']
+        if isinstance(raw_sd, str):
+            try: raw_sd = _json.loads(raw_sd)
+            except Exception: raw_sd = {}
+        result['session_data'] = raw_sd or {}
+        return result
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f'[load_session] {e}')
+        return dict(_defaults)
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def upsert_session(client_id: str, session_id: str, updates: dict) -> bool:
+    """
+    Create or update a chat session row.
+    frustration_score accumulates (not overwritten).
+    turn_count increments by 1 on every conflict.
+    Returns True on success, False on failure.
+    """
+    import json as _json
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        named    = ('name', 'email', 'phone', 'purchase_stage',
+                    'frustration_score', 'turn_count')
+        col_vals = {k: updates[k] for k in named if k in updates}
+        extra    = {k: v for k, v in updates.items() if k not in named}
+        cursor.execute(
+            """
+            INSERT INTO chat_sessions
+                (client_id, session_id, name, email, phone,
+                 purchase_stage, frustration_score, turn_count,
+                 session_data, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 1, %s, NOW())
+            ON CONFLICT ON CONSTRAINT chat_sessions_client_session_uq
+            DO UPDATE SET
+                name              = COALESCE(EXCLUDED.name,           chat_sessions.name),
+                email             = COALESCE(EXCLUDED.email,          chat_sessions.email),
+                phone             = COALESCE(EXCLUDED.phone,          chat_sessions.phone),
+                purchase_stage    = COALESCE(EXCLUDED.purchase_stage, chat_sessions.purchase_stage),
+                frustration_score = chat_sessions.frustration_score
+                                    + GREATEST(EXCLUDED.frustration_score, 0),
+                turn_count        = chat_sessions.turn_count + 1,
+                session_data      = chat_sessions.session_data || EXCLUDED.session_data,
+                updated_at        = NOW()
+            """,
+            (
+                client_id, session_id,
+                col_vals.get('name'), col_vals.get('email'),
+                col_vals.get('phone'), col_vals.get('purchase_stage'),
+                max(int(col_vals.get('frustration_score', 0)), 0),
+                _json.dumps(extra) if extra else '{}',
+            )
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f'[upsert_session] {e}')
+        return False
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def delete_session(client_id: str, session_id: str) -> bool:
+    """Hard-delete a session row on widget reset. Returns True on success."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "DELETE FROM chat_sessions WHERE client_id = %s AND session_id = %s",
+            (client_id, session_id)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f'[delete_session] {e}')
+        return False
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
 def migrate_kb_gaps():
     """
     Add a UNIQUE constraint on (client_id, question) to kb_gaps so that
@@ -2884,212 +3152,6 @@ def migrate_kb_gaps():
         print("✅ migrate_kb_gaps complete")
     except Exception as e:
         print(f"⚠️  migrate_kb_gaps: {e}")
-
-
-# =====================================================================
-# PHASE 3 — PERSISTENT SESSION MEMORY
-# =====================================================================
-
-def migrate_chat_sessions():
-    """
-    Create chat_sessions table if it doesn't exist.
-    Safe to call on every startup — fully idempotent.
-    Also adds the UNIQUE constraint via SAVEPOINT so repeated calls
-    don't abort the transaction if the constraint already exists.
-    """
-    try:
-        conn, cursor = get_db()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS chat_sessions (
-                id                SERIAL      PRIMARY KEY,
-                client_id         TEXT        NOT NULL,
-                session_id        TEXT        NOT NULL,
-                name              TEXT,
-                email             TEXT,
-                phone             TEXT,
-                purchase_stage    TEXT,
-                frustration_score INTEGER     DEFAULT 0,
-                turn_count        INTEGER     DEFAULT 0,
-                session_data      JSONB       DEFAULT '{}',
-                created_at        TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
-                updated_at        TIMESTAMP   DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        cursor.execute(
-            "CREATE INDEX IF NOT EXISTS idx_chat_sessions_client "
-            "ON chat_sessions (client_id, updated_at DESC)"
-        )
-        # UNIQUE constraint — wrapped in SAVEPOINT so a duplicate-constraint
-        # error only rolls back this one statement, not the whole transaction.
-        cursor.execute("SAVEPOINT sp_cs_uq")
-        try:
-            cursor.execute(
-                "ALTER TABLE chat_sessions ADD CONSTRAINT "
-                "chat_sessions_client_session_uq UNIQUE (client_id, session_id)"
-            )
-            cursor.execute("RELEASE SAVEPOINT sp_cs_uq")
-        except Exception:
-            cursor.execute("ROLLBACK TO SAVEPOINT sp_cs_uq")
-        conn.commit()
-        print("✅ migrate_chat_sessions complete")
-    except Exception as e:
-        print(f"⚠️  migrate_chat_sessions: {e}")
-    finally:
-        cursor.close()
-        conn.close()
-
-
-def load_session(client_id: str, session_id: str) -> dict:
-    """
-    Load a persistent session from PostgreSQL.
-
-    Returns a dict with these guaranteed keys (safe defaults when missing):
-        name              str | None
-        email             str | None
-        phone             str | None
-        purchase_stage    str | None
-        frustration_score int   (0)
-        turn_count        int   (0)
-        session_data      dict  ({})   — arbitrary extra fields
-
-    Never raises. Returns all-default dict on any DB failure so the
-    caller can treat a missing session identically to a fresh one.
-    """
-    _defaults = {
-        'name':              None,
-        'email':             None,
-        'phone':             None,
-        'purchase_stage':    None,
-        'frustration_score': 0,
-        'turn_count':        0,
-        'session_data':      {},
-    }
-    try:
-        conn, cursor = get_db()
-        cursor.execute(
-            """SELECT name, email, phone, purchase_stage,
-                      frustration_score, turn_count, session_data
-               FROM chat_sessions
-               WHERE client_id = %s AND session_id = %s""",
-            (client_id, session_id)
-        )
-        row = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        if not row:
-            return dict(_defaults)
-        result = dict(_defaults)
-        result['name']              = row['name']
-        result['email']             = row['email']
-        result['phone']             = row['phone']
-        result['purchase_stage']    = row['purchase_stage']
-        result['frustration_score'] = int(row['frustration_score'] or 0)
-        result['turn_count']        = int(row['turn_count'] or 0)
-        # session_data is JSONB — psycopg2 returns it as a dict already
-        raw_sd = row['session_data']
-        if isinstance(raw_sd, str):
-            try:
-                raw_sd = json.loads(raw_sd)
-            except Exception:
-                raw_sd = {}
-        result['session_data'] = raw_sd or {}
-        return result
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug(f"[load_session] {e}")
-        return dict(_defaults)
-
-
-def upsert_session(client_id: str, session_id: str, updates: dict) -> bool:
-    """
-    Create or update a chat session row with the supplied field values.
-
-    `updates` may contain any subset of the named columns plus arbitrary
-    keys which are merged into session_data (the JSONB blob).
-
-    Named columns handled explicitly:
-        name, email, phone, purchase_stage,
-        frustration_score, turn_count
-
-    Any other key in `updates` is merged into session_data so callers
-    can store arbitrary per-session state without a schema migration.
-
-    Strategy: INSERT … ON CONFLICT DO UPDATE so both create and update
-    are a single round-trip. turn_count is always incremented by 1.
-    frustration_score accumulates (not overwritten) to prevent a single
-    calm message from wiping a prior frustration signal.
-
-    Returns True on success, False on failure (always non-blocking).
-    """
-    try:
-        conn, cursor = get_db()
-
-        # Separate named columns from extra payload
-        named = ('name', 'email', 'phone', 'purchase_stage',
-                 'frustration_score', 'turn_count')
-        col_vals = {k: updates[k] for k in named if k in updates}
-        extra    = {k: v for k, v in updates.items() if k not in named}
-
-        cursor.execute(
-            """
-            INSERT INTO chat_sessions
-                (client_id, session_id, name, email, phone,
-                 purchase_stage, frustration_score, turn_count,
-                 session_data, updated_at)
-            VALUES
-                (%s, %s, %s, %s, %s, %s, %s, 1, %s, NOW())
-            ON CONFLICT ON CONSTRAINT chat_sessions_client_session_uq
-            DO UPDATE SET
-                name              = COALESCE(EXCLUDED.name,           chat_sessions.name),
-                email             = COALESCE(EXCLUDED.email,          chat_sessions.email),
-                phone             = COALESCE(EXCLUDED.phone,          chat_sessions.phone),
-                purchase_stage    = COALESCE(EXCLUDED.purchase_stage, chat_sessions.purchase_stage),
-                frustration_score = chat_sessions.frustration_score
-                                    + GREATEST(EXCLUDED.frustration_score, 0),
-                turn_count        = chat_sessions.turn_count + 1,
-                session_data      = chat_sessions.session_data || EXCLUDED.session_data,
-                updated_at        = NOW()
-            """,
-            (
-                client_id,
-                session_id,
-                col_vals.get('name'),
-                col_vals.get('email'),
-                col_vals.get('phone'),
-                col_vals.get('purchase_stage'),
-                max(int(col_vals.get('frustration_score', 0)), 0),
-                json.dumps(extra) if extra else json.dumps({}),
-            )
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return True
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug(f"[upsert_session] {e}")
-        return False
-
-
-def delete_session(client_id: str, session_id: str) -> bool:
-    """
-    Hard-delete a single session row. Call when a conversation ends
-    or a widget reset is triggered. Returns True on success.
-    """
-    try:
-        conn, cursor = get_db()
-        cursor.execute(
-            "DELETE FROM chat_sessions WHERE client_id = %s AND session_id = %s",
-            (client_id, session_id)
-        )
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return True
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).debug(f"[delete_session] {e}")
-        return False
 
 
 def get_recent_conversations(client_id: str, limit: int = 15) -> list:
@@ -3120,6 +3182,43 @@ def get_recent_conversations(client_id: str, limit: int = 15) -> list:
             result.append({'role': 'assistant', 'content': row['bot_response']})
         return result
     except Exception:
+        return []
+
+
+def get_conversations(client_id: str, limit: int = 200) -> list:
+    """
+    Return the last `limit` real conversation turns for a client,
+    newest first, as a list of dicts ready for the dashboard UI.
+    Excludes lead_captured rows (form submissions).
+    Each dict contains: session_id, user_message, bot_response, timestamp (ISO str).
+    Returns [] on failure.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''SELECT session_id, user_message, bot_response, timestamp
+               FROM conversations
+               WHERE client_id = %s
+                 AND (method IS NULL OR method != 'lead_captured')
+               ORDER BY timestamp DESC
+               LIMIT %s''',
+            (client_id, limit)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for row in rows:
+            result.append({
+                'session_id':   row.get('session_id') or '—',
+                'user_message': row.get('user_message') or '',
+                'bot_response': row.get('bot_response') or '',
+                'timestamp':    row['timestamp'].isoformat() if row.get('timestamp') else '',
+            })
+        return result
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_conversations] {e}')
         return []
 
 
