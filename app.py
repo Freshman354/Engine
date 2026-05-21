@@ -380,13 +380,12 @@ try:
     if hasattr(models, 'migrate_kb_gaps'):
         models.migrate_kb_gaps()
 
-    # Weekly digest preferences — adds digest_enabled column to users table.
-    # Defaults TRUE so all existing paid users are opted in automatically.
+    # System 2: Training data collection table
     try:
-        from weekly_digest import migrate_digest_preferences
-        migrate_digest_preferences()
-    except Exception as _digest_err:
-        print(f'⚠️  migrate_digest_preferences failed: {_digest_err}')
+        from training_collector import migrate_training_tables
+        migrate_training_tables()
+    except Exception as _tc_err:
+        print(f'⚠️  migrate_training_tables failed: {_tc_err}')
 
     # ── System 1: Agent tool tables (orders, appointment_slots, appointments, human_inbox) ──
     try:
@@ -1316,6 +1315,24 @@ def chat():
                         client_id, message, response_text,
                         matched=True, method=method, session_id=session_id
                     )
+
+                    # System 2: collect escalation training sample
+                    if client_id != 'demo':
+                        try:
+                            from training_collector import collect_escalation
+                            collect_escalation(
+                                client_id    = client_id,
+                                session_id   = session_id or '',
+                                user_message = message,
+                                reason       = _reason,
+                                bot_response = response_text,
+                                ticket_id    = str(_ticket_id) if '_ticket_id' in dir() else '',
+                                urgency      = _urgency,
+                                vertical     = vertical,
+                            )
+                        except Exception as _tc_err:
+                            app.logger.debug(f'[TrainingCollector] escalation error: {_tc_err}')
+
                     return jsonify({
                         'success':               True,
                         'response':              response_text,
@@ -1340,6 +1357,23 @@ def chat():
                 if response_text:
                     matched = confidence > 0.4
                     log_conversation(client_id, message, response_text, matched=matched, method=method, session_id=session_id)
+
+                    # System 2: collect training sample in background
+                    if client_id != 'demo':
+                        try:
+                            from training_collector import collect_conversation_turn
+                            collect_conversation_turn(
+                                client_id    = client_id,
+                                session_id   = session_id or '',
+                                user_message = message,
+                                bot_response = response_text,
+                                method       = method,
+                                confidence   = confidence,
+                                vertical     = vertical,
+                                is_lead      = bool(result.get('is_lead')),
+                            )
+                        except Exception as _tc_err:
+                            app.logger.debug(f'[TrainingCollector] chat turn error: {_tc_err}')
                     app.logger.info(
                         f"[AI Match] method={method} confidence={confidence:.2f} "
                         f"response_len={len(response_text)} cached={from_cache}"
@@ -1397,6 +1431,56 @@ def chat():
         app.logger.error(f'Error in chat endpoint: {e}')
         import traceback
         traceback.print_exc()
+        return jsonify({'success': False, 'error': 'Internal server error'}), 500
+
+
+@app.route('/api/chat/rate', methods=['POST'])
+@limiter.limit("20 per minute")
+def chat_rate():
+    """
+    System 2: User thumbs-up (1) / thumbs-down (-1) rating on a bot response.
+    Stores a rating training sample and updates the quality on the original sample.
+
+    Body: { client_id, session_id, sample_id, rating, user_message, bot_response }
+    rating: 1 = positive, -1 = negative, 0 = neutral
+    """
+    try:
+        data         = request.json or {}
+        client_id    = sanitize_input(data.get('client_id', ''), max_length=50)
+        session_id   = sanitize_input(data.get('session_id', ''), max_length=100)
+        sample_id    = sanitize_input(data.get('sample_id', ''), max_length=30)
+        user_message = sanitize_input(data.get('user_message', ''), max_length=1000)
+        bot_response = sanitize_input(data.get('bot_response', ''), max_length=2000)
+
+        try:
+            rating = int(data.get('rating', 0))
+        except (TypeError, ValueError):
+            rating = 0
+        rating = max(-1, min(rating, 1))
+
+        if not client_id:
+            return jsonify({'success': False, 'error': 'client_id required'}), 400
+
+        # Verify client exists before recording
+        if client_id != 'demo':
+            client = models.get_client_by_id(client_id)
+            if not client:
+                return jsonify({'success': False, 'error': 'Client not found'}), 404
+
+            from training_collector import collect_user_rating
+            collect_user_rating(
+                client_id    = client_id,
+                session_id   = session_id,
+                sample_id    = sample_id,
+                rating       = rating,
+                user_message = user_message,
+                bot_response = bot_response,
+            )
+
+        return jsonify({'success': True, 'rating': rating})
+
+    except Exception as e:
+        app.logger.error(f'[chat/rate] error: {e}')
         return jsonify({'success': False, 'error': 'Internal server error'}), 500
 
 
@@ -3540,6 +3624,31 @@ def manage_faqs():
             cache_utils.bump_kb_version(client_id)
             app.logger.info(f"[Cache] KB invalidated after FAQ save: client={client_id}")
 
+            # System 2: record each saved FAQ as a correction training sample.
+            # This captures human-curated knowledge edits as high-quality (1.0)
+            # training signal — the best data the system will ever see.
+            if client_id != 'demo':
+                try:
+                    from training_collector import collect_correction
+                    vertical = json.loads(
+                        models.get_client_by_id(client_id).get('branding_settings') or '{}'
+                    ).get('vertical', 'general')
+                    for faq in faqs_list[:50]:  # cap at 50 per save to avoid burst writes
+                        q = (faq.get('question') or '').strip()
+                        a = (faq.get('answer')   or '').strip()
+                        if q and a:
+                            collect_correction(
+                                client_id        = client_id,
+                                session_id       = '',
+                                original_message = q,
+                                bad_response     = '',   # no prior bad response — new FAQ
+                                correct_response = a,
+                                corrected_by     = f'user:{current_user.id}',
+                                vertical         = vertical,
+                            )
+                except Exception as _tc_err:
+                    app.logger.debug(f'[TrainingCollector] FAQ correction error: {_tc_err}')
+
             # Re-index embeddings for semantic search (non-blocking)
             if ai_helper and ai_helper.enabled:
                 try:
@@ -3906,12 +4015,10 @@ def create_paypal_payment():
         data = request.json
         plan = data.get('plan')
 
-        # FIX: 'solo' was missing — caused a 400 "Invalid plan" error for solo users paying via PayPal.
         PLAN_PRICES = {
-            'solo':    19.00,
             'starter': 49.00,
-            'pro':     99.00,
-            'agency':  299.00,
+            'pro': 99.00,
+            'agency': 299.00
         }
 
         amount = PLAN_PRICES.get(plan)
@@ -4097,21 +4204,11 @@ def flutterwave_callback():
     paid_amount  = float(txn.get('amount', 0))
     paid_currency = txn.get('currency', 'USD')
 
-    # Amount check.
-    # FIX: Previously only validated USD payments — non-USD (NGN, GHS, KES etc.)
-    # bypassed the check entirely, allowing underpayment in any other currency.
-    # Now non-USD payments are logged as warnings for manual review.
-    # Replace the warning block with a hard reject if you add currency conversion.
+    # Amount check (USD only)
     if paid_currency == 'USD' and paid_amount < expected_amt:
-        app.logger.error(f"Flutterwave amount mismatch: expected {expected_amt}, got {paid_amount} {paid_currency}")
+        app.logger.error(f"Flutterwave amount mismatch: expected {expected_amt}, got {paid_amount}")
         flash("Payment amount mismatch. Contact support@lumvi.net.", 'error')
         return redirect(url_for('upgrade_page'))
-    elif paid_currency != 'USD':
-        app.logger.warning(
-            f"[FLW] Non-USD payment — skipping amount check: "
-            f"user={current_user.id} plan={plan} currency={paid_currency} "
-            f"amount={paid_amount} txn={transaction_id} — review manually."
-        )
 
     # Upgrade user with recurring subscription fields
     models.update_user_subscription(
@@ -4187,8 +4284,7 @@ def flutterwave_webhook():
         app.logger.error(f"Flutterwave webhook: unknown plan/user tx_ref='{tx_ref}'")
         return jsonify({'status': 'unknown plan'}), 200
 
-    # Amount validation — same fix as callback route.
-    # Non-USD payments are logged for manual review instead of being silently accepted.
+    # Amount validation — same check as the callback route
     is_annual    = (cycle == 'annual')
     expected_amt = PLAN_PRICES_FLW[plan]['annual'] if is_annual else PLAN_PRICES_FLW[plan]['monthly']
     if currency == 'USD' and amount < expected_amt:
@@ -4197,12 +4293,6 @@ def flutterwave_webhook():
             f"expected {expected_amt}, got {amount} tx_ref='{tx_ref}'"
         )
         return jsonify({'status': 'amount mismatch'}), 200
-    elif currency != 'USD':
-        app.logger.warning(
-            f"[Webhook] Non-USD payment — skipping amount check: "
-            f"user={user_id} plan={plan} currency={currency} amount={amount} "
-            f"tx_ref='{tx_ref}' — review manually."
-        )
 
     # Duplicate check
     conn, cursor = models.get_db()
@@ -5173,8 +5263,9 @@ def client_dashboard_router():
         leads    = models.get_leads(client_id_param)
         faqs     = models.get_faqs(client_id_param)
         articles = models.get_articles(client_id_param)
-        # ── Fetch live conversations for the Conversations tab ──
-        conversations = models.get_conversations(client_id_param)
+        for lead in leads:
+            if lead.get('created_at') and not isinstance(lead['created_at'], str):
+                lead['created_at'] = lead['created_at'].isoformat()
         branding = {}
         if client.get('branding_settings'):
             try:
@@ -5189,8 +5280,6 @@ def client_dashboard_router():
             leads=leads,
             faqs=faqs,
             articles=articles,
-            conversations=conversations,
-            conversation_count=len(conversations),
             client_user_name=current_user.email,
             client_user_email=current_user.email,
             faq_count=len(faqs),
@@ -5210,8 +5299,10 @@ def client_dashboard_client():
     leads       = models.get_leads(client_id)
     faqs        = models.get_faqs(client_id)
     articles    = models.get_articles(client_id)
-    # ── Fetch live conversations for the Conversations tab ──
-    conversations = models.get_conversations(client_id)
+    # Serialize datetimes
+    for lead in leads:
+        if lead.get('created_at') and not isinstance(lead['created_at'], str):
+            lead['created_at'] = lead['created_at'].isoformat()
     branding = {}
     if client and client.get('branding_settings'):
         try:
@@ -5226,8 +5317,6 @@ def client_dashboard_client():
         leads=leads,
         faqs=faqs,
         articles=articles,
-        conversations=conversations,
-        conversation_count=len(conversations),
         client_user_name=session.get('client_user_name'),
         client_user_email=session.get('client_user_email'),
         faq_count=len(faqs),
@@ -5435,70 +5524,99 @@ def cron_enforce_subscriptions():
 
 
 # =====================================================================
-# WEEKLY DIGEST — CRON + ADMIN ENDPOINTS
+# SYSTEM 2 — TRAINING DATA: ADMIN ROUTES
 # =====================================================================
 
-def _run_weekly_digest_bg():
-    """Runs send_weekly_digests() in a background daemon thread."""
-    try:
-        from weekly_digest import send_weekly_digests
-        return send_weekly_digests(mail=mail, app_context=app)
-    except Exception as e:
-        app.logger.error(f"[WeeklyDigest] Runner error: {e}")
-        return {'sent': 0, 'skipped': 0, 'errors': 1, 'total_users': 0}
-
-
-@app.route('/cron/weekly-digest', methods=['GET', 'POST'])
-def cron_weekly_digest():
-    """
-    External cron — triggers the weekly digest email send.
-    Schedule once per week (Monday morning recommended).
-    Secured by the same CRON_SECRET as enforce-subscriptions.
-
-      GET  /cron/weekly-digest?secret=YOUR_CRON_SECRET
-      POST /cron/weekly-digest  {"secret": "YOUR_CRON_SECRET"}
-
-    Returns 202 immediately; email send runs in a background thread
-    so the pinger never times out waiting for bulk email delivery.
-    """
-    cron_secret = os.environ.get('CRON_SECRET', '').strip()
-    if not cron_secret:
-        app.logger.error("[WeeklyDigest/Cron] CRON_SECRET not set — endpoint disabled.")
-        return jsonify({'error': 'Cron not configured'}), 503
-
-    provided = (
-        request.args.get('secret', '') or
-        (request.get_json(silent=True) or {}).get('secret', '')
-    )
-    if not __import__("hmac").compare_digest(provided, cron_secret):
-        app.logger.warning(f"[WeeklyDigest/Cron] Unauthorized from {request.remote_addr}")
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    import threading as _dthread
-    _dthread.Thread(target=_run_weekly_digest_bg, daemon=True).start()
-    app.logger.info("[WeeklyDigest/Cron] Digest job started via cron.")
-    return jsonify({
-        'success':      True,
-        'message':      'Weekly digest job started in background.',
-        'triggered_at': datetime.utcnow().isoformat(),
-    }), 202
-
-
-@app.route('/api/admin/send-weekly-digest', methods=['POST'])
+@app.route('/api/admin/training/stats', methods=['GET'])
 @login_required
-def admin_send_weekly_digest():
-    """Admin manual trigger — fires the weekly digest immediately for testing."""
+def admin_training_stats():
+    """
+    Returns training sample stats.
+    Admin only.
+    Query params:
+      client_id — if provided, returns per-type breakdown for that client.
+                  If omitted, returns summary across all clients.
+    """
     if not current_user.is_admin:
         return jsonify({'success': False, 'error': 'Admin only'}), 403
+    try:
+        from training_collector import get_training_stats as _get_stats_all
+        from training_collector import get_training_stats as _get_stats_client
+        client_id = request.args.get('client_id')
+        if client_id:
+            # Per-client breakdown reuses the original function signature
+            stats = _get_stats_client(client_id)
+        else:
+            stats = _get_stats_all()
+        return jsonify({'success': True, 'stats': stats})
+    except Exception as e:
+        app.logger.error(f'[TrainingAdmin] stats error: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
 
-    import threading as _dthread
-    _dthread.Thread(target=_run_weekly_digest_bg, daemon=True).start()
-    app.logger.info(f"[WeeklyDigest/Admin] Triggered by admin {current_user.id}")
-    return jsonify({
-        'success':      True,
-        'message':      'Digest job started. Check server logs for progress.',
-        'triggered_at': datetime.utcnow().isoformat(),
-    })
+
+@app.route('/api/admin/training/export', methods=['GET'])
+@login_required
+def admin_training_export():
+    """
+    Export training samples as JSONL (Alpaca format) for fine-tuning.
+    Query params:
+      client_id  — filter to one client (optional; omit for all)
+      split      — train / val / test (default: train)
+      min_quality — float 0.0–1.0 (default: 0.5)
+      limit      — max rows (default: 5000)
+
+    Returns a downloadable .jsonl file.
+    """
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Admin only'}), 403
+    try:
+        from training_collector import export_training_jsonl
+        import io
+        client_id   = request.args.get('client_id')
+        split       = request.args.get('split', 'train')
+        min_quality = float(request.args.get('min_quality', 0.5))
+        limit       = int(request.args.get('limit', 5000))
+
+        jsonl_str = export_training_jsonl(
+            client_id   = client_id,
+            split       = split,
+            min_quality = min_quality,
+            limit       = limit,
+        )
+        filename = f"lumvi_training_{split}_{datetime.utcnow().strftime('%Y%m%d')}.jsonl"
+        return app.response_class(
+            response    = jsonl_str,
+            status      = 200,
+            mimetype    = 'application/jsonl',
+            headers     = {'Content-Disposition': f'attachment; filename={filename}'},
+        )
+    except Exception as e:
+        app.logger.error(f'[TrainingAdmin] export error: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/training/assign-splits', methods=['POST'])
+@login_required
+def admin_assign_splits():
+    """
+    Assign train/val/test splits to all unassigned samples for a client.
+    Body: { "client_id": "...", "train_pct": 0.8, "val_pct": 0.1 }
+    """
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'error': 'Admin only'}), 403
+    try:
+        from training_collector import assign_splits
+        data       = request.get_json() or {}
+        client_id  = data.get('client_id')
+        train_pct  = float(data.get('train_pct', 0.8))
+        val_pct    = float(data.get('val_pct', 0.1))
+        if not client_id:
+            return jsonify({'success': False, 'error': 'client_id required'}), 400
+        assign_splits(client_id=client_id, train_pct=train_pct, val_pct=val_pct)
+        return jsonify({'success': True, 'message': f'Splits assigned for {client_id}'})
+    except Exception as e:
+        app.logger.error(f'[TrainingAdmin] assign_splits error: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/terms')
