@@ -81,50 +81,53 @@ def send_welcome_email(email):
 <!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:'Inter',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:40px 0;">
+<body style="margin:0;padding:0;background:#0D0D0D;font-family:'Inter',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0D0D0D;padding:40px 0;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
 
         <!-- Header -->
-        <tr><td style="background:linear-gradient(135deg,#6366f1 0%,#7c3aed 50%,#a78bfa 100%);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
-          <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:12px;padding:10px 20px;margin-bottom:16px;">
-            <span style="font-size:26px;font-weight:900;color:#ffffff;letter-spacing:-0.5px;">&#9889; Lumvi</span>
+        <tr><td style="background:linear-gradient(135deg,#1A1508 0%,#2A1F05 60%,#1A1508 100%);border-radius:16px 16px 0 0;padding:40px 40px 32px;text-align:center;border:1px solid rgba(201,168,76,0.25);border-bottom:none;">
+          <div style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);border-radius:10px;padding:9px 20px;margin-bottom:20px;">
+            <span style="font-size:22px;font-weight:900;color:#0D0D0D;letter-spacing:-0.3px;">&#9889; Lumvi</span>
           </div>
-          <h1 style="margin:0;font-size:24px;font-weight:800;color:#ffffff;line-height:1.3;">
-            You're all set &mdash; let's build your first chatbot!
+          <h1 style="margin:0;font-size:24px;font-weight:800;color:#F5F0E8;line-height:1.35;">
+            You&rsquo;re all set &mdash; let&rsquo;s build your first chatbot!
           </h1>
         </td></tr>
 
+        <!-- Gold divider bar -->
+        <tr><td style="background:linear-gradient(90deg,#C9A84C,#E2B96A,#C9A84C);height:2px;border-left:1px solid rgba(201,168,76,0.25);border-right:1px solid rgba(201,168,76,0.25);"></td></tr>
+
         <!-- Body -->
-        <tr><td style="background:#1e293b;padding:36px 40px;">
-          <p style="margin:0 0 20px;color:#94a3b8;font-size:15px;line-height:1.7;">
-            Hey there &#128075; &mdash; welcome to Lumvi! You're now part of a growing group of agencies and businesses using AI chatbots to capture leads and answer questions automatically.
+        <tr><td style="background:#141414;padding:36px 40px;border:1px solid rgba(201,168,76,0.15);border-top:none;border-bottom:none;">
+          <p style="margin:0 0 20px;color:#A89880;font-size:15px;line-height:1.75;">
+            Hey there &#128075; &mdash; welcome to Lumvi! You&rsquo;re now part of a growing group of agencies and businesses using AI chatbots to capture leads and answer questions automatically.
           </p>
-          <p style="margin:0 0 28px;color:#94a3b8;font-size:15px;line-height:1.7;">
-            Here's how to get started in 3 simple steps:
+          <p style="margin:0 0 24px;color:#A89880;font-size:15px;line-height:1.75;">
+            Here&rsquo;s how to get started in 3 simple steps:
           </p>
 
           <!-- Steps -->
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
             <tr>
-              <td style="padding:14px 16px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;">
-                <strong style="font-size:14px;font-weight:700;color:#c7d2fe;">1. Create your first chatbot</strong>
-                <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.6;">Go to your dashboard and click "Create New Chatbot". Choose an industry template or start from scratch.</p>
+              <td style="padding:16px 18px;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.18);border-radius:12px;">
+                <strong style="font-size:14px;font-weight:700;color:#E2B96A;">1. Create your first chatbot</strong>
+                <p style="margin:6px 0 0;font-size:13px;color:#7A6E60;line-height:1.65;">Go to your dashboard and click &ldquo;Create New Chatbot&rdquo;. Choose an industry template or start from scratch.</p>
               </td>
             </tr>
             <tr><td style="height:10px;"></td></tr>
             <tr>
-              <td style="padding:14px 16px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;">
-                <strong style="font-size:14px;font-weight:700;color:#c7d2fe;">2. Add your FAQs</strong>
-                <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.6;">Train your bot with common questions. Upload a CSV or PDF, or add them manually in the FAQ Manager.</p>
+              <td style="padding:16px 18px;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.18);border-radius:12px;">
+                <strong style="font-size:14px;font-weight:700;color:#E2B96A;">2. Add your FAQs</strong>
+                <p style="margin:6px 0 0;font-size:13px;color:#7A6E60;line-height:1.65;">Train your bot with common questions. Upload a CSV or PDF, or add them manually in the FAQ Manager.</p>
               </td>
             </tr>
             <tr><td style="height:10px;"></td></tr>
             <tr>
-              <td style="padding:14px 16px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;">
-                <strong style="font-size:14px;font-weight:700;color:#c7d2fe;">3. Embed on your website</strong>
-                <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.6;">Copy the one-line embed code from your dashboard and paste it into any website. Done!</p>
+              <td style="padding:16px 18px;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.18);border-radius:12px;">
+                <strong style="font-size:14px;font-weight:700;color:#E2B96A;">3. Embed on your website</strong>
+                <p style="margin:6px 0 0;font-size:13px;color:#7A6E60;line-height:1.65;">Copy the one-line embed code from your dashboard and paste it into any website. Done!</p>
               </td>
             </tr>
           </table>
@@ -133,25 +136,25 @@ def send_welcome_email(email):
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr><td align="center" style="padding:8px 0 28px;">
               <a href="https://lumvi.net/dashboard"
-                 style="display:inline-block;background:linear-gradient(135deg,#6366f1,#7c3aed);color:#ffffff;text-decoration:none;padding:15px 36px;border-radius:10px;font-weight:800;font-size:15px;">
+                 style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);color:#0D0D0D;text-decoration:none;padding:15px 40px;border-radius:10px;font-weight:800;font-size:15px;letter-spacing:0.01em;">
                 Go to My Dashboard &rarr;
               </a>
             </td></tr>
           </table>
 
-          <p style="margin:0;color:#475569;font-size:13px;line-height:1.7;border-top:1px solid rgba(255,255,255,0.06);padding-top:20px;">
+          <p style="margin:0;color:#5A5248;font-size:13px;line-height:1.75;border-top:1px solid rgba(201,168,76,0.12);padding-top:20px;">
             Questions? Reply to this email or reach us at
-            <a href="mailto:support@lumvi.net" style="color:#818cf8;text-decoration:none;">support@lumvi.net</a>.
-            We're happy to help.
+            <a href="mailto:support@lumvi.net" style="color:#C9A84C;text-decoration:none;">support@lumvi.net</a>.
+            We&rsquo;re happy to help.
           </p>
         </td></tr>
 
         <!-- Footer -->
-        <tr><td style="background:#0f172a;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center;">
-          <p style="margin:0;color:#334155;font-size:12px;">
-            &copy; 2025 Lumvi &middot;
-            <a href="https://lumvi.net" style="color:#475569;text-decoration:none;">lumvi.net</a> &middot;
-            <a href="https://lumvi.net/privacy-policy" style="color:#475569;text-decoration:none;">Privacy Policy</a>
+        <tr><td style="background:#0D0D0D;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center;border:1px solid rgba(201,168,76,0.15);border-top:none;">
+          <p style="margin:0;color:#3D3830;font-size:12px;">
+            &copy; 2026 Lumvi &middot;
+            <a href="https://lumvi.net" style="color:#5A5248;text-decoration:none;">lumvi.net</a> &middot;
+            <a href="https://lumvi.net/privacy-policy" style="color:#5A5248;text-decoration:none;">Privacy Policy</a>
           </p>
         </td></tr>
 
@@ -687,42 +690,36 @@ def _notify_handoff(client_id, client, config, ticket_id, reason,
                         sender=f"{sender_info['name']} <{sender_info['address']}>",
                         recipients=[notify_email],
                         html=f"""
-                        <div style="font-family:'DM Sans',sans-serif;max-width:560px;margin:0 auto;
-                                    background:#F7F4EF;padding:36px;border-radius:16px;">
-                          <h2 style="font-size:20px;font-weight:700;color:#1C1917;margin-bottom:4px;">
-                            Human Handoff Requested</h2>
-                          <p style="color:#A8A29E;font-size:13px;margin-bottom:24px;">
-                            via {company_name} · Ticket
-                            <code style="background:#E7E2DA;padding:2px 6px;border-radius:4px;">
-                              {ticket_id}</code></p>
-                          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-                            <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
-                                           font-size:13px;color:#57534E;width:120px;">Customer</td>
-                                <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
-                                           font-size:13px;font-weight:600;color:#1C1917;">
-                                  {customer_label}</td></tr>
-                            {'<tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;color:#57534E;">Email</td><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;font-weight:600;"><a href="mailto:' + email + '" style="color:#B8924A;">' + email + '</a></td></tr>' if email else ''}
-                            <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
-                                           font-size:13px;color:#57534E;">Urgency</td>
-                                <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
-                                           font-size:13px;font-weight:600;">{urgency_label}</td></tr>
-                            <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
-                                           font-size:13px;color:#57534E;">Trigger</td>
-                                <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
-                                           font-size:13px;color:#1C1917;">{method}</td></tr>
-                            <tr><td style="padding:10px 0;font-size:13px;color:#57534E;
-                                          vertical-align:top;padding-top:14px;">Question</td>
-                                <td style="padding:10px 0;padding-top:14px;font-size:13px;
-                                           font-style:italic;color:#1C1917;">"{reason[:300]}"</td></tr>
-                          </table>
-                          {'<div style="background:#fff;border:1px solid #E7E2DA;border-radius:10px;padding:16px;margin-bottom:20px;"><p style="font-size:12px;color:#A8A29E;margin:0 0 8px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Conversation summary</p><pre style="font-size:12px;color:#57534E;white-space:pre-wrap;margin:0;line-height:1.6;">' + summary[:800] + '</pre></div>' if summary else ''}
-                          <a href="{inbox_url}"
-                             style="display:inline-block;margin-top:4px;padding:11px 22px;
-                                    background:#B8924A;color:#fff;text-decoration:none;
-                                    border-radius:9px;font-weight:700;font-size:13.5px;">
-                            Open Inbox →</a>
-                          <p style="font-size:11px;color:#A8A29E;margin-top:20px;">
-                            Ticket ID: {ticket_id} · Lumvi Platform</p>
+                        <div style="font-family:'Inter',Arial,sans-serif;max-width:560px;margin:0 auto;background:#0D0D0D;border-radius:16px;overflow:hidden;border:1px solid rgba(201,168,76,0.2);">
+                          <div style="background:linear-gradient(135deg,#1A1508,#2A1F05);padding:28px 32px 24px;text-align:center;border-bottom:2px solid #C9A84C;">
+                            <div style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);border-radius:8px;padding:7px 16px;margin-bottom:14px;">
+                              <span style="font-size:16px;font-weight:900;color:#0D0D0D;">&#9889; Lumvi</span>
+                            </div>
+                            <h2 style="font-size:20px;font-weight:800;color:#F5F0E8;margin:0;">Human Handoff Requested</h2>
+                          </div>
+                          <div style="background:#141414;padding:28px 32px;">
+                            <p style="color:#7A6E60;font-size:13px;margin:0 0 20px;">
+                              via {company_name} &middot; Ticket
+                              <code style="background:#1F1A10;color:#C9A84C;padding:2px 7px;border-radius:4px;border:1px solid rgba(201,168,76,0.25);">{ticket_id}</code>
+                            </p>
+                            <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+                              <tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;width:120px;">Customer</td>
+                                  <td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;color:#F5F0E8;">{customer_label}</td></tr>
+                              {'<tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;">Email</td><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;"><a href="mailto:' + email + '" style="color:#C9A84C;text-decoration:none;">' + email + '</a></td></tr>' if email else ''}
+                              <tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;">Urgency</td>
+                                  <td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;color:#E2B96A;">{urgency_label}</td></tr>
+                              <tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;">Trigger</td>
+                                  <td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#F5F0E8;">{method}</td></tr>
+                              <tr><td style="padding:10px 0;font-size:13px;color:#7A6E60;vertical-align:top;padding-top:14px;">Question</td>
+                                  <td style="padding:10px 0;padding-top:14px;font-size:13px;font-style:italic;color:#A89880;">&ldquo;{reason[:300]}&rdquo;</td></tr>
+                            </table>
+                            {'<div style="background:#1A1508;border:1px solid rgba(201,168,76,0.18);border-radius:10px;padding:16px;margin-bottom:20px;"><p style="font-size:12px;color:#C9A84C;margin:0 0 8px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;">Conversation summary</p><pre style="font-size:12px;color:#7A6E60;white-space:pre-wrap;margin:0;line-height:1.6;">' + summary[:800] + '</pre></div>' if summary else ''}
+                            <a href="{inbox_url}"
+                               style="display:inline-block;margin-top:4px;padding:12px 24px;background:linear-gradient(135deg,#C9A84C,#E2B96A);color:#0D0D0D;text-decoration:none;border-radius:9px;font-weight:800;font-size:13.5px;">
+                              Open Inbox &rarr;</a>
+                            <p style="font-size:11px;color:#3D3830;margin-top:20px;">
+                              Ticket ID: {ticket_id} &middot; Lumvi Platform</p>
+                          </div>
                         </div>"""
                     )
                     mail.send(msg)
@@ -1552,29 +1549,27 @@ def submit_lead():
                     sender=f"{sender_info['name']} <{sender_info['address']}>",
                     recipients=[notify_email],
                     html=f"""
-                    <div style="font-family:'DM Sans',sans-serif;max-width:520px;margin:0 auto;
-                                background:#F7F4EF;padding:36px;border-radius:16px;">
-                      <h2 style="font-size:20px;font-weight:700;color:#1C1917;margin-bottom:4px;">
-                        New Lead Captured</h2>
-                      <p style="color:#A8A29E;font-size:13px;margin-bottom:24px;">
-                        via {client.get('company_name','your chatbot')}</p>
-                      <table style="width:100%;border-collapse:collapse;">
-                        <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
-                                       font-size:13px;color:#57534E;width:100px;">Name</td>
-                            <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
-                                       font-size:13px;font-weight:600;color:#1C1917;">{name}</td></tr>
-                        <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
-                                       font-size:13px;color:#57534E;">Email</td>
-                            <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
-                                       font-size:13px;font-weight:600;color:#1C1917;">{email}</td></tr>
-                        {'<tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;color:#57534E;">Phone</td><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;font-weight:600;color:#1C1917;">'+phone+'</td></tr>' if phone else ''}
-                        {'<tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;color:#57534E;">Company</td><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;font-weight:600;color:#1C1917;">'+company+'</td></tr>' if company else ''}
-                      </table>
-                      <a href="https://lumvi.net/admin/leads?client_id={client_id}"
-                         style="display:inline-block;margin-top:24px;padding:11px 22px;
-                                background:#B8924A;color:#fff;text-decoration:none;
-                                border-radius:9px;font-weight:700;font-size:13.5px;">
-                        View All Leads →</a>
+                    <div style="font-family:'Inter',Arial,sans-serif;max-width:520px;margin:0 auto;background:#0D0D0D;border-radius:16px;overflow:hidden;border:1px solid rgba(201,168,76,0.2);">
+                      <div style="background:linear-gradient(135deg,#1A1508,#2A1F05);padding:26px 32px 22px;text-align:center;border-bottom:2px solid #C9A84C;">
+                        <div style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);border-radius:8px;padding:7px 16px;margin-bottom:12px;">
+                          <span style="font-size:15px;font-weight:900;color:#0D0D0D;">&#9889; Lumvi</span>
+                        </div>
+                        <h2 style="font-size:20px;font-weight:800;color:#F5F0E8;margin:0;">New Lead Captured</h2>
+                      </div>
+                      <div style="background:#141414;padding:26px 32px;">
+                        <p style="color:#7A6E60;font-size:13px;margin:0 0 20px;">via {client.get('company_name','your chatbot')}</p>
+                        <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+                          <tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;width:100px;">Name</td>
+                              <td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;color:#F5F0E8;">{name}</td></tr>
+                          <tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;">Email</td>
+                              <td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;color:#C9A84C;">{email}</td></tr>
+                          {'<tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;">Phone</td><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;color:#F5F0E8;">'+phone+'</td></tr>' if phone else ''}
+                          {'<tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;">Company</td><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;color:#F5F0E8;">'+company+'</td></tr>' if company else ''}
+                        </table>
+                        <a href="https://lumvi.net/admin/leads?client_id={client_id}"
+                           style="display:inline-block;padding:12px 24px;background:linear-gradient(135deg,#C9A84C,#E2B96A);color:#0D0D0D;text-decoration:none;border-radius:9px;font-weight:800;font-size:13.5px;">
+                          View All Leads &rarr;</a>
+                      </div>
                     </div>"""
                 )
                 mail.send(msg)
@@ -1689,22 +1684,26 @@ def forgot_password():
                     sender="Lumvi <support@lumvi.net>",
                     recipients=[email],
                     html=f"""
-                    <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#f8fafc;padding:40px;border-radius:16px;">
-                        <div style="text-align:center;margin-bottom:32px;">
-                            <div style="display:inline-block;background:linear-gradient(135deg,#6366f1,#a78bfa);border-radius:12px;padding:12px 20px;font-size:24px;font-weight:800;margin-bottom:12px;">⚡ Lumvi</div>
+                    <div style="font-family:'Inter',Arial,sans-serif;max-width:480px;margin:0 auto;background:#0D0D0D;border-radius:16px;overflow:hidden;border:1px solid rgba(201,168,76,0.2);">
+                      <div style="background:linear-gradient(135deg,#1A1508,#2A1F05);padding:32px 40px 28px;text-align:center;border-bottom:2px solid #C9A84C;">
+                        <div style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);border-radius:10px;padding:9px 20px;margin-bottom:16px;">
+                          <span style="font-size:20px;font-weight:900;color:#0D0D0D;">&#9889; Lumvi</span>
                         </div>
-                        <h2 style="margin:0 0 12px;font-size:22px;font-weight:700;">Reset your password</h2>
-                        <p style="color:#94a3b8;margin:0 0 28px;line-height:1.6;">
-                            We received a request to reset the password for your Lumvi account.
-                            Click the button below to set a new password. This link expires in <strong style="color:#f8fafc;">1 hour</strong>.
+                        <h2 style="margin:0;font-size:22px;font-weight:800;color:#F5F0E8;">Reset your password</h2>
+                      </div>
+                      <div style="background:#141414;padding:32px 40px;">
+                        <p style="color:#A89880;margin:0 0 28px;line-height:1.75;font-size:15px;">
+                          We received a request to reset the password for your Lumvi account.
+                          Click the button below to set a new password. This link expires in <strong style="color:#E2B96A;">1 hour</strong>.
                         </p>
-                        <a href="{reset_url}" style="display:block;text-align:center;background:linear-gradient(135deg,#6366f1,#7c3aed);color:white;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:700;font-size:15px;margin-bottom:24px;">
-                            Reset My Password →
+                        <a href="{reset_url}" style="display:block;text-align:center;background:linear-gradient(135deg,#C9A84C,#E2B96A);color:#0D0D0D;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:800;font-size:15px;margin-bottom:28px;">
+                          Reset My Password &rarr;
                         </a>
-                        <p style="color:#475569;font-size:13px;margin:0;line-height:1.6;">
-                            If you didn't request this, you can safely ignore this email — your password won't change.<br><br>
-                            Or copy this link: <span style="color:#6366f1;">{reset_url}</span>
+                        <p style="color:#5A5248;font-size:13px;margin:0;line-height:1.75;border-top:1px solid rgba(201,168,76,0.1);padding-top:20px;">
+                          If you didn&rsquo;t request this, you can safely ignore this email &mdash; your password won&rsquo;t change.<br><br>
+                          Or copy this link: <span style="color:#C9A84C;">{reset_url}</span>
                         </p>
+                      </div>
                     </div>
                     """
                 )
@@ -4399,22 +4398,27 @@ def cancel_subscription():
                     sender="Lumvi <support@lumvi.net>",
                     recipients=[current_user.email],
                     html=f"""
-                    <div style="font-family:'DM Sans',sans-serif;max-width:520px;margin:0 auto;
-                                background:#F7F4EF;padding:36px;border-radius:16px;">
-                      <h2 style="font-size:20px;font-weight:700;color:#1C1917;margin-bottom:8px;">
-                        Subscription Cancelled</h2>
-                      <p style="color:#57534E;font-size:14px;line-height:1.6;margin-bottom:16px;">
-                        Your Lumvi subscription has been cancelled. You will retain full access
-                        until <strong>{_access_ends}</strong>. After that, your account will
-                        revert to the free plan automatically — no further charges will be made.</p>
-                      <p style="color:#57534E;font-size:14px;line-height:1.6;margin-bottom:24px;">
-                        Changed your mind? You can resubscribe at any time from your
-                        <a href="https://lumvi.net/upgrade" style="color:#B8924A;">upgrade page</a>.
-                        Your data and clients will be waiting for you.</p>
-                      <p style="color:#A8A29E;font-size:12px;">
-                        Questions? Contact
-                        <a href="mailto:support@lumvi.net" style="color:#B8924A;">support@lumvi.net</a>.
-                      </p>
+                    <div style="font-family:'Inter',Arial,sans-serif;max-width:520px;margin:0 auto;background:#0D0D0D;border-radius:16px;overflow:hidden;border:1px solid rgba(201,168,76,0.2);">
+                      <div style="background:linear-gradient(135deg,#1A1508,#2A1F05);padding:28px 32px 24px;text-align:center;border-bottom:2px solid #C9A84C;">
+                        <div style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);border-radius:8px;padding:7px 16px;margin-bottom:12px;">
+                          <span style="font-size:15px;font-weight:900;color:#0D0D0D;">&#9889; Lumvi</span>
+                        </div>
+                        <h2 style="font-size:20px;font-weight:800;color:#F5F0E8;margin:0;">Subscription Cancelled</h2>
+                      </div>
+                      <div style="background:#141414;padding:28px 32px;">
+                        <p style="color:#A89880;font-size:14px;line-height:1.75;margin-bottom:16px;">
+                          Your Lumvi subscription has been cancelled. You will retain full access
+                          until <strong style="color:#E2B96A;">{_access_ends}</strong>. After that, your account will
+                          revert to the free plan automatically &mdash; no further charges will be made.</p>
+                        <p style="color:#A89880;font-size:14px;line-height:1.75;margin-bottom:24px;">
+                          Changed your mind? You can resubscribe at any time from your
+                          <a href="https://lumvi.net/upgrade" style="color:#C9A84C;text-decoration:none;">upgrade page</a>.
+                          Your data and clients will be waiting for you.</p>
+                        <p style="color:#5A5248;font-size:12px;border-top:1px solid rgba(201,168,76,0.1);padding-top:16px;margin:0;">
+                          Questions? Contact
+                          <a href="mailto:support@lumvi.net" style="color:#C9A84C;text-decoration:none;">support@lumvi.net</a>.
+                        </p>
+                      </div>
                     </div>"""
                 )
                 mail.send(_cancel_msg)
@@ -5373,21 +5377,25 @@ def invite_client_user():
             sender="Lumvi <support@lumvi.net>",
             recipients=[email],
             html=f"""
-<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#f8fafc;padding:40px;border-radius:16px;">
-  <div style="text-align:center;margin-bottom:28px;">
-    <div style="display:inline-block;background:linear-gradient(135deg,#6366f1,#a78bfa);border-radius:12px;padding:10px 20px;font-size:22px;font-weight:800;">⚡ {company}</div>
+<div style="font-family:'Inter',Arial,sans-serif;max-width:480px;margin:0 auto;background:#0D0D0D;border-radius:16px;overflow:hidden;border:1px solid rgba(201,168,76,0.2);">
+  <div style="background:linear-gradient(135deg,#1A1508,#2A1F05);padding:28px 32px 24px;text-align:center;border-bottom:2px solid #C9A84C;">
+    <div style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);border-radius:8px;padding:8px 18px;margin-bottom:12px;">
+      <span style="font-size:18px;font-weight:900;color:#0D0D0D;">&#9889; {company}</span>
+    </div>
+    <h2 style="margin:0;font-size:20px;font-weight:800;color:#F5F0E8;">Your portal access is ready</h2>
   </div>
-  <h2 style="margin:0 0 12px;font-size:20px;">Your portal access is ready</h2>
-  <p style="color:#94a3b8;margin:0 0 24px;line-height:1.6;">Hi {name or email}, you've been given access to your client portal where you can view your leads, FAQs and analytics.</p>
-  <div style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:16px;margin-bottom:24px;">
-    <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;">Login URL</p>
-    <p style="margin:0;font-size:14px;color:#a5b4fc;">lumvi.net/client-login</p>
-    <p style="margin:12px 0 6px;font-size:13px;color:#94a3b8;">Email</p>
-    <p style="margin:0;font-size:14px;color:#f8fafc;">{email}</p>
-    <p style="margin:12px 0 6px;font-size:13px;color:#94a3b8;">Password</p>
-    <p style="margin:0;font-size:14px;color:#f8fafc;">{password}</p>
+  <div style="background:#141414;padding:28px 32px;">
+    <p style="color:#A89880;margin:0 0 24px;line-height:1.75;font-size:15px;">Hi {name or email}, you&rsquo;ve been given access to your client portal where you can view your leads, FAQs and analytics.</p>
+    <div style="background:#1A1508;border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:18px;margin-bottom:24px;">
+      <p style="margin:0 0 4px;font-size:12px;color:#7A6E60;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Login URL</p>
+      <p style="margin:0 0 14px;font-size:14px;color:#C9A84C;">lumvi.net/client-login</p>
+      <p style="margin:0 0 4px;font-size:12px;color:#7A6E60;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Email</p>
+      <p style="margin:0 0 14px;font-size:14px;color:#F5F0E8;">{email}</p>
+      <p style="margin:0 0 4px;font-size:12px;color:#7A6E60;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Password</p>
+      <p style="margin:0;font-size:14px;color:#F5F0E8;">{password}</p>
+    </div>
+    <a href="https://lumvi.net/client-login" style="display:block;text-align:center;background:linear-gradient(135deg,#C9A84C,#E2B96A);color:#0D0D0D;text-decoration:none;padding:14px;border-radius:10px;font-weight:800;font-size:15px;">Access My Portal &rarr;</a>
   </div>
-  <a href="https://lumvi.net/client-login" style="display:block;text-align:center;background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff;text-decoration:none;padding:14px;border-radius:10px;font-weight:700;">Access My Portal →</a>
 </div>"""
         )
         mail.send(msg)
