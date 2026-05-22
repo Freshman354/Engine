@@ -2765,6 +2765,43 @@ def get_embeddings_for_client(client_id: str) -> list:
         conn.close()
 
 
+def clear_all_embeddings(client_id: str = None) -> int:
+    """
+    Nullify stored embeddings after an embedding model change.
+    Required after switching from Gemini text-embedding-004 to
+    BAAI/bge-small-en-v1.5 — the vector spaces are incompatible
+    and stale embeddings will silently corrupt similarity scores.
+
+    Pass client_id to clear one client only, or None to clear all.
+    Returns the number of rows updated.
+    Call this once after deploying the new ai_helper.py, then
+    ai_helper.index_faqs() will regenerate embeddings using the
+    new model on the next FAQ save or on explicit re-index.
+    """
+    try:
+        conn, cursor = get_db()
+        if client_id:
+            cursor.execute(
+                "UPDATE knowledge_base SET embedding = NULL, updated_at = NOW() "
+                "WHERE client_id = %s AND embedding IS NOT NULL",
+                (client_id,)
+            )
+        else:
+            cursor.execute(
+                "UPDATE knowledge_base SET embedding = NULL, updated_at = NOW() "
+                "WHERE embedding IS NOT NULL"
+            )
+        count = cursor.rowcount
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return count
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[clear_all_embeddings] {e}")
+        return 0
+
+
 def delete_knowledge_chunks(client_id: str) -> None:
     """Delete all knowledge chunks for a client."""
     conn, cursor = get_db()

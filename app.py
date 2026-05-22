@@ -1255,7 +1255,7 @@ def chat():
                 response_text = result.get('response', '')
                 method        = result.get('method', 'rag_pipeline')
                 confidence    = result.get('confidence', 0.0)
-                from_cache    = result.get('method') == 'cache'
+                from_cache    = result.get('method') in ('cache', 'redis_cache')
 
                 # ── HANDOFF: contact_request or is_lead from pipeline ─────────
                 # When the AI returns a contact_request action (IDK, confidence

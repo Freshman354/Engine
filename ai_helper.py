@@ -125,6 +125,21 @@ import collections
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Tuple, Optional
 
+# LUMVI FIX: Change 1 — Load sentence-transformers model once at module level.
+# Replaces Gemini text-embedding-004 API calls in _embed() with a self-hosted
+# BAAI/bge-small-en-v1.5 model to eliminate per-embedding API cost.
+_ST_MODEL = None
+try:
+    from sentence_transformers import SentenceTransformer as _SentenceTransformer
+    _ST_MODEL = _SentenceTransformer('BAAI/bge-small-en-v1.5')
+    logging.getLogger(__name__).info(
+        "[Embed] sentence-transformers BAAI/bge-small-en-v1.5 loaded successfully"
+    )
+except Exception as _st_load_err:
+    logging.getLogger(__name__).warning(
+        f"[Embed] sentence-transformers load failed — _embed() will return []: {_st_load_err}"
+    )
+
 # ── Bounded LRU cache (Fix #6: replaces unbounded Dict[str,str]) ─────────────
 # Pure-Python OrderedDict-based LRU — no extra dependency needed.
 class _LRUCache:
@@ -293,6 +308,13 @@ _QUESTION_SIGNALS = re.compile(
 # recreating the set object on every call.
 _BARE_PRONOUNS = frozenset({'it', 'that', 'this', 'they', 'them', 'those', 'these'})
 
+# LUMVI FIX: Change 4 — Disable inference-time query expansion at module level.
+# Previously set as a local variable inside generate_response(), which meant it
+# was re-assigned on every call and could not be overridden by config or tests.
+# Defined here as a module-level constant so it is set once at import time.
+# Set to True to re-enable (adds 1 unbudgeted Gemini call per turn on 3+ word queries).
+_INFERENCE_EXPANSION_ENABLED: bool = False
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Pure-Python math helpers
@@ -431,27 +453,21 @@ def _embed(text: str, task: str = 'retrieval_document') -> list:
             logger.debug(f"[EmbedCache] Redis get failed (non-critical): {_redis_get_err}")
 
     # FIX BUG-3 (embed guard): _embed is module-level so it has no access to
-    # self.enabled. Guard against calling genai when it was never configured by
-    # checking whether genai has been configured at all. If configure() was never
-    # called (no api key / init failure) the internal client will be absent.
-    try:
-        # genai stores its client in a module-level default; accessing it raises
-        # AttributeError / ValueError when not configured.
-        _client = genai._default_api_client  # noqa: SLF001 — intentional internal check
-        if _client is None:
-            return []
-    except Exception:
+    # self.enabled. Guard against calling the embedding model when it was never
+    # loaded successfully.
+    # LUMVI FIX: Change 1 — Use locally loaded sentence-transformers model instead
+    # of the Gemini embedding API. Same function signature and cache logic retained.
+    # _normalize() is called on output to produce unit vectors, matching prior behaviour.
+    if _ST_MODEL is None:
         return []
 
     try:
-        result = genai.embed_content(
-            model='models/text-embedding-004',
-            content=text.strip()[:2048],
-            task_type=task,
+        _raw_vec = _ST_MODEL.encode(
+            text.strip()[:2048],
+            normalize_embeddings=False,   # we call _normalize() ourselves below
+            show_progress_bar=False,
         )
-        # FIX 1: Normalize to unit vector at storage time so every future
-        # cosine similarity reduces to a dot product — no magnitude recomputation.
-        vec = _normalize(result['embedding'])
+        vec = _normalize(_raw_vec.tolist())
         # Fix 1: _LRUCache.__setitem__ handles bounded eviction — no manual eviction needed.
         _EMBED_CACHE[cache_key] = vec
 
@@ -1262,6 +1278,36 @@ class AIHelper:
                 'action':        None,
             }
 
+        # LUMVI FIX: Change 2 — HTTP-level Redis response cache check.
+        # Runs before any Gemini or embedding calls to short-circuit repeat queries.
+        # Skipped entirely for demo clients and anonymous sessions (client_id None).
+        # Cache key: SHA-256 of "resp:{client_id}:{vertical}:{normalised_message}".
+        # Only written when confidence >= confidence_high (0.65) after a real answer.
+        # Uses the existing _redis_embed_client connection — no new Redis connection.
+        _REDIS_RESP_PREFIX = "lumvi:resp:v1:"
+        _REDIS_RESP_TTL    = 86400  # 24 hours
+        _resp_cache_key    = None   # populated below; used again at cache-write time
+
+        if client_id and client_id != 'demo' and _redis_embed_client is not None:
+            try:
+                _raw_resp_key = f"resp:{client_id}:{vertical}:{user_message.lower().strip()}"
+                _resp_cache_key = hashlib.sha256(_raw_resp_key.encode()).hexdigest()
+                _cached_resp_bytes = _redis_embed_client.get(
+                    _REDIS_RESP_PREFIX + _resp_cache_key
+                )
+                if _cached_resp_bytes is not None:
+                    _cached_resp_dict = json.loads(_cached_resp_bytes)
+                    _cached_resp_dict['method'] = 'redis_cache'
+                    logger.debug(
+                        f"[RespCache HIT] client={client_id} key={_resp_cache_key[:10]}…"
+                    )
+                    return _cached_resp_dict
+            except Exception as _resp_cache_read_err:
+                # Never block the response on a Redis error — silently continue.
+                logger.debug(
+                    f"[RespCache] read failed (non-critical): {_resp_cache_read_err}"
+                )
+
         try:
             history = conversation_history or []
 
@@ -1488,14 +1534,11 @@ class AIHelper:
             logger.debug(f"[Rewrite] '{clean[:40]}' → '{search_query[:60]}'")
 
             # ── INFERENCE-TIME QUERY EXPANSION (Fix 3) ───────────────────
-            # Generate 2 lightweight paraphrase variants of the search query
-            # and union their embedding-search results before RRF.
-            # Only fires when:
-            #   - feature flag is on
-            #   - Gemini is enabled
-            #   - Call 1 was NOT used this turn (budget guard: max 2 calls/turn)
-            #   - query is 3+ words (single-word queries don't benefit)
-            _INFERENCE_EXPANSION_ENABLED = True
+            # Controlled by module-level _INFERENCE_EXPANSION_ENABLED constant.
+            # Currently disabled (False) — see module-level declaration.
+            # When enabled, generates 2 paraphrase variants and unions their
+            # embedding results before RRF. Budget guard: only fires when
+            # Call 1 was NOT used this turn, and query is 3+ words.
             _expansion_queries: List[str] = [search_query]
             if (
                 _INFERENCE_EXPANSION_ENABLED
@@ -1586,8 +1629,15 @@ class AIHelper:
             )
 
             # ── HYBRID RERANK ─────────────────────────────────────────────
-            last_category                = self._last_response_category(history)
-            kb_size                      = max(len(faqs), 10)   # FIX Bug3: real corpus size for BM25 IDF
+            last_category = self._last_response_category(history)
+            # LUMVI FIX: Change 3 — Pass len(candidates) as kb_size so BM25 IDF
+            # is calibrated to the actual set of documents being scored, not the
+            # total KB size. _embedding_search pre-filters to _MAX_CANDIDATES (50),
+            # so IDF computed over the full chunk count would artificially inflate
+            # scores for rare terms against a corpus that was never fully retrieved.
+            # len(candidates) is the honest N for this scoring pass; _hybrid_rerank
+            # already applies max(kb_size, len(candidates), 10) as a floor guard.
+            kb_size = len(candidates)
             hybrid_ranked, hybrid_scores = self._hybrid_rerank(
                 search_query, candidates, vector_scores,
                 last_category=last_category,
@@ -1843,6 +1893,39 @@ class AIHelper:
             # Only cache responses the model was genuinely confident about.
             if confidence >= confidence_high:
                 self._response_cache[cache_key] = final
+                # LUMVI FIX: Change 2 — Write high-confidence responses to Redis so
+                # subsequent identical queries are served without any Gemini or
+                # embedding calls. Uses existing _redis_embed_client. TTL: 24 hours.
+                # Skipped for demo clients and when Redis is unavailable.
+                if (
+                    _resp_cache_key is not None
+                    and client_id
+                    and client_id != 'demo'
+                    and _redis_embed_client is not None
+                ):
+                    try:
+                        _resp_payload = {
+                            'response':      final,
+                            'method':        method,
+                            'confidence':    confidence,
+                            'is_lead':       False,
+                            'lead_metadata': None,
+                            'action':        None,
+                        }
+                        _redis_embed_client.setex(
+                            _REDIS_RESP_PREFIX + _resp_cache_key,
+                            _REDIS_RESP_TTL,
+                            json.dumps(_resp_payload),
+                        )
+                        logger.debug(
+                            f"[RespCache WRITE] client={client_id} "
+                            f"key={_resp_cache_key[:10]}… conf={confidence:.2f}"
+                        )
+                    except Exception as _resp_cache_write_err:
+                        # Never block the response on a Redis error — silently continue.
+                        logger.debug(
+                            f"[RespCache] write failed (non-critical): {_resp_cache_write_err}"
+                        )
 
             # FIX #7: Replaced Thread(...).start() with bounded ThreadPoolExecutor.
             # Prevents runaway thread creation under traffic spikes. The module-level
