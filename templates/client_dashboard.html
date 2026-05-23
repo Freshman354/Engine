@@ -724,6 +724,25 @@
     .stage-closed  { border-top: 3px solid var(--green); }
     .stage-lost    { border-top: 3px solid var(--red); }
 
+    /* ── Drag-and-drop states ── */
+    .crm-card.dragging {
+      opacity: 0.45; transform: scale(0.97);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      cursor: grabbing;
+    }
+    .crm-cards.drag-over {
+      background: var(--gold-dim, rgba(212,175,55,0.08));
+      border-radius: var(--radius-sm);
+      outline: 2px dashed var(--gold-border);
+      outline-offset: -4px;
+    }
+    .crm-card { cursor: grab; }
+    .crm-card-stage-badge {
+      font-size: 10px; font-weight: 600; color: var(--text-muted);
+      background: var(--surface-3); border-radius: 4px;
+      padding: 1px 6px; display: inline-block; margin-bottom: 4px;
+    }
+
     /* ══════════════════════════════════════════════════════════════
        CUSTOMIZATION CENTER — PHASE 5
     ══════════════════════════════════════════════════════════════ */
@@ -1522,15 +1541,15 @@
       {% if leads %}
       <div class="crm-board">
         <!-- New — all real leads land here -->
-        <div class="crm-col stage-new">
+        <div class="crm-col stage-new" data-stage="new">
           <div class="crm-col-header">
             <span class="crm-col-title">New</span>
             <span class="crm-col-count">{{ leads|length }}</span>
           </div>
-          <div class="crm-cards">
+          <div class="crm-cards" data-stage="new">
             {% for lead in leads %}
             <div class="crm-card" onclick="openLeadDetailModal({{ loop.index0 }})" draggable="true"
-                 data-lead-index="{{ loop.index0 }}">
+                 data-lead-index="{{ loop.index0 }}" data-stage="new" data-lead-id="{{ loop.index0 }}">
               <div class="crm-card-priority-strip prio-high"></div>
               <div class="crm-card-name">{{ lead.name or lead.email or 'Anonymous' }}</div>
               <div class="crm-card-source">Chatbot{% if lead.message %} · {{ (lead.message or '')[:30] }}{% if (lead.message or '')|length > 30 %}…{% endif %}{% endif %}</div>
@@ -1545,65 +1564,65 @@
         </div>
 
         <!-- Contacted -->
-        <div class="crm-col stage-contact">
+        <div class="crm-col stage-contact" data-stage="contacted">
           <div class="crm-col-header">
             <span class="crm-col-title">Contacted</span>
             <span class="crm-col-count">0</span>
           </div>
-          <div class="crm-cards">
-            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);">
+          <div class="crm-cards" data-stage="contacted">
+            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);" class="drop-placeholder">
               Drag leads here after first contact
             </div>
           </div>
         </div>
 
         <!-- Qualified -->
-        <div class="crm-col stage-qual">
+        <div class="crm-col stage-qual" data-stage="qualified">
           <div class="crm-col-header">
             <span class="crm-col-title">Qualified</span>
             <span class="crm-col-count">0</span>
           </div>
-          <div class="crm-cards">
-            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);">
+          <div class="crm-cards" data-stage="qualified">
+            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);" class="drop-placeholder">
               Leads confirmed as a good fit
             </div>
           </div>
         </div>
 
         <!-- Proposal -->
-        <div class="crm-col stage-prop">
+        <div class="crm-col stage-prop" data-stage="proposal">
           <div class="crm-col-header">
             <span class="crm-col-title">Proposal</span>
             <span class="crm-col-count">0</span>
           </div>
-          <div class="crm-cards">
-            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);">
+          <div class="crm-cards" data-stage="proposal">
+            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);" class="drop-placeholder">
               Quote or proposal sent
             </div>
           </div>
         </div>
 
         <!-- Closed -->
-        <div class="crm-col stage-closed">
+        <div class="crm-col stage-closed" data-stage="closed">
           <div class="crm-col-header">
             <span class="crm-col-title">Closed ✓</span>
             <span class="crm-col-count">0</span>
           </div>
-          <div class="crm-cards">
-            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);">
+          <div class="crm-cards" data-stage="closed">
+            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);" class="drop-placeholder">
               Won deals
             </div>
           </div>
         </div>
 
         <!-- Lost -->
-        <div class="crm-col stage-lost">
+        <div class="crm-col stage-lost" data-stage="lost">
           <div class="crm-col-header">
             <span class="crm-col-title">Lost</span>
             <span class="crm-col-count">0</span>
           </div>
-          <div class="crm-cards">
-            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);">
+          <div class="crm-cards" data-stage="lost">
+            <div style="padding:20px 10px;text-align:center;font-size:12px;color:var(--text-muted);" class="drop-placeholder">
               Closed — not won
             </div>
           </div>
@@ -1613,6 +1632,187 @@
       {# Embed leads data for modal JS #}
       <script>
         var LEADS_DATA = {{ leads | tojson }};
+      </script>
+
+      <script>
+      /* ══════════════════════════════════════════════════════════════
+         CRM PIPELINE — DRAG & DROP
+         Persists stage assignments in localStorage so card positions
+         survive page reloads.
+      ══════════════════════════════════════════════════════════════ */
+      (function () {
+        // ── Storage key scoped to this page's client ──────────────
+        var STORAGE_KEY = 'crm_stages_' + (typeof CLIENT_ID !== 'undefined' ? CLIENT_ID : 'default');
+
+        // ── Load persisted stage map: { leadId -> stageName } ─────
+        function loadStageMap() {
+          try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+          catch (e) { return {}; }
+        }
+        function saveStageMap(map) {
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(map)); } catch (e) {}
+        }
+
+        // Stage label display names
+        var STAGE_LABELS = {
+          'new': 'New', 'contacted': 'Contacted', 'qualified': 'Qualified',
+          'proposal': 'Proposal', 'closed': 'Closed', 'lost': 'Lost'
+        };
+
+        var draggedCard = null;
+
+        // ── Build a card DOM node from lead data ──────────────────
+        function buildCard(leadId, lead, stage) {
+          var card = document.createElement('div');
+          card.className = 'crm-card';
+          card.draggable = true;
+          card.dataset.leadId   = leadId;
+          card.dataset.leadIndex = leadId;
+          card.dataset.stage    = stage;
+
+          var prio = lead.priority || 'high';
+          var prioClass = prio === 'low' ? 'prio-low' : prio === 'med' ? 'prio-med' : 'prio-high';
+          var msg = (lead.message || lead.conversation_snippet || '');
+          var snippet = msg.length > 30 ? msg.slice(0, 30) + '…' : msg;
+          var date = (lead.created_at || '').slice(0, 10) || '—';
+          var name = lead.name || lead.email || 'Anonymous';
+
+          card.innerHTML =
+            '<div class="crm-card-priority-strip ' + prioClass + '"></div>' +
+            '<div class="crm-card-name">' + escHtml(name) + '</div>' +
+            '<div class="crm-card-source">Chatbot' + (snippet ? ' · ' + escHtml(snippet) : '') + '</div>' +
+            '<div class="crm-card-footer">' +
+              '<div class="lead-score" style="color:var(--text-muted);font-size:11px;">' + date + '</div>' +
+            '</div>';
+
+          card.addEventListener('click', function () { openLeadDetailModal(parseInt(leadId, 10)); });
+          bindDragEvents(card);
+          return card;
+        }
+
+        // ── Drag events on a card ─────────────────────────────────
+        function bindDragEvents(card) {
+          card.addEventListener('dragstart', function (e) {
+            draggedCard = card;
+            card.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', card.dataset.leadId);
+          });
+          card.addEventListener('dragend', function () {
+            card.classList.remove('dragging');
+            document.querySelectorAll('.crm-cards').forEach(function (col) {
+              col.classList.remove('drag-over');
+            });
+            draggedCard = null;
+          });
+        }
+
+        // ── Drop zone events on each .crm-cards column ────────────
+        function bindDropZone(zone) {
+          zone.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            zone.classList.add('drag-over');
+          });
+          zone.addEventListener('dragenter', function (e) {
+            e.preventDefault();
+            zone.classList.add('drag-over');
+          });
+          zone.addEventListener('dragleave', function (e) {
+            // only remove if we're leaving the zone itself (not a child)
+            if (!zone.contains(e.relatedTarget)) {
+              zone.classList.remove('drag-over');
+            }
+          });
+          zone.addEventListener('drop', function (e) {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            if (!draggedCard) return;
+
+            var newStage = zone.dataset.stage;
+            var leadId   = draggedCard.dataset.leadId;
+
+            // Remove placeholder hint if present
+            var placeholder = zone.querySelector('.drop-placeholder');
+            if (placeholder) placeholder.remove();
+
+            // Move card into new column
+            zone.appendChild(draggedCard);
+            draggedCard.dataset.stage = newStage;
+
+            // Persist
+            var map = loadStageMap();
+            map[leadId] = newStage;
+            saveStageMap(map);
+
+            // Update all column counts
+            updateCounts();
+
+            // Show a subtle toast
+            if (typeof showToast === 'function') {
+              showToast('Lead moved to ' + (STAGE_LABELS[newStage] || newStage), 'success');
+            }
+          });
+        }
+
+        // ── Recount cards per column and update header badges ─────
+        function updateCounts() {
+          document.querySelectorAll('.crm-col').forEach(function (col) {
+            var cards = col.querySelectorAll('.crm-card').length;
+            var badge = col.querySelector('.crm-col-count');
+            if (badge) badge.textContent = cards;
+          });
+        }
+
+        // ── Re-place cards based on persisted stage map ───────────
+        function restoreStages() {
+          var map = loadStageMap();
+          var hasAny = Object.keys(map).length > 0;
+          if (!hasAny) return;
+
+          Object.keys(map).forEach(function (leadId) {
+            var stage = map[leadId];
+            if (stage === 'new') return; // already in correct column
+
+            var card = document.querySelector('.crm-card[data-lead-id="' + leadId + '"]');
+            var targetZone = document.querySelector('.crm-cards[data-stage="' + stage + '"]');
+            if (!card || !targetZone) return;
+
+            // Remove placeholder if this is the first card going in
+            var placeholder = targetZone.querySelector('.drop-placeholder');
+            if (placeholder) placeholder.remove();
+
+            targetZone.appendChild(card);
+            card.dataset.stage = stage;
+          });
+
+          updateCounts();
+        }
+
+        // ── Init ──────────────────────────────────────────────────
+        function init() {
+          // Bind drag events to all existing cards
+          document.querySelectorAll('.crm-card').forEach(function (card) {
+            bindDragEvents(card);
+          });
+
+          // Bind drop zones to all column containers
+          document.querySelectorAll('.crm-cards').forEach(function (zone) {
+            bindDropZone(zone);
+          });
+
+          // Restore previously saved positions
+          restoreStages();
+          updateCounts();
+        }
+
+        // Run after DOM is ready
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', init);
+        } else {
+          init();
+        }
+      })();
       </script>
 
       {% else %}
