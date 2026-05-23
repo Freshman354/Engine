@@ -81,53 +81,50 @@ def send_welcome_email(email):
 <!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#0D0D0D;font-family:'Inter',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0D0D0D;padding:40px 0;">
+<body style="margin:0;padding:0;background:#0f172a;font-family:'Inter',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:40px 0;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
 
         <!-- Header -->
-        <tr><td style="background:linear-gradient(135deg,#1A1508 0%,#2A1F05 60%,#1A1508 100%);border-radius:16px 16px 0 0;padding:40px 40px 32px;text-align:center;border:1px solid rgba(201,168,76,0.25);border-bottom:none;">
-          <div style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);border-radius:10px;padding:9px 20px;margin-bottom:20px;">
-            <span style="font-size:22px;font-weight:900;color:#0D0D0D;letter-spacing:-0.3px;">&#9889; Lumvi</span>
+        <tr><td style="background:linear-gradient(135deg,#6366f1 0%,#7c3aed 50%,#a78bfa 100%);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
+          <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:12px;padding:10px 20px;margin-bottom:16px;">
+            <span style="font-size:26px;font-weight:900;color:#ffffff;letter-spacing:-0.5px;">&#9889; Lumvi</span>
           </div>
-          <h1 style="margin:0;font-size:24px;font-weight:800;color:#F5F0E8;line-height:1.35;">
-            You&rsquo;re all set &mdash; let&rsquo;s build your first chatbot!
+          <h1 style="margin:0;font-size:24px;font-weight:800;color:#ffffff;line-height:1.3;">
+            You're all set &mdash; let's build your first chatbot!
           </h1>
         </td></tr>
 
-        <!-- Gold divider bar -->
-        <tr><td style="background:linear-gradient(90deg,#C9A84C,#E2B96A,#C9A84C);height:2px;border-left:1px solid rgba(201,168,76,0.25);border-right:1px solid rgba(201,168,76,0.25);"></td></tr>
-
         <!-- Body -->
-        <tr><td style="background:#141414;padding:36px 40px;border:1px solid rgba(201,168,76,0.15);border-top:none;border-bottom:none;">
-          <p style="margin:0 0 20px;color:#A89880;font-size:15px;line-height:1.75;">
-            Hey there &#128075; &mdash; welcome to Lumvi! You&rsquo;re now part of a growing group of agencies and businesses using AI chatbots to capture leads and answer questions automatically.
+        <tr><td style="background:#1e293b;padding:36px 40px;">
+          <p style="margin:0 0 20px;color:#94a3b8;font-size:15px;line-height:1.7;">
+            Hey there &#128075; &mdash; welcome to Lumvi! You're now part of a growing group of agencies and businesses using AI chatbots to capture leads and answer questions automatically.
           </p>
-          <p style="margin:0 0 24px;color:#A89880;font-size:15px;line-height:1.75;">
-            Here&rsquo;s how to get started in 3 simple steps:
+          <p style="margin:0 0 28px;color:#94a3b8;font-size:15px;line-height:1.7;">
+            Here's how to get started in 3 simple steps:
           </p>
 
           <!-- Steps -->
           <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
             <tr>
-              <td style="padding:16px 18px;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.18);border-radius:12px;">
-                <strong style="font-size:14px;font-weight:700;color:#E2B96A;">1. Create your first chatbot</strong>
-                <p style="margin:6px 0 0;font-size:13px;color:#7A6E60;line-height:1.65;">Go to your dashboard and click &ldquo;Create New Chatbot&rdquo;. Choose an industry template or start from scratch.</p>
+              <td style="padding:14px 16px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;">
+                <strong style="font-size:14px;font-weight:700;color:#c7d2fe;">1. Create your first chatbot</strong>
+                <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.6;">Go to your dashboard and click "Create New Chatbot". Choose an industry template or start from scratch.</p>
               </td>
             </tr>
             <tr><td style="height:10px;"></td></tr>
             <tr>
-              <td style="padding:16px 18px;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.18);border-radius:12px;">
-                <strong style="font-size:14px;font-weight:700;color:#E2B96A;">2. Add your FAQs</strong>
-                <p style="margin:6px 0 0;font-size:13px;color:#7A6E60;line-height:1.65;">Train your bot with common questions. Upload a CSV or PDF, or add them manually in the FAQ Manager.</p>
+              <td style="padding:14px 16px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;">
+                <strong style="font-size:14px;font-weight:700;color:#c7d2fe;">2. Add your FAQs</strong>
+                <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.6;">Train your bot with common questions. Upload a CSV or PDF, or add them manually in the FAQ Manager.</p>
               </td>
             </tr>
             <tr><td style="height:10px;"></td></tr>
             <tr>
-              <td style="padding:16px 18px;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.18);border-radius:12px;">
-                <strong style="font-size:14px;font-weight:700;color:#E2B96A;">3. Embed on your website</strong>
-                <p style="margin:6px 0 0;font-size:13px;color:#7A6E60;line-height:1.65;">Copy the one-line embed code from your dashboard and paste it into any website. Done!</p>
+              <td style="padding:14px 16px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;">
+                <strong style="font-size:14px;font-weight:700;color:#c7d2fe;">3. Embed on your website</strong>
+                <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.6;">Copy the one-line embed code from your dashboard and paste it into any website. Done!</p>
               </td>
             </tr>
           </table>
@@ -136,25 +133,25 @@ def send_welcome_email(email):
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr><td align="center" style="padding:8px 0 28px;">
               <a href="https://lumvi.net/dashboard"
-                 style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);color:#0D0D0D;text-decoration:none;padding:15px 40px;border-radius:10px;font-weight:800;font-size:15px;letter-spacing:0.01em;">
+                 style="display:inline-block;background:linear-gradient(135deg,#6366f1,#7c3aed);color:#ffffff;text-decoration:none;padding:15px 36px;border-radius:10px;font-weight:800;font-size:15px;">
                 Go to My Dashboard &rarr;
               </a>
             </td></tr>
           </table>
 
-          <p style="margin:0;color:#5A5248;font-size:13px;line-height:1.75;border-top:1px solid rgba(201,168,76,0.12);padding-top:20px;">
+          <p style="margin:0;color:#475569;font-size:13px;line-height:1.7;border-top:1px solid rgba(255,255,255,0.06);padding-top:20px;">
             Questions? Reply to this email or reach us at
-            <a href="mailto:support@lumvi.net" style="color:#C9A84C;text-decoration:none;">support@lumvi.net</a>.
-            We&rsquo;re happy to help.
+            <a href="mailto:support@lumvi.net" style="color:#818cf8;text-decoration:none;">support@lumvi.net</a>.
+            We're happy to help.
           </p>
         </td></tr>
 
         <!-- Footer -->
-        <tr><td style="background:#0D0D0D;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center;border:1px solid rgba(201,168,76,0.15);border-top:none;">
-          <p style="margin:0;color:#3D3830;font-size:12px;">
-            &copy; 2026 Lumvi &middot;
-            <a href="https://lumvi.net" style="color:#5A5248;text-decoration:none;">lumvi.net</a> &middot;
-            <a href="https://lumvi.net/privacy-policy" style="color:#5A5248;text-decoration:none;">Privacy Policy</a>
+        <tr><td style="background:#0f172a;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center;">
+          <p style="margin:0;color:#334155;font-size:12px;">
+            &copy; 2025 Lumvi &middot;
+            <a href="https://lumvi.net" style="color:#475569;text-decoration:none;">lumvi.net</a> &middot;
+            <a href="https://lumvi.net/privacy-policy" style="color:#475569;text-decoration:none;">Privacy Policy</a>
           </p>
         </td></tr>
 
@@ -247,6 +244,7 @@ PLAN_LIMITS = {
         'faqs_per_client': 5,
         'messages_per_day': 50,
         'analytics': False,
+        'analytics_level': 'none',
         'customization': False,
         'white_label': False,
         'webhooks': False,
@@ -258,6 +256,7 @@ PLAN_LIMITS = {
         'faqs_per_client': 999,
         'messages_per_day': 999999,  # unlimited
         'analytics': True,
+        'analytics_level': 'basic',
         'customization': True,
         'white_label': False,
         'webhooks': False,
@@ -268,7 +267,8 @@ PLAN_LIMITS = {
         'clients': 3,
         'faqs_per_client': 999,
         'messages_per_day': 2000,
-        'analytics': False,
+        'analytics': True,           # Basic: conversations + leads (no unanswered Qs / timeline)
+        'analytics_level': 'basic',  # Pro/Agency get 'full'
         'customization': True,
         'white_label': False,
         'webhooks': False,
@@ -280,6 +280,7 @@ PLAN_LIMITS = {
         'faqs_per_client': 999,
         'messages_per_day': 999999,  # unlimited
         'analytics': True,
+        'analytics_level': 'full',
         'customization': True,
         'white_label': False,
         'webhooks': True,
@@ -291,6 +292,7 @@ PLAN_LIMITS = {
         'faqs_per_client': 999,
         'messages_per_day': 999999,  # unlimited
         'analytics': True,
+        'analytics_level': 'full',
         'customization': True,
         'white_label': True,
         'webhooks': True,
@@ -302,12 +304,20 @@ PLAN_LIMITS = {
         'faqs_per_client': 999,
         'messages_per_day': 999999,
         'analytics': True,
+        'analytics_level': 'full',
         'customization': True,
         'white_label': True,
         'webhooks': True,
         'priority_support': True
     }
 }
+
+# ── Agency per-seat overage pricing ────────────────────────────────
+# Agency plan includes AGENCY_INCLUDED_CLIENTS clients flat.
+# Every client above that incurs AGENCY_SEAT_PRICE / month, billed
+# via the /cron/agency-overage endpoint (run monthly, same CRON_SECRET).
+AGENCY_INCLUDED_CLIENTS = 20
+AGENCY_SEAT_PRICE       = 15.00   # USD per extra client per month
 
 # Initialize Flask-Login
 login_manager = LoginManager()
@@ -382,6 +392,10 @@ try:
         models.migrate_api_usage_log()
     if hasattr(models, 'migrate_kb_gaps'):
         models.migrate_kb_gaps()
+    if hasattr(models, 'migrate_lead_pipeline'):
+        models.migrate_lead_pipeline()
+    if hasattr(models, 'migrate_agency_seat_billing'):
+        models.migrate_agency_seat_billing()
 
     # System 2: Training data collection table
     try:
@@ -690,36 +704,42 @@ def _notify_handoff(client_id, client, config, ticket_id, reason,
                         sender=f"{sender_info['name']} <{sender_info['address']}>",
                         recipients=[notify_email],
                         html=f"""
-                        <div style="font-family:'Inter',Arial,sans-serif;max-width:560px;margin:0 auto;background:#0D0D0D;border-radius:16px;overflow:hidden;border:1px solid rgba(201,168,76,0.2);">
-                          <div style="background:linear-gradient(135deg,#1A1508,#2A1F05);padding:28px 32px 24px;text-align:center;border-bottom:2px solid #C9A84C;">
-                            <div style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);border-radius:8px;padding:7px 16px;margin-bottom:14px;">
-                              <span style="font-size:16px;font-weight:900;color:#0D0D0D;">&#9889; Lumvi</span>
-                            </div>
-                            <h2 style="font-size:20px;font-weight:800;color:#F5F0E8;margin:0;">Human Handoff Requested</h2>
-                          </div>
-                          <div style="background:#141414;padding:28px 32px;">
-                            <p style="color:#7A6E60;font-size:13px;margin:0 0 20px;">
-                              via {company_name} &middot; Ticket
-                              <code style="background:#1F1A10;color:#C9A84C;padding:2px 7px;border-radius:4px;border:1px solid rgba(201,168,76,0.25);">{ticket_id}</code>
-                            </p>
-                            <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
-                              <tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;width:120px;">Customer</td>
-                                  <td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;color:#F5F0E8;">{customer_label}</td></tr>
-                              {'<tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;">Email</td><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;"><a href="mailto:' + email + '" style="color:#C9A84C;text-decoration:none;">' + email + '</a></td></tr>' if email else ''}
-                              <tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;">Urgency</td>
-                                  <td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;color:#E2B96A;">{urgency_label}</td></tr>
-                              <tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;">Trigger</td>
-                                  <td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#F5F0E8;">{method}</td></tr>
-                              <tr><td style="padding:10px 0;font-size:13px;color:#7A6E60;vertical-align:top;padding-top:14px;">Question</td>
-                                  <td style="padding:10px 0;padding-top:14px;font-size:13px;font-style:italic;color:#A89880;">&ldquo;{reason[:300]}&rdquo;</td></tr>
-                            </table>
-                            {'<div style="background:#1A1508;border:1px solid rgba(201,168,76,0.18);border-radius:10px;padding:16px;margin-bottom:20px;"><p style="font-size:12px;color:#C9A84C;margin:0 0 8px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;">Conversation summary</p><pre style="font-size:12px;color:#7A6E60;white-space:pre-wrap;margin:0;line-height:1.6;">' + summary[:800] + '</pre></div>' if summary else ''}
-                            <a href="{inbox_url}"
-                               style="display:inline-block;margin-top:4px;padding:12px 24px;background:linear-gradient(135deg,#C9A84C,#E2B96A);color:#0D0D0D;text-decoration:none;border-radius:9px;font-weight:800;font-size:13.5px;">
-                              Open Inbox &rarr;</a>
-                            <p style="font-size:11px;color:#3D3830;margin-top:20px;">
-                              Ticket ID: {ticket_id} &middot; Lumvi Platform</p>
-                          </div>
+                        <div style="font-family:'DM Sans',sans-serif;max-width:560px;margin:0 auto;
+                                    background:#F7F4EF;padding:36px;border-radius:16px;">
+                          <h2 style="font-size:20px;font-weight:700;color:#1C1917;margin-bottom:4px;">
+                            Human Handoff Requested</h2>
+                          <p style="color:#A8A29E;font-size:13px;margin-bottom:24px;">
+                            via {company_name} · Ticket
+                            <code style="background:#E7E2DA;padding:2px 6px;border-radius:4px;">
+                              {ticket_id}</code></p>
+                          <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+                            <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                           font-size:13px;color:#57534E;width:120px;">Customer</td>
+                                <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                           font-size:13px;font-weight:600;color:#1C1917;">
+                                  {customer_label}</td></tr>
+                            {'<tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;color:#57534E;">Email</td><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;font-weight:600;"><a href="mailto:' + email + '" style="color:#B8924A;">' + email + '</a></td></tr>' if email else ''}
+                            <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                           font-size:13px;color:#57534E;">Urgency</td>
+                                <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                           font-size:13px;font-weight:600;">{urgency_label}</td></tr>
+                            <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                           font-size:13px;color:#57534E;">Trigger</td>
+                                <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                           font-size:13px;color:#1C1917;">{method}</td></tr>
+                            <tr><td style="padding:10px 0;font-size:13px;color:#57534E;
+                                          vertical-align:top;padding-top:14px;">Question</td>
+                                <td style="padding:10px 0;padding-top:14px;font-size:13px;
+                                           font-style:italic;color:#1C1917;">"{reason[:300]}"</td></tr>
+                          </table>
+                          {'<div style="background:#fff;border:1px solid #E7E2DA;border-radius:10px;padding:16px;margin-bottom:20px;"><p style="font-size:12px;color:#A8A29E;margin:0 0 8px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;">Conversation summary</p><pre style="font-size:12px;color:#57534E;white-space:pre-wrap;margin:0;line-height:1.6;">' + summary[:800] + '</pre></div>' if summary else ''}
+                          <a href="{inbox_url}"
+                             style="display:inline-block;margin-top:4px;padding:11px 22px;
+                                    background:#B8924A;color:#fff;text-decoration:none;
+                                    border-radius:9px;font-weight:700;font-size:13.5px;">
+                            Open Inbox →</a>
+                          <p style="font-size:11px;color:#A8A29E;margin-top:20px;">
+                            Ticket ID: {ticket_id} · Lumvi Platform</p>
                         </div>"""
                     )
                     mail.send(msg)
@@ -1196,8 +1216,22 @@ def chat():
                                 "Upgrade your plan for unlimited messages, or try again tomorrow. 🚀"
                             ),
                             'limit_reached': True,
+                            'upgrade_url': '/upgrade?plan=pro',
                             'method': 'limit_enforced'
                         })
+                    # ── Overage warning: fire at 80% usage ──────────────────
+                    elif daily_limit < 999999 and today_count >= int(daily_limit * 0.8):
+                        pct = round(today_count / daily_limit * 100)
+                        app.logger.info(
+                            f"[UsageWarning] {client_id} at {pct}% of daily cap "
+                            f"({today_count}/{daily_limit}) on plan '{plan_type}'"
+                        )
+                        # We continue processing but flag the warning in the response
+                        # so the dashboard can show a banner the next time the owner logs in.
+                        try:
+                            models.upsert_usage_warning(client_id, pct, today_count, daily_limit)
+                        except Exception:
+                            pass  # non-fatal
 
         # Load vertical system prompt
         vertical = config.get('vertical', 'general')
@@ -1255,7 +1289,7 @@ def chat():
                 response_text = result.get('response', '')
                 method        = result.get('method', 'rag_pipeline')
                 confidence    = result.get('confidence', 0.0)
-                from_cache    = result.get('method') in ('cache', 'redis_cache')
+                from_cache    = result.get('method') == 'cache'
 
                 # ── HANDOFF: contact_request or is_lead from pipeline ─────────
                 # When the AI returns a contact_request action (IDK, confidence
@@ -1549,27 +1583,29 @@ def submit_lead():
                     sender=f"{sender_info['name']} <{sender_info['address']}>",
                     recipients=[notify_email],
                     html=f"""
-                    <div style="font-family:'Inter',Arial,sans-serif;max-width:520px;margin:0 auto;background:#0D0D0D;border-radius:16px;overflow:hidden;border:1px solid rgba(201,168,76,0.2);">
-                      <div style="background:linear-gradient(135deg,#1A1508,#2A1F05);padding:26px 32px 22px;text-align:center;border-bottom:2px solid #C9A84C;">
-                        <div style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);border-radius:8px;padding:7px 16px;margin-bottom:12px;">
-                          <span style="font-size:15px;font-weight:900;color:#0D0D0D;">&#9889; Lumvi</span>
-                        </div>
-                        <h2 style="font-size:20px;font-weight:800;color:#F5F0E8;margin:0;">New Lead Captured</h2>
-                      </div>
-                      <div style="background:#141414;padding:26px 32px;">
-                        <p style="color:#7A6E60;font-size:13px;margin:0 0 20px;">via {client.get('company_name','your chatbot')}</p>
-                        <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-                          <tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;width:100px;">Name</td>
-                              <td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;color:#F5F0E8;">{name}</td></tr>
-                          <tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;">Email</td>
-                              <td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;color:#C9A84C;">{email}</td></tr>
-                          {'<tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;">Phone</td><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;color:#F5F0E8;">'+phone+'</td></tr>' if phone else ''}
-                          {'<tr><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;color:#7A6E60;">Company</td><td style="padding:10px 0;border-bottom:1px solid rgba(201,168,76,0.1);font-size:13px;font-weight:600;color:#F5F0E8;">'+company+'</td></tr>' if company else ''}
-                        </table>
-                        <a href="https://lumvi.net/admin/leads?client_id={client_id}"
-                           style="display:inline-block;padding:12px 24px;background:linear-gradient(135deg,#C9A84C,#E2B96A);color:#0D0D0D;text-decoration:none;border-radius:9px;font-weight:800;font-size:13.5px;">
-                          View All Leads &rarr;</a>
-                      </div>
+                    <div style="font-family:'DM Sans',sans-serif;max-width:520px;margin:0 auto;
+                                background:#F7F4EF;padding:36px;border-radius:16px;">
+                      <h2 style="font-size:20px;font-weight:700;color:#1C1917;margin-bottom:4px;">
+                        New Lead Captured</h2>
+                      <p style="color:#A8A29E;font-size:13px;margin-bottom:24px;">
+                        via {client.get('company_name','your chatbot')}</p>
+                      <table style="width:100%;border-collapse:collapse;">
+                        <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                       font-size:13px;color:#57534E;width:100px;">Name</td>
+                            <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                       font-size:13px;font-weight:600;color:#1C1917;">{name}</td></tr>
+                        <tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                       font-size:13px;color:#57534E;">Email</td>
+                            <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
+                                       font-size:13px;font-weight:600;color:#1C1917;">{email}</td></tr>
+                        {'<tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;color:#57534E;">Phone</td><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;font-weight:600;color:#1C1917;">'+phone+'</td></tr>' if phone else ''}
+                        {'<tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;color:#57534E;">Company</td><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;font-weight:600;color:#1C1917;">'+company+'</td></tr>' if company else ''}
+                      </table>
+                      <a href="https://lumvi.net/admin/leads?client_id={client_id}"
+                         style="display:inline-block;margin-top:24px;padding:11px 22px;
+                                background:#B8924A;color:#fff;text-decoration:none;
+                                border-radius:9px;font-weight:700;font-size:13.5px;">
+                        View All Leads →</a>
                     </div>"""
                 )
                 mail.send(msg)
@@ -1585,6 +1621,214 @@ def submit_lead():
     except Exception as e:
         app.logger.error(f'Error submitting lead: {e}')
         return jsonify({'success': False, 'error': 'Failed to submit lead'}), 500
+
+# =====================================================================
+# LEAD MANAGEMENT API — stage updates, notes, assignment, delete
+# All operations go through models.py → PostgreSQL.
+# =====================================================================
+
+def _fire_lead_stage_webhook(client_id, lead, old_stage):
+    """Fire outbound webhook when a lead's stage changes."""
+    try:
+        client = models.get_client_by_id(client_id)
+        if not client:
+            return
+        config = json.loads(client.get('branding_settings') or '{}')
+        webhook_url = config.get('integrations', {}).get('webhook_url')
+        if not webhook_url:
+            return
+        payload = {
+            'event':     'lead_stage_changed',
+            'client_id': client_id,
+            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'data': {
+                'lead_id':     str(lead.get('id')),
+                'name':        lead.get('name'),
+                'email':       lead.get('email'),
+                'old_stage':   old_stage,
+                'new_stage':   lead.get('stage'),
+                'notes':       lead.get('notes'),
+                'assigned_to': lead.get('assigned_to'),
+            }
+        }
+        import threading
+        threading.Thread(
+            target=_fire_webhook,
+            args=(webhook_url, payload, client_id),
+            daemon=True
+        ).start()
+    except Exception as e:
+        app.logger.error(f'[LeadMgmt] webhook fire error: {e}')
+
+
+@app.route('/api/leads/<client_id>', methods=['GET'])
+@login_required
+def list_leads(client_id):
+    """Return all leads for a client with optional stage/search filter."""
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    stage  = request.args.get('stage', '').strip()
+    search = request.args.get('q', '').lower().strip()
+    page   = max(1, int(request.args.get('page', 1)))
+    per_page = min(100, int(request.args.get('per_page', 50)))
+
+    leads = models.get_leads(client_id)
+
+    if stage:
+        leads = [l for l in leads if (l.get('stage') or 'new') == stage]
+    if search:
+        leads = [l for l in leads if
+                 search in (l.get('name') or '').lower() or
+                 search in (l.get('email') or '').lower() or
+                 search in (l.get('company') or '').lower()]
+
+    total = len(leads)
+    leads = leads[(page - 1) * per_page: page * per_page]
+    return jsonify({'success': True, 'leads': leads, 'total': total, 'page': page, 'per_page': per_page})
+
+
+@app.route('/api/leads/<client_id>/<int:lead_id>', methods=['PATCH'])
+@login_required
+def update_lead(client_id, lead_id):
+    """
+    Update a lead's stage, notes, assigned_to, priority, name, email, phone, or company.
+    Fires the outbound webhook on stage change.
+    """
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    data = request.json or {}
+    valid_stages = {'new', 'contacted', 'qualified', 'proposal', 'closed', 'lost'}
+
+    if 'stage' in data and data['stage'] not in valid_stages:
+        return jsonify({'success': False, 'error': f'Invalid stage: {data["stage"]}'}), 400
+
+    # Fetch current state to detect stage change and get old_stage
+    existing = models.get_lead_by_id(client_id, lead_id)
+    if not existing:
+        return jsonify({'success': False, 'error': 'Lead not found'}), 404
+
+    old_stage = existing.get('stage') or 'new'
+    stage_changed = 'stage' in data and data['stage'] != old_stage
+
+    # Build action description for activity log
+    if stage_changed:
+        action = f"Moved from {old_stage} → {data['stage']}"
+    elif 'notes' in data:
+        action = 'Notes updated'
+    elif 'assigned_to' in data:
+        action = f"Assigned to {data.get('assigned_to', '')}"
+    else:
+        action = 'Updated: ' + ', '.join(k for k in data if k not in ('_actor', '_action'))
+
+    data['_actor']  = current_user.email
+    data['_action'] = action
+
+    updated = models.update_lead(client_id, lead_id, data)
+    if updated is None:
+        return jsonify({'success': False, 'error': 'Lead not found or update failed'}), 404
+
+    if stage_changed:
+        _fire_lead_stage_webhook(client_id, updated, old_stage)
+
+    return jsonify({'success': True, 'lead': updated})
+
+
+@app.route('/api/leads/<client_id>/<int:lead_id>', methods=['DELETE'])
+@login_required
+def delete_lead(client_id, lead_id):
+    """Permanently delete a lead."""
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    ok = models.delete_lead_by_client(client_id, lead_id)
+    if not ok:
+        return jsonify({'success': False, 'error': 'Lead not found'}), 404
+
+    app.logger.info(f'[LeadMgmt] deleted lead={lead_id} client={client_id} user={current_user.email}')
+    return jsonify({'success': True})
+
+
+@app.route('/api/leads/<client_id>/bulk', methods=['POST'])
+@login_required
+def bulk_update_leads(client_id):
+    """
+    Bulk update multiple leads at once.
+    Body: { lead_ids: [...], updates: { stage?, assigned_to?, priority? } }
+    """
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    data     = request.json or {}
+    lead_ids = data.get('lead_ids', [])
+    updates  = data.get('updates', {})
+    valid_stages = {'new', 'contacted', 'qualified', 'proposal', 'closed', 'lost'}
+
+    if 'stage' in updates and updates['stage'] not in valid_stages:
+        return jsonify({'success': False, 'error': 'Invalid stage'}), 400
+    if not lead_ids:
+        return jsonify({'success': False, 'error': 'No lead_ids provided'}), 400
+
+    count = models.bulk_update_leads(client_id, lead_ids, updates, actor=current_user.email)
+
+    # Fire webhooks for stage changes
+    if 'stage' in updates:
+        for lid in lead_ids:
+            lead = models.get_lead_by_id(client_id, lid)
+            if lead:
+                _fire_lead_stage_webhook(client_id, lead, old_stage='unknown')
+
+    return jsonify({'success': True, 'updated': count})
+
+
+@app.route('/api/leads/<client_id>/webhook-inbound', methods=['POST'])
+def inbound_lead_webhook(client_id):
+    """
+    External CRM / Zapier / Make can POST here to update a lead from their side.
+    Auth: X-Lumvi-Secret header must match the client's configured inbound_webhook_secret.
+    Body: { lead_id, stage?, notes?, assigned_to?, priority? }
+    """
+    client = models.get_client_by_id(client_id)
+    if not client:
+        return jsonify({'error': 'Client not found'}), 404
+
+    config = json.loads(client.get('branding_settings') or '{}')
+    expected_secret = config.get('integrations', {}).get('inbound_webhook_secret', '')
+    provided_secret = request.headers.get('X-Lumvi-Secret', '')
+
+    if not expected_secret or provided_secret != expected_secret:
+        return jsonify({'error': 'Unauthorized — invalid or missing X-Lumvi-Secret header'}), 401
+
+    data    = request.json or {}
+    lead_id_raw = data.get('lead_id', '')
+    try:
+        lead_id = int(lead_id_raw)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'lead_id must be an integer'}), 400
+
+    valid_stages = {'new', 'contacted', 'qualified', 'proposal', 'closed', 'lost'}
+    if 'stage' in data and data['stage'] not in valid_stages:
+        return jsonify({'error': f'Invalid stage. Must be one of: {", ".join(sorted(valid_stages))}'}), 400
+
+    existing = models.get_lead_by_id(client_id, lead_id)
+    if not existing:
+        return jsonify({'error': 'Lead not found'}), 404
+
+    old_stage = existing.get('stage') or 'new'
+    allowed = {'stage', 'notes', 'assigned_to', 'priority'}
+    updates = {k: v for k, v in data.items() if k in allowed}
+    updates['_actor']  = 'external_webhook'
+    updates['_action'] = 'Inbound webhook: ' + ', '.join(f"{k}={v}" for k, v in updates.items() if not k.startswith('_'))
+
+    updated = models.update_lead(client_id, lead_id, updates)
+    stage_changed = 'stage' in updates and updates['stage'] != old_stage
+    if stage_changed and updated:
+        _fire_lead_stage_webhook(client_id, updated, old_stage)
+
+    app.logger.info(f'[InboundWebhook] lead={lead_id} client={client_id} stage_changed={stage_changed}')
+    return jsonify({'success': True, 'lead_id': lead_id, 'stage': (updated or {}).get('stage')})
+
 
 # =====================================================================
 # AUTHENTICATION ROUTES
@@ -1684,26 +1928,22 @@ def forgot_password():
                     sender="Lumvi <support@lumvi.net>",
                     recipients=[email],
                     html=f"""
-                    <div style="font-family:'Inter',Arial,sans-serif;max-width:480px;margin:0 auto;background:#0D0D0D;border-radius:16px;overflow:hidden;border:1px solid rgba(201,168,76,0.2);">
-                      <div style="background:linear-gradient(135deg,#1A1508,#2A1F05);padding:32px 40px 28px;text-align:center;border-bottom:2px solid #C9A84C;">
-                        <div style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);border-radius:10px;padding:9px 20px;margin-bottom:16px;">
-                          <span style="font-size:20px;font-weight:900;color:#0D0D0D;">&#9889; Lumvi</span>
+                    <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#f8fafc;padding:40px;border-radius:16px;">
+                        <div style="text-align:center;margin-bottom:32px;">
+                            <div style="display:inline-block;background:linear-gradient(135deg,#6366f1,#a78bfa);border-radius:12px;padding:12px 20px;font-size:24px;font-weight:800;margin-bottom:12px;">⚡ Lumvi</div>
                         </div>
-                        <h2 style="margin:0;font-size:22px;font-weight:800;color:#F5F0E8;">Reset your password</h2>
-                      </div>
-                      <div style="background:#141414;padding:32px 40px;">
-                        <p style="color:#A89880;margin:0 0 28px;line-height:1.75;font-size:15px;">
-                          We received a request to reset the password for your Lumvi account.
-                          Click the button below to set a new password. This link expires in <strong style="color:#E2B96A;">1 hour</strong>.
+                        <h2 style="margin:0 0 12px;font-size:22px;font-weight:700;">Reset your password</h2>
+                        <p style="color:#94a3b8;margin:0 0 28px;line-height:1.6;">
+                            We received a request to reset the password for your Lumvi account.
+                            Click the button below to set a new password. This link expires in <strong style="color:#f8fafc;">1 hour</strong>.
                         </p>
-                        <a href="{reset_url}" style="display:block;text-align:center;background:linear-gradient(135deg,#C9A84C,#E2B96A);color:#0D0D0D;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:800;font-size:15px;margin-bottom:28px;">
-                          Reset My Password &rarr;
+                        <a href="{reset_url}" style="display:block;text-align:center;background:linear-gradient(135deg,#6366f1,#7c3aed);color:white;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:700;font-size:15px;margin-bottom:24px;">
+                            Reset My Password →
                         </a>
-                        <p style="color:#5A5248;font-size:13px;margin:0;line-height:1.75;border-top:1px solid rgba(201,168,76,0.1);padding-top:20px;">
-                          If you didn&rsquo;t request this, you can safely ignore this email &mdash; your password won&rsquo;t change.<br><br>
-                          Or copy this link: <span style="color:#C9A84C;">{reset_url}</span>
+                        <p style="color:#475569;font-size:13px;margin:0;line-height:1.6;">
+                            If you didn't request this, you can safely ignore this email — your password won't change.<br><br>
+                            Or copy this link: <span style="color:#6366f1;">{reset_url}</span>
                         </p>
-                      </div>
                     </div>
                     """
                 )
@@ -1840,6 +2080,15 @@ def dashboard():
     slots_display = 'Unlimited' if client_limit >= 999999 else str(client_limit)
     limit_reached = False if client_limit >= 999999 else client_count >= client_limit
 
+    # ── Agency per-seat overage for dashboard display ───────────────
+    agency_extra_seats   = max(0, client_count - AGENCY_INCLUDED_CLIENTS) if plan_type == 'agency' else 0
+    agency_overage_cost  = agency_extra_seats * AGENCY_SEAT_PRICE
+    agency_overage_label = (
+        f"+{agency_extra_seats} extra seat{'s' if agency_extra_seats != 1 else ''} "
+        f"× ${AGENCY_SEAT_PRICE:.0f}/mo = ${agency_overage_cost:.0f}/mo billed next cycle"
+        if agency_extra_seats > 0 else ''
+    )
+
     # Subscription status for popup
     sub_status = session.pop('sub_status', None)
     sub_info = get_subscription_status(fresh_user) if fresh_user else {'status': 'free'}
@@ -1857,7 +2106,12 @@ def dashboard():
         limit_reached=limit_reached,
         sub_status=sub_info['status'],
         sub_expires_at=sub_info.get('expires_at'),
-        sub_grace_ends_at=sub_info.get('grace_ends_at')
+        sub_grace_ends_at=sub_info.get('grace_ends_at'),
+        agency_extra_seats=agency_extra_seats,
+        agency_overage_cost=agency_overage_cost,
+        agency_overage_label=agency_overage_label,
+        agency_included_clients=AGENCY_INCLUDED_CLIENTS,
+        agency_seat_price=AGENCY_SEAT_PRICE
     )
 
 
@@ -1925,7 +2179,15 @@ def create_client():
         }
         upgrade_hint = plan_upgrade_hints.get(plan_type, 'Upgrade to add more chatbots')
 
-        if client_count >= plan_limit:
+        # ── Agency per-seat: allow creation above 20, charge $15/extra ──
+        is_agency_overage = (
+            plan_type == 'agency' and
+            client_count >= AGENCY_INCLUDED_CLIENTS
+        )
+        extra_seats = max(0, client_count - AGENCY_INCLUDED_CLIENTS + 1) if is_agency_overage else 0
+        overage_cost = extra_seats * AGENCY_SEAT_PRICE
+
+        if client_count >= plan_limit and not is_agency_overage:
             # Return JSON if called from the onboarding wizard (XHR/JSON request)
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
                request.headers.get('Accept', '').startswith('application/json'):
@@ -1972,6 +2234,21 @@ p{{color:#57534E;margin-bottom:16px;line-height:1.65;font-size:15px;}}
 
         client_id = models.create_client(current_user.id, company_name)
         app.logger.info(f"[CreateClient] Created {client_id} for user {current_user.id}")
+
+        # Log agency overage seat so it can be billed in the monthly cron
+        if is_agency_overage and client_id:
+            try:
+                models.record_agency_overage_seat(
+                    user_id   = current_user.id,
+                    client_id = client_id,
+                    seat_num  = client_count + 1,  # 1-indexed seat number
+                )
+                app.logger.info(
+                    f"[AgencyOverage] user={current_user.id} seat={client_count+1} "
+                    f"extra_cost=${overage_cost:.2f}/mo client={client_id}"
+                )
+            except Exception as _ov_err:
+                app.logger.error(f"[AgencyOverage] Failed to record seat: {_ov_err}")
 
         # Return JSON if the request came from the onboarding wizard (XHR),
         # otherwise redirect to dashboard for the legacy form-submit flow.
@@ -4398,27 +4675,22 @@ def cancel_subscription():
                     sender="Lumvi <support@lumvi.net>",
                     recipients=[current_user.email],
                     html=f"""
-                    <div style="font-family:'Inter',Arial,sans-serif;max-width:520px;margin:0 auto;background:#0D0D0D;border-radius:16px;overflow:hidden;border:1px solid rgba(201,168,76,0.2);">
-                      <div style="background:linear-gradient(135deg,#1A1508,#2A1F05);padding:28px 32px 24px;text-align:center;border-bottom:2px solid #C9A84C;">
-                        <div style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);border-radius:8px;padding:7px 16px;margin-bottom:12px;">
-                          <span style="font-size:15px;font-weight:900;color:#0D0D0D;">&#9889; Lumvi</span>
-                        </div>
-                        <h2 style="font-size:20px;font-weight:800;color:#F5F0E8;margin:0;">Subscription Cancelled</h2>
-                      </div>
-                      <div style="background:#141414;padding:28px 32px;">
-                        <p style="color:#A89880;font-size:14px;line-height:1.75;margin-bottom:16px;">
-                          Your Lumvi subscription has been cancelled. You will retain full access
-                          until <strong style="color:#E2B96A;">{_access_ends}</strong>. After that, your account will
-                          revert to the free plan automatically &mdash; no further charges will be made.</p>
-                        <p style="color:#A89880;font-size:14px;line-height:1.75;margin-bottom:24px;">
-                          Changed your mind? You can resubscribe at any time from your
-                          <a href="https://lumvi.net/upgrade" style="color:#C9A84C;text-decoration:none;">upgrade page</a>.
-                          Your data and clients will be waiting for you.</p>
-                        <p style="color:#5A5248;font-size:12px;border-top:1px solid rgba(201,168,76,0.1);padding-top:16px;margin:0;">
-                          Questions? Contact
-                          <a href="mailto:support@lumvi.net" style="color:#C9A84C;text-decoration:none;">support@lumvi.net</a>.
-                        </p>
-                      </div>
+                    <div style="font-family:'DM Sans',sans-serif;max-width:520px;margin:0 auto;
+                                background:#F7F4EF;padding:36px;border-radius:16px;">
+                      <h2 style="font-size:20px;font-weight:700;color:#1C1917;margin-bottom:8px;">
+                        Subscription Cancelled</h2>
+                      <p style="color:#57534E;font-size:14px;line-height:1.6;margin-bottom:16px;">
+                        Your Lumvi subscription has been cancelled. You will retain full access
+                        until <strong>{_access_ends}</strong>. After that, your account will
+                        revert to the free plan automatically — no further charges will be made.</p>
+                      <p style="color:#57534E;font-size:14px;line-height:1.6;margin-bottom:24px;">
+                        Changed your mind? You can resubscribe at any time from your
+                        <a href="https://lumvi.net/upgrade" style="color:#B8924A;">upgrade page</a>.
+                        Your data and clients will be waiting for you.</p>
+                      <p style="color:#A8A29E;font-size:12px;">
+                        Questions? Contact
+                        <a href="mailto:support@lumvi.net" style="color:#B8924A;">support@lumvi.net</a>.
+                      </p>
                     </div>"""
                 )
                 mail.send(_cancel_msg)
@@ -5277,6 +5549,11 @@ def client_dashboard_router():
                 branding = bs.get('branding', {})
             except Exception:
                 pass
+        # Fetch plan info for analytics gating and usage warning
+        _owner_plan_ov  = models.get_user_by_id(client.get('user_id', '')) if hasattr(models, 'get_user_by_id') else {}
+        _plan_type_ov   = (_owner_plan_ov or {}).get('plan_type', 'free')
+        _plan_limits_ov = PLAN_LIMITS.get(_plan_type_ov, PLAN_LIMITS['free'])
+        _usage_warn_ov  = models.get_usage_warning(client_id_param) if hasattr(models, 'get_usage_warning') else None
         return render_template(
             'client_dashboard.html',
             client=client,
@@ -5289,6 +5566,8 @@ def client_dashboard_router():
             faq_count=len(faqs),
             lead_count=len(leads),
             owner_view=True,   # lets the template show an "← Back" link
+            analytics_level=_plan_limits_ov.get('analytics_level', 'none'),
+            usage_warning=_usage_warn_ov,
         )
 
     # ── Client portal user: must be authenticated via client session ──
@@ -5314,6 +5593,11 @@ def client_dashboard_client():
             branding = bs.get('branding', {})
         except Exception:
             pass
+    # Fetch plan info for analytics gating and usage warning
+    _owner_cp     = models.get_client_owner(client_id) if hasattr(models, 'get_client_owner') else {}
+    _plan_type_cp = (_owner_cp or {}).get('plan_type', 'starter')  # portal users on paid plan
+    _plan_lim_cp  = PLAN_LIMITS.get(_plan_type_cp, PLAN_LIMITS['free'])
+    _usage_warn_cp = models.get_usage_warning(client_id) if hasattr(models, 'get_usage_warning') else None
     return render_template(
         'client_dashboard.html',
         client=client,
@@ -5326,6 +5610,8 @@ def client_dashboard_client():
         faq_count=len(faqs),
         lead_count=len(leads),
         owner_view=False,
+        analytics_level=_plan_lim_cp.get('analytics_level', 'basic'),
+        usage_warning=_usage_warn_cp,
     )
 
 
@@ -5377,25 +5663,21 @@ def invite_client_user():
             sender="Lumvi <support@lumvi.net>",
             recipients=[email],
             html=f"""
-<div style="font-family:'Inter',Arial,sans-serif;max-width:480px;margin:0 auto;background:#0D0D0D;border-radius:16px;overflow:hidden;border:1px solid rgba(201,168,76,0.2);">
-  <div style="background:linear-gradient(135deg,#1A1508,#2A1F05);padding:28px 32px 24px;text-align:center;border-bottom:2px solid #C9A84C;">
-    <div style="display:inline-block;background:linear-gradient(135deg,#C9A84C,#E2B96A);border-radius:8px;padding:8px 18px;margin-bottom:12px;">
-      <span style="font-size:18px;font-weight:900;color:#0D0D0D;">&#9889; {company}</span>
-    </div>
-    <h2 style="margin:0;font-size:20px;font-weight:800;color:#F5F0E8;">Your portal access is ready</h2>
+<div style="font-family:Inter,Arial,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#f8fafc;padding:40px;border-radius:16px;">
+  <div style="text-align:center;margin-bottom:28px;">
+    <div style="display:inline-block;background:linear-gradient(135deg,#6366f1,#a78bfa);border-radius:12px;padding:10px 20px;font-size:22px;font-weight:800;">⚡ {company}</div>
   </div>
-  <div style="background:#141414;padding:28px 32px;">
-    <p style="color:#A89880;margin:0 0 24px;line-height:1.75;font-size:15px;">Hi {name or email}, you&rsquo;ve been given access to your client portal where you can view your leads, FAQs and analytics.</p>
-    <div style="background:#1A1508;border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:18px;margin-bottom:24px;">
-      <p style="margin:0 0 4px;font-size:12px;color:#7A6E60;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Login URL</p>
-      <p style="margin:0 0 14px;font-size:14px;color:#C9A84C;">lumvi.net/client-login</p>
-      <p style="margin:0 0 4px;font-size:12px;color:#7A6E60;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Email</p>
-      <p style="margin:0 0 14px;font-size:14px;color:#F5F0E8;">{email}</p>
-      <p style="margin:0 0 4px;font-size:12px;color:#7A6E60;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;">Password</p>
-      <p style="margin:0;font-size:14px;color:#F5F0E8;">{password}</p>
-    </div>
-    <a href="https://lumvi.net/client-login" style="display:block;text-align:center;background:linear-gradient(135deg,#C9A84C,#E2B96A);color:#0D0D0D;text-decoration:none;padding:14px;border-radius:10px;font-weight:800;font-size:15px;">Access My Portal &rarr;</a>
+  <h2 style="margin:0 0 12px;font-size:20px;">Your portal access is ready</h2>
+  <p style="color:#94a3b8;margin:0 0 24px;line-height:1.6;">Hi {name or email}, you've been given access to your client portal where you can view your leads, FAQs and analytics.</p>
+  <div style="background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);border-radius:10px;padding:16px;margin-bottom:24px;">
+    <p style="margin:0 0 6px;font-size:13px;color:#94a3b8;">Login URL</p>
+    <p style="margin:0;font-size:14px;color:#a5b4fc;">lumvi.net/client-login</p>
+    <p style="margin:12px 0 6px;font-size:13px;color:#94a3b8;">Email</p>
+    <p style="margin:0;font-size:14px;color:#f8fafc;">{email}</p>
+    <p style="margin:12px 0 6px;font-size:13px;color:#94a3b8;">Password</p>
+    <p style="margin:0;font-size:14px;color:#f8fafc;">{password}</p>
   </div>
+  <a href="https://lumvi.net/client-login" style="display:block;text-align:center;background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff;text-decoration:none;padding:14px;border-radius:10px;font-weight:700;">Access My Portal →</a>
 </div>"""
         )
         mail.send(msg)
@@ -5528,6 +5810,285 @@ def cron_enforce_subscriptions():
         'success':          True,
         'ran_at':           datetime.utcnow().isoformat(),
         'downgraded_count': len(downgraded),
+    })
+
+
+# =====================================================================
+# WEEKLY UNANSWERED QUESTIONS DIGEST EMAIL
+# =====================================================================
+
+def _build_digest_email_html(business_name: str, questions: list, upgrade_url: str) -> str:
+    rows = ''.join(
+        f"""<tr>
+          <td style="padding:10px 16px;border-bottom:1px solid #F0EBE1;font-size:14px;color:#1C1917;">
+            {i}. {q['question']}
+          </td>
+          <td style="padding:10px 16px;border-bottom:1px solid #F0EBE1;font-size:13px;color:#A8A29E;text-align:right;">
+            {q['count']}x this week
+          </td>
+        </tr>"""
+        for i, q in enumerate(questions, 1)
+    )
+    return f"""
+    <div style="font-family:'DM Sans',Arial,sans-serif;max-width:540px;margin:0 auto;background:#F7F4EF;padding:32px 20px;">
+      <div style="text-align:center;margin-bottom:24px;">
+        <span style="font-size:22px;font-weight:800;color:#1C1917;">Your weekly bot report 🤖</span>
+      </div>
+      <div style="background:#fff;border:1px solid #E7E2DA;border-radius:16px;overflow:hidden;">
+        <div style="background:#1C1917;padding:20px 24px;">
+          <p style="color:rgba(255,255,255,0.7);font-size:14px;margin:0;">
+            Hi {business_name} team — here are the top questions your chatbot
+            <strong style="color:#B8924A;">couldn't answer</strong> this week.
+            Adding these to your knowledge base will help convert more visitors.
+          </p>
+        </div>
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#F7F4EF;">
+              <th style="padding:10px 16px;font-size:12px;font-weight:700;color:#A8A29E;text-align:left;text-transform:uppercase;letter-spacing:0.05em;">Question</th>
+              <th style="padding:10px 16px;font-size:12px;font-weight:700;color:#A8A29E;text-align:right;text-transform:uppercase;letter-spacing:0.05em;">Frequency</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+        <div style="padding:20px 24px;text-align:center;border-top:1px solid #F0EBE1;">
+          <a href="{upgrade_url}" style="display:inline-block;padding:12px 28px;background:#B8924A;color:#fff;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;">
+            Fix these gaps in your bot →
+          </a>
+          <p style="font-size:12px;color:#A8A29E;margin-top:12px;">
+            Log in to your dashboard to add answers to these questions.
+          </p>
+        </div>
+      </div>
+      <p style="text-align:center;font-size:11px;color:#A8A29E;margin-top:20px;">
+        Lumvi · <a href="{upgrade_url}/unsubscribe-digest" style="color:#A8A29E;">Unsubscribe from weekly digest</a>
+      </p>
+    </div>
+    """
+
+
+def send_weekly_digest():
+    """
+    Send each paid client's owner an email listing their top unanswered
+    questions from the past 7 days. Designed to be called by a weekly cron.
+    Skips clients with no unanswered questions.
+    """
+    if not hasattr(models, 'get_clients_for_weekly_digest'):
+        app.logger.warning('[WeeklyDigest] models.get_clients_for_weekly_digest not found — skipping')
+        return {'sent': 0, 'skipped': 0}
+
+    from flask_mail import Message as MailMessage
+    clients   = models.get_clients_for_weekly_digest()
+    sent = skipped = 0
+    base_url  = os.environ.get('APP_BASE_URL', 'https://lumvi.net')
+
+    for client in clients:
+        cid     = client['client_id']
+        biz     = client.get('business_name') or 'Your business'
+        email   = client.get('contact_email') or client.get('owner_email')
+        if not email:
+            skipped += 1
+            continue
+
+        questions = models.get_unanswered_questions_for_email(cid, since_days=7, limit=5)
+        if not questions:
+            skipped += 1
+            continue
+
+        try:
+            html = _build_digest_email_html(
+                business_name=biz,
+                questions=questions,
+                upgrade_url=f"{base_url}/dashboard?client_id={cid}"
+            )
+            msg = MailMessage(
+                subject   = f"Your bot report: {len(questions)} questions it couldn't answer this week",
+                recipients= [email],
+                html      = html,
+                sender    = os.environ.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
+            )
+            mail.send(msg)
+            sent += 1
+            app.logger.info(f'[WeeklyDigest] sent to {email} for client {cid}')
+        except Exception as e:
+            app.logger.error(f'[WeeklyDigest] failed for {cid}: {e}')
+            skipped += 1
+
+    app.logger.info(f'[WeeklyDigest] complete — sent={sent} skipped={skipped}')
+    return {'sent': sent, 'skipped': skipped}
+
+
+@app.route('/cron/weekly-digest', methods=['GET', 'POST'])
+def cron_weekly_digest():
+    """
+    Weekly cron endpoint — sends the unanswered-questions digest to all paid clients.
+    Secure with the same CRON_SECRET as /cron/enforce-subscriptions.
+    Point a weekly cron-job.org job (or UptimeRobot) at this URL.
+
+    Usage:
+      GET /cron/weekly-digest?secret=YOUR_CRON_SECRET
+      POST /cron/weekly-digest  (body: {"secret": "YOUR_CRON_SECRET"})
+    """
+    cron_secret = os.environ.get('CRON_SECRET', '').strip()
+    if not cron_secret:
+        return jsonify({'error': 'Cron not configured'}), 503
+
+    provided = (
+        request.args.get('secret', '') or
+        (request.get_json(silent=True) or {}).get('secret', '')
+    )
+    if not __import__('hmac').compare_digest(provided, cron_secret):
+        app.logger.warning(f'[WeeklyDigest] Unauthorized attempt from {request.remote_addr}')
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    result = send_weekly_digest()
+    return jsonify({'success': True, 'ran_at': datetime.utcnow().isoformat(), **result})
+
+
+# =====================================================================
+# AGENCY PER-SEAT OVERAGE BILLING
+# =====================================================================
+
+def bill_agency_overages():
+    """
+    Called monthly by /cron/agency-overage.
+    For every agency user with more than AGENCY_INCLUDED_CLIENTS clients,
+    calculate the extra seats, record a payment, and email a receipt.
+    Returns a summary dict.
+    """
+    if not hasattr(models, 'get_agency_users_with_overage'):
+        app.logger.warning('[AgencyOverage] models.get_agency_users_with_overage not found')
+        return {'billed': 0, 'skipped': 0, 'total_revenue': 0.0}
+
+    agency_users = models.get_agency_users_with_overage(AGENCY_INCLUDED_CLIENTS)
+    billed = skipped = 0
+    total_revenue = 0.0
+
+    for u in agency_users:
+        user_id     = u['id']
+        email       = u['email']
+        client_count = int(u['client_count'])
+        extra_seats  = client_count - AGENCY_INCLUDED_CLIENTS
+        if extra_seats <= 0:
+            skipped += 1
+            continue
+
+        amount = round(extra_seats * AGENCY_SEAT_PRICE, 2)
+
+        try:
+            models.record_payment(
+                user_id  = user_id,
+                amount   = amount,
+                plan_type= 'agency',
+                provider = 'overage',
+                currency = 'USD',
+                status   = 'pending',   # set to 'completed' after actual charge via payment provider
+                notes    = (
+                    f"Agency per-seat overage: {extra_seats} extra seat(s) "
+                    f"× ${AGENCY_SEAT_PRICE}/mo = ${amount:.2f}. "
+                    f"Total clients: {client_count} (included: {AGENCY_INCLUDED_CLIENTS})"
+                )
+            )
+            total_revenue += amount
+            billed += 1
+            app.logger.info(
+                f'[AgencyOverage] billed user={user_id} email={email} '
+                f'extra_seats={extra_seats} amount=${amount}'
+            )
+
+            # Email receipt / notice to agency owner
+            try:
+                from flask_mail import Message as MailMessage
+                base_url = os.environ.get('APP_BASE_URL', 'https://lumvi.net')
+                html = f"""
+                <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#F7F4EF;">
+                  <div style="background:#fff;border:1px solid #E7E2DA;border-radius:16px;overflow:hidden;">
+                    <div style="background:#1C1917;padding:20px 24px;">
+                      <h2 style="color:#B8924A;font-size:18px;margin:0;">Agency Per-Seat Billing Notice</h2>
+                    </div>
+                    <div style="padding:24px;">
+                      <p style="color:#57534E;font-size:14px;line-height:1.6;margin-bottom:16px;">
+                        Hi {email},<br><br>
+                        Your Lumvi Agency plan currently has <strong>{client_count} chatbots</strong>.
+                        Your plan includes {AGENCY_INCLUDED_CLIENTS} — the additional
+                        <strong>{extra_seats} seat(s)</strong> are billed at
+                        ${AGENCY_SEAT_PRICE:.0f}/mo each.
+                      </p>
+                      <div style="background:#F7F4EF;border:1px solid #E7E2DA;border-radius:12px;padding:16px;margin-bottom:20px;">
+                        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                          <span style="color:#A8A29E;font-size:13px;">Included seats</span>
+                          <span style="font-weight:700;color:#1C1917;">{AGENCY_INCLUDED_CLIENTS}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                          <span style="color:#A8A29E;font-size:13px;">Extra seats</span>
+                          <span style="font-weight:700;color:#1C1917;">{extra_seats} × ${AGENCY_SEAT_PRICE:.0f}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;border-top:1px solid #E7E2DA;padding-top:10px;margin-top:4px;">
+                          <span style="color:#A8A29E;font-size:13px;">Overage charge</span>
+                          <span style="font-weight:800;color:#B8924A;font-size:16px;">${amount:.2f}/mo</span>
+                        </div>
+                      </div>
+                      <p style="color:#A8A29E;font-size:12px;">
+                        This charge will be processed via your payment method on file.
+                        To reduce your bill, archive unused chatbots from your
+                        <a href="{base_url}/agency/clients" style="color:#B8924A;">Agency dashboard</a>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                """
+                msg = MailMessage(
+                    subject   = f'Lumvi Agency billing: {extra_seats} extra seat(s) — ${amount:.2f}/mo',
+                    recipients= [email],
+                    html      = html,
+                    sender    = os.environ.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
+                )
+                mail.send(msg)
+            except Exception as mail_err:
+                app.logger.error(f'[AgencyOverage] email failed for {email}: {mail_err}')
+
+        except Exception as e:
+            app.logger.error(f'[AgencyOverage] billing failed for user={user_id}: {e}')
+            skipped += 1
+
+    app.logger.info(
+        f'[AgencyOverage] complete — billed={billed} skipped={skipped} '
+        f'total_revenue=${total_revenue:.2f}'
+    )
+    return {'billed': billed, 'skipped': skipped, 'total_revenue': total_revenue}
+
+
+@app.route('/cron/agency-overage', methods=['GET', 'POST'])
+def cron_agency_overage():
+    """
+    Monthly cron — calculates and records per-seat overage charges for all
+    agency users who have more than AGENCY_INCLUDED_CLIENTS chatbots.
+
+    Usage (same CRON_SECRET as other cron endpoints):
+      GET  /cron/agency-overage?secret=YOUR_CRON_SECRET
+      POST /cron/agency-overage  (body: {"secret": "YOUR_CRON_SECRET"})
+
+    Recommended schedule: 1st of every month at 00:05 UTC.
+    """
+    cron_secret = os.environ.get('CRON_SECRET', '').strip()
+    if not cron_secret:
+        return jsonify({'error': 'Cron not configured'}), 503
+
+    provided = (
+        request.args.get('secret', '') or
+        (request.get_json(silent=True) or {}).get('secret', '')
+    )
+    if not __import__('hmac').compare_digest(provided, cron_secret):
+        app.logger.warning(f'[AgencyOverage] Unauthorized cron attempt from {request.remote_addr}')
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    result = bill_agency_overages()
+    return jsonify({
+        'success':       True,
+        'ran_at':        datetime.utcnow().isoformat(),
+        'billed':        result['billed'],
+        'skipped':       result['skipped'],
+        'total_revenue': result['total_revenue'],
     })
 
 

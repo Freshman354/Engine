@@ -280,6 +280,46 @@
     .section.active { display: block; animation: fadeUp 0.28s ease both; }
     @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 
+    /* ── Usage warning banner ── */
+    .usage-warning-banner {
+      display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+      background: rgba(249,115,22,0.08); border: 1px solid rgba(249,115,22,0.3);
+      border-radius: var(--radius-sm); margin-bottom: 20px; font-size: 13px;
+    }
+    .usage-warning-banner .uwb-icon { font-size: 18px; flex-shrink: 0; }
+    .usage-warning-banner .uwb-text { flex: 1; color: var(--text-primary); line-height: 1.5; }
+    .usage-warning-banner .uwb-text strong { color: var(--orange); }
+    .usage-warning-banner .uwb-cta {
+      padding: 6px 14px; background: var(--orange); color: #fff; border-radius: 7px;
+      font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .usage-warning-banner .uwb-cta:hover { opacity: 0.85; }
+
+    /* ── Blurred analytics upsell (Starter users see shape, Pro users see data) ── */
+    .analytics-locked-wrap { position: relative; }
+    .analytics-blur-overlay {
+      position: absolute; inset: 0; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 12px; text-align: center; padding: 24px;
+      background: linear-gradient(to bottom, rgba(var(--surface-1-rgb,18,18,18),0) 0%, var(--surface-1) 60%);
+      border-radius: var(--radius-sm);
+    }
+    .analytics-blur-inner { filter: blur(5px); pointer-events: none; user-select: none; }
+    .analytics-lock-badge {
+      background: var(--gold-dim); border: 1px solid var(--gold-border);
+      border-radius: 20px; padding: 4px 14px;
+      font-size: 11px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .analytics-lock-title { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+    .analytics-lock-sub   { font-size: 13px; color: var(--text-secondary); max-width: 320px; line-height: 1.5; }
+    .analytics-lock-btn {
+      display: inline-block; padding: 10px 22px; background: var(--gold); color: #fff;
+      border-radius: 9px; font-size: 13px; font-weight: 700; text-decoration: none;
+      box-shadow: 0 2px 10px var(--gold-glow); transition: background 0.15s;
+    }
+    .analytics-lock-btn:hover { background: var(--gold-dk, #9A7A3A); }
+
     /* ══════════════════════════════════════════════════════════════
        STAT CARDS
     ══════════════════════════════════════════════════════════════ */
@@ -743,6 +783,48 @@
       padding: 1px 6px; display: inline-block; margin-bottom: 4px;
     }
 
+    /* ── Lead Management Modal ── */
+    .lm-tab {
+      padding: 10px 16px; font-size: 13px; font-weight: 500;
+      color: var(--text-muted); background: none; border: none;
+      border-bottom: 2px solid transparent; cursor: pointer;
+      transition: color 0.15s, border-color 0.15s; font-family: var(--font-body);
+    }
+    .lm-tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+    .lm-tab:hover:not(.active) { color: var(--text-primary); }
+
+    .lm-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; display: block; }
+    .lm-field { display: flex; flex-direction: column; }
+    .lm-input {
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 8px 10px;
+      font-size: 13px; color: var(--text-primary); font-family: var(--font-body);
+      transition: border-color 0.15s;
+    }
+    .lm-input:focus { outline: none; border-color: var(--gold-border); }
+
+    .lm-stage-pill {
+      font-size: 11px; font-weight: 600; padding: 4px 12px;
+      border-radius: 20px; border: 1.5px solid var(--border);
+      background: var(--surface-2); color: var(--text-muted);
+      cursor: pointer; transition: all 0.15s; font-family: var(--font-body);
+    }
+    .lm-stage-pill:hover { border-color: var(--gold-border); color: var(--gold); }
+    .lm-stage-pill.active { border-color: var(--gold); background: var(--gold-dim); color: var(--gold); }
+    .lm-stage-pill[data-stage="closed"].active { border-color: var(--green); background: rgba(34,197,94,0.1); color: var(--green); }
+    .lm-stage-pill[data-stage="lost"].active   { border-color: var(--red);   background: rgba(239,68,68,0.1);  color: var(--red); }
+    .lm-stage-pill[data-stage="contacted"].active { border-color: var(--purple); background: rgba(168,85,247,0.1); color: var(--purple); }
+    .lm-stage-pill[data-stage="proposal"].active  { border-color: var(--orange); background: rgba(249,115,22,0.1); color: var(--orange); }
+
+    .lm-activity-item {
+      display: flex; gap: 10px; align-items: flex-start;
+      padding: 10px 12px; border-radius: var(--radius-sm);
+      background: var(--surface-2); border: 1px solid var(--border);
+    }
+    .lm-activity-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--gold); margin-top: 4px; flex-shrink: 0; }
+    .lm-activity-text { font-size: 12px; color: var(--text-secondary); flex: 1; }
+    .lm-activity-time { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+
     /* ══════════════════════════════════════════════════════════════
        CUSTOMIZATION CENTER — PHASE 5
     ══════════════════════════════════════════════════════════════ */
@@ -1170,6 +1252,20 @@
 
     <!-- ════════════════ OVERVIEW ════════════════ -->
     <section class="section active" id="section-overview">
+
+      {# ── Usage warning banner — shown when client hits 80%+ of daily limit ── #}
+      {% if usage_warning and usage_warning.pct >= 80 %}
+      <div class="usage-warning-banner" style="margin-bottom:20px;">
+        <span class="uwb-icon">⚡</span>
+        <div class="uwb-text">
+          <strong>{{ usage_warning.pct }}% of your daily message limit used</strong>
+          — {{ usage_warning.today_count }} of {{ usage_warning.daily_limit }} messages today.
+          Upgrade now to remove limits and avoid your bot going silent.
+        </div>
+        <a href="/upgrade?plan=pro" class="uwb-cta">Upgrade Plan →</a>
+      </div>
+      {% endif %}
+
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-icon gold">
@@ -1332,7 +1428,8 @@
         </div>
       </div>
 
-      <!-- Charts row -->
+      {% if analytics_level == 'full' %}
+      <!-- Charts row — full analytics (Pro / Agency) -->
       <div class="analytics-grid-2">
         <div class="chart-wrap">
           <div class="chart-header">
@@ -1417,6 +1514,39 @@
           </div>
         </div>
       </div>
+
+      {% else %}
+      {# ── Starter: show blurred chart shape + upgrade CTA ── #}
+      <div class="analytics-locked-wrap" style="min-height:340px;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;margin-top:4px;">
+        <div class="analytics-blur-inner" aria-hidden="true">
+          <!-- Faked chart skeleton so users can see the shape of real data -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:20px;">
+            <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;height:160px;"></div>
+            <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;height:160px;"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:0 20px 20px;">
+            <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);height:100px;"></div>
+            <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);height:100px;"></div>
+            <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);height:100px;"></div>
+          </div>
+        </div>
+        <div class="analytics-blur-overlay">
+          <span class="analytics-lock-badge">Pro Feature</span>
+          <div class="analytics-lock-title">Unlock advanced analytics</div>
+          <div class="analytics-lock-sub">
+            See your full conversation timeline, AI success rate trends,
+            unanswered questions, and lead source breakdown.
+          </div>
+          <a href="/upgrade?plan=pro" class="analytics-lock-btn">
+            Upgrade to Pro — $99/mo →
+          </a>
+          <div style="font-size:11px;color:var(--text-muted);">
+            You're on the Starter plan &middot; Conversations &amp; leads are always visible
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
     </section>
 
     <!-- ════════════════ CONVERSATIONS ════════════════ -->
@@ -2123,63 +2253,148 @@
 
 <!-- ════════════════ LEAD DETAIL MODAL ════════════════ -->
 <div class="modal-overlay" id="lead-modal">
-  <div class="modal">
+  <div class="modal" style="max-width:680px;width:95vw;">
     <div class="modal-header">
-      <span class="modal-title">Lead Details</span>
-      <button class="modal-close" onclick="closeModal('lead-modal')">
-        <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
-      </button>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span class="modal-title" id="lm-modal-title">Lead Details</span>
+        <span id="lm-stage-badge" style="font-size:11px;font-weight:600;padding:2px 10px;border-radius:20px;background:var(--surface-3);color:var(--text-secondary);">New</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-ghost btn-sm" id="lm-delete-btn" style="color:var(--red);border-color:transparent;" onclick="lmDeleteLead()">
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"/></svg>
+          Delete
+        </button>
+        <button class="modal-close" onclick="closeModal('lead-modal')">
+          <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+        </button>
+      </div>
     </div>
-    <div class="modal-body">
-      <div class="detail-row">
-        <div class="detail-key">Name</div>
-        <div class="detail-val" id="modal-lead-name">—</div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-key">Email</div>
-        <div class="detail-val" id="modal-lead-email">—</div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-key">Phone</div>
-        <div class="detail-val" id="modal-lead-phone">—</div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-key">Company</div>
-        <div class="detail-val" id="modal-lead-company">—</div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-key">Message</div>
-        <div class="detail-val" id="modal-lead-message">—</div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-key">Captured</div>
-        <div class="detail-val" id="modal-lead-date">—</div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-key">Source</div>
-        <div class="detail-val">Website chatbot</div>
-      </div>
-      <div class="detail-row">
-        <div class="detail-key">Stage</div>
-        <div class="detail-val">
-          <select class="form-select" style="max-width:180px;">
-            <option selected>New</option>
-            <option>Contacted</option>
-            <option>Qualified</option>
-            <option>Proposal</option>
-            <option>Closed</option>
-            <option>Lost</option>
+
+    <!-- Tab bar -->
+    <div style="display:flex;border-bottom:1px solid var(--border);padding:0 24px;gap:0;">
+      <button class="lm-tab active" data-tab="details" onclick="lmSwitchTab('details',this)">Details</button>
+      <button class="lm-tab" data-tab="notes" onclick="lmSwitchTab('notes',this)">Notes</button>
+      <button class="lm-tab" data-tab="activity" onclick="lmSwitchTab('activity',this)">Activity</button>
+      <button class="lm-tab" data-tab="webhook" onclick="lmSwitchTab('webhook',this)">Webhook</button>
+    </div>
+
+    <div class="modal-body" style="padding:0;max-height:70vh;overflow-y:auto;">
+
+      <!-- ── TAB: Details ── -->
+      <div id="lm-tab-details" class="lm-tab-pane" style="padding:20px 24px;display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div class="lm-field">
+          <label class="lm-label">Name</label>
+          <input class="lm-input" id="lm-name" type="text" placeholder="Full name"/>
+        </div>
+        <div class="lm-field">
+          <label class="lm-label">Email</label>
+          <input class="lm-input" id="lm-email" type="email" placeholder="email@example.com"/>
+        </div>
+        <div class="lm-field">
+          <label class="lm-label">Phone</label>
+          <input class="lm-input" id="lm-phone" type="text" placeholder="+1 555 000 0000"/>
+        </div>
+        <div class="lm-field">
+          <label class="lm-label">Company</label>
+          <input class="lm-input" id="lm-company" type="text" placeholder="Company name"/>
+        </div>
+        <div class="lm-field" style="grid-column:1/-1;">
+          <label class="lm-label">Pipeline Stage</label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;" id="lm-stage-pills">
+            <button class="lm-stage-pill" data-stage="new">New</button>
+            <button class="lm-stage-pill" data-stage="contacted">Contacted</button>
+            <button class="lm-stage-pill" data-stage="qualified">Qualified</button>
+            <button class="lm-stage-pill" data-stage="proposal">Proposal</button>
+            <button class="lm-stage-pill" data-stage="closed">Closed ✓</button>
+            <button class="lm-stage-pill" data-stage="lost">Lost</button>
+          </div>
+        </div>
+        <div class="lm-field">
+          <label class="lm-label">Priority</label>
+          <select class="lm-input" id="lm-priority">
+            <option value="high">🔴 High</option>
+            <option value="med">🟠 Medium</option>
+            <option value="low">🟢 Low</option>
           </select>
         </div>
+        <div class="lm-field">
+          <label class="lm-label">Assigned To</label>
+          <input class="lm-input" id="lm-assigned" type="text" placeholder="Team member name or email"/>
+        </div>
+        <div class="lm-field" style="grid-column:1/-1;">
+          <label class="lm-label">Initial Message</label>
+          <div id="lm-message" style="font-size:13px;color:var(--text-secondary);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;min-height:40px;"></div>
+        </div>
+        <div class="lm-field" style="grid-column:1/-1;display:flex;gap:16px;">
+          <div style="flex:1;">
+            <label class="lm-label">Captured</label>
+            <div id="lm-date" style="font-size:13px;color:var(--text-secondary);padding:4px 0;"></div>
+          </div>
+          <div style="flex:1;">
+            <label class="lm-label">Source</label>
+            <div id="lm-source" style="font-size:13px;color:var(--text-secondary);padding:4px 0;">Website chatbot</div>
+          </div>
+          <div style="flex:1;">
+            <label class="lm-label">Lead ID</label>
+            <div id="lm-id" style="font-size:11px;font-family:monospace;color:var(--text-muted);padding:4px 0;"></div>
+          </div>
+        </div>
       </div>
-      <div class="detail-row">
-        <div class="detail-key">Notes</div>
-        <div class="detail-val"><textarea class="notes-area" rows="3" placeholder="Add notes about this lead…"></textarea></div>
+
+      <!-- ── TAB: Notes ── -->
+      <div id="lm-tab-notes" class="lm-tab-pane" style="display:none;padding:20px 24px;">
+        <label class="lm-label" style="margin-bottom:8px;display:block;">Internal Notes</label>
+        <textarea id="lm-notes" class="lm-input" rows="10"
+          placeholder="Add notes about this lead — call summaries, follow-up actions, context…"
+          style="width:100%;resize:vertical;min-height:200px;font-family:var(--font-body);"></textarea>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:6px;">Notes are internal and not visible to the lead.</p>
       </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost btn-sm" onclick="closeModal('lead-modal')">Close</button>
-      <button class="btn btn-primary btn-sm" onclick="showToast('Lead updated!','success');closeModal('lead-modal')">Save Changes</button>
+
+      <!-- ── TAB: Activity ── -->
+      <div id="lm-tab-activity" class="lm-tab-pane" style="display:none;padding:20px 24px;">
+        <div id="lm-activity-log" style="display:flex;flex-direction:column;gap:10px;">
+          <div style="text-align:center;color:var(--text-muted);font-size:13px;padding:30px 0;">No activity recorded yet.</div>
+        </div>
+      </div>
+
+      <!-- ── TAB: Webhook ── -->
+      <div id="lm-tab-webhook" class="lm-tab-pane" style="display:none;padding:20px 24px;">
+        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-bottom:16px;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">📡 Inbound Webhook Endpoint</div>
+          <p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px;">
+            External CRMs, Zapier, or Make can POST to this URL to update this lead's stage, notes, or assignment — and it will reflect instantly in the pipeline.
+          </p>
+          <div class="lm-label" style="margin-bottom:4px;">Endpoint URL</div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <code id="lm-webhook-url" style="flex:1;font-size:11px;background:var(--surface-3);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></code>
+            <button class="btn btn-ghost btn-sm" onclick="lmCopyWebhookUrl()">Copy</button>
+          </div>
+          <div class="lm-label" style="margin-top:12px;margin-bottom:4px;">Required Header</div>
+          <code style="display:block;font-size:11px;background:var(--surface-3);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--gold);">X-Lumvi-Secret: &lt;your-inbound-secret&gt;</code>
+          <div class="lm-label" style="margin-top:12px;margin-bottom:4px;">Example Body</div>
+          <code id="lm-webhook-example" style="display:block;font-size:11px;background:var(--surface-3);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text-secondary);white-space:pre;line-height:1.6;"></code>
+        </div>
+        <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:16px;">
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:8px;">⚡ Outbound Events</div>
+          <p style="font-size:12px;color:var(--text-secondary);">
+            When this lead's stage changes, Lumvi fires a <code style="font-size:11px;">lead_stage_changed</code> event to your configured outbound webhook URL. Set this in <strong>Settings → Integrations</strong>.
+          </p>
+        </div>
+      </div>
+
+    </div><!-- /modal-body -->
+
+    <div class="modal-footer" style="justify-content:space-between;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="lm-save-status" style="font-size:12px;color:var(--text-muted);"></span>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="closeModal('lead-modal')">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="lm-save-btn" onclick="lmSaveLead()">
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+          Save Changes
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -2470,21 +2685,271 @@
   }
 
   /* ══════════════════════════════════════════════════════════════
-     CRM — open real lead detail modal
+     LEAD MANAGEMENT SYSTEM
+     - Full CRUD: open, edit, save, delete
+     - Stage pills wired to backend PATCH /api/leads/<client_id>/<lead_id>
+     - Drag-and-drop stage changes also persist via same endpoint
+     - Activity log rendered from lead.activity_log
+     - Inbound webhook info displayed per-lead
   ══════════════════════════════════════════════════════════════ */
+  let _lmCurrentLead   = null;   // the raw lead object being edited
+  let _lmCurrentIndex  = null;   // index in LEADS_DATA
+  let _lmPendingStage  = null;   // stage selected in pills (not yet saved)
+
+  // Stage display metadata
+  const LM_STAGES = {
+    new:       { label: 'New',       color: 'var(--blue)' },
+    contacted: { label: 'Contacted', color: 'var(--purple)' },
+    qualified: { label: 'Qualified', color: 'var(--gold)' },
+    proposal:  { label: 'Proposal',  color: 'var(--orange)' },
+    closed:    { label: 'Closed ✓',  color: 'var(--green)' },
+    lost:      { label: 'Lost',      color: 'var(--red)' },
+  };
+
   function openLeadDetailModal(index) {
     const lead = (typeof LEADS_DATA !== 'undefined') ? LEADS_DATA[index] : null;
     if (!lead) { openLeadModal(); return; }
-    // Populate modal fields if they exist
-    const setField = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val || '—'; };
-    setField('modal-lead-name',    lead.name);
-    setField('modal-lead-email',   lead.email);
-    setField('modal-lead-phone',   lead.phone);
-    setField('modal-lead-company', lead.company);
-    setField('modal-lead-message', lead.message || lead.conversation_snippet);
-    setField('modal-lead-date',    (lead.created_at || '').slice(0, 16).replace('T', ' '));
+
+    _lmCurrentLead  = lead;
+    _lmCurrentIndex = index;
+    _lmPendingStage = lead.stage || 'new';
+
+    // Populate fields
+    _lmSet('lm-name',     lead.name     || '');
+    _lmSet('lm-email',    lead.email    || '');
+    _lmSet('lm-phone',    lead.phone    || '');
+    _lmSet('lm-company',  lead.company  || '');
+    _lmSet('lm-assigned', lead.assigned_to || '');
+    document.getElementById('lm-priority').value = lead.priority || 'high';
+    document.getElementById('lm-notes').value    = lead.notes    || '';
+    document.getElementById('lm-message').textContent = lead.message || lead.conversation_snippet || '—';
+    document.getElementById('lm-date').textContent    = (lead.created_at || '').slice(0, 16).replace('T', ' ') || '—';
+    document.getElementById('lm-source').textContent  = lead.source_url || 'Website chatbot';
+    document.getElementById('lm-id').textContent      = lead.id || '—';
+    document.getElementById('lm-modal-title').textContent = lead.name || lead.email || 'Lead Details';
+
+    // Stage badge + pills
+    _lmRenderStageBadge(_lmPendingStage);
+    _lmRenderStagePills(_lmPendingStage);
+
+    // Webhook tab
+    const baseUrl = window.location.origin;
+    document.getElementById('lm-webhook-url').textContent =
+      `${baseUrl}/api/leads/${CLIENT_ID}/webhook-inbound`;
+    document.getElementById('lm-webhook-example').textContent =
+      JSON.stringify({ lead_id: lead.id || 123, stage: 'contacted', notes: 'Called, interested.', assigned_to: 'sarah@yourco.com' }, null, 2);
+
+    // Activity log
+    _lmRenderActivityLog(lead.activity_log || []);
+
+    // Reset tab to details
+    lmSwitchTab('details', document.querySelector('.lm-tab[data-tab="details"]'));
+    document.getElementById('lm-save-status').textContent = '';
     document.getElementById('lead-modal').classList.add('open');
   }
+
+  function _lmSet(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  }
+
+  function _lmRenderStageBadge(stage) {
+    const badge = document.getElementById('lm-stage-badge');
+    const meta  = LM_STAGES[stage] || LM_STAGES.new;
+    badge.textContent = meta.label;
+    badge.style.background = meta.color + '22';
+    badge.style.color       = meta.color;
+    badge.style.border      = `1px solid ${meta.color}55`;
+  }
+
+  function _lmRenderStagePills(activeStage) {
+    document.querySelectorAll('.lm-stage-pill').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.stage === activeStage);
+    });
+  }
+
+  function _lmRenderActivityLog(log) {
+    const container = document.getElementById('lm-activity-log');
+    if (!log || !log.length) {
+      container.innerHTML = '<div style="text-align:center;color:var(--text-muted);font-size:13px;padding:30px 0;">No activity recorded yet.</div>';
+      return;
+    }
+    // Newest first
+    const items = [...log].reverse().map(entry => {
+      const ts   = (entry.ts || '').replace('T', ' ').slice(0, 16);
+      const user = entry.user || 'system';
+      const act  = escHtml(entry.action || '');
+      return `<div class="lm-activity-item">
+        <div class="lm-activity-dot"></div>
+        <div class="lm-activity-text"><strong>${escHtml(user)}</strong> — ${act}</div>
+        <div class="lm-activity-time">${ts}</div>
+      </div>`;
+    }).join('');
+    container.innerHTML = items;
+  }
+
+  // Stage pills click handler
+  document.querySelectorAll('.lm-stage-pill').forEach(btn => {
+    btn.addEventListener('click', function() {
+      _lmPendingStage = this.dataset.stage;
+      _lmRenderStagePills(_lmPendingStage);
+      _lmRenderStageBadge(_lmPendingStage);
+    });
+  });
+
+  function lmSwitchTab(tabName, btnEl) {
+    document.querySelectorAll('.lm-tab-pane').forEach(p => p.style.display = 'none');
+    document.querySelectorAll('.lm-tab').forEach(b => b.classList.remove('active'));
+    const pane = document.getElementById('lm-tab-' + tabName);
+    if (pane) pane.style.display = tabName === 'details' ? 'grid' : 'block';
+    if (btnEl) btnEl.classList.add('active');
+  }
+
+  async function lmSaveLead() {
+    if (!_lmCurrentLead || !CLIENT_ID) return;
+    const leadId = _lmCurrentLead.id;
+    if (!leadId) { showToast('Cannot save — lead has no ID', 'error'); return; }
+
+    const saveBtn    = document.getElementById('lm-save-btn');
+    const saveStatus = document.getElementById('lm-save-status');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving…';
+
+    const payload = {
+      name:        document.getElementById('lm-name').value.trim(),
+      email:       document.getElementById('lm-email').value.trim(),
+      phone:       document.getElementById('lm-phone').value.trim(),
+      company:     document.getElementById('lm-company').value.trim(),
+      assigned_to: document.getElementById('lm-assigned').value.trim(),
+      priority:    document.getElementById('lm-priority').value,
+      notes:       document.getElementById('lm-notes').value,
+      stage:       _lmPendingStage,
+    };
+
+    try {
+      const res = await fetch(`/api/leads/${CLIENT_ID}/${leadId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        // Update local LEADS_DATA so next open reflects changes
+        Object.assign(_lmCurrentLead, payload);
+        if (data.lead && data.lead.activity_log) {
+          _lmCurrentLead.activity_log = data.lead.activity_log;
+        }
+        LEADS_DATA[_lmCurrentIndex] = _lmCurrentLead;
+
+        // Sync pipeline card in the DOM
+        _lmSyncCardToDOM(_lmCurrentLead);
+
+        showToast('Lead saved successfully', 'success');
+        saveStatus.textContent = 'Saved just now';
+        setTimeout(() => { saveStatus.textContent = ''; }, 4000);
+      } else {
+        showToast(data.error || 'Save failed', 'error');
+      }
+    } catch(e) {
+      showToast('Network error — could not save', 'error');
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> Save Changes';
+    }
+  }
+
+  function _lmSyncCardToDOM(lead) {
+    // Cards are keyed by data-lead-index (array position in LEADS_DATA)
+    const card = document.querySelector(`.crm-card[data-lead-index="${_lmCurrentIndex}"]`);
+    if (!card) return;
+    const newStage = lead.stage || 'new';
+    const targetZone = document.querySelector(`.crm-cards[data-stage="${newStage}"]`);
+    if (targetZone && card.parentElement !== targetZone) {
+      const placeholder = targetZone.querySelector('.drop-placeholder');
+      if (placeholder) placeholder.remove();
+      targetZone.appendChild(card);
+      card.dataset.stage = newStage;
+      if (typeof updateCounts === 'function') updateCounts();
+    }
+    // Update name on card
+    const nameEl = card.querySelector('.crm-card-name');
+    if (nameEl) nameEl.textContent = lead.name || lead.email || 'Anonymous';
+    // Update priority strip
+    const strip = card.querySelector('.crm-card-priority-strip');
+    if (strip) {
+      strip.className = 'crm-card-priority-strip ' + (lead.priority === 'low' ? 'prio-low' : lead.priority === 'med' ? 'prio-med' : 'prio-high');
+    }
+    // Keep localStorage in sync too
+    try {
+      var STORAGE_KEY = 'crm_stages_' + CLIENT_ID;
+      var map = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      map[_lmCurrentIndex] = newStage;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    } catch(e) {}
+  }
+
+  async function lmDeleteLead() {
+    if (!_lmCurrentLead || !CLIENT_ID) return;
+    const leadId = _lmCurrentLead.id;
+    if (!leadId) { showToast('Cannot delete — lead has no ID', 'error'); return; }
+
+    if (!confirm(`Delete lead for "${_lmCurrentLead.name || _lmCurrentLead.email}"? This cannot be undone.`)) return;
+
+    try {
+      const res  = await fetch(`/api/leads/${CLIENT_ID}/${leadId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        // Remove card from DOM
+        const card = document.querySelector(`.crm-card[data-lead-index="${_lmCurrentIndex}"]`);
+        if (card) card.remove();
+        if (typeof updateCounts === 'function') updateCounts();
+        closeModal('lead-modal');
+        showToast('Lead deleted', 'info');
+      } else {
+        showToast(data.error || 'Delete failed', 'error');
+      }
+    } catch(e) {
+      showToast('Network error — could not delete', 'error');
+    }
+  }
+
+  function lmCopyWebhookUrl() {
+    const url = document.getElementById('lm-webhook-url').textContent;
+    navigator.clipboard.writeText(url).then(() => showToast('Endpoint URL copied!', 'success'));
+  }
+
+  // Patch drag-and-drop to also persist stage changes to the backend DB
+  (function patchDragDropPersistence() {
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.crm-cards').forEach(function(zone) {
+        zone.addEventListener('drop', async function() {
+          await new Promise(r => setTimeout(r, 80)); // let D&D script settle
+          const newStage = zone.dataset.stage;
+          // Find the most recently dropped card (last child that is a crm-card)
+          const cards = zone.querySelectorAll('.crm-card');
+          const movedCard = cards[cards.length - 1];
+          if (!movedCard) return;
+          const idx  = parseInt(movedCard.dataset.leadIndex, 10);
+          const lead = (typeof LEADS_DATA !== 'undefined') ? LEADS_DATA[idx] : null;
+          if (!lead || !lead.id || !CLIENT_ID) return;
+          if ((lead.stage || 'new') === newStage) return;
+          try {
+            const res = await fetch(`/api/leads/${CLIENT_ID}/${lead.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ stage: newStage }),
+            });
+            const data = await res.json();
+            if (data.success) {
+              lead.stage = newStage;
+              LEADS_DATA[idx] = lead;
+            }
+          } catch(e) { /* silent — localStorage fallback still active */ }
+        }, true);
+      });
+    });
+  })();
 
   /* ══════════════════════════════════════════════════════════════
      AI SUGGESTIONS — load from real unanswered questions

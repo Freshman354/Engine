@@ -1675,6 +1675,211 @@ def migrate_lead_custom_fields():
     cursor.close()
     conn.close()
 
+
+def migrate_lead_pipeline():
+    """
+    Add pipeline management columns to the leads table.
+    Idempotent — safe to call on every startup.
+      stage        : pipeline stage (new/contacted/qualified/proposal/closed/lost)
+      notes        : internal notes added by the business
+      assigned_to  : team member name or email
+      priority     : high / med / low
+      activity_log : JSON array of {ts, user, action} entries
+      updated_at   : last modification timestamp
+    """
+    conn, cursor = get_db()
+    try:
+        cols = [
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS stage        TEXT    DEFAULT 'new'",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS notes        TEXT",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS assigned_to  TEXT",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS priority     TEXT    DEFAULT 'high'",
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS activity_log TEXT",   # JSON
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS updated_at   TIMESTAMP",
+        ]
+        for stmt in cols:
+            cursor.execute(stmt)
+        conn.commit()
+        print("✅ migrate_lead_pipeline complete")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_lead_pipeline: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_lead_by_id(client_id, lead_id):
+    """
+    Fetch a single lead by its integer primary-key id.
+    Returns a dict or None.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            'SELECT * FROM leads WHERE id = %s AND client_id = %s',
+            (lead_id, client_id)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        if result.get('created_at'):
+            result['created_at'] = result['created_at'].isoformat()
+        if result.get('updated_at'):
+            result['updated_at'] = result['updated_at'].isoformat()
+        if result.get('custom_fields') and isinstance(result['custom_fields'], str):
+            try:
+                result['custom_fields'] = json.loads(result['custom_fields'])
+            except Exception:
+                pass
+        if result.get('activity_log') and isinstance(result['activity_log'], str):
+            try:
+                result['activity_log'] = json.loads(result['activity_log'])
+            except Exception:
+                result['activity_log'] = []
+        return result
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_lead_by_id] {e}")
+        return None
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def update_lead(client_id, lead_id, updates: dict):
+    """
+    Update allowed fields on a lead row. Appends to activity_log.
+    updates keys: stage, notes, assigned_to, priority, name, email, phone, company
+    Returns the updated lead dict, or None on failure.
+    """
+    allowed = {'stage', 'notes', 'assigned_to', 'priority', 'name', 'email', 'phone', 'company'}
+    clean   = {k: v for k, v in updates.items() if k in allowed}
+    if not clean:
+        return get_lead_by_id(client_id, lead_id)
+
+    conn, cursor = get_db()
+    try:
+        # Load existing activity_log
+        cursor.execute(
+            'SELECT activity_log FROM leads WHERE id = %s AND client_id = %s',
+            (lead_id, client_id)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        existing_log = []
+        if row['activity_log']:
+            try:
+                existing_log = json.loads(row['activity_log'])
+            except Exception:
+                existing_log = []
+
+        new_entry = {
+            'ts':     __import__('datetime').datetime.utcnow().isoformat() + 'Z',
+            'user':   updates.get('_actor', 'system'),
+            'action': updates.get('_action', 'Updated: ' + ', '.join(clean.keys())),
+        }
+        existing_log.append(new_entry)
+
+        set_clauses = ', '.join(f"{k} = %s" for k in clean)
+        set_clauses += ", activity_log = %s, updated_at = NOW()"
+        values = list(clean.values()) + [json.dumps(existing_log), lead_id, client_id]
+
+        cursor.execute(
+            f"UPDATE leads SET {set_clauses} WHERE id = %s AND client_id = %s",
+            values
+        )
+        conn.commit()
+        return get_lead_by_id(client_id, lead_id)
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[update_lead] {e}")
+        return None
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def delete_lead_by_client(client_id, lead_id):
+    """
+    Delete a single lead, enforcing client_id ownership.
+    Returns True on success, False if not found or error.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            'DELETE FROM leads WHERE id = %s AND client_id = %s',
+            (lead_id, client_id)
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+        return deleted > 0
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[delete_lead_by_client] {e}")
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def bulk_update_leads(client_id, lead_ids: list, updates: dict, actor: str = 'system'):
+    """
+    Update multiple leads at once. Returns count of rows updated.
+    updates keys: stage, assigned_to, priority
+    """
+    allowed = {'stage', 'assigned_to', 'priority'}
+    clean   = {k: v for k, v in updates.items() if k in allowed}
+    if not clean or not lead_ids:
+        return 0
+
+    conn, cursor = get_db()
+    updated = 0
+    try:
+        for lead_id in lead_ids:
+            cursor.execute(
+                'SELECT activity_log FROM leads WHERE id = %s AND client_id = %s',
+                (lead_id, client_id)
+            )
+            row = cursor.fetchone()
+            if not row:
+                continue
+            existing_log = []
+            if row['activity_log']:
+                try:
+                    existing_log = json.loads(row['activity_log'])
+                except Exception:
+                    pass
+            existing_log.append({
+                'ts':     __import__('datetime').datetime.utcnow().isoformat() + 'Z',
+                'user':   actor,
+                'action': 'Bulk update: ' + ', '.join(f"{k}={v}" for k, v in clean.items()),
+            })
+            set_clauses = ', '.join(f"{k} = %s" for k in clean)
+            set_clauses += ", activity_log = %s, updated_at = NOW()"
+            values = list(clean.values()) + [json.dumps(existing_log), lead_id, client_id]
+            cursor.execute(
+                f"UPDATE leads SET {set_clauses} WHERE id = %s AND client_id = %s",
+                values
+            )
+            updated += cursor.rowcount
+        conn.commit()
+        return updated
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[bulk_update_leads] {e}")
+        return 0
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def get_leads(client_id):
     """Get all leads for a client, newest first. Returns [] on failure."""
     try:
@@ -1692,12 +1897,23 @@ def get_leads(client_id):
             # Serialize datetime so JSON / analytics.html fmtDate() works
             if row.get('created_at'):
                 row['created_at'] = row['created_at'].isoformat()
+            if row.get('updated_at'):
+                row['updated_at'] = row['updated_at'].isoformat()
             # Deserialize custom_fields back to dict if stored as JSON string
             if row.get('custom_fields') and isinstance(row['custom_fields'], str):
                 try:
                     row['custom_fields'] = json.loads(row['custom_fields'])
                 except Exception:
                     pass
+            # Deserialize activity_log back to list
+            if row.get('activity_log') and isinstance(row['activity_log'], str):
+                try:
+                    row['activity_log'] = json.loads(row['activity_log'])
+                except Exception:
+                    row['activity_log'] = []
+            # Default stage for legacy rows that pre-date the migration
+            if not row.get('stage'):
+                row['stage'] = 'new'
             result.append(row)
         return result
     except Exception as e:
@@ -2158,6 +2374,232 @@ def admin_delete_lead(lead_id):
     conn.commit()
     cursor.close()
     conn.close()
+
+
+# =====================================================================
+# AGENCY PER-SEAT OVERAGE
+# =====================================================================
+
+def migrate_agency_seat_billing():
+    """
+    Create the agency_overage_seats table if it doesn't exist.
+    Records which clients are overage seats and when they were added.
+    Idempotent — safe to call on every startup.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS agency_overage_seats (
+                id          SERIAL PRIMARY KEY,
+                user_id     INT  NOT NULL,
+                client_id   TEXT NOT NULL,
+                seat_num    INT  NOT NULL,       -- 1-indexed position (21, 22, ...)
+                created_at  TIMESTAMP DEFAULT NOW(),
+                UNIQUE (client_id)
+            )
+        """)
+        conn.commit()
+        print("✅ migrate_agency_seat_billing complete")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_agency_seat_billing: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def record_agency_overage_seat(user_id: int, client_id: str, seat_num: int):
+    """
+    Record that a newly created client is an overage seat for an agency user.
+    Upserts so re-runs are safe.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute("""
+            INSERT INTO agency_overage_seats (user_id, client_id, seat_num)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (client_id) DO UPDATE
+              SET seat_num = EXCLUDED.seat_num
+        """, (user_id, client_id, seat_num))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[record_agency_overage_seat] {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_agency_users_with_overage(included_clients: int = 20):
+    """
+    Return all agency users whose active client count exceeds included_clients.
+    Used by the monthly billing cron.
+    Returns list of dicts: { id, email, client_count }.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute("""
+            SELECT u.id, u.email, COUNT(c.client_id) AS client_count
+            FROM users u
+            JOIN clients c ON c.user_id = u.id AND c.is_active = TRUE
+            WHERE u.plan_type = 'agency'
+            GROUP BY u.id, u.email
+            HAVING COUNT(c.client_id) > %s
+            ORDER BY client_count DESC
+        """, (included_clients,))
+        return [dict(r) for r in cursor.fetchall()]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_agency_users_with_overage] {e}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_agency_overage_summary(user_id: int, included_clients: int = 20):
+    """
+    Return a summary of overage seats for a specific agency user.
+    Used to show live cost in the dashboard.
+    Returns { client_count, extra_seats, overage_cost_per_month } or None.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute("""
+            SELECT COUNT(*) AS client_count
+            FROM clients
+            WHERE user_id = %s AND is_active = TRUE
+        """, (user_id,))
+        row = cursor.fetchone()
+        client_count = int(row['client_count']) if row else 0
+        extra_seats  = max(0, client_count - included_clients)
+        return {
+            'client_count':          client_count,
+            'included_clients':      included_clients,
+            'extra_seats':           extra_seats,
+            'overage_cost_per_month': extra_seats * 15.0,
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_agency_overage_summary] {e}")
+        return None
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# =====================================================================
+# USAGE WARNINGS & WEEKLY EMAIL HELPERS
+# =====================================================================
+
+def upsert_usage_warning(client_id: str, pct: int, today_count: int, daily_limit: int):
+    """
+    Store / update a usage-warning record so the dashboard can show a banner.
+    Table: usage_warnings(client_id PK, pct INT, today_count INT, daily_limit INT, updated_at TIMESTAMP)
+    Created lazily via ADD COLUMN IF NOT EXISTS pattern below.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS usage_warnings (
+                client_id   TEXT PRIMARY KEY,
+                pct         INT,
+                today_count INT,
+                daily_limit INT,
+                updated_at  TIMESTAMP DEFAULT NOW()
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO usage_warnings (client_id, pct, today_count, daily_limit, updated_at)
+            VALUES (%s, %s, %s, %s, NOW())
+            ON CONFLICT (client_id) DO UPDATE
+              SET pct=EXCLUDED.pct, today_count=EXCLUDED.today_count,
+                  daily_limit=EXCLUDED.daily_limit, updated_at=NOW()
+        """, (client_id, pct, today_count, daily_limit))
+        conn.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[upsert_usage_warning] {e}")
+        try: conn.rollback()
+        except: pass
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_usage_warning(client_id: str):
+    """Return the latest usage warning for a client, or None."""
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            "SELECT * FROM usage_warnings WHERE client_id = %s", (client_id,)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception:
+        return None
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_unanswered_questions_for_email(client_id: str, since_days: int = 7, limit: int = 5):
+    """
+    Return the top unanswered questions for a client from the past N days.
+    Used for the weekly digest email.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute("""
+            SELECT user_message AS question, COUNT(*) AS cnt
+            FROM conversations
+            WHERE client_id = %s
+              AND matched = FALSE
+              AND created_at >= NOW() - INTERVAL '%s days'
+            GROUP BY user_message
+            ORDER BY cnt DESC
+            LIMIT %s
+        """, (client_id, since_days, limit))
+        rows = cursor.fetchall()
+        return [{'question': r['question'], 'count': int(r['cnt'])} for r in rows]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_unanswered_for_email] {e}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_clients_for_weekly_digest():
+    """
+    Return all active paid clients with their owner email and contact_email,
+    for the weekly unanswered-questions digest.
+    Only returns clients where the owner is on a paid plan (not free).
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute("""
+            SELECT
+                c.client_id,
+                c.business_name,
+                c.contact_email,
+                u.email   AS owner_email,
+                u.plan_type
+            FROM clients c
+            JOIN users u ON u.id = c.user_id
+            WHERE u.plan_type NOT IN ('free', 'enterprise')
+              AND c.is_active = TRUE
+        """)
+        return [dict(r) for r in cursor.fetchall()]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_clients_for_weekly_digest] {e}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
 
 
 # =====================================================================
@@ -2763,43 +3205,6 @@ def get_embeddings_for_client(client_id: str) -> list:
     finally:
         cursor.close()
         conn.close()
-
-
-def clear_all_embeddings(client_id: str = None) -> int:
-    """
-    Nullify stored embeddings after an embedding model change.
-    Required after switching from Gemini text-embedding-004 to
-    BAAI/bge-small-en-v1.5 — the vector spaces are incompatible
-    and stale embeddings will silently corrupt similarity scores.
-
-    Pass client_id to clear one client only, or None to clear all.
-    Returns the number of rows updated.
-    Call this once after deploying the new ai_helper.py, then
-    ai_helper.index_faqs() will regenerate embeddings using the
-    new model on the next FAQ save or on explicit re-index.
-    """
-    try:
-        conn, cursor = get_db()
-        if client_id:
-            cursor.execute(
-                "UPDATE knowledge_base SET embedding = NULL, updated_at = NOW() "
-                "WHERE client_id = %s AND embedding IS NOT NULL",
-                (client_id,)
-            )
-        else:
-            cursor.execute(
-                "UPDATE knowledge_base SET embedding = NULL, updated_at = NOW() "
-                "WHERE embedding IS NOT NULL"
-            )
-        count = cursor.rowcount
-        conn.commit()
-        cursor.close()
-        conn.close()
-        return count
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"[clear_all_embeddings] {e}")
-        return 0
 
 
 def delete_knowledge_chunks(client_id: str) -> None:

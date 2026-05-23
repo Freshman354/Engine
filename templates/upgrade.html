@@ -265,6 +265,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>2,000 messages / day</li>
         <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Full customisation</li>
         <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Lead capture forms</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Basic analytics <span style="font-size:11px;background:rgba(22,163,74,0.1);color:var(--success);border-radius:4px;padding:1px 5px;font-weight:600;">New</span></li>
         <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">Webhooks / Zapier</span></li>
         <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">White-label</span></li>
       </ul>
@@ -292,7 +293,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
       <ul class="feat-list">
         <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>10 chatbots</li>
         <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited messages</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Webhooks + Zapier / Make</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Webhooks + <strong>Zapier &amp; Make</strong> ready</li>
         <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Advanced analytics</li>
         <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Priority email support</li>
         <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">White-label / reseller</span></li>
@@ -316,9 +317,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
       </div>
       <div class="price-per">/month</div>
       <div class="price-annual-note" id="agency-annual"></div>
-      <p class="plan-desc">Unlimited clients, full white-label, and reseller rights. Built for agencies.</p>
+      <p class="plan-desc">Unlimited clients, full white-label, and reseller rights. Includes 20 chatbots — $15/mo per extra seat.</p>
       <ul class="feat-list">
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited chatbots</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>20 chatbots included</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span>+$15/mo per extra chatbot <span style="font-size:11px;color:var(--sub);">(no hard cap)</span></span></li>
         <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited messages</li>
         <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Full white-label — your brand</li>
         <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Custom domain per widget</li>
@@ -336,6 +338,96 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
     </div>
 
   </div><!-- /pricing-grid -->
+
+  <!-- ── AGENCY MARGIN CALCULATOR ── -->
+  <div id="agency-calc" style="background:var(--dark);border-radius:var(--radius);padding:36px;margin-bottom:20px;">
+    <div style="text-align:center;margin-bottom:28px;">
+      <div style="display:inline-block;background:rgba(184,146,74,0.15);border:1px solid rgba(184,146,74,0.3);border-radius:20px;padding:4px 14px;font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">For Agencies</div>
+      <h3 style="font-family:'Fraunces',serif;font-size:24px;font-weight:800;color:#fff;margin-bottom:8px;">Your profit margin calculator</h3>
+      <p style="font-size:14px;color:rgba(255,255,255,0.5);max-width:460px;margin:0 auto;">
+        Agencies reselling Lumvi typically charge clients $200–$500/mo per chatbot.
+        See exactly how much you pocket.
+      </p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:680px;margin:0 auto 28px;">
+      <div>
+        <label style="display:block;font-size:12px;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Your clients</label>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <input type="range" id="calc-clients" min="3" max="50" value="10"
+            style="flex:1;accent-color:var(--gold);cursor:pointer;" oninput="updateCalc()" onchange="updateCalc()">
+          <span id="calc-clients-val" style="font-family:'Fraunces',serif;font-size:24px;font-weight:800;color:var(--gold);min-width:40px;text-align:right;">10</span>
+        </div>
+      </div>
+      <div>
+        <label style="display:block;font-size:12px;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">You charge per client / mo</label>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <input type="range" id="calc-price" min="99" max="500" step="1" value="249"
+            style="flex:1;accent-color:var(--gold);cursor:pointer;" oninput="updateCalc()" onchange="updateCalc()">
+          <span id="calc-price-display" style="font-family:'Fraunces',serif;font-size:24px;font-weight:800;color:var(--gold);">$<span id="calc-price-val">249</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:680px;margin:0 auto 24px;">
+      <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:18px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:6px;">Your revenue</div>
+        <div id="calc-revenue" style="font-family:'Fraunces',serif;font-size:28px;font-weight:800;color:#fff;">$2,490</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:2px;">/month</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:18px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:6px;">Lumvi costs you</div>
+        <div id="calc-lumvi-cost" style="font-family:'Fraunces',serif;font-size:28px;font-weight:800;color:rgba(255,255,255,0.5);">$299</div>
+        <div id="calc-lumvi-note" style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:2px;">/mo (incl. 20 seats)</div>
+      </div>
+      <div style="background:rgba(184,146,74,0.12);border:1px solid rgba(184,146,74,0.3);border-radius:12px;padding:18px;text-align:center;">
+        <div style="font-size:11px;color:var(--gold);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:6px;">Your profit</div>
+        <div id="calc-profit" style="font-family:'Fraunces',serif;font-size:28px;font-weight:800;color:var(--gold);">$2,191</div>
+        <div style="font-size:11px;color:rgba(184,146,74,0.6);margin-top:2px;">/month</div>
+      </div>
+    </div>
+
+    <div style="text-align:center;">
+      <p id="calc-margin-line" style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:16px;">
+        That's an <strong style="color:var(--gold);">87.9% margin</strong> — you keep $<span id="calc-per-client">219.10</span> of every $249 you charge.
+      </p>
+      <button class="btn-upgrade btn-gold" style="width:auto;padding:12px 32px;display:inline-flex;"
+        onclick="startPayment('agency')">
+        Start with Agency — $299/mo →
+      </button>
+    </div>
+  </div>
+
+  <!-- ── ZAPIER / MAKE INTEGRATION CALLOUT ── -->
+  <div style="background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);padding:28px 32px;margin-bottom:20px;display:flex;align-items:center;gap:28px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:200px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <div style="width:32px;height:32px;border-radius:8px;background:rgba(255,79,0,0.1);display:flex;align-items:center;justify-content:center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="#FF4F00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <span style="font-size:15px;font-weight:700;color:var(--dark);">Connect to 7,000+ apps with Zapier &amp; Make</span>
+      </div>
+      <p style="font-size:13px;color:var(--mid);line-height:1.6;margin:0;">
+        On Pro and Agency, every new lead your chatbot captures can automatically
+        flow into HubSpot, Pipedrive, Notion, Google Sheets, Slack, or any tool
+        your clients already use — no code required.
+      </p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span style="padding:4px 10px;background:var(--cream2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--mid);">HubSpot</span>
+        <span style="padding:4px 10px;background:var(--cream2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--mid);">Pipedrive</span>
+        <span style="padding:4px 10px;background:var(--cream2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--mid);">Google Sheets</span>
+        <span style="padding:4px 10px;background:var(--cream2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--mid);">Slack</span>
+        <span style="padding:4px 10px;background:var(--cream2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--mid);">Notion</span>
+        <span style="padding:4px 10px;background:var(--cream2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--mid);">+ 7,000 more</span>
+      </div>
+      <button class="btn-upgrade btn-gold" style="width:auto;display:inline-flex;padding:10px 20px;font-size:13px;"
+        onclick="startPayment('pro')">
+        Get Pro with Webhooks →
+      </button>
+    </div>
+  </div>
 
   <!-- ENTERPRISE STRIP -->
   <div class="enterprise-strip">
@@ -376,7 +468,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
       <h4>💳 Pay with Card (Instant)</h4>
       <p>Secure payment via Flutterwave. All major cards accepted.</p>
       <button class="btn-pay btn-pay-gold" onclick="initiateFlutterwavePayment()">
-        Pay <span id="cardAmount">$0</span>
+        Pay <span id="cardAmount">$0</span> Securely →
       </button>
     </div>
 
@@ -498,6 +590,55 @@ function contactForBankTransfer() {
   const plan = new URLSearchParams(window.location.search).get('plan');
   if (plan && prices[plan]) startPayment(plan);
 })();
+
+// ── Agency margin calculator ──────────────────────────────────────
+function updateCalc() {
+  var clients    = parseInt(document.getElementById('calc-clients').value, 10) || 10;
+  var price      = parseInt(document.getElementById('calc-price').value, 10) || 249;
+  var INCLUDED   = 20;
+  var SEAT_PRICE = 15;
+  var lumviBase  = 299;
+  var extraSeats = Math.max(0, clients - INCLUDED);
+  var lumviTotal = lumviBase + (extraSeats * SEAT_PRICE);
+  var revenue    = clients * price;
+  var profit     = revenue - lumviTotal;
+  var margin     = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : '0.0';
+  var perClient  = clients > 0 ? Math.round(profit / clients) : 0;
+
+  document.getElementById('calc-clients-val').textContent = clients;
+  document.getElementById('calc-price-val').textContent   = price;
+  document.getElementById('calc-revenue').textContent     = '$' + revenue.toLocaleString();
+  document.getElementById('calc-lumvi-cost').textContent  = '$' + lumviTotal.toLocaleString();
+  document.getElementById('calc-lumvi-note').textContent  = extraSeats > 0
+    ? '/mo (20 seats + ' + extraSeats + ' extra)'
+    : '/mo (incl. 20 seats)';
+
+  var profitEl = document.getElementById('calc-profit');
+  profitEl.textContent = profit >= 0
+    ? '$' + profit.toLocaleString()
+    : '-$' + Math.abs(profit).toLocaleString();
+  profitEl.style.color = profit >= 0 ? 'var(--gold)' : 'var(--danger)';
+
+  var seatNote = extraSeats > 0
+    ? ' (incl. ' + extraSeats + ' extra seat' + (extraSeats > 1 ? 's' : '') + ' \u00d7 $' + SEAT_PRICE + ' = $' + (extraSeats * SEAT_PRICE) + '/mo)'
+    : '';
+  document.getElementById('calc-margin-line').innerHTML =
+    "That's a <strong style=\"color:var(--gold);\">" + margin + "% margin</strong>" +
+    " \u2014 Lumvi costs you $" + lumviTotal + "/mo" + seatNote +
+    ". You keep <strong style=\"color:var(--gold);\">$" + perClient + "</strong> of every $" + price + " you charge.";
+
+  var perClientEl = document.getElementById('calc-per-client');
+  if (perClientEl) perClientEl.textContent = perClient;
+}
+updateCalc();
+
+document.addEventListener('DOMContentLoaded', function() {
+  var c = document.getElementById('calc-clients');
+  var p = document.getElementById('calc-price');
+  if (c) { c.addEventListener('input', updateCalc); c.addEventListener('change', updateCalc); }
+  if (p) { p.addEventListener('input', updateCalc); p.addEventListener('change', updateCalc); }
+  updateCalc();
+});
 </script>
 </body>
 </html>
