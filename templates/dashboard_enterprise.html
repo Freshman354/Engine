@@ -435,13 +435,31 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 <label>Industry Template</label>
                 <p style="font-size:13px;color:var(--sub);margin:-4px 0 12px;font-weight:300;">Pre-configures tone, prompts and FAQs for this industry.</p>
                 <input type="hidden" name="vertical" id="vertical-input" value="general">
-                <div class="vertical-grid">
+                <div class="vertical-grid" style="grid-template-columns:repeat(4,1fr);max-height:280px;overflow-y:auto;padding-right:4px;">
                     <div class="vertical-card selected" data-vertical="general" onclick="selectVertical(this)"><span class="vertical-icon">🌐</span><span class="vertical-label">General</span></div>
                     <div class="vertical-card" data-vertical="real_estate" onclick="selectVertical(this)"><span class="vertical-icon">🏠</span><span class="vertical-label">Real Estate</span></div>
                     <div class="vertical-card" data-vertical="saas" onclick="selectVertical(this)"><span class="vertical-icon">💻</span><span class="vertical-label">SaaS</span></div>
                     <div class="vertical-card" data-vertical="ecommerce" onclick="selectVertical(this)"><span class="vertical-icon">🛒</span><span class="vertical-label">E-commerce</span></div>
                     <div class="vertical-card" data-vertical="healthcare" onclick="selectVertical(this)"><span class="vertical-icon">🏥</span><span class="vertical-label">Healthcare</span></div>
                     <div class="vertical-card" data-vertical="law_firm" onclick="selectVertical(this)"><span class="vertical-icon">⚖️</span><span class="vertical-label">Law Firm</span></div>
+                    <div class="vertical-card" data-vertical="restaurant" onclick="selectVertical(this)"><span class="vertical-icon">🍽️</span><span class="vertical-label">Restaurant</span></div>
+                    <div class="vertical-card" data-vertical="hotel" onclick="selectVertical(this)"><span class="vertical-icon">🏨</span><span class="vertical-label">Hotel</span></div>
+                    <div class="vertical-card" data-vertical="fitness" onclick="selectVertical(this)"><span class="vertical-icon">🏋️</span><span class="vertical-label">Fitness</span></div>
+                    <div class="vertical-card" data-vertical="dental" onclick="selectVertical(this)"><span class="vertical-icon">🦷</span><span class="vertical-label">Dental</span></div>
+                    <div class="vertical-card" data-vertical="mortgage" onclick="selectVertical(this)"><span class="vertical-icon">🏦</span><span class="vertical-label">Mortgage</span></div>
+                    <div class="vertical-card" data-vertical="insurance" onclick="selectVertical(this)"><span class="vertical-icon">🛡️</span><span class="vertical-label">Insurance</span></div>
+                    <div class="vertical-card" data-vertical="education" onclick="selectVertical(this)"><span class="vertical-icon">🎓</span><span class="vertical-label">Education</span></div>
+                    <div class="vertical-card" data-vertical="automotive" onclick="selectVertical(this)"><span class="vertical-icon">🚗</span><span class="vertical-label">Automotive</span></div>
+                    <div class="vertical-card" data-vertical="beauty" onclick="selectVertical(this)"><span class="vertical-icon">💅</span><span class="vertical-label">Beauty</span></div>
+                    <div class="vertical-card" data-vertical="travel" onclick="selectVertical(this)"><span class="vertical-icon">✈️</span><span class="vertical-label">Travel</span></div>
+                    <div class="vertical-card" data-vertical="recruitment" onclick="selectVertical(this)"><span class="vertical-icon">💼</span><span class="vertical-label">Recruitment</span></div>
+                    <div class="vertical-card" data-vertical="accounting" onclick="selectVertical(this)"><span class="vertical-icon">📊</span><span class="vertical-label">Accounting</span></div>
+                    <div class="vertical-card" data-vertical="construction" onclick="selectVertical(this)"><span class="vertical-icon">🏗️</span><span class="vertical-label">Construction</span></div>
+                    <div class="vertical-card" data-vertical="pet_services" onclick="selectVertical(this)"><span class="vertical-icon">🐾</span><span class="vertical-label">Pet Services</span></div>
+                    <div class="vertical-card" data-vertical="nonprofit" onclick="selectVertical(this)"><span class="vertical-icon">❤️</span><span class="vertical-label">Non-Profit</span></div>
+                    <div class="vertical-card" data-vertical="events" onclick="selectVertical(this)"><span class="vertical-icon">🎉</span><span class="vertical-label">Events</span></div>
+                    <div class="vertical-card" data-vertical="therapy" onclick="selectVertical(this)"><span class="vertical-icon">🧠</span><span class="vertical-label">Therapy</span></div>
+                    <div class="vertical-card" data-vertical="photography" onclick="selectVertical(this)"><span class="vertical-icon">📸</span><span class="vertical-label">Photography</span></div>
                 </div>
                 <div class="vertical-preview" id="vertical-preview"><span id="preview-text">Friendly, professional assistant. Suitable for any business type.</span></div>
             </div>
@@ -499,7 +517,32 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 <script>
     function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sidebarOverlay').classList.add('open');}
     function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('open');}
-    const VERTICAL_PREVIEWS={general:'Friendly, professional assistant. Suitable for any business type.',real_estate:'Warm, consultative tone. Focused on booking property viewings and lead qualification.',saas:'Helpful, technical tone. Handles onboarding, billing and support tickets.',ecommerce:'Fast, friendly tone. Handles returns, shipping and product questions.',healthcare:'Calm, professional tone. Books appointments and handles clinic FAQs.',law_firm:'Formal, precise tone. Intake form for new client consultations.'};
+    const VERTICAL_PREVIEWS={
+  general:'Friendly, professional assistant. Suitable for any business type.',
+  real_estate:'Warm, consultative tone. Focused on booking property viewings and lead qualification.',
+  saas:'Helpful, technical tone. Handles onboarding, billing and support tickets.',
+  ecommerce:'Fast, friendly tone. Handles returns, shipping and product questions.',
+  healthcare:'Calm, professional tone. Books appointments and handles clinic FAQs — never gives medical advice.',
+  law_firm:'Formal, precise tone. Legal intake assistant — never gives legal advice.',
+  restaurant:'Warm and enthusiastic. Handles reservations, menus, dietary options and opening hours.',
+  hotel:'Professional concierge tone. Handles bookings, room enquiries and local recommendations.',
+  fitness:'Energetic and encouraging. Handles memberships, class schedules and personal training enquiries.',
+  dental:'Friendly and reassuring. Books appointments and handles clinic FAQs — never diagnoses conditions.',
+  mortgage:'Clear and jargon-free. Collects lead details for mortgage enquiries — never gives financial advice.',
+  insurance:'Straightforward and trustworthy. Handles policy enquiries and lead capture — no claims advice.',
+  education:'Warm and supportive. Handles course enquiries, enrolment and tutor availability.',
+  automotive:'Knowledgeable and direct. Handles vehicle enquiries, test drives and service bookings.',
+  beauty:'Personable and stylish. Books appointments for treatments, stylists and therapists.',
+  travel:'Enthusiastic and inspiring. Handles travel packages, itineraries and booking enquiries.',
+  recruitment:'Professional and encouraging. Handles job seeker and employer enquiries and intake.',
+  accounting:'Clear and confident. Handles service enquiries and lead qualification — no tax advice.',
+  construction:'Dependable and detail-oriented. Handles quote requests, project types and site visits.',
+  pet_services:'Warm and caring. Books vet appointments and grooming — never gives medical diagnoses.',
+  nonprofit:'Compassionate and mission-driven. Guides donors, volunteers and partners.',
+  events:'Creative and detail-oriented. Handles venue hire, packages and event enquiries.',
+  therapy:'Calm and empathetic. Handles booking enquiries — never provides clinical advice or crisis support.',
+  photography:'Creative and personable. Handles shoot enquiries, packages and availability.'
+};
     function selectVertical(card){document.querySelectorAll('.vertical-card').forEach(c=>c.classList.remove('selected'));card.classList.add('selected');const v=card.getAttribute('data-vertical');document.getElementById('vertical-input').value=v;document.getElementById('preview-text').textContent=VERTICAL_PREVIEWS[v]||'';}
     function openNewClientModal(){document.getElementById('new-client-modal').style.display='flex';}
     function closeModal(){document.getElementById('new-client-modal').style.display='none';}

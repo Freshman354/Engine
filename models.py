@@ -1093,7 +1093,7 @@ def update_user_password(user_id, new_password):
     cursor.close()
     conn.close()
 
-def create_client(user_id, company_name, branding_settings=None):
+def create_client(user_id, company_name, branding_settings=None, vertical=None):
     """
     Create a new client for a user.
     If the owner is an agency and has agency_branding_settings, those are
@@ -1117,6 +1117,7 @@ def create_client(user_id, company_name, branding_settings=None):
                     'bot_settings': dict(agency_bs.get('bot_settings', {})),
                     'contact': dict(agency_bs.get('contact', {})),
                     'integrations': {},
+                    'vertical': vertical or agency_bs.get('vertical', 'general'),
                 }
                 # Reset company-specific fields so owner fills them in
                 branding_settings['branding']['company_name'] = company_name
@@ -1136,6 +1137,7 @@ def create_client(user_id, company_name, branding_settings=None):
             },
             'contact': {},
             'integrations': {},
+            'vertical': vertical or 'general',
         }
 
     primary_color = branding_settings.get('branding', {}).get('primary_color')

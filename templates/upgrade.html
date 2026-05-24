@@ -62,8 +62,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .save-badge.visible{opacity:1;transform:translateX(0);}
 
 /* ── PRICING GRID ── */
-.pricing-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px;align-items:start;}
-@media(max-width:1024px){.pricing-grid{grid-template-columns:repeat(2,1fr);}}
+.pricing-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:28px;align-items:start;}
+@media(max-width:1280px){.pricing-grid{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:860px){.pricing-grid{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:560px){.pricing-grid{grid-template-columns:1fr;}}
 
 /* ── CARD ── */
@@ -308,6 +309,36 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
       {% endif %}
     </div>
 
+    <!-- GROWTH -->
+    <div class="pricing-card" style="border-color:rgba(99,102,241,0.35);">
+      <div class="popular-badge" style="background:linear-gradient(135deg,#6366f1,#7c3aed);">Best for Agencies</div>
+      <div class="plan-name" style="color:#6366f1;margin-top:18px;">Growth</div>
+      <div class="price-row">
+        <span class="price-sym" style="color:#6366f1;">$</span>
+        <span class="price-amt" style="color:#6366f1;" id="growth-price">149</span>
+      </div>
+      <div class="price-per">/month</div>
+      <div class="price-annual-note" id="growth-annual"></div>
+      <p class="plan-desc">20 clients + full white-label. Resell under your own brand and keep 100% margin.</p>
+      <ul class="feat-list">
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>20 chatbots</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited messages</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Webhooks + Zapier &amp; Make</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><strong>Full white-label</strong> — your brand</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><strong>Reseller rights</strong> — 100% margin</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Advanced analytics</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Priority support</li>
+      </ul>
+      {% if user and user.plan_type == 'growth' %}
+      <button class="btn-upgrade btn-current">Current Plan</button>
+      {% else %}
+      <button class="btn-upgrade" style="background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff;box-shadow:0 2px 12px rgba(99,102,241,0.35);" onclick="startPayment('growth')">
+        Get Growth
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </button>
+      {% endif %}
+    </div>
+
     <!-- AGENCY -->
     <div class="pricing-card" style="border-color:rgba(184,146,74,0.25);">
       <div class="plan-name" style="color:var(--gold);">Agency</div>
@@ -504,13 +535,14 @@ const prices = {
   solo:    { monthly: 19,  annual: Math.round(19  * 10 / 12), label: 'Solo'    },
   starter: { monthly: 49,  annual: Math.round(49  * 10 / 12), label: 'Starter' },
   pro:     { monthly: 99,  annual: Math.round(99  * 10 / 12), label: 'Pro'     },
+  growth:  { monthly: 149, annual: Math.round(149 * 10 / 12), label: 'Growth'  },
   agency:  { monthly: 299, annual: Math.round(299 * 10 / 12), label: 'Agency'  },
 };
 
 function toggleBilling() {
   isAnnual = document.getElementById('billingToggle').checked;
   document.getElementById('saveBadge').classList.toggle('visible', isAnnual);
-  ['solo','starter','pro','agency'].forEach(function(plan) {
+  ['solo','starter','pro','growth','agency'].forEach(function(plan) {
     const el  = document.getElementById(plan + '-price');
     const aEl = document.getElementById(plan + '-annual');
     el.style.opacity   = '0';
