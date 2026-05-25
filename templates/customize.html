@@ -529,26 +529,59 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
         <p class="hint">Your clients embed <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 5px;border-radius:3px;">https://chat.yourcompany.com/widget.js</code> — no "lumvi.net" visible anywhere.</p>
       </div>
 
-      <!-- CNAME instructions box (show on save / DNS verify) -->
-      <div id="cnameInstructions" style="display:{% if client and client.get('custom_widget_domain') %}block{% else %}none{% endif %};
-        padding:16px 18px;background:var(--success-lt);border:1px solid rgba(22,163,74,0.2);
-        border-radius:12px;margin-top:4px;margin-bottom:14px;">
-        <div style="font-size:13px;font-weight:700;color:var(--success);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-          CNAME Setup Instructions
+      <!-- CNAME + Cloudflare SSL instructions -->
+      <div id="cnameInstructions" style="display:{% if client and client.get('custom_widget_domain') %}block{% else %}none{% endif %};margin-top:4px;margin-bottom:14px;">
+
+        <!-- Step 1: DNS record -->
+        <div style="padding:14px 16px;background:var(--success-lt);border:1px solid rgba(22,163,74,0.2);border-radius:12px;margin-bottom:10px;">
+          <div style="font-size:12.5px;font-weight:700;color:var(--success);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            Step 1 — Add a CNAME record in your DNS provider
+          </div>
+          <ol style="font-size:12px;color:var(--mid);line-height:1.9;padding-left:16px;margin-bottom:10px;">
+            <li>Log in to your DNS provider (Cloudflare, GoDaddy, Namecheap, Route 53…)</li>
+            <li>Create a new <strong>CNAME</strong> record:</li>
+          </ol>
+          <div style="background:#1C1917;border-radius:9px;padding:12px 14px;font-family:'DM Mono',monospace;font-size:11.5px;color:#D4C4A8;line-height:1.9;">
+            <span style="color:#A3C4A8;">Type :</span>  CNAME<br>
+            <span style="color:#A3C4A8;">Name :</span>  <span id="cnameHost">{{ (client.get('custom_widget_domain','').split('.')[0]) if client and client.get('custom_widget_domain') else 'chat' }}</span><br>
+            <span style="color:#A3C4A8;">Value:</span>  lumvi.net<br>
+            <span style="color:#A3C4A8;">TTL  :</span>  Auto (or 3600)
+          </div>
         </div>
-        <ol style="font-size:12.5px;color:var(--mid);line-height:1.9;padding-left:18px;margin-bottom:10px;">
-          <li>Log in to your DNS provider (Cloudflare, GoDaddy, Namecheap, Route 53…)</li>
-          <li>Create a new <strong>CNAME</strong> record:</li>
-        </ol>
-        <div style="background:#1C1917;border-radius:9px;padding:13px 15px;font-family:'DM Mono',monospace;font-size:11.5px;color:#D4C4A8;line-height:1.8;">
-          <span style="color:#A3C4A8;">Type :</span>  CNAME<br>
-          <span style="color:#A3C4A8;">Name :</span>  <span id="cnameHost">{{ (client.get('custom_widget_domain','').split('.')[0]) if client and client.get('custom_widget_domain') else 'chat' }}</span><br>
-          <span style="color:#A3C4A8;">Value:</span>  lumvi.net<br>
-          <span style="color:#A3C4A8;">TTL  :</span>  Auto (or 3600)
+
+        <!-- Step 2: SSL via Cloudflare -->
+        <div style="padding:14px 16px;background:var(--warning-lt);border:1px solid rgba(217,119,6,0.2);border-radius:12px;margin-bottom:10px;">
+          <div style="font-size:12.5px;font-weight:700;color:var(--warning);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Step 2 — Enable SSL (required — browsers block non-HTTPS widgets)
+          </div>
+          <p style="font-size:12px;color:#92400e;line-height:1.7;margin-bottom:10px;">
+            Your custom domain needs an SSL certificate. <strong>The easiest free option is Cloudflare:</strong>
+          </p>
+          <ol style="font-size:12px;color:#92400e;line-height:1.9;padding-left:16px;">
+            <li>Add your domain to <a href="https://cloudflare.com" target="_blank" style="color:var(--gold-dk);font-weight:700;">Cloudflare</a> (free plan)</li>
+            <li>Set the CNAME above with the <strong>orange cloud icon ON</strong> (Proxied)</li>
+            <li>Go to <strong>SSL/TLS → Overview</strong>, set mode to <strong>"Full"</strong></li>
+            <li>Done — Cloudflare provisions the certificate automatically</li>
+          </ol>
+          <p style="font-size:11.5px;color:#92400e;margin-top:10px;opacity:0.8;">
+            Not using Cloudflare? Use Certbot / Let's Encrypt on your server to issue a cert for the subdomain.
+          </p>
         </div>
-        <p style="font-size:12px;color:var(--sub);margin-top:10px;">After propagation (up to 24 h), your embed code will use <strong id="cnameDomain">{{ client.get('custom_widget_domain','') if client else '' }}</strong> — Lumvi is never seen.</p>
+
+        <!-- Step 3: Verify -->
+        <div style="padding:12px 14px;background:var(--cream2);border:1px solid var(--border);border-radius:10px;">
+          <div style="font-size:12px;font-weight:700;color:var(--mid);margin-bottom:4px;">Step 3 — Verify &amp; save</div>
+          <p style="font-size:12px;color:var(--sub);line-height:1.6;">
+            Click <strong>Check DNS</strong> after adding the record. Propagation takes up to 24 h.
+            Embed code will update to use <strong id="cnameDomain">{{ client.get('custom_widget_domain','') if client else '' }}</strong> once verified.
+          </p>
+          <div id="cnameChain" style="display:none;margin-top:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--gold-dk);background:var(--gold-lt);padding:6px 10px;border-radius:7px;"></div>
+        </div>
+
       </div>
+
 
       <!-- ── CUSTOM CSS ── -->
       <div class="field">
@@ -1446,6 +1479,17 @@ async function verifyDomain() {
       badge.textContent = d.message;
     }
     if (d.pointed) updateCnameBox(domain);
+
+    // Show CNAME chain if returned by the improved API
+    const chainEl = document.getElementById('cnameChain');
+    if (chainEl) {
+      if (d.chain && d.chain.length) {
+        chainEl.textContent = 'CNAME chain: ' + [domain, ...d.chain].join(' → ');
+        chainEl.style.display = 'block';
+      } else {
+        chainEl.style.display = 'none';
+      }
+    }
   } catch(e) { console.error('[Customize] verifyDomain error:', e); toast('DNS check failed', 'error'); }
   finally { btn.textContent = 'Check DNS'; btn.disabled = false; }
 }

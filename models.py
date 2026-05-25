@@ -336,6 +336,8 @@ def migrate_white_label():
         for sql in [
             # Custom domain the client owner CNAMEs to lumvi.net
             "ALTER TABLE clients ADD COLUMN IF NOT EXISTS custom_widget_domain TEXT",
+            # Unique partial index — NULLs allowed (multiple unset domains OK)
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_clients_custom_widget_domain ON clients (custom_widget_domain) WHERE custom_widget_domain IS NOT NULL",
             # Custom CSS injected into the widget <style> block
             "ALTER TABLE clients ADD COLUMN IF NOT EXISTS custom_css TEXT",
             # Branded "From" email name  e.g. "Acme Support"
@@ -1177,11 +1179,102 @@ _DOMAIN_RE = __import__('re').compile(
     r'^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
 )
 
+# Optional dnspython — used for accurate CNAME-chain DNS verification.
+# Falls back to socket if not installed.
+try:
+    import dns.resolver as _dns_resolver
+    import dns.exception as _dns_exception
+    _HAS_DNSPYTHON = True
+except ImportError:
+    _HAS_DNSPYTHON = False
+
+_LUMVI_TARGET = 'lumvi.net'   # canonical CNAME target agencies point to
+
 def is_valid_domain(domain: str) -> bool:
     """Return True if `domain` looks like a valid hostname (no scheme, no path)."""
     if not domain or len(domain) > 253:
         return False
     return bool(_DOMAIN_RE.match(domain.strip()))
+
+
+def check_domain_dns(domain: str) -> dict:
+    """
+    Walk the CNAME chain for `domain` and report whether it resolves to lumvi.net.
+
+    Returns:
+        {
+            'pointed': bool,
+            'message': str,          # human-readable status
+            'chain':   list[str],    # CNAME hops discovered
+        }
+
+    Strategy:
+      1. If dnspython is available, walk CNAME records (works correctly with
+         Cloudflare-proxied domains where IP comparison fails).
+      2. Fallback: compare resolved IPs against lumvi.net IPs via socket.
+         This is less accurate but always available.
+    """
+    import socket
+
+    domain = domain.strip().lower()
+    chain  = []
+
+    if _HAS_DNSPYTHON:
+        resolver = _dns_resolver.Resolver()
+        resolver.timeout  = 3
+        resolver.lifetime = 6
+
+        current = domain
+        for _ in range(10):   # guard against infinite CNAME loops
+            try:
+                answers = resolver.resolve(current, 'CNAME')
+                target  = str(answers[0].target).rstrip('.')
+                chain.append(target)
+
+                if target == _LUMVI_TARGET or target.endswith('.' + _LUMVI_TARGET):
+                    return {
+                        'pointed': True,
+                        'message': f'✓ CNAME chain points to {_LUMVI_TARGET}',
+                        'chain':   chain,
+                    }
+                current = target
+
+            except _dns_exception.DNSException:
+                # No CNAME at this hop — stop walking
+                break
+
+        # CNAME chain didn't reach lumvi.net; check if A records match
+        try:
+            lumvi_ips  = {r[4][0] for r in socket.getaddrinfo(_LUMVI_TARGET, None)}
+            domain_ips = {r[4][0] for r in socket.getaddrinfo(domain, None)}
+            if lumvi_ips & domain_ips:
+                return {'pointed': True,  'message': '✓ Domain IP resolves to Lumvi', 'chain': chain}
+            if domain_ips:
+                return {'pointed': False, 'message': '⏳ Domain resolves but CNAME does not point to lumvi.net — check your DNS', 'chain': chain}
+        except socket.gaierror:
+            pass
+
+        return {'pointed': False, 'message': '✗ Domain not found — add a CNAME record pointing to lumvi.net', 'chain': chain}
+
+    # ── Fallback: socket IP comparison ───────────────────────────────────────
+    # Less accurate for Cloudflare-proxied domains, but always available.
+    try:
+        lumvi_ips  = {r[4][0] for r in socket.getaddrinfo(_LUMVI_TARGET, None)}
+        domain_ips = {r[4][0] for r in socket.getaddrinfo(domain, None)}
+        if lumvi_ips & domain_ips:
+            return {'pointed': True,  'message': '✓ Domain is pointing to Lumvi', 'chain': chain}
+        if domain_ips:
+            return {
+                'pointed': False,
+                'message': (
+                    "⏳ Domain resolves but doesn't match Lumvi's IP — if you're using Cloudflare, "
+                    "install dnspython on the server for accurate CNAME detection"
+                ),
+                'chain': chain,
+            }
+        return {'pointed': False, 'message': '✗ Domain not found — check your DNS records', 'chain': chain}
+    except socket.gaierror:
+        return {'pointed': False, 'message': '✗ Domain not found — check your DNS records', 'chain': chain}
 
 
 def get_client_by_custom_domain(domain: str):
@@ -1207,19 +1300,42 @@ def save_white_label_settings(client_id: str, domain: str | None,
                                custom_css: str | None,
                                branded_email_from: str | None) -> None:
     """
-    Persist the three white-label columns for a client in one atomic UPDATE.
-    Pass None for any field to leave it unchanged.
+    Persist white-label columns for a client.
+
+    Sentinel semantics (per field):
+      None        → leave existing value untouched  (field not in request payload)
+      ''          → explicitly clear  (set NULL in DB)
+      'some.value'→ update to new value
+
+    This lets callers clear a custom domain by passing domain='' rather than
+    being trapped by the old COALESCE-always-keeps behaviour.
     """
+    def _val(v):
+        """Convert sentinel: None→skip, ''→NULL, str→str."""
+        if v is None:
+            return _SKIP
+        return None if v == '' else v
+
+    _SKIP = object()
+
+    sets, params = [], []
+    d  = _val(domain)
+    c  = _val(custom_css)
+    ef = _val(branded_email_from)
+
+    if d  is not _SKIP: sets.append('custom_widget_domain = %s'); params.append(d)
+    if c  is not _SKIP: sets.append('custom_css           = %s'); params.append(c)
+    if ef is not _SKIP: sets.append('branded_email_from   = %s'); params.append(ef)
+
+    if not sets:
+        return  # nothing to do
+
+    params.append(client_id)
+    sql = f"UPDATE clients SET {', '.join(sets)} WHERE client_id = %s"
+
     try:
         conn, cursor = get_db()
-        cursor.execute(
-            """UPDATE clients
-               SET custom_widget_domain = COALESCE(%s, custom_widget_domain),
-                   custom_css           = COALESCE(%s, custom_css),
-                   branded_email_from   = COALESCE(%s, branded_email_from)
-               WHERE client_id = %s""",
-            (domain, custom_css, branded_email_from, client_id)
-        )
+        cursor.execute(sql, params)
         conn.commit()
         cursor.close()
         conn.close()

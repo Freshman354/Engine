@@ -1,5 +1,7 @@
 from flask import Flask, request, jsonify, render_template, send_from_directory, redirect, url_for, session, flash
 from flask_cors import CORS
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FuturesTimeout
+_dns_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix='dns-check')
 from dotenv import load_dotenv
 import os
 import json
@@ -2422,6 +2424,42 @@ def index():
 # WIDGET & ADMIN ROUTES
 # =====================================================================
 
+@app.route('/static/widget.js')
+def serve_widget_js_custom_domain():
+    """
+    Serve widget.js when requested via a white-label custom domain.
+
+    When an agency sets chat.theiragency.com as their custom domain, the embed
+    code points widget.js at https://chat.theiragency.com/static/widget.js.
+    Flask's normal static file handler doesn't check the Host header, so this
+    route explicitly serves the file regardless of which domain the request
+    arrived on — as long as that domain is registered as a custom_widget_domain.
+    """
+    import os
+    from flask import send_from_directory
+
+    host = request.host.split(':')[0].lower()
+
+    # Allow the real lumvi.net origin through without extra checks
+    if host in ('lumvi.net', 'www.lumvi.net', 'localhost', '127.0.0.1'):
+        return send_from_directory(app.static_folder, 'widget.js',
+                                   mimetype='application/javascript')
+
+    # Verify the requesting host is a registered custom domain
+    client = models.get_client_by_custom_domain(host)
+    if not client:
+        app.logger.warning(f"[WidgetJS] Unregistered custom domain blocked: {host}")
+        return jsonify({'error': 'Unknown domain'}), 403
+
+    app.logger.info(f"[WidgetJS] Serving widget.js for custom domain: {host} client={client['client_id']}")
+    response = send_from_directory(app.static_folder, 'widget.js',
+                                   mimetype='application/javascript')
+    # Allow cross-origin from any domain (widget embeds always cross-origin)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Cache-Control'] = 'public, max-age=300'  # 5 min cache
+    return response
+
+
 @app.route('/widget')
 def widget():
     """
@@ -3421,11 +3459,17 @@ def save_white_label():
     is_agency   = plan_type in ('agency', 'enterprise')
     is_pro_plus = plan_type in ('pro', 'agency', 'enterprise')
 
-    domain             = data.get('custom_widget_domain', '').strip().lower() or None
-    custom_css         = data.get('custom_css', '').strip() or None
-    branded_email_from = data.get('branded_email_from', '').strip() or None
+    # Keep empty string as sentinel for 'clear this field';
+    # None means 'key not in payload — don't touch'.
+    # models.save_white_label_settings() understands both sentinels.
+    _raw_domain    = data.get('custom_widget_domain')
+    _raw_css       = data.get('custom_css')
+    _raw_email     = data.get('branded_email_from')
+    domain             = _raw_domain.strip().lower()    if _raw_domain    is not None else None
+    custom_css         = _raw_css.strip()               if _raw_css       is not None else None
+    branded_email_from = _raw_email.strip()             if _raw_email     is not None else None
 
-    # Validate domain format
+    # Validate domain format (skip if clearing)
     if domain and not models.is_valid_domain(domain):
         return jsonify({'success': False, 'error': f'"{domain}" is not a valid domain name. Use format: chat.yoursite.com'}), 400
 
@@ -3496,10 +3540,11 @@ def save_agency_branding_route():
 @login_required
 def verify_custom_domain():
     """
-    Lightweight DNS check — resolves the CNAME and reports whether it points to lumvi.net.
-    This is informational only; the widget route itself does the real lookup.
+    DNS check — walks the CNAME chain to verify the domain points to lumvi.net.
+    Uses dnspython when available (accurate for Cloudflare-proxied domains).
+    Falls back to socket IP comparison otherwise.
+    Runs in a thread pool so it never blocks a Flask worker.
     """
-    import socket
     data      = request.json or {}
     domain    = data.get('domain', '').strip().lower()
     client_id = data.get('client_id', '')
@@ -3509,25 +3554,40 @@ def verify_custom_domain():
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
+    # Run DNS lookup off the Flask worker thread — 8 s hard timeout
+    future = _dns_executor.submit(models.check_domain_dns, domain)
     try:
-        resolved = socket.getaddrinfo(domain, None)
-        # Also try to resolve lumvi.net for comparison
-        lumvi_ips = {r[4][0] for r in socket.getaddrinfo('lumvi.net', None)}
-        domain_ips = {r[4][0] for r in resolved}
-        pointed = bool(lumvi_ips & domain_ips)
-        return jsonify({
-            'success':      True,
-            'domain':       domain,
-            'pointed':      pointed,
-            'message':      '✓ Domain is pointing to Lumvi' if pointed else '⏳ CNAME not yet propagated — check back in a few hours',
-        })
-    except socket.gaierror:
+        result = future.result(timeout=8)
+    except _FuturesTimeout:
+        app.logger.warning(f"[DNS] verify timed out for domain={domain}")
         return jsonify({
             'success': True,
             'domain':  domain,
             'pointed': False,
-            'message': '✗ Domain not found — check your DNS records',
+            'message': '⏳ DNS check timed out — try again in a moment',
+            'chain':   [],
         })
+    except Exception as exc:
+        app.logger.error(f"[DNS] verify error domain={domain}: {exc}")
+        return jsonify({
+            'success': True,
+            'domain':  domain,
+            'pointed': False,
+            'message': '✗ DNS check failed — check your DNS records',
+            'chain':   [],
+        })
+
+    app.logger.info(
+        f"[DNS] verify domain={domain} pointed={result['pointed']} "
+        f"chain={result.get('chain')} user={current_user.id}"
+    )
+    return jsonify({
+        'success': True,
+        'domain':  domain,
+        'pointed': result['pointed'],
+        'message': result['message'],
+        'chain':   result.get('chain', []),
+    })
 
 
 @app.route('/analytics')
