@@ -209,28 +209,32 @@ def enforce_subscriptions():
     """
     Downgrade all non-admin users whose grace period has ended.
     Safe to call multiple times — SQL WHERE clause is idempotent.
-    Called from three places:
-      1. _threading.Timer on startup (after DB is ready)
-      2. GET/POST /cron/enforce-subscriptions (external pinger)
-      3. POST /api/admin/enforce-subscriptions (manual admin trigger)
+    Logs every run to cron_runs for auditability.
     """
+    import time as _time
+    t0 = _time.time()
     try:
         now = datetime.utcnow()
         app.logger.info(f"[Scheduler] enforce_subscriptions running at {now.isoformat()}")
         downgraded = models.downgrade_expired_users()
-        if downgraded:
-            for u in downgraded:
-                # Note: plan_type in the returned row is already 'free' after the
-                # downgrade — log the user identity only; old plan is recorded in DB.
-                app.logger.info(
-                    f"[Scheduler] Downgraded user {u['id']} ({u.get('email')}) → free"
-                )
-            app.logger.info(f"[Scheduler] Total downgraded: {len(downgraded)}")
-        else:
-            app.logger.info("[Scheduler] No users to downgrade.")
+        for u in downgraded:
+            app.logger.info(
+                f"[Scheduler] Downgraded user {u['id']} ({u.get('email')}) → free"
+            )
+        app.logger.info(f"[Scheduler] Total downgraded: {len(downgraded)}")
+        duration_ms = int((_time.time() - t0) * 1000)
+        models.log_cron_run(
+            'enforce_subscriptions', success=True,
+            result={'downgraded_count': len(downgraded)},
+            duration_ms=duration_ms,
+        )
         return downgraded
     except Exception as e:
         app.logger.error(f"[Scheduler] enforce_subscriptions error: {e}")
+        models.log_cron_run(
+            'enforce_subscriptions', success=False,
+            result={'error': str(e)}, duration_ms=0,
+        )
         return []
 
 
@@ -390,6 +394,8 @@ try:
         models.migrate_client_status()
     if hasattr(models, 'migrate_onboarding'):
         models.migrate_onboarding()
+    if hasattr(models, 'migrate_cron_tables'):
+        models.migrate_cron_tables()
     if hasattr(models, 'migrate_api_usage_log'):
         models.migrate_api_usage_log()
     if hasattr(models, 'migrate_kb_gaps'):
@@ -786,43 +792,175 @@ def find_best_match(user_query, faqs_list, confidence_threshold=0.68):
     return best_faq, round(best_score, 2)
 
 
-def _fire_webhook(webhook_url, payload, client_id):
-    """Internal: POST the webhook payload. Always runs in a background thread."""
+# =====================================================================
+# UNIFIED WEBHOOK DISPATCHER
+# Replaces the old _fire_webhook / notify_webhook / _fire_lead_stage_webhook.
+# Reads from webhook_configs, signs with HMAC-SHA256, logs every delivery,
+# retries up to 3 times with exponential back-off, runs off the Flask worker.
+# =====================================================================
+
+# Thread pool dedicated to webhook delivery (separate from DNS pool)
+_wh_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix='wh-deliver')
+
+
+def _is_safe_webhook_url(url: str) -> bool:
+    """
+    Block SSRF vectors — reject private / loopback / link-local addresses
+    and non-HTTP(S) schemes before ever making the outbound request.
+    """
+    import ipaddress
     try:
-        requests.post(webhook_url, json=payload, timeout=5)
-        app.logger.info(f'✅ Webhook fired for {client_id}')
-    except Exception as e:
-        app.logger.error(f'Webhook error for {client_id}: {e}')
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            return False
+        host = parsed.hostname or ''
+        if not host:
+            return False
+        # Block known-bad hostnames
+        if host in ('localhost', 'metadata.google.internal', '169.254.169.254'):
+            return False
+        try:
+            addr = ipaddress.ip_address(host)
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                return False
+        except ValueError:
+            pass   # hostname, not IP — allow (DNS will resolve later)
+        return True
+    except Exception:
+        return False
 
 
-def notify_webhook(client_id, lead_data):
-    """Fire the webhook in a daemon thread so it never blocks the request cycle."""
+def _deliver_one(webhook_url: str, payload: dict, signing_secret: str,
+                 event_type: str, client_id: str, webhook_id: str) -> None:
+    """
+    Deliver one webhook with up to 3 attempts (0.5 s / 2 s / 5 s back-off).
+    Logs the final outcome to webhook_logs.
+    """
+    import time, hmac as _hmac, hashlib
+
+    body_bytes = json.dumps(payload, separators=(',', ':')).encode()
+    headers = {
+        'Content-Type':     'application/json',
+        'X-Lumvi-Event':    event_type,
+        'X-Lumvi-Delivery': str(uuid.uuid4()),
+        'User-Agent':       'Lumvi-Webhooks/1.0',
+    }
+    if signing_secret:
+        sig = _hmac.new(signing_secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+        headers['X-Lumvi-Signature'] = f'sha256={sig}'
+
+    delays   = [0, 0.5, 2.0]   # sleep before attempt 2 and 3
+    last_exc = None
+    status   = 0
+    resp_txt = ''
+    duration = 0
+
+    for attempt, delay in enumerate(delays, start=1):
+        if delay:
+            time.sleep(delay)
+        t0 = time.time()
+        try:
+            resp     = requests.post(webhook_url, data=body_bytes, headers=headers, timeout=10)
+            duration = int((time.time() - t0) * 1000)
+            status   = resp.status_code
+            resp_txt = resp.text[:500]
+            if 200 <= status < 300:
+                app.logger.info(
+                    f'[Webhook] ✓ delivered event={event_type} client={client_id} wh={webhook_id} attempt={attempt} status={status} dur={duration}ms'
+                )
+                models.log_webhook_delivery(
+                    client_id=client_id, webhook_id=webhook_id,
+                    event_type=event_type, url=webhook_url,
+                    payload=payload, status_code=status,
+                    response_text=resp_txt, success=True,
+                    duration_ms=duration,
+                )
+                return
+            app.logger.warning(
+                f'[Webhook] non-2xx event={event_type} client={client_id} status={status} attempt={attempt}'
+            )
+        except Exception as exc:
+            duration = int((time.time() - t0) * 1000)
+            last_exc = exc
+            app.logger.warning(
+                f'[Webhook] error event={event_type} client={client_id} attempt={attempt}: {exc}'
+            )
+
+    # All attempts failed — log the final failure
+    models.log_webhook_delivery(
+        client_id=client_id, webhook_id=webhook_id,
+        event_type=event_type, url=webhook_url,
+        payload=payload, status_code=status,
+        response_text=resp_txt or str(last_exc or 'Failed after 3 attempts'),
+        success=False, duration_ms=duration,
+    )
+    app.logger.error(
+        f'[Webhook] ✗ all attempts failed event={event_type} client={client_id} wh={webhook_id} last_status={status}'
+    )
+
+
+def fire_webhook_event(client_id: str, event_type: str, data: dict) -> None:
+    """
+    Public entry point — call this everywhere an event happens.
+
+    Reads all enabled webhook_configs for the client, filters to those
+    that subscribe to event_type, signs each payload, and dispatches
+    delivery to the thread pool (never blocks the request cycle).
+
+    Silently no-ops if the client has no webhooks or the plan doesn't
+    support them — safe to call unconditionally.
+    """
+    if client_id == 'demo':
+        return
     try:
-        client = models.get_client_by_id(client_id)
-        if not client:
+        webhooks = models.get_webhooks(client_id)
+        if not webhooks:
             return
-
-        config = json.loads(client.get('branding_settings') or '{}')
-        webhook_url = config.get('integrations', {}).get('webhook_url')
-
-        if not webhook_url:
-            return
-
         payload = {
-            'event': 'new_lead',
+            'event':     event_type,
             'client_id': client_id,
-            'lead': lead_data,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'data':      data,
         }
-        import threading
-        threading.Thread(
-            target=_fire_webhook,
-            args=(webhook_url, payload, client_id),
-            daemon=True,
-        ).start()
+        fired = 0
+        for wh in webhooks:
+            if not wh.get('enabled'):
+                continue
+            subscribed = wh.get('events') or []
+            # events may be stored as JSON string or list
+            if isinstance(subscribed, str):
+                try:
+                    subscribed = json.loads(subscribed)
+                except Exception:
+                    subscribed = []
+            if event_type not in subscribed:
+                continue
+            url = (wh.get('url') or '').strip()
+            if not url or not _is_safe_webhook_url(url):
+                if url:
+                    app.logger.warning(
+                        f'[Webhook] SSRF-blocked or invalid URL wh={wh.get("webhook_id")} url={url}'
+                    )
+                continue
+            _wh_executor.submit(
+                _deliver_one,
+                url, payload, wh.get('signing_secret', ''),
+                event_type, client_id, wh.get('webhook_id', ''),
+            )
+            fired += 1
+        if fired:
+            app.logger.info(
+                f'[Webhook] dispatched event={event_type} client={client_id} webhooks={fired}'
+            )
+    except Exception as exc:
+        app.logger.error(f'[Webhook] fire_webhook_event error: {exc}')
 
-    except Exception as e:
-        app.logger.error(f'notify_webhook setup error: {e}')
+
+# ── Kept for backward compat — delegates to fire_webhook_event ─────────
+def notify_webhook(client_id: str, lead_data: dict) -> None:
+    """Deprecated shim — use fire_webhook_event directly."""
+    fire_webhook_event(client_id, 'lead_captured', lead_data)
 
 
 def _notify_handoff(client_id, client, config, ticket_id, reason,
@@ -892,22 +1030,15 @@ def _notify_handoff(client_id, client, config, ticket_id, reason,
                 except Exception as _mail_err:
                     app.logger.warning(f"[Handoff] email failed ticket={ticket_id}: {_mail_err}")
 
-            # Fire outbound CRM webhook if configured
-            webhook_url = config.get('integrations', {}).get('webhook_url')
-            if webhook_url:
-                _fire_webhook(webhook_url, {
-                    'event':     'handoff_created',
-                    'client_id': client_id,
-                    'ticket': {
-                        'ticket_id':      ticket_id,
-                        'urgency':        urgency,
-                        'reason':         reason,
-                        'customer_name':  name,
-                        'customer_email': email,
-                        'method':         method,
-                        'timestamp':      datetime.utcnow().isoformat(),
-                    }
-                }, client_id)
+            # Fire outbound CRM webhook via unified dispatcher
+            fire_webhook_event(client_id, 'handoff_created', {
+                'ticket_id':      ticket_id,
+                'urgency':        urgency,
+                'reason':         reason,
+                'customer_name':  name,
+                'customer_email': email,
+                'method':         method,
+            })
 
         except Exception as _outer_err:
             app.logger.error(f"[Handoff] _notify_handoff thread error: {_outer_err}")
@@ -1562,6 +1693,24 @@ def chat():
                         except Exception as _sum_err:
                             app.logger.debug(f"[Summarise] non-critical: {_sum_err}")
 
+                    # Fire message_sent for every AI response
+                    fire_webhook_event(client_id, 'message_sent', {
+                        'session_id': session_id,
+                        'message':    message,
+                        'response':   response_text,
+                        'method':     method,
+                        'confidence': round(confidence, 4),
+                    })
+                    # Fire faq_matched when AI matched with meaningful confidence
+                    if matched and confidence >= 0.5:
+                        fire_webhook_event(client_id, 'faq_matched', {
+                            'session_id': session_id,
+                            'message':    message,
+                            'response':   response_text,
+                            'method':     method,
+                            'confidence': round(confidence, 4),
+                        })
+
                     return jsonify({
                         'success':    True,
                         'response':   response_text,
@@ -1582,6 +1731,20 @@ def chat():
             )
             response_text = best_faq.get('answer')
             log_conversation(client_id, message, response_text, matched=True, method='keyword_fallback', session_id=session_id)
+            fire_webhook_event(client_id, 'message_sent', {
+                'session_id': session_id,
+                'message':    message,
+                'response':   response_text,
+                'method':     'keyword_fallback',
+                'confidence': round(confidence, 4),
+            })
+            fire_webhook_event(client_id, 'faq_matched', {
+                'session_id': session_id,
+                'message':    message,
+                'response':   response_text,
+                'method':     'keyword_fallback',
+                'confidence': round(confidence, 4),
+            })
             return jsonify({
                 'success': True,
                 'response': response_text,
@@ -1694,7 +1857,15 @@ def submit_lead():
         }
 
         models.save_lead(client_id, lead_data)
+        # lead_captured fires via notify_webhook shim → fire_webhook_event
         notify_webhook(client_id, {'name': name, 'email': email, 'phone': phone, 'company': company})
+        # conversation_ended — a submitted lead marks end of a qualified session
+        fire_webhook_event(client_id, 'conversation_ended', {
+            'session_id':  data.get('session_id', ''),
+            'outcome':     'lead_captured',
+            'lead_name':   name,
+            'lead_email':  email,
+        })
 
         # Log to conversations table so lead submissions appear in analytics
         user_summary = f"[Lead Captured] Name: {name} | Email: {email}"
@@ -1773,37 +1944,16 @@ def submit_lead():
 # =====================================================================
 
 def _fire_lead_stage_webhook(client_id, lead, old_stage):
-    """Fire outbound webhook when a lead's stage changes."""
-    try:
-        client = models.get_client_by_id(client_id)
-        if not client:
-            return
-        config = json.loads(client.get('branding_settings') or '{}')
-        webhook_url = config.get('integrations', {}).get('webhook_url')
-        if not webhook_url:
-            return
-        payload = {
-            'event':     'lead_stage_changed',
-            'client_id': client_id,
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
-            'data': {
-                'lead_id':     str(lead.get('id')),
-                'name':        lead.get('name'),
-                'email':       lead.get('email'),
-                'old_stage':   old_stage,
-                'new_stage':   lead.get('stage'),
-                'notes':       lead.get('notes'),
-                'assigned_to': lead.get('assigned_to'),
-            }
-        }
-        import threading
-        threading.Thread(
-            target=_fire_webhook,
-            args=(webhook_url, payload, client_id),
-            daemon=True
-        ).start()
-    except Exception as e:
-        app.logger.error(f'[LeadMgmt] webhook fire error: {e}')
+    """Fire outbound webhook when a lead stage changes — delegates to unified dispatcher."""
+    fire_webhook_event(client_id, 'lead_stage_changed', {
+        'lead_id':     str(lead.get('id', '')),
+        'name':        lead.get('name'),
+        'email':       lead.get('email'),
+        'old_stage':   old_stage,
+        'new_stage':   lead.get('stage'),
+        'notes':       lead.get('notes'),
+        'assigned_to': lead.get('assigned_to'),
+    })
 
 
 @app.route('/api/leads/<client_id>', methods=['GET'])
@@ -6082,22 +6232,30 @@ def _build_digest_email_html(business_name: str, questions: list, upgrade_url: s
 def send_weekly_digest():
     """
     Send each paid client's owner an email listing their top unanswered
-    questions from the past 7 days. Designed to be called by a weekly cron.
-    Skips clients with no unanswered questions.
+    questions from the past 7 days.
+
+    Deduplication: uses get_clients_for_weekly_digest_due() which only
+    returns clients whose last_digest_sent_at is NULL or >6 days ago.
+    After a successful send, marks the client with mark_digest_sent() so
+    a repeated cron call in the same week is a no-op.
     """
-    if not hasattr(models, 'get_clients_for_weekly_digest'):
-        app.logger.warning('[WeeklyDigest] models.get_clients_for_weekly_digest not found — skipping')
-        return {'sent': 0, 'skipped': 0}
+    import time as _time
+    t0 = _time.time()
+
+    if not hasattr(models, 'get_clients_for_weekly_digest_due'):
+        app.logger.warning('[WeeklyDigest] dedup function not found — skipping')
+        return {'sent': 0, 'skipped': 0, 'errors': 0}
 
     from flask_mail import Message as MailMessage
-    clients   = models.get_clients_for_weekly_digest()
-    sent = skipped = 0
-    base_url  = os.environ.get('APP_BASE_URL', 'https://lumvi.net')
+    # Use the dedup-safe version — never returns clients sent to in the last 6 days
+    clients  = models.get_clients_for_weekly_digest_due()
+    sent = skipped = errors = 0
+    base_url = os.environ.get('APP_BASE_URL', 'https://lumvi.net')
 
     for client in clients:
-        cid     = client['client_id']
-        biz     = client.get('business_name') or 'Your business'
-        email   = client.get('contact_email') or client.get('owner_email')
+        cid   = client['client_id']
+        biz   = client.get('business_name') or 'Your business'
+        email = client.get('contact_email') or client.get('owner_email')
         if not email:
             skipped += 1
             continue
@@ -6120,14 +6278,20 @@ def send_weekly_digest():
                 sender    = os.environ.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
             )
             mail.send(msg)
+            # Stamp dedup timestamp immediately after successful send
+            models.mark_digest_sent(cid)
             sent += 1
-            app.logger.info(f'[WeeklyDigest] sent to {email} for client {cid}')
+            app.logger.info(f'[WeeklyDigest] sent to {email} client={cid}')
         except Exception as e:
             app.logger.error(f'[WeeklyDigest] failed for {cid}: {e}')
-            skipped += 1
+            errors += 1
 
-    app.logger.info(f'[WeeklyDigest] complete — sent={sent} skipped={skipped}')
-    return {'sent': sent, 'skipped': skipped}
+    duration_ms = int((_time.time() - t0) * 1000)
+    result = {'sent': sent, 'skipped': skipped, 'errors': errors}
+    app.logger.info(f'[WeeklyDigest] complete — {result} dur={duration_ms}ms')
+    models.log_cron_run('weekly_digest', success=(errors == 0), result=result,
+                        duration_ms=duration_ms, triggered_by='http')
+    return result
 
 
 @app.route('/cron/weekly-digest', methods=['GET', 'POST'])
@@ -6166,8 +6330,17 @@ def bill_agency_overages():
     Called monthly by /cron/agency-overage.
     For every agency user with more than AGENCY_INCLUDED_CLIENTS clients,
     calculate the extra seats, record a payment, and email a receipt.
+
+    NOTE: record_payment() creates a 'pending' record. To auto-charge cards
+    you must call Flutterwave's tokenized charge endpoint using the stored
+    subscription_id as the card token. This requires Flutterwave's card
+    tokenization to be enabled on your account — wire it in here once enabled.
+    Until then, the pending record triggers the email which prompts manual payment.
+
     Returns a summary dict.
     """
+    import time as _time
+    _t0 = _time.time()
     if not hasattr(models, 'get_agency_users_with_overage'):
         app.logger.warning('[AgencyOverage] models.get_agency_users_with_overage not found')
         return {'billed': 0, 'skipped': 0, 'total_revenue': 0.0}
@@ -6263,11 +6436,100 @@ def bill_agency_overages():
             app.logger.error(f'[AgencyOverage] billing failed for user={user_id}: {e}')
             skipped += 1
 
+    import time as _time
+    duration_ms = int((_time.time() - _t0) * 1000) if '_t0' in dir() else 0
+    result = {'billed': billed, 'skipped': skipped, 'total_revenue': round(total_revenue, 2)}
     app.logger.info(
         f'[AgencyOverage] complete — billed={billed} skipped={skipped} '
-        f'total_revenue=${total_revenue:.2f}'
+        f'total_revenue=${total_revenue:.2f} dur={duration_ms}ms'
     )
-    return {'billed': billed, 'skipped': skipped, 'total_revenue': total_revenue}
+    models.log_cron_run('agency_overage', success=True, result=result,
+                        duration_ms=duration_ms, triggered_by='http')
+    return result
+
+
+# =====================================================================
+# LOG CLEANUP CRON — run weekly, prunes webhook_logs only
+# Conversations are NEVER pruned — kept for LLM fine-tuning.
+# =====================================================================
+
+@app.route('/cron/cleanup-logs', methods=['GET', 'POST'])
+def cron_cleanup_logs():
+    """
+    Prune old webhook_logs (default >60 days) to keep the DB lean.
+
+    NOTE: Conversations are intentionally excluded from cleanup —
+    they are preserved as LLM fine-tuning training data.
+
+    Recommended schedule: weekly (e.g. every Sunday at 03:00 UTC).
+    Secured by the same CRON_SECRET as other cron endpoints.
+
+    Usage:
+      GET  /cron/cleanup-logs?secret=YOUR_CRON_SECRET
+      POST /cron/cleanup-logs  (body: {"secret": "YOUR_CRON_SECRET"})
+
+    Optional query/body params:
+      webhook_days  (default 60)  — delete webhook_logs older than N days
+    """
+    import time as _time
+    cron_secret = os.environ.get('CRON_SECRET', '').strip()
+    if not cron_secret:
+        return jsonify({'error': 'Cron not configured'}), 503
+
+    body     = request.get_json(silent=True) or {}
+    provided = request.args.get('secret', '') or body.get('secret', '')
+    if not __import__('hmac').compare_digest(provided, cron_secret):
+        app.logger.warning(f'[CleanupLogs] Unauthorized from {request.remote_addr}')
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    webhook_days = int(request.args.get('webhook_days', body.get('webhook_days', 60)))
+
+    # Clamp to safe minimum — never delete less than 7 days of data
+    webhook_days = max(webhook_days, 7)
+
+    # NOTE: conversations are never pruned — preserved for LLM fine-tuning.
+
+    t0      = _time.time()
+    deleted = models.prune_old_logs(webhook_days=webhook_days)
+    duration_ms = int((_time.time() - t0) * 1000)
+
+    result = {
+        **deleted,
+        'webhook_days': webhook_days,
+    }
+    models.log_cron_run('cleanup_logs', success=True, result=result,
+                        duration_ms=duration_ms, triggered_by='http')
+    app.logger.info(f'[CleanupLogs] {result} dur={duration_ms}ms')
+    return jsonify({'success': True, 'ran_at': datetime.utcnow().isoformat(), **result})
+
+
+# =====================================================================
+# CRON STATUS — admin visibility into last run times and history
+# =====================================================================
+
+@app.route('/cron/status', methods=['GET'])
+@login_required
+def cron_status():
+    """
+    Returns last-run info for all cron jobs.
+    Admin-only — requires login and is_admin flag.
+
+    Usage:
+      GET /cron/status
+    """
+    if not getattr(current_user, 'is_admin', False):
+        return jsonify({'error': 'Admin only'}), 403
+
+    jobs = ['enforce_subscriptions', 'weekly_digest', 'agency_overage', 'cleanup_logs']
+    status = {}
+    for job in jobs:
+        last = models.get_cron_last_run(job)
+        if last:
+            # Convert datetime to ISO string for JSON serialisation
+            last['ran_at'] = last['ran_at'].isoformat() if hasattr(last.get('ran_at'), 'isoformat') else str(last.get('ran_at', ''))
+        status[job] = last or {'ran_at': None, 'success': None, 'result': None}
+
+    return jsonify({'success': True, 'cron_status': status})
 
 
 @app.route('/cron/agency-overage', methods=['GET', 'POST'])

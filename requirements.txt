@@ -16,3 +16,4 @@ flask-mail
 APScheduler
 redis
 gevent
+dnspython

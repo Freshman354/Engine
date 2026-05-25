@@ -380,6 +380,173 @@ def migrate_client_status():
         print(f"⚠️  migrate_client_status: {e}")
 
 
+# =====================================================================
+# CRON INFRASTRUCTURE MIGRATIONS
+# =====================================================================
+
+def migrate_cron_tables():
+    """
+    Create cron_runs table for auditing all cron executions.
+    Add last_digest_sent_at to clients for deduplication.
+    Safe — uses IF NOT EXISTS / IF NOT EXISTS column guard.
+    """
+    stmts = [
+        # Audit log for every cron execution
+        """CREATE TABLE IF NOT EXISTS cron_runs (
+            id          BIGSERIAL PRIMARY KEY,
+            job_name    TEXT        NOT NULL,
+            ran_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            success     BOOLEAN     NOT NULL DEFAULT TRUE,
+            result      JSONB,
+            duration_ms INT,
+            triggered_by TEXT        DEFAULT 'http'
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_cron_runs_job_ran ON cron_runs (job_name, ran_at DESC)",
+        # Deduplication guard for weekly digest
+        "ALTER TABLE clients ADD COLUMN IF NOT EXISTS last_digest_sent_at TIMESTAMPTZ",
+    ]
+    try:
+        conn, cursor = get_db()
+        for stmt in stmts:
+            cursor.execute(stmt)
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print("✅ migrate_cron_tables complete")
+    except Exception as e:
+        print(f"⚠️  migrate_cron_tables: {e}")
+
+
+def log_cron_run(job_name: str, success: bool, result: dict,
+                 duration_ms: int = 0, triggered_by: str = 'http') -> None:
+    """Insert one row into cron_runs. Never raises — cron must not fail to log."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """INSERT INTO cron_runs (job_name, success, result, duration_ms, triggered_by)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (job_name, success, json.dumps(result), duration_ms, triggered_by)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[log_cron_run] {e}")
+
+
+def get_cron_last_run(job_name: str) -> dict | None:
+    """Return the most recent cron_runs row for job_name, or None."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """SELECT * FROM cron_runs
+               WHERE job_name = %s
+               ORDER BY ran_at DESC LIMIT 1""",
+            (job_name,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return dict(row) if row else None
+    except Exception:
+        return None
+
+
+def get_cron_history(job_name: str, limit: int = 20) -> list:
+    """Return the last N runs for a job — used by admin dashboard."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """SELECT job_name, ran_at, success, result, duration_ms, triggered_by
+               FROM cron_runs
+               WHERE job_name = %s
+               ORDER BY ran_at DESC LIMIT %s""",
+            (job_name, limit)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
+
+def prune_old_logs(webhook_days: int = 60) -> dict:
+    """
+    Delete old webhook_logs rows to keep the DB lean.
+    Conversations are intentionally kept forever — they are used as
+    LLM fine-tuning training data and must never be auto-pruned.
+    Returns counts of deleted rows.
+    Safe — uses explicit WHERE clause with age guard.
+    """
+    deleted = {'webhook_logs': 0}
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "DELETE FROM webhook_logs WHERE created_at < NOW() - (%s * INTERVAL '1 day')",
+            (webhook_days,)
+        )
+        deleted['webhook_logs'] = cursor.rowcount
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[prune_old_logs] {e}")
+    return deleted
+
+
+def get_clients_for_weekly_digest_due() -> list:
+    """
+    Same as get_clients_for_weekly_digest but only returns clients whose
+    last_digest_sent_at is NULL or older than 6 days — prevents double-sending.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute("""
+            SELECT
+                c.client_id,
+                c.business_name,
+                c.contact_email,
+                u.email     AS owner_email,
+                u.plan_type,
+                c.last_digest_sent_at
+            FROM clients c
+            JOIN users u ON u.id = c.user_id
+            WHERE u.plan_type NOT IN ('free', 'enterprise')
+              AND c.is_active = TRUE
+              AND (
+                c.last_digest_sent_at IS NULL
+                OR c.last_digest_sent_at < NOW() - INTERVAL '6 days'
+              )
+        """)
+        return [dict(r) for r in cursor.fetchall()]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_clients_for_weekly_digest_due] {e}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def mark_digest_sent(client_id: str) -> None:
+    """Stamp last_digest_sent_at = NOW() after a successful digest send."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "UPDATE clients SET last_digest_sent_at = NOW() WHERE client_id = %s",
+            (client_id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[mark_digest_sent] {e}")
+
+
 def migrate_onboarding():
     """Add onboarding_completed column to users table. Safe — uses IF NOT EXISTS."""
     try:
@@ -2561,7 +2728,7 @@ def get_agency_users_with_overage(included_clients: int = 20):
             SELECT u.id, u.email, COUNT(c.client_id) AS client_count
             FROM users u
             JOIN clients c ON c.user_id = u.id AND c.is_active = TRUE
-            WHERE u.plan_type = 'agency'
+            WHERE u.plan_type IN ('agency', 'growth')
             GROUP BY u.id, u.email
             HAVING COUNT(c.client_id) > %s
             ORDER BY client_count DESC
@@ -2674,7 +2841,7 @@ def get_unanswered_questions_for_email(client_id: str, since_days: int = 7, limi
             FROM conversations
             WHERE client_id = %s
               AND matched = FALSE
-              AND created_at >= NOW() - INTERVAL '%s days'
+              AND created_at >= NOW() - (%s * INTERVAL '1 day')
             GROUP BY user_message
             ORDER BY cnt DESC
             LIMIT %s
@@ -4156,8 +4323,56 @@ def save_webhooks(client_id: str, webhooks: list) -> int:
             (client_id, incoming_ids or ['__none__'])
         )
 
+        # SSRF guard — reject private / loopback / non-HTTP(S) URLs at save time
+        import ipaddress
+        from urllib.parse import urlparse as _urlparse
+
+        def _is_safe_url(url: str) -> bool:
+            try:
+                p = _urlparse(url)
+                if p.scheme not in ('http', 'https'):
+                    return False
+                host = p.hostname or ''
+                if not host:
+                    return False
+                if host in ('localhost', 'metadata.google.internal', '169.254.169.254'):
+                    return False
+                try:
+                    addr = ipaddress.ip_address(host)
+                    if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                        return False
+                except ValueError:
+                    pass   # hostname, not IP — allow
+                return True
+            except Exception:
+                return False
+
+        # Valid event names — reject unknown event types
+        _VALID_EVENTS = {
+            'lead_captured', 'lead_stage_changed', 'conversation_ended',
+            'faq_matched', 'message_sent', 'handoff_created',
+        }
+
         saved = 0
         for wh in webhooks:
+            url = (wh.get('url') or '').strip()
+            if not url or not _is_safe_url(url):
+                import logging
+                logging.getLogger(__name__).warning(
+                    f'[save_webhooks] SSRF-blocked or invalid URL client={client_id} url={url!r}'
+                )
+                continue  # skip this webhook — don't save dangerous URLs
+
+            # Sanitise event list against known valid events
+            raw_events = wh.get('events') or ['lead_captured']
+            if isinstance(raw_events, str):
+                try:
+                    import json as _json
+                    raw_events = _json.loads(raw_events)
+                except Exception:
+                    raw_events = ['lead_captured']
+            clean_events = [e for e in raw_events if e in _VALID_EVENTS] or ['lead_captured']
+
             wid    = wh.get('webhook_id') or str(uuid.uuid4())
             secret = existing_secrets.get(wid) or _generate_signing_secret()
             cursor.execute(
@@ -4173,8 +4388,8 @@ def save_webhooks(client_id: str, webhooks: list) -> int:
                 (
                     client_id, wid,
                     wh.get('name', 'Webhook')[:120],
-                    wh.get('url', ''),
-                    json.dumps(wh.get('events', ['lead_captured'])),
+                    url,
+                    json.dumps(clean_events),
                     bool(wh.get('enabled', True)),
                     secret,
                 )
