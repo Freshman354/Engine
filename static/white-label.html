@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>White-Label Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --gold:#B8924A;--gold-dk:#9A7A3A;
+  --gold-glow:rgba(184,146,74,0.22);--gold-soft:rgba(184,146,74,0.10);
+  --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;
+  --border:#E7E2DA;--panel:#EDEAE3;
+  --cream:#FAF9F6;--white:#FFFFFF;
+  --ink:#0F0F0F;--ink-3:#6B6860;--ink-4:#9C9890;
+}
+html,body{
+  width:100%;height:100%;overflow:hidden;
+  font-family:'DM Sans',system-ui,sans-serif;
+  background:var(--dark);-webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:'';position:absolute;inset:0;
+  background-image:
+    radial-gradient(ellipse 80% 60% at 70% 50%,rgba(184,146,74,0.07) 0%,transparent 60%),
+    linear-gradient(rgba(184,146,74,0.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(184,146,74,0.025) 1px,transparent 1px);
+  background-size:100% 100%,40px 40px,40px 40px;
+  pointer-events:none;z-index:0;
+}
+
+/* SCENE */
+.scene{
+  position:relative;z-index:1;
+  width:100%;height:100%;
+  display:grid;grid-template-columns:1fr 1fr;
+  align-items:center;gap:0;
+  padding:32px 36px 32px 44px;
+}
+
+/* LEFT — BULLETS */
+.left{display:flex;flex-direction:column;justify-content:center;gap:0;padding-right:28px;}
+
+.bullet{
+  display:flex;align-items:flex-start;gap:14px;
+  padding:14px 16px;border-radius:12px;
+  border:1px solid transparent;
+  transition:background 0.4s,border-color 0.4s;
+  cursor:default;position:relative;
+  opacity:0;transform:translateX(-16px);
+}
+.bullet.visible{opacity:1;transform:translateX(0);transition:opacity 0.5s ease,transform 0.5s ease,background 0.4s,border-color 0.4s;}
+.bullet.active{background:rgba(184,146,74,0.07);border-color:rgba(184,146,74,0.22);}
+
+.b-check{
+  width:22px;height:22px;border-radius:6px;
+  background:rgba(184,146,74,0.12);border:1px solid rgba(184,146,74,0.25);
+  color:var(--gold);display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:800;flex-shrink:0;margin-top:1px;
+  transition:background 0.3s,border-color 0.3s,box-shadow 0.3s;
+}
+.bullet.active .b-check{background:var(--gold);border-color:var(--gold);color:#fff;box-shadow:0 0 12px rgba(184,146,74,0.4);}
+
+.b-title{font-size:13px;font-weight:700;color:rgba(247,244,239,0.5);margin-bottom:2px;transition:color 0.3s;}
+.bullet.active .b-title{color:rgba(247,244,239,0.95);}
+.b-desc{font-size:11px;color:rgba(168,162,158,0.55);line-height:1.5;font-weight:300;transition:color 0.3s;}
+.bullet.active .b-desc{color:rgba(168,162,158,0.9);}
+
+.b-bar{
+  position:absolute;bottom:0;left:16px;right:16px;
+  height:1.5px;background:rgba(184,146,74,0.12);
+  border-radius:2px;overflow:hidden;opacity:0;transition:opacity 0.2s;
+}
+.bullet.active .b-bar{opacity:1;}
+.b-bar-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--gold-dk),var(--gold));border-radius:2px;}
+
+/* RIGHT — WIDGET */
+.right{display:flex;align-items:center;justify-content:center;position:relative;}
+.right::before{
+  content:'';position:absolute;
+  width:240px;height:300px;border-radius:50%;
+  background:radial-gradient(circle,rgba(184,146,74,0.11) 0%,transparent 70%);
+  filter:blur(40px);pointer-events:none;
+}
+
+.phone{
+  position:relative;width:210px;height:390px;
+  background:var(--ink);border-radius:32px;
+  box-shadow:0 0 0 1px rgba(255,255,255,0.07),0 0 0 9px rgba(0,0,0,0.25),0 40px 80px rgba(0,0,0,0.5),0 12px 30px rgba(0,0,0,0.3);
+  overflow:hidden;display:flex;flex-direction:column;
+  animation:phoneFloat 7s ease-in-out infinite;
+}
+@keyframes phoneFloat{0%,100%{transform:translateY(0) rotate(-0.8deg);}50%{transform:translateY(-10px) rotate(-0.8deg);}}
+.notch{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:60px;height:14px;background:#000;border-radius:12px;z-index:20;}
+
+/* Widget */
+.w{display:flex;flex-direction:column;height:100%;background:var(--cream);border-radius:32px;overflow:hidden;}
+
+/* Header */
+.w-hdr{background:var(--ink);flex-shrink:0;position:relative;overflow:hidden;isolation:isolate;}
+.w-hdr-accent{height:2px;background:var(--gold);}
+.w-hdr::before{content:'';position:absolute;top:-30px;left:-20px;width:160px;height:120px;background:radial-gradient(ellipse,var(--gold) 0%,transparent 70%);opacity:0.08;pointer-events:none;}
+.w-hdr::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:14px;background:var(--cream);border-radius:10px 10px 0 0;z-index:2;}
+.w-hdr-inner{padding:28px 12px 18px;position:relative;z-index:1;}
+.w-agency-label{font-size:7px;font-weight:600;color:rgba(255,255,255,0.22);letter-spacing:0.15em;text-transform:uppercase;margin-bottom:9px;transition:opacity 0.3s;}
+.w-profile{display:flex;align-items:center;gap:9px;}
+.w-av-wrap{position:relative;flex-shrink:0;}
+.w-av-ring{position:absolute;inset:-2px;border-radius:10px;background:linear-gradient(135deg,var(--gold) 0%,transparent 60%);opacity:0.55;}
+.w-av{position:relative;z-index:1;width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;font-size:13px;border:1px solid rgba(255,255,255,0.12);}
+.w-name{font-family:'Instrument Serif',Georgia,serif;font-size:13px;font-weight:400;font-style:italic;color:#fff;letter-spacing:-0.2px;line-height:1.1;margin-bottom:4px;}
+.w-name .agency{color:var(--gold);font-style:normal;}
+.w-status{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:2px 7px 2px 5px;}
+.w-sdot{width:5px;height:5px;border-radius:50%;background:#4ade80;animation:sdp 2.6s ease-in-out infinite;}
+@keyframes sdp{0%,100%{box-shadow:0 0 0 0 rgba(74,222,128,0.55);}50%{box-shadow:0 0 0 3px rgba(74,222,128,0);}}
+.w-status span{font-size:7px;color:rgba(255,255,255,0.4);}
+
+/* Domain bar */
+.w-domain-bar{
+  display:flex;align-items:center;gap:5px;
+  background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);
+  border-radius:6px;padding:4px 8px;margin-top:7px;
+  transition:background 0.4s,border-color 0.4s,box-shadow 0.4s;
+}
+.w-domain-bar.hl{background:rgba(184,146,74,0.12);border-color:rgba(184,146,74,0.38);box-shadow:0 0 16px rgba(184,146,74,0.22);}
+.w-domain-icon{width:8px;height:8px;flex-shrink:0;opacity:0.35;transition:opacity 0.3s;}
+.w-domain-icon svg{width:8px;height:8px;stroke:var(--gold);fill:none;stroke-width:2;}
+.w-domain-bar.hl .w-domain-icon{opacity:1;}
+.w-domain-text{font-size:7px;font-family:'DM Sans',monospace;color:rgba(255,255,255,0.3);transition:color 0.4s;}
+.w-domain-bar.hl .w-domain-text{color:var(--gold);}
+
+/* Tabs */
+.w-tabs{display:flex;background:#fff;border-bottom:1px solid #E6E3DC;flex-shrink:0;padding:2px 6px 0;position:relative;z-index:1;}
+.w-tab{flex:1;padding:5px 4px 6px;font-size:8px;font-weight:600;color:var(--ink-4);border:none;background:none;border-bottom:2px solid transparent;display:flex;align-items:center;justify-content:center;gap:3px;font-family:inherit;cursor:pointer;transition:color 0.15s,border-color 0.15s;}
+.w-tab svg{width:8px;height:8px;}
+.w-tab.active{color:var(--ink);border-bottom-color:var(--gold);}
+
+/* Panels */
+.w-panel{display:none;flex:1;flex-direction:column;overflow:hidden;}
+.w-panel.active{display:flex;}
+
+/* Messages */
+.w-msgs{flex:1;overflow:hidden;padding:10px 9px 6px;display:flex;flex-direction:column;gap:3px;background:#FAF9F6;}
+.w-day{text-align:center;font-size:6.5px;color:var(--ink-4);font-weight:500;margin-bottom:4px;display:flex;align-items:center;gap:5px;letter-spacing:0.05em;text-transform:uppercase;}
+.w-day::before,.w-day::after{content:'';flex:1;height:1px;background:#E6E3DC;}
+
+.w-row{display:flex;align-items:flex-end;gap:5px;opacity:0;transform:translateY(6px);transition:opacity 0.35s ease,transform 0.35s ease;}
+.w-row.user{flex-direction:row-reverse;}
+.w-row.shown{opacity:1;transform:translateY(0);}
+
+.w-mini-av{
+  width:14px;height:14px;border-radius:50%;flex-shrink:0;
+  background:#F4F2ED;border:1px solid #E6E3DC;
+  display:flex;align-items:center;justify-content:center;
+  font-size:5px;overflow:hidden;margin-bottom:10px;
+  transition:box-shadow 0.4s;
+}
+.w-mini-av.hl{box-shadow:0 0 0 2px var(--gold),0 0 10px rgba(184,146,74,0.4);}
+
+.w-col{display:flex;flex-direction:column;max-width:78%;gap:1px;}
+.w-row.user .w-col{align-items:flex-end;}
+.w-sender{font-size:6px;font-weight:700;color:var(--ink-4);padding:0 3px;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:1px;}
+.w-bub{padding:6px 9px;font-size:8.5px;line-height:1.5;word-break:break-word;}
+.w-bub.bot{background:#fff;color:var(--ink);border-radius:2px 9px 9px 9px;border:1px solid #E6E3DC;box-shadow:0 1px 3px rgba(0,0,0,0.04);}
+.w-bub.user{background:var(--gold);color:#fff;border-radius:9px 2px 9px 9px;box-shadow:0 2px 8px rgba(184,146,74,0.3);}
+.w-time{font-size:6.5px;color:var(--ink-4);padding:0 3px;margin-top:1px;}
+.w-row.user .w-time{text-align:right;}
+
+/* Typing */
+.w-typing{display:flex;align-items:flex-end;gap:5px;opacity:0;transition:opacity 0.3s;}
+.w-typing.show{opacity:1;}
+.w-tbub{background:#fff;border:1px solid #E6E3DC;border-radius:2px 9px 9px 9px;padding:6px 10px;display:flex;gap:3px;align-items:center;}
+.td{width:4px;height:4px;border-radius:50%;background:var(--ink-4);animation:tdb 1.4s ease-in-out infinite;}
+.td:nth-child(2){animation-delay:.15s;}.td:nth-child(3){animation-delay:.3s;}
+@keyframes tdb{0%,60%,100%{transform:translateY(0);opacity:.3;}30%{transform:translateY(-4px);opacity:1;}}
+
+/* Input */
+.w-input-row{padding:6px 8px 8px;background:#fff;border-top:1px solid #E6E3DC;flex-shrink:0;display:flex;gap:5px;align-items:center;}
+.w-inp{flex:1;background:#FAF9F6;border:1.5px solid #E6E3DC;border-radius:14px;padding:5px 9px;font-size:8px;color:var(--ink-3);font-family:inherit;outline:none;}
+.w-sbtn{width:24px;height:24px;border-radius:50%;background:var(--gold);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(184,146,74,0.35);flex-shrink:0;}
+.w-sbtn svg{width:9px;height:9px;fill:none;stroke:#fff;stroke-width:2;}
+
+/* Help center */
+.w-hc{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#FAF9F6;}
+.w-hc-hdr{padding:9px 10px 7px;background:#fff;border-bottom:1px solid #E6E3DC;flex-shrink:0;}
+.w-hc-title{font-family:'Instrument Serif',Georgia,serif;font-style:italic;font-size:11px;font-weight:400;color:var(--ink);margin-bottom:4px;}
+.w-hc-search{width:100%;background:#FAF9F6;border:1px solid #E6E3DC;border-radius:6px;padding:4px 8px;font-size:7.5px;color:var(--ink-3);font-family:inherit;outline:none;}
+.w-hc-list{flex:1;overflow:hidden;padding:6px 8px;display:flex;flex-direction:column;gap:3px;}
+.w-hc-cat{font-size:6px;font-weight:700;color:var(--ink-4);text-transform:uppercase;letter-spacing:0.08em;padding:2px 2px 3px;}
+.w-art{background:#fff;border:1px solid #E6E3DC;border-radius:7px;padding:6px 8px;display:flex;align-items:center;gap:6px;transition:border-color 0.4s,box-shadow 0.4s;}
+.w-art.hl{border-color:rgba(184,146,74,0.4);box-shadow:0 0 10px rgba(184,146,74,0.12);}
+.w-art-icon{width:20px;height:20px;border-radius:5px;background:rgba(184,146,74,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background 0.4s;}
+.w-art.hl .w-art-icon{background:rgba(184,146,74,0.18);}
+.w-art-icon svg{width:9px;height:9px;stroke:var(--gold);}
+.w-art-ttl{font-size:7.5px;font-weight:600;color:var(--ink);margin-bottom:1px;}
+.w-art-prev{font-size:6.5px;color:var(--ink-4);}
+.w-art-arr{margin-left:auto;flex-shrink:0;}
+.w-art-arr svg{width:7px;height:7px;stroke:var(--ink-4);}
+</style>
+</head>
+<body>
+<div class="scene">
+
+  <!-- LEFT -->
+  <div class="left">
+    <div class="bullet" id="b0">
+      <div class="b-check">✓</div>
+      <div class="b-text">
+        <div class="b-title">Custom Domain</div>
+        <div class="b-desc">chatbot.youragency.com, not lumvi.net.</div>
+      </div>
+      <div class="b-bar"><div class="b-bar-fill" id="bar0"></div></div>
+    </div>
+    <div class="bullet" id="b1">
+      <div class="b-check">✓</div>
+      <div class="b-text">
+        <div class="b-title">Your Logo Everywhere</div>
+        <div class="b-desc">In widget, emails, and client dashboard.</div>
+      </div>
+      <div class="b-bar"><div class="b-bar-fill" id="bar1"></div></div>
+    </div>
+    <div class="bullet" id="b2">
+      <div class="b-check">✓</div>
+      <div class="b-text">
+        <div class="b-title">Reseller Rights</div>
+        <div class="b-desc">Legally resell and white-label on Growth+.</div>
+      </div>
+      <div class="b-bar"><div class="b-bar-fill" id="bar2"></div></div>
+    </div>
+    <div class="bullet" id="b3">
+      <div class="b-check">✓</div>
+      <div class="b-text">
+        <div class="b-title">Help Center Tab</div>
+        <div class="b-desc">Let visitors browse articles inside the chat widget.</div>
+      </div>
+      <div class="b-bar"><div class="b-bar-fill" id="bar3"></div></div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="w">
+
+        <div class="w-hdr">
+          <div class="w-hdr-accent"></div>
+          <div class="w-hdr-inner">
+            <div class="w-agency-label" id="wLabel">YourAgency Support</div>
+            <div class="w-profile">
+              <div class="w-av-wrap">
+                <div class="w-av-ring"></div>
+                <div class="w-av">🏢</div>
+              </div>
+              <div>
+                <div class="w-name"><span class="agency" id="wAgency">YourAgency</span> Assistant</div>
+                <div class="w-status"><div class="w-sdot"></div><span>Online · Replies instantly</span></div>
+              </div>
+            </div>
+            <div class="w-domain-bar" id="wDomain">
+              <div class="w-domain-icon">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              </div>
+              <div class="w-domain-text" id="wDomainText">chatbot.youragency.com</div>
+            </div>
+          </div>
+        </div>
+
+        <nav class="w-tabs">
+          <button class="w-tab active" id="tabChat" onclick="sw('chat')">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            Chat
+          </button>
+          <button class="w-tab" id="tabHelp" onclick="sw('help')">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Help Center
+          </button>
+        </nav>
+
+        <!-- Chat -->
+        <div class="w-panel active" id="panelChat">
+          <div class="w-msgs">
+            <div class="w-day">Today</div>
+            <div class="w-row" id="r0">
+              <div class="w-mini-av" id="av0">🏢</div>
+              <div class="w-col">
+                <div class="w-sender" id="s0">YourAgency</div>
+                <div class="w-bub bot">Hi! How can I help you today? 👋</div>
+                <div class="w-time">Just now</div>
+              </div>
+            </div>
+            <div class="w-row user" id="r1">
+              <div class="w-mini-av" style="font-size:6px;font-weight:700;color:#6B6860;">Y</div>
+              <div class="w-col">
+                <div class="w-bub user">Is this fully white-labeled?</div>
+                <div class="w-time" style="text-align:right">Just now</div>
+              </div>
+            </div>
+            <div class="w-typing" id="wTyping">
+              <div class="w-mini-av">🏢</div>
+              <div class="w-tbub"><div class="td"></div><div class="td"></div><div class="td"></div></div>
+            </div>
+            <div class="w-row" id="r2">
+              <div class="w-mini-av" id="av1">🏢</div>
+              <div class="w-col">
+                <div class="w-sender" id="s1">YourAgency</div>
+                <div class="w-bub bot">100%! Your clients only ever see <strong id="wInline">YourAgency</strong> — your domain, logo &amp; colors. Lumvi is completely invisible. 🎯</div>
+                <div class="w-time">Just now</div>
+              </div>
+            </div>
+          </div>
+          <div class="w-input-row">
+            <input class="w-inp" id="wInp" placeholder="Ask me anything…" readonly>
+            <button class="w-sbtn"><svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+          </div>
+        </div>
+
+        <!-- Help -->
+        <div class="w-panel" id="panelHelp">
+          <div class="w-hc">
+            <div class="w-hc-hdr">
+              <div class="w-hc-title">Help Center</div>
+              <input class="w-hc-search" placeholder="Search articles…" readonly>
+            </div>
+            <div class="w-hc-list">
+              <div class="w-hc-cat">Getting Started</div>
+              <div class="w-art" id="art0">
+                <div class="w-art-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                <div style="flex:1;min-width:0"><div class="w-art-ttl">Setting up your custom domain</div><div class="w-art-prev">Connect chatbot.youragency.com…</div></div>
+                <div class="w-art-arr"><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+              </div>
+              <div class="w-art" id="art1">
+                <div class="w-art-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                <div style="flex:1;min-width:0"><div class="w-art-ttl">Uploading your logo &amp; colors</div><div class="w-art-prev">Brand the widget to match…</div></div>
+                <div class="w-art-arr"><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+              </div>
+              <div class="w-hc-cat" style="margin-top:3px">Billing</div>
+              <div class="w-art" id="art2">
+                <div class="w-art-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                <div style="flex:1;min-width:0"><div class="w-art-ttl">Reseller rights on Growth+</div><div class="w-art-prev">Legally resell to your clients…</div></div>
+                <div class="w-art-arr"><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+              </div>
+              <div class="w-art" id="art3">
+                <div class="w-art-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                <div style="flex:1;min-width:0"><div class="w-art-ttl">Agency plan flat pricing</div><div class="w-art-prev">No per-client fees, ever…</div></div>
+                <div class="w-art-arr"><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function sw(t){
+  ['chat','help'].forEach(x=>{
+    const cap = x.charAt(0).toUpperCase()+x.slice(1);
+    document.getElementById('tab'+cap).classList.toggle('active',x===t);
+    document.getElementById('panel'+cap).classList.toggle('active',x===t);
+  });
+}
+
+// Clear all highlights
+function clearHL(){
+  document.getElementById('wDomain').classList.remove('hl');
+  document.querySelectorAll('.w-mini-av').forEach(e=>e.classList.remove('hl'));
+  document.querySelectorAll('.w-art').forEach(e=>e.classList.remove('hl'));
+}
+
+const DURATION = 3000;
+
+const steps = [
+  { // Custom Domain → glow domain bar
+    bullet:0,
+    run(){
+      sw('chat');
+      setTimeout(()=> document.getElementById('wDomain').classList.add('hl'), 150);
+    }
+  },
+  { // Your Logo → glow avatars
+    bullet:1,
+    run(){
+      sw('chat');
+      setTimeout(()=> document.querySelectorAll('.w-mini-av').forEach(e=>e.classList.add('hl')), 150);
+    }
+  },
+  { // Reseller → agency name cycles
+    bullet:2,
+    run(){
+      sw('chat');
+      cycleAgency();
+    }
+  },
+  { // Help Center → switch tab + highlight articles
+    bullet:3,
+    run(){
+      sw('help');
+      setTimeout(()=> document.querySelectorAll('.w-art').forEach(e=>e.classList.add('hl')), 300);
+    }
+  }
+];
+
+let cur = -1;
+
+function runStep(idx){
+  if(cur>=0){
+    document.getElementById('b'+cur).classList.remove('active');
+    const pbar = document.getElementById('bar'+cur);
+    pbar.style.transition='none'; pbar.style.width='0%';
+  }
+  clearHL();
+  cur = idx;
+  const b = document.getElementById('b'+idx);
+  b.classList.add('active');
+  const bar = document.getElementById('bar'+idx);
+  bar.style.transition='none'; bar.style.width='0%';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    bar.style.transition=`width ${DURATION}ms linear`;
+    bar.style.width='100%';
+  }));
+  steps[idx].run();
+}
+
+// Stagger bullets in
+[0,1,2,3].forEach(i=> setTimeout(()=> document.getElementById('b'+i).classList.add('visible'), 300+i*100));
+
+// Animate chat messages
+const msgs = ['r0','r1','wTyping','r2'];
+const delays = [400,1100,1800,2700];
+msgs.forEach((id,i)=> setTimeout(()=>{
+  const el = document.getElementById(id);
+  if(!el) return;
+  if(id==='wTyping'){ el.classList.add('show'); setTimeout(()=>el.classList.remove('show'),900); }
+  else el.classList.add('shown');
+}, delays[i]));
+
+// Start loop after chat settles
+setTimeout(()=>{
+  runStep(0);
+  setInterval(()=> runStep((cur+1)%steps.length), DURATION);
+}, 3400);
+
+// Agency cycling for step 2
+const agencies = [
+  {name:'YourAgency', domain:'chatbot.youragency.com'},
+  {name:'NovaSpark',  domain:'chat.novaspark.io'},
+  {name:'BrightMind', domain:'support.brightmind.co'},
+  {name:'ApexDigital',domain:'help.apexdigital.com'},
+];
+let aIdx = 0;
+
+function cycleAgency(){
+  aIdx = (aIdx+1) % agencies.length;
+  const a = agencies[aIdx];
+  const targets = ['wAgency','wInline','s0','s1','wLabel'];
+  targets.forEach(id=>{
+    const el = document.getElementById(id); if(!el) return;
+    el.style.transition='opacity 0.25s'; el.style.opacity='0';
+  });
+  const dm = document.getElementById('wDomainText');
+  const inp = document.getElementById('wInp');
+  dm.style.transition='opacity 0.25s'; dm.style.opacity='0';
+  setTimeout(()=>{
+    document.getElementById('wAgency').textContent = a.name;
+    document.getElementById('wInline').textContent = a.name;
+    document.getElementById('s0').textContent = a.name;
+    document.getElementById('s1').textContent = a.name;
+    document.getElementById('wLabel').textContent = a.name+' Support';
+    dm.textContent = a.domain;
+    inp.placeholder = 'Ask '+a.name+' anything…';
+    targets.forEach(id=>{
+      const el = document.getElementById(id); if(!el) return;
+      el.style.opacity='1';
+    });
+    dm.style.opacity='1';
+  }, 260);
+}
+</script>
+</body>
+</html>
