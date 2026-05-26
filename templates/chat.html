@@ -2,91 +2,48 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<!--
-  FIX [MOBILE-VIEWPORT]: Replaced `maximum-scale=1.0, user-scalable=no` with
-  `viewport-fit=cover` to support modern iOS safe areas without blocking
-  user zoom (which violates accessibility guidelines). Height issues on mobile
-  keyboards are now handled via dvh units in CSS instead.
--->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>{{ client.bot_name or client.company_name or 'Support' }}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<!--
-  PERF [FONT-DISPLAY]: Added `font-display=swap` baked into the URL. This prevents
-  invisible text during font load (FOIT) — critical for a widget that appears
-  in a popup and must feel instant.
--->
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-<!--
-  SECURITY [CSP-SAFE]: DOMPurify is loaded from a pinned CDN version to sanitize
-  markdown-rendered HTML and prevent XSS. This is the only external runtime
-  dependency added — everything else is vanilla JS.
--->
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js" defer></script>
 
 <style>
-/* ─────────────────────────────────────────────────────────────
-   RESET & ROOT
-   IMPROVEMENT: Added will-change-free defaults, contain:layout
-   on key elements, and dvh unit for true mobile viewport height.
-───────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
   --brand:        {{ client.widget_color or '#B8924A' }};
-  --brand-glow:   {{ client.widget_color or '#B8924A' }}28;
-  --brand-soft:   {{ client.widget_color or '#B8924A' }}12;
-  --brand-border: {{ client.widget_color or '#B8924A' }}35;
+  --brand-glow:   {{ client.widget_color or '#B8924A' }}30;
+  --brand-soft:   {{ client.widget_color or '#B8924A' }}0e;
+  --brand-border: {{ client.widget_color or '#B8924A' }}28;
   --brand-dark:   {{ client.widget_color or '#B8924A' }}dd;
 
-  --dark:    #111827;
-  --mid:     #374151;
-  --sub:     #9CA3AF;
-  --muted:   #6B7280;
-  --surface: #FFFFFF;
-  --bg:      #F9FAFB;
-  --border:  #E5E7EB;
-  --border2: #F3F4F6;
-  --success: #10B981;
-  --danger:  #EF4444;
-  --warning: #F59E0B;
+  --ink:       #0F0F0F;
+  --ink-2:     #3A3835;
+  --ink-3:     #6B6860;
+  --ink-4:     #9C9890;
+  --cream:     #FAF9F6;
+  --cream-2:   #F4F2ED;
+  --cream-3:   #EAE8E2;
+  --white:     #FFFFFF;
+  --border:    #E6E3DC;
+  --border-2:  #F0EDE7;
+  --success:   #16A34A;
+  --danger:    #DC2626;
 
-  --radius:    20px;
-  --radius-sm: 12px;
-  --radius-xs: 8px;
+  --r-lg:  20px;
+  --r-md:  16px;
+  --r-sm:  12px;
+  --r-xs:  8px;
 
-  /* IMPROVEMENT: Semantic motion tokens — respects prefers-reduced-motion */
-  --ease-out:  cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in:   cubic-bezier(0.4, 0, 1, 1);
-  --dur-fast:  140ms;
-  --dur-mid:   220ms;
-  --dur-slow:  380ms;
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --t1: 120ms;
+  --t2: 200ms;
+  --t3: 340ms;
 }
 
-/*
-  FIX [MOBILE-HEIGHT]: Use dvh (dynamic viewport height) so the widget
-  doesn't get cut off or overflow when the mobile soft keyboard appears.
-  Falls back gracefully to 100vh for unsupported browsers.
-*/
-html, body {
-  height: 100%;
-  height: 100dvh;
-  overflow: hidden;
-}
-
-body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  /* PERF: text-size-adjust prevents mobile browsers from resizing fonts */
-  -webkit-text-size-adjust: 100%;
-}
-
-/* ACCESSIBILITY: Respect user's reduced-motion preference */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -94,353 +51,417 @@ body {
   }
 }
 
-/* ─────────────────────────────────────────────────────────────
+html, body {
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+  background: var(--cream);
+  display: flex;
+  flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+  color: var(--ink);
+}
+
+/* ═══════════════════════════════════
    HEADER
-   IMPROVEMENT: Slightly elevated shadow, better gradient polish,
-   smooth status pulse animation.
-───────────────────────────────────────────────────────────── */
+═══════════════════════════════════ */
 .header {
-  background: var(--brand);
-  padding: 14px 16px 38px;
+  background: var(--ink);
+  padding: 0;
   position: relative;
   flex-shrink: 0;
-  /* PERF: isolate creates a new stacking context, prevents layout bleed */
   isolation: isolate;
-}
-
-.header-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-
-.header-brand {
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(255,255,255,0.65);
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.header-actions { display: flex; gap: 6px; }
-
-.hbtn {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: rgba(255,255,255,0.15);
-  border: none;
-  color: #fff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background var(--dur-fast);
-  /* ACCESSIBILITY: Clear focus ring */
-  outline: none;
-}
-.hbtn:hover { background: rgba(255,255,255,0.25); }
-.hbtn:focus-visible { box-shadow: 0 0 0 2px #fff; }
-.hbtn svg { width: 14px; height: 14px; pointer-events: none; }
-
-.header-profile {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.header-avatar {
-  width: 50px;
-  height: 50px;
-  border-radius: 15px;
-  background: rgba(255,255,255,0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  flex-shrink: 0;
   overflow: hidden;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.2), 0 0 0 2px rgba(255,255,255,0.25);
 }
 
-/* IMPROVEMENT: Lazy loading for avatar image */
-.header-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  loading: lazy; /* applied via JS below */
+/* Top accent line — brand color */
+.header-accent {
+  height: 2px;
+  background: var(--brand);
+  opacity: 0.9;
+  position: relative;
+  z-index: 2;
 }
 
-.header-info { flex: 1; min-width: 0; }
-.header-name {
-  font-size: 17px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: -0.3px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* Subtle radial glow from brand color */
+.header::before {
+  content: '';
+  position: absolute;
+  top: -60px;
+  left: -40px;
+  width: 260px;
+  height: 200px;
+  background: radial-gradient(ellipse, var(--brand) 0%, transparent 70%);
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: 0;
 }
 
-.header-status {
-  font-size: 12px;
-  color: rgba(255,255,255,0.8);
-  margin-top: 3px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #4ade80;
-  flex-shrink: 0;
-  /* IMPROVEMENT: Smoother, looping pulse instead of a simple box-shadow */
-  animation: statusPulse 2.4s ease-in-out infinite;
-}
-
-@keyframes statusPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.6); }
-  50% { box-shadow: 0 0 0 4px rgba(74, 222, 128, 0); }
-}
-
-/* Curved bottom edge of header */
+/* Curved reveal into message area */
 .header::after {
   content: '';
   position: absolute;
   bottom: -1px;
   left: 0;
   right: 0;
-  height: 28px;
-  background: var(--bg);
-  border-radius: 22px 22px 0 0;
+  height: 24px;
+  background: var(--cream);
+  border-radius: 18px 18px 0 0;
+  z-index: 2;
 }
 
-/* ─────────────────────────────────────────────────────────────
+.header-inner {
+  padding: 14px 16px 32px;
+  position: relative;
+  z-index: 1;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.header-brand {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.25);
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.header-actions { display: flex; gap: 4px; }
+
+.hbtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.55);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--t1), color var(--t1), border-color var(--t1);
+  outline: none;
+}
+.hbtn:hover {
+  background: rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.9);
+  border-color: rgba(255,255,255,0.2);
+}
+.hbtn:focus-visible { box-shadow: 0 0 0 2px rgba(255,255,255,0.35); }
+.hbtn svg { width: 12px; height: 12px; pointer-events: none; }
+
+.header-profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Avatar with ring */
+.header-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.header-avatar-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--brand) 0%, transparent 60%);
+  opacity: 0.55;
+  z-index: 0;
+}
+
+.header-avatar {
+  position: relative;
+  z-index: 1;
+  width: 50px;
+  height: 50px;
+  border-radius: 15px;
+  background: rgba(255,255,255,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.header-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.header-info { flex: 1; min-width: 0; }
+
+.header-name {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-size: 20px;
+  font-weight: 400;
+  font-style: italic;
+  color: #FFFFFF;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
+  margin-bottom: 6px;
+}
+
+.header-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px;
+  padding: 3px 10px 3px 7px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+  flex-shrink: 0;
+  animation: pulse 2.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(74,222,128,0.55); }
+  50%      { box-shadow: 0 0 0 4px rgba(74,222,128,0); }
+}
+
+.header-status span:last-child {
+  font-size: 11px;
+  color: rgba(255,255,255,0.45);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/* ═══════════════════════════════════
    TABS
-   IMPROVEMENT: Indicator animates position (no layout shift),
-   proper ARIA roles applied via JS.
-───────────────────────────────────────────────────────────── */
+═══════════════════════════════════ */
 .tabs {
   display: flex;
-  background: var(--surface);
+  background: var(--white);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  position: relative;
+  padding: 4px 10px 0;
+  gap: 2px;
 }
 
 .tab {
   flex: 1;
-  padding: 11px 8px;
-  text-align: center;
-  font-size: 12.5px;
+  padding: 8px 6px 10px;
+  font-size: 11.5px;
   font-weight: 600;
-  color: var(--sub);
+  color: var(--ink-4);
   cursor: pointer;
   border: none;
   background: none;
   border-bottom: 2px solid transparent;
-  transition: color var(--dur-fast), border-color var(--dur-fast);
+  transition: color var(--t1), border-color var(--t1);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
   outline: none;
+  letter-spacing: 0.02em;
   position: relative;
+}
+.tab svg { width: 11px; height: 11px; flex-shrink: 0; }
+.tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--brand);
 }
 .tab:focus-visible::after {
   content: '';
   position: absolute;
-  inset: 3px;
+  inset: 4px 2px;
   border: 2px solid var(--brand);
-  border-radius: 6px;
+  border-radius: 5px;
 }
-.tab svg { width: 13px; height: 13px; flex-shrink: 0; }
-.tab.active { color: var(--brand); border-bottom-color: var(--brand); }
 
 .tab-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
 .tab-panel.active { display: flex; }
 
-/* ─────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════
    MESSAGES
-   IMPROVEMENT: contain: layout style on message container cuts
-   reflow cost on long conversations. scroll-behavior only applied
-   when motion is OK.
-───────────────────────────────────────────────────────────── */
+═══════════════════════════════════ */
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 14px;
+  padding: 20px 14px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  background: var(--bg);
-  /* PERF: reduce scroll event jank on mobile */
+  gap: 3px;
+  background: var(--cream);
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
-
 @media (prefers-reduced-motion: no-preference) {
   .messages { scroll-behavior: smooth; }
 }
-
-.messages::-webkit-scrollbar { width: 3px; }
+.messages::-webkit-scrollbar { width: 2px; }
 .messages::-webkit-scrollbar-track { background: transparent; }
-.messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.messages::-webkit-scrollbar-thumb { background: var(--cream-3); border-radius: 4px; }
 
-/* FIX [MSG-ANIMATION]: Use transform only (GPU layer) not opacity+translate combo
-   which can cause composite-layer thrashing on Android low-end devices. */
 .msg-row {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  animation: msgIn var(--dur-mid) var(--ease-out) both;
-  /* PERF: contain prevents message renders from reflowing siblings */
+  animation: msgIn var(--t2) var(--ease) both;
   contain: layout style;
 }
 .msg-row.user { flex-direction: row-reverse; }
 
 @keyframes msgIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* Avatar — subtle, minimal */
 .msg-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 9px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
   flex-shrink: 0;
-  background: var(--brand-soft);
-  border: 1px solid var(--brand-border);
+  background: var(--cream-2);
+  border: 1.5px solid var(--border);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 9px;
   overflow: hidden;
+  align-self: flex-end;
+  margin-bottom: 18px;
 }
-.msg-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
+.msg-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .msg-avatar.user-av {
-  background: var(--border2);
-  border-color: var(--border);
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 700;
-  color: var(--muted);
-  letter-spacing: 0.02em;
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+  background: var(--cream-2);
 }
 
 .msg-col {
   display: flex;
   flex-direction: column;
-  max-width: 78%;
+  max-width: 74%;
   gap: 2px;
   min-width: 0;
 }
 .msg-row.user .msg-col { align-items: flex-end; }
 
 .sender-label {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--sub);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--ink-4);
   padding: 0 4px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   margin-bottom: 1px;
 }
 
+/* Bot bubble — warm white card */
 .bubble {
   padding: 10px 14px;
   font-size: 13.5px;
-  line-height: 1.6;
+  line-height: 1.65;
   word-break: break-word;
-  /* IMPROVEMENT: Better box-shadow layering for depth without visual noise */
-  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 2px 6px rgba(0,0,0,0.04);
   position: relative;
 }
 
 .bubble.bot {
-  background: var(--surface);
-  color: var(--dark);
-  border-radius: var(--radius-sm) var(--radius-sm) var(--radius-sm) 4px;
+  background: var(--white);
+  color: var(--ink);
+  border-radius: 3px var(--r-md) var(--r-md) var(--r-md);
   border: 1px solid var(--border);
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.04),
+    0 4px 12px rgba(0,0,0,0.04),
+    0 0 0 1px rgba(255,255,255,0.6) inset;
 }
 
+/* User bubble — brand gradient */
 .bubble.user {
   background: var(--brand);
   color: #fff;
-  border-radius: var(--radius-sm) var(--radius-sm) 4px var(--radius-sm);
+  border-radius: var(--r-md) 3px var(--r-md) var(--r-md);
+  box-shadow:
+    0 2px 8px var(--brand-glow),
+    0 4px 20px var(--brand-glow);
 }
 
-/* IMPROVEMENT: Markdown content styles inside bot bubbles */
+/* Markdown */
 .bubble.bot .md-content { white-space: normal; }
 .bubble.bot .md-content p { margin-bottom: 8px; }
 .bubble.bot .md-content p:last-child { margin-bottom: 0; }
 .bubble.bot .md-content ul,
 .bubble.bot .md-content ol { padding-left: 18px; margin: 6px 0; }
 .bubble.bot .md-content li { margin-bottom: 4px; }
-.bubble.bot .md-content strong { font-weight: 600; color: var(--dark); }
-.bubble.bot .md-content em { font-style: italic; }
+.bubble.bot .md-content strong { font-weight: 700; }
+.bubble.bot .md-content em { font-style: italic; color: var(--ink-2); }
 .bubble.bot .md-content code {
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-family: 'SF Mono', 'Fira Code', monospace;
   font-size: 12px;
-  background: var(--bg);
+  background: var(--cream-2);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 1px 5px;
   color: var(--brand);
 }
 .bubble.bot .md-content pre {
-  background: #1e1e2e;
-  border-radius: var(--radius-xs);
+  background: #141414;
+  border-radius: var(--r-xs);
   padding: 12px 14px;
   overflow-x: auto;
   margin: 8px 0;
 }
 .bubble.bot .md-content pre code {
-  background: none;
-  border: none;
-  padding: 0;
-  color: #cdd6f4;
-  font-size: 12px;
-  line-height: 1.6;
+  background: none; border: none; padding: 0;
+  color: #e2e0dc; font-size: 12px; line-height: 1.65;
 }
 .bubble.bot .md-content a {
   color: var(--brand);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.bubble.bot .md-content a:hover { opacity: 0.8; }
 .bubble.bot .md-content blockquote {
-  border-left: 3px solid var(--brand-border);
+  border-left: 2px solid var(--brand-border);
   padding-left: 10px;
-  color: var(--muted);
+  color: var(--ink-3);
   margin: 6px 0;
 }
-
-/* User message text: plain (no markdown rendered) */
 .bubble.user { white-space: pre-line; }
 
 .msg-time {
   font-size: 10px;
-  color: var(--sub);
+  color: var(--ink-4);
   padding: 0 4px;
   margin-top: 1px;
+  letter-spacing: 0.02em;
 }
 .msg-row.user .msg-time { text-align: right; }
 
-/*
-  IMPROVEMENT: Retry button for failed messages
-  Shown on bot error bubbles to let user retry without refreshing.
-*/
+/* Retry */
 .retry-btn {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  font-size: 11.5px;
+  gap: 5px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--brand);
   background: var(--brand-soft);
@@ -448,23 +469,25 @@ body {
   border-radius: 20px;
   padding: 4px 10px;
   cursor: pointer;
-  margin-top: 6px;
-  transition: background var(--dur-fast), color var(--dur-fast);
+  margin-top: 5px;
+  transition: background var(--t1), color var(--t1);
   font-family: inherit;
 }
 .retry-btn:hover { background: var(--brand); color: #fff; }
-.retry-btn svg { width: 11px; height: 11px; }
+.retry-btn svg { width: 10px; height: 10px; }
 
-/* DAY DIVIDER */
+/* Day divider */
 .day-divider {
   text-align: center;
-  font-size: 11px;
-  color: var(--sub);
+  font-size: 10px;
+  color: var(--ink-4);
   font-weight: 500;
-  margin: 6px 0 10px;
+  margin: 2px 0 12px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .day-divider::before,
 .day-divider::after {
@@ -474,104 +497,104 @@ body {
   background: var(--border);
 }
 
-/* TYPING INDICATOR */
-.typing-row {
-  display: none;
-  align-items: flex-end;
-  gap: 8px;
-}
+/* Typing indicator */
+.typing-row { display: none; align-items: flex-end; gap: 8px; }
 .typing-row.show { display: flex; }
 
 .typing-bubble {
-  background: var(--surface);
+  background: var(--white);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm) var(--radius-sm) var(--radius-sm) 4px;
-  padding: 11px 14px;
+  border-radius: 3px var(--r-md) var(--r-md) var(--r-md);
+  padding: 12px 16px;
   display: flex;
   gap: 5px;
   align-items: center;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 
 .td {
-  width: 7px;
-  height: 7px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: var(--sub);
-  animation: tdBounce 1.3s ease-in-out infinite;
+  background: var(--ink-4);
+  animation: tdBounce 1.4s ease-in-out infinite;
 }
 .td:nth-child(2) { animation-delay: 0.15s; }
 .td:nth-child(3) { animation-delay: 0.30s; }
 @keyframes tdBounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-  30% { transform: translateY(-5px); opacity: 1; }
+  0%,60%,100% { transform: translateY(0); opacity: 0.3; }
+  30%         { transform: translateY(-5px); opacity: 1; }
 }
 
-/* QUICK REPLIES */
+/* ═══════════════════════════════════
+   QUICK REPLIES
+═══════════════════════════════════ */
 .qr-wrap {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
-  padding: 10px 14px 4px;
+  gap: 6px;
+  padding: 8px 14px 6px;
   flex-shrink: 0;
+  background: var(--cream);
 }
 
 .qr-btn {
-  padding: 7px 14px;
-  border: 1.5px solid var(--brand-border);
+  padding: 6px 14px;
+  border: 1.5px solid var(--border);
   border-radius: 20px;
   font-size: 12.5px;
-  font-weight: 600;
-  color: var(--brand);
-  background: var(--brand-soft);
+  font-weight: 500;
+  color: var(--ink-2);
+  background: var(--white);
   cursor: pointer;
-  transition: background var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast), transform var(--dur-fast);
+  transition: all var(--t1);
   font-family: inherit;
   white-space: nowrap;
-  /* MOBILE: Better tap target */
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+  letter-spacing: 0.01em;
 }
-.qr-btn:hover { background: var(--brand); color: #fff; border-color: var(--brand); }
-.qr-btn:active { transform: scale(0.96); }
+.qr-btn:hover {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+.qr-btn:active { transform: translateY(0) scale(0.97); }
 .qr-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
-/* ─────────────────────────────────────────────────────────────
-   LEAD COLLECTION FORM
-   FIX [DUPLICATE-IDS]: Lead inputs now use data-lead-input
-   attribute + JS targeting instead of id="leadIn" which caused
-   duplicate ID bugs when multiple steps were visible in DOM.
-───────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════
+   LEAD FORM
+═══════════════════════════════════ */
 .lead-form-card {
-  background: linear-gradient(135deg, var(--brand-soft) 0%, var(--bg) 100%);
-  border: 1px solid var(--brand-border);
-  border-radius: var(--radius-sm);
+  background: var(--cream);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
   padding: 14px;
-  margin: 4px 0;
+  margin: 2px 0;
 }
 .lead-form-card h4 {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--dark);
-  margin-bottom: 4px;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--ink);
+  margin-bottom: 3px;
 }
-.lead-form-card p {
-  font-size: 12px;
-  color: var(--sub);
-  line-height: 1.5;
-}
+.lead-form-card p { font-size: 12px; color: var(--ink-4); line-height: 1.5; }
 
 .lead-input {
   width: 100%;
   padding: 10px 13px;
   border: 1.5px solid var(--border);
-  border-radius: var(--radius-xs);
+  border-radius: var(--r-xs);
   font-size: 13.5px;
   font-family: inherit;
-  color: var(--dark);
-  background: var(--surface);
+  color: var(--ink);
+  background: var(--white);
   outline: none;
-  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+  transition: border-color var(--t1), box-shadow var(--t1);
   margin-top: 8px;
 }
 .lead-input:focus {
@@ -580,13 +603,13 @@ body {
 }
 .lead-input.error {
   border-color: var(--danger);
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12);
-  animation: shake 0.3s ease;
+  box-shadow: 0 0 0 3px rgba(220,38,38,0.1);
+  animation: shake 0.28s ease;
 }
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25%       { transform: translateX(-4px); }
-  75%       { transform: translateX(4px); }
+  0%,100% { transform: translateX(0); }
+  25%      { transform: translateX(-3px); }
+  75%      { transform: translateX(3px); }
 }
 
 .lead-input-error {
@@ -601,23 +624,22 @@ body {
   margin-top: 10px;
   width: 100%;
   padding: 10px;
-  background: var(--brand);
+  background: var(--ink);
   color: #fff;
   border: none;
-  border-radius: var(--radius-xs);
-  font-size: 13.5px;
-  font-weight: 700;
+  border-radius: var(--r-xs);
+  font-size: 13px;
+  font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: opacity var(--dur-fast), transform var(--dur-fast);
+  letter-spacing: 0.03em;
+  transition: background var(--t1), transform var(--t1);
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
 }
-.lead-submit:hover { opacity: 0.88; }
+.lead-submit:hover { background: var(--brand); }
 .lead-submit:active { transform: scale(0.98); }
-.lead-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.lead-submit:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* LEAD SUCCESS */
 .lead-success {
   display: flex;
   flex-direction: column;
@@ -627,52 +649,57 @@ body {
   text-align: center;
 }
 .lead-success-icon {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   background: var(--success);
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: successPop var(--dur-slow) var(--ease-out) both;
+  animation: successPop var(--t3) var(--spring) both;
 }
 @keyframes successPop {
-  from { transform: scale(0.5); opacity: 0; }
+  from { transform: scale(0); opacity: 0; }
   to   { transform: scale(1); opacity: 1; }
 }
-.lead-success-icon svg { width: 22px; height: 22px; color: #fff; }
-.lead-success h4 { font-size: 14px; font-weight: 700; color: var(--dark); }
-.lead-success p  { font-size: 12.5px; color: var(--sub); line-height: 1.5; }
+.lead-success-icon svg { width: 18px; height: 18px; color: #fff; }
+.lead-success h4 {
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--ink);
+}
+.lead-success p { font-size: 12.5px; color: var(--ink-4); line-height: 1.5; }
 
-/* ─────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════
    INPUT AREA
-   IMPROVEMENT: Textarea auto-grow is smoother. Mobile keyboard
-   safe area padding added. Better focus state.
-───────────────────────────────────────────────────────────── */
+═══════════════════════════════════ */
 .input-area {
-  padding: 12px 14px;
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
-  background: var(--surface);
+  padding: 10px 12px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  background: var(--white);
   border-top: 1px solid var(--border);
   flex-shrink: 0;
   display: flex;
-  gap: 9px;
+  gap: 8px;
   align-items: flex-end;
 }
 
 .input-wrap {
   flex: 1;
   min-width: 0;
-  background: var(--bg);
+  background: var(--cream);
   border: 1.5px solid var(--border);
   border-radius: 22px;
   padding: 9px 14px;
   display: flex;
   align-items: center;
-  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+  transition: border-color var(--t1), box-shadow var(--t1), background var(--t1);
 }
 .input-wrap:focus-within {
   border-color: var(--brand);
+  background: var(--white);
   box-shadow: 0 0 0 3px var(--brand-glow);
 }
 
@@ -682,22 +709,22 @@ body {
   border: none;
   background: transparent;
   outline: none;
-  font-size: 14px;
+  font-size: 13.5px;
   font-family: inherit;
-  color: var(--dark);
+  color: var(--ink);
   resize: none;
   max-height: 96px;
-  line-height: 1.45;
-  /* PERF: No height animation on every keystroke — use JS for smooth grow */
+  line-height: 1.5;
   overflow: hidden;
   display: block;
 }
-.chat-input::placeholder { color: var(--sub); }
+.chat-input::placeholder { color: var(--ink-4); }
 
+/* Send button — minimal, refined */
 .send-btn {
-  width: 42px;
-  height: 42px;
-  min-width: 42px;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
   border-radius: 50%;
   background: var(--brand);
   border: none;
@@ -706,52 +733,53 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: transform var(--dur-fast), box-shadow var(--dur-fast), opacity var(--dur-fast);
+  transition: transform var(--t1) var(--spring), box-shadow var(--t1), opacity var(--t1);
   box-shadow: 0 2px 10px var(--brand-glow);
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   outline: none;
 }
-.send-btn:hover { transform: scale(1.06); box-shadow: 0 4px 16px var(--brand-glow); }
-.send-btn:active { transform: scale(0.94); }
-.send-btn:disabled { opacity: 0.45; transform: none; cursor: not-allowed; box-shadow: none; }
+.send-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 16px var(--brand-glow);
+}
+.send-btn:active { transform: scale(0.92); }
+.send-btn:disabled { opacity: 0.35; transform: none; cursor: not-allowed; box-shadow: none; }
 .send-btn:focus-visible { box-shadow: 0 0 0 3px var(--brand-glow), 0 2px 10px var(--brand-glow); }
-.send-btn svg { width: 15px; height: 15px; color: #fff; pointer-events: none; }
+.send-btn svg { width: 14px; height: 14px; color: #fff; pointer-events: none; }
 
-/* POWERED BY */
+/* Powered by */
 .powered {
   text-align: center;
-  padding: 7px;
-  font-size: 10.5px;
-  color: var(--sub);
-  background: var(--bg);
-  border-top: 1px solid var(--border);
+  padding: 6px;
+  font-size: 9.5px;
+  color: var(--ink-4);
+  background: var(--white);
+  border-top: 1px solid var(--border-2);
   flex-shrink: 0;
+  letter-spacing: 0.05em;
 }
-.powered a {
-  color: var(--brand);
-  text-decoration: none;
-  font-weight: 600;
-}
+.powered a { color: var(--brand); text-decoration: none; font-weight: 600; }
 .powered a:hover { text-decoration: underline; }
 {% if client.remove_branding %}.powered { display: none !important; }{% endif %}
 
-/* ─────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════
    HELP CENTER
-   FIX [HC-LOAD-ONCE]: Articles load only once per session (cached
-   in allArts). Subsequent tab switches reuse cached data.
-───────────────────────────────────────────────────────────── */
+═══════════════════════════════════ */
 .hc-header {
-  padding: 14px;
-  background: var(--surface);
+  padding: 16px 14px 14px;
+  background: var(--white);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .hc-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--dark);
-  margin-bottom: 10px;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--ink);
+  margin-bottom: 12px;
+  letter-spacing: -0.2px;
 }
 
 .search-wrap { position: relative; }
@@ -760,77 +788,78 @@ body {
   left: 11px;
   top: 50%;
   transform: translateY(-50%);
-  width: 14px;
-  height: 14px;
-  color: var(--sub);
+  width: 13px;
+  height: 13px;
+  color: var(--ink-4);
   pointer-events: none;
 }
 .hc-search {
   width: 100%;
-  padding: 9px 12px 9px 33px;
+  padding: 9px 12px 9px 32px;
   border: 1.5px solid var(--border);
-  border-radius: 22px;
+  border-radius: 20px;
   font-size: 13px;
   font-family: inherit;
-  background: var(--bg);
-  color: var(--dark);
+  background: var(--cream);
+  color: var(--ink);
   outline: none;
-  transition: border-color var(--dur-fast), box-shadow var(--dur-fast), background var(--dur-fast);
+  transition: border-color var(--t1), box-shadow var(--t1), background var(--t1);
 }
 .hc-search:focus {
   border-color: var(--brand);
-  background: var(--surface);
+  background: var(--white);
   box-shadow: 0 0 0 3px var(--brand-glow);
 }
 
-/* PERF: contain on list items to avoid full-list reflow on hover */
 .hc-list {
   flex: 1;
   overflow-y: auto;
+  background: var(--cream);
   -webkit-overflow-scrolling: touch;
 }
-.hc-list::-webkit-scrollbar { width: 3px; }
-.hc-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.hc-list::-webkit-scrollbar { width: 2px; }
+.hc-list::-webkit-scrollbar-thumb { background: var(--cream-3); border-radius: 4px; }
 
 .hc-cat-label {
-  padding: 10px 14px 5px;
-  font-size: 10.5px;
+  padding: 12px 14px 4px;
+  font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--sub);
-  background: var(--bg);
+  letter-spacing: 0.12em;
+  color: var(--ink-4);
+  background: var(--cream);
   position: sticky;
   top: 0;
   z-index: 1;
 }
 
 .hc-art {
-  padding: 13px 14px;
-  border-bottom: 1px solid var(--border2);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-2);
   cursor: pointer;
-  transition: background var(--dur-fast);
+  transition: background var(--t1);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
+  background: var(--white);
+  margin: 0 8px 4px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border);
   contain: layout style;
 }
-.hc-art:hover { background: var(--brand-soft); }
+.hc-art:hover {
+  background: var(--cream);
+  border-color: var(--brand-border);
+}
 .hc-art:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 
-.hc-art-left {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  flex: 1;
-  min-width: 0;
-}
+.hc-art-left { display: flex; align-items: flex-start; gap: 10px; flex: 1; min-width: 0; }
 
 .hc-art-icon {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   border-radius: 9px;
   background: var(--brand-soft);
   border: 1px solid var(--brand-border);
@@ -839,21 +868,21 @@ body {
   justify-content: center;
   flex-shrink: 0;
 }
-.hc-art-icon svg { width: 14px; height: 14px; color: var(--brand); }
+.hc-art-icon svg { width: 13px; height: 13px; color: var(--brand); }
 
 .hc-art-meta { flex: 1; min-width: 0; }
 .hc-art-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--dark);
-  line-height: 1.35;
+  color: var(--ink);
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .hc-art-preview {
   font-size: 11.5px;
-  color: var(--sub);
+  color: var(--ink-4);
   margin-top: 2px;
   line-height: 1.4;
   white-space: nowrap;
@@ -861,21 +890,15 @@ body {
   text-overflow: ellipsis;
 }
 
-.hc-arrow { color: var(--sub); flex-shrink: 0; transition: transform var(--dur-fast); }
-.hc-art:hover .hc-arrow { transform: translateX(2px); }
-.hc-arrow svg { width: 15px; height: 15px; }
+.hc-arrow { color: var(--ink-4); flex-shrink: 0; transition: transform var(--t1); }
+.hc-art:hover .hc-arrow { transform: translateX(3px); color: var(--brand); }
+.hc-arrow svg { width: 14px; height: 14px; }
 
 .hc-empty { padding: 48px 20px; text-align: center; }
-.hc-empty svg { width: 40px; height: 40px; color: var(--border); margin-bottom: 12px; }
-.hc-empty p { font-size: 13px; color: var(--sub); line-height: 1.5; }
+.hc-empty svg { width: 36px; height: 36px; color: var(--cream-3); margin: 0 auto 12px; display: block; }
+.hc-empty p { font-size: 13px; color: var(--ink-4); line-height: 1.5; }
 
-/* ARTICLE DETAIL */
-.art-detail {
-  display: none;
-  flex-direction: column;
-  flex: 1;
-  overflow: hidden;
-}
+.art-detail { display: none; flex-direction: column; flex: 1; overflow: hidden; }
 .art-detail.show { display: flex; }
 
 .art-back {
@@ -885,60 +908,59 @@ body {
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--brand);
-  background: var(--surface);
+  background: var(--white);
   flex-shrink: 0;
-  transition: background var(--dur-fast);
+  transition: background var(--t1);
   outline: none;
   touch-action: manipulation;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
 }
-.art-back:hover { background: var(--brand-soft); }
+.art-back:hover { background: var(--cream); }
 .art-back:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
-.art-back svg { width: 14px; height: 14px; }
+.art-back svg { width: 13px; height: 13px; }
 
-.art-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 18px 16px;
-  -webkit-overflow-scrolling: touch;
-}
-.art-body::-webkit-scrollbar { width: 3px; }
-.art-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+.art-body { flex: 1; overflow-y: auto; padding: 20px 16px; -webkit-overflow-scrolling: touch; }
+.art-body::-webkit-scrollbar { width: 2px; }
+.art-body::-webkit-scrollbar-thumb { background: var(--cream-3); border-radius: 4px; }
 
 .art-cat-tag {
   display: inline-block;
   padding: 2px 9px;
   background: var(--brand-soft);
   color: var(--brand);
+  border: 1px solid var(--brand-border);
   border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   margin-bottom: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 .art-body h2 {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--dark);
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-size: 19px;
+  font-weight: 400;
+  color: var(--ink);
   margin-bottom: 12px;
-  line-height: 1.35;
+  line-height: 1.3;
+  letter-spacing: -0.2px;
 }
 .art-body .art-content {
   font-size: 13.5px;
-  color: var(--mid);
-  line-height: 1.75;
+  color: var(--ink-2);
+  line-height: 1.8;
   white-space: pre-line;
 }
 
-.art-footer {
-  margin-top: 20px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-}
+.art-footer { margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border); }
 .art-helpful {
   font-size: 12px;
-  color: var(--sub);
+  color: var(--ink-4);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -949,11 +971,11 @@ body {
   border: 1.5px solid var(--border);
   border-radius: 20px;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--sub);
+  font-weight: 500;
+  color: var(--ink-3);
   cursor: pointer;
   background: none;
-  transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast);
+  transition: all var(--t1);
   font-family: inherit;
   touch-action: manipulation;
 }
@@ -961,9 +983,7 @@ body {
 .helpful-btn.voted { background: var(--brand); color: #fff; border-color: var(--brand); }
 .helpful-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
-/* ─────────────────────────────────────────────────────────────
-   EMPTY / ERROR STATES
-───────────────────────────────────────────────────────────── */
+/* Empty state */
 .empty-chat-state {
   display: flex;
   flex-direction: column;
@@ -972,53 +992,46 @@ body {
   flex: 1;
   padding: 32px 20px;
   text-align: center;
-  color: var(--sub);
+  color: var(--ink-4);
   gap: 10px;
 }
-.empty-chat-state svg { width: 40px; height: 40px; color: var(--border); }
+.empty-chat-state svg { width: 36px; height: 36px; color: var(--cream-3); }
 .empty-chat-state p { font-size: 13px; line-height: 1.5; }
 
-/* ─────────────────────────────────────────────────────────────
-   TOAST NOTIFICATION
-   IMPROVEMENT: Non-intrusive status notifications for offline/error
-───────────────────────────────────────────────────────────── */
+/* Toast */
 .toast {
   position: fixed;
-  bottom: 80px;
+  bottom: 72px;
   left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  background: var(--dark);
-  color: #fff;
+  transform: translateX(-50%) translateY(14px);
+  background: var(--ink);
+  color: rgba(255,255,255,0.9);
   font-size: 12px;
   font-weight: 500;
-  padding: 8px 14px;
+  padding: 8px 16px;
   border-radius: 20px;
   pointer-events: none;
   opacity: 0;
-  transition: opacity var(--dur-mid), transform var(--dur-mid) var(--ease-out);
+  transition: opacity var(--t2), transform var(--t2) var(--ease);
   z-index: 9999;
   white-space: nowrap;
   max-width: calc(100% - 32px);
+  letter-spacing: 0.01em;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
 }
-.toast.show {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
-}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* ─────────────────────────────────────────────────────────────
-   MOBILE
-───────────────────────────────────────────────────────────── */
+/* Mobile */
 @media (max-width: 420px) {
-  .header { padding: 12px 14px 34px; }
-  .header-name { font-size: 16px; }
-  .messages { padding: 12px 10px; }
-  .input-area { padding: 10px 12px; padding-bottom: max(10px, env(safe-area-inset-bottom)); gap: 8px; }
-  .send-btn { width: 40px; height: 40px; min-width: 40px; }
-  .msg-col { max-width: 82%; }
-  .bubble { font-size: 13px; }
+  .header-inner { padding: 13px 14px 30px; }
+  .header-name { font-size: 18px; }
+  .messages { padding: 16px 10px 8px; }
+  .input-area { padding: 9px 10px; padding-bottom: max(9px, env(safe-area-inset-bottom)); }
+  .send-btn { width: 36px; height: 36px; min-width: 36px; }
+  .msg-col { max-width: 80%; }
+  .bubble { font-size: 13px; padding: 9px 13px; }
+  .hc-art { margin: 0 6px 4px; }
 }
-
-/* PERF: Low-end Android — disable decorative animations */
 @media (max-width: 420px) and (prefers-reduced-motion: no-preference) {
   .msg-row { animation-duration: 150ms; }
 }
@@ -1026,51 +1039,50 @@ body {
 </head>
 <body>
 
-<!-- ACCESSIBILITY: main landmark role -->
 <main role="main" style="display:contents;">
 
 <!-- ── HEADER ── -->
 <header class="header" role="banner">
-  <div class="header-top">
-    <span class="header-brand" aria-label="Powered by">
-      {% if not client.remove_branding %}Powered by Lumvi{% else %}{{ client.company_name or '' }}{% endif %}
-    </span>
-    <div class="header-actions">
-      <!--
-        FIX [POSTMESSAGE-SECURITY]: Changed '*' wildcard to a specific
-        target origin. In production, set PARENT_ORIGIN server-side.
-        Falls back to '*' if not configured but logs a warning.
-      -->
-      <button class="hbtn" aria-label="Minimize chat"
-        onclick="closePanelSecure()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-          <line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-      </button>
-    </div>
-  </div>
-
-  <div class="header-profile">
-    <div class="header-avatar" aria-hidden="true">
-      {% if client.bot_avatar_url %}
-        <img src="{{ client.bot_avatar_url }}" alt="{{ client.bot_name }}" loading="lazy">
-      {% elif client.logo_url %}
-        <img src="{{ client.logo_url }}" alt="{{ client.bot_name }}" loading="lazy">
-      {% else %}
-        <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
-          <circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/>
-          <circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/>
-          <path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/>
-        </svg>
-      {% endif %}
-    </div>
-    <div class="header-info">
-      <div class="header-name" role="heading" aria-level="1">
-        {{ client.bot_name or client.company_name or 'Support' }}
+  <div class="header-accent"></div>
+  <div class="header-inner">
+    <div class="header-top">
+      <span class="header-brand" aria-label="Powered by">
+        {% if not client.remove_branding %}Powered by Lumvi{% else %}{{ client.company_name or '' }}{% endif %}
+      </span>
+      <div class="header-actions">
+        <button class="hbtn" aria-label="Minimize chat" onclick="closePanelSecure()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
       </div>
-      <div class="header-status" aria-label="Status: online">
-        <span class="status-dot" aria-hidden="true"></span>
-        <span>{{ client.tagline or 'Typically replies instantly' }}</span>
+    </div>
+
+    <div class="header-profile">
+      <div class="header-avatar-wrap" aria-hidden="true">
+        <div class="header-avatar-ring"></div>
+        <div class="header-avatar">
+          {% if client.bot_avatar_url %}
+            <img src="{{ client.bot_avatar_url }}" alt="{{ client.bot_name }}" loading="lazy">
+          {% elif client.logo_url %}
+            <img src="{{ client.logo_url }}" alt="{{ client.bot_name }}" loading="lazy">
+          {% else %}
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
+              <circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.1)"/>
+              <circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.35)"/>
+              <path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.35)"/>
+            </svg>
+          {% endif %}
+        </div>
+      </div>
+      <div class="header-info">
+        <div class="header-name" role="heading" aria-level="1">
+          {{ client.bot_name or client.company_name or 'Support' }}
+        </div>
+        <div class="header-status" aria-label="Status: online">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span>{{ client.tagline or 'Typically replies instantly' }}</span>
+        </div>
       </div>
     </div>
   </div>
@@ -1096,20 +1108,10 @@ body {
   </button>
 </nav>
 
-<!-- ══════════════ CHAT PANEL ══════════════ -->
-<section class="tab-panel active" id="panel-chat" role="tabpanel"
-  aria-labelledby="tab-chat">
-
-  <!--
-    ACCESSIBILITY: Live region so screen readers announce new messages.
-    aria-live="polite" won't interrupt current speech.
-  -->
-  <div class="messages" id="messages"
-    role="log" aria-live="polite" aria-label="Conversation">
-
+<!-- ══ CHAT PANEL ══ -->
+<section class="tab-panel active" id="panel-chat" role="tabpanel" aria-labelledby="tab-chat">
+  <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Conversation">
     <div class="day-divider" id="dayDiv" aria-hidden="true"></div>
-
-    <!-- Welcome message -->
     <div class="msg-row" id="welcomeRow">
       <div class="msg-avatar" aria-hidden="true" id="botAv1">
         {% if client.bot_avatar_url %}
@@ -1117,11 +1119,7 @@ body {
         {% elif client.logo_url %}
           <img src="{{ client.logo_url }}" alt="" loading="lazy">
         {% else %}
-          <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
-            <circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/>
-            <circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/>
-            <path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/>
-          </svg>
+          <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;"><circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/><circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/><path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/></svg>
         {% endif %}
       </div>
       <div class="msg-col">
@@ -1132,8 +1130,6 @@ body {
         <div class="msg-time" aria-hidden="true">Just now</div>
       </div>
     </div>
-
-    <!-- Typing indicator -->
     <div class="typing-row" id="typingRow" aria-label="Assistant is typing" aria-hidden="true">
       <div class="msg-avatar" aria-hidden="true" id="botAv2">
         {% if client.bot_avatar_url %}
@@ -1141,11 +1137,7 @@ body {
         {% elif client.logo_url %}
           <img src="{{ client.logo_url }}" alt="" loading="lazy">
         {% else %}
-          <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;">
-            <circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/>
-            <circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/>
-            <path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/>
-          </svg>
+          <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;"><circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/><circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/><path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/></svg>
         {% endif %}
       </div>
       <div class="typing-bubble">
@@ -1156,7 +1148,6 @@ body {
     </div>
   </div>
 
-  <!-- Quick replies -->
   {%- set _raw_qr = client.quick_replies if client.quick_replies else [] -%}
   {%- set qr = [] -%}
   {%- for btn in _raw_qr -%}
@@ -1164,7 +1155,6 @@ body {
       {%- set qr = qr + [btn | string | trim] -%}
     {%- endif -%}
   {%- endfor -%}
-
   {% if qr %}
   <div class="qr-wrap" id="qrWrap" role="group" aria-label="Quick replies">
     {% for btn in qr[:5] %}
@@ -1175,13 +1165,9 @@ body {
   <div id="qrWrap" style="display:none;" aria-hidden="true"></div>
   {% endif %}
 
-  <!-- Input -->
   <div class="input-area">
     <div class="input-wrap">
-      <textarea
-        class="chat-input"
-        id="chatInput"
-        rows="1"
+      <textarea class="chat-input" id="chatInput" rows="1"
         placeholder="Type a message…"
         aria-label="Message input"
         aria-multiline="true"
@@ -1189,8 +1175,7 @@ body {
         oninput="autoGrow(this)"
         autocomplete="off"
         autocorrect="on"
-        spellcheck="true"
-      ></textarea>
+        spellcheck="true"></textarea>
     </div>
     <button class="send-btn" id="sendBtn" onclick="sendMsg()"
       aria-label="Send message" title="Send (Enter)">
@@ -1208,11 +1193,8 @@ body {
   {% endif %}
 </section>
 
-<!-- ══════════════ HELP CENTER PANEL ══════════════ -->
-<section class="tab-panel" id="panel-help" role="tabpanel"
-  aria-labelledby="tab-help">
-
-  <!-- Article list view -->
+<!-- ══ HELP CENTER ══ -->
+<section class="tab-panel" id="panel-help" role="tabpanel" aria-labelledby="tab-help">
   <div id="hcList" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
     <div class="hc-header">
       <div class="hc-title">Help Center</div>
@@ -1235,8 +1217,6 @@ body {
       </div>
     </div>
   </div>
-
-  <!-- Article detail view -->
   <div id="hcDetail" class="art-detail" role="article">
     <button class="art-back" onclick="backToList()" aria-label="Back to articles list">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
@@ -1259,11 +1239,8 @@ body {
   </div>
 </section>
 
-<!-- Toast notification container -->
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
-
 </main>
-
 <script>
 /* ═══════════════════════════════════════════════════════════════
    LUMVI CHAT WIDGET — Upgraded v2.0
