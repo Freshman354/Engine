@@ -55,31 +55,6 @@ app.config['REMEMBER_COOKIE_DURATION']    = timedelta(days=30)
 app.config['REMEMBER_COOKIE_SECURE']      = True
 app.config['REMEMBER_COOKIE_HTTPONLY']    = True
 
-# ── Server-side sessions via Redis ───────────────────────────────────
-# Flask's default client-side sessions store the session in a signed
-# cookie. Under multiple Gunicorn workers a redirect can land on a
-# different worker that hasn't "seen" the new cookie yet, causing a
-# 500 on the first post-login request (dashboard). Server-side sessions
-# stored in Redis are visible to every worker instantly.
-#
-# Falls back gracefully to the default cookie session if REDIS_URL is
-# not set (e.g. local dev), so nothing breaks without Redis.
-_redis_url = os.environ.get('REDIS_URL')
-if _redis_url:
-    try:
-        import redis as _redis_lib
-        from flask_session import Session as _FlaskSession
-        app.config['SESSION_TYPE']             = 'redis'
-        app.config['SESSION_REDIS']            = _redis_lib.from_url(_redis_url)
-        app.config['SESSION_USE_SIGNER']       = True   # tamper-proof session IDs
-        app.config['SESSION_KEY_PREFIX']       = 'lumvi_sess:'
-        app.config['SESSION_PERMANENT']        = True
-        _FlaskSession(app)
-        print("✅ Server-side Redis sessions enabled")
-    except ImportError:
-        print("⚠️  flask-session or redis not installed — falling back to cookie sessions. "
-              "Run: pip install flask-session redis")
-
 # Admin blueprint — registered AFTER SECRET_KEY is configured
 from admin_routes import admin_bp
 app.register_blueprint(admin_bp)
@@ -2340,19 +2315,14 @@ def login():
                     app.logger.info(f"Auto-downgraded user {user_data['id']} to free on login")
 
             user = User(user_data)
-            session.pop('_user_cache', None)  # bust stale cache before login
+            session.pop('_user_cache', None)  # bust cache so load_user re-fetches on next request
             session.permanent = True          # apply PERMANENT_SESSION_LIFETIME (30 days)
             login_user(user, remember=True)
-            # Pre-warm the user cache immediately so load_user on the very next
-            # request (the dashboard redirect) never needs a cold DB hit.
-            # Without this, a multi-worker setup can 500 when the redirect lands
-            # on a different worker before the session write has propagated.
-            session['_user_cache'] = dict(user_data)
             models.track_event('login', user_id=user_data['id'], metadata={'email': email})
 
-            # Pass subscription status to dashboard via session.
-            # Reuse user_data already in memory — no extra DB round-trip needed.
-            sub = get_subscription_status(user_data)
+            # Pass subscription status to dashboard via session
+            fresh = models.get_user_by_id(user_data['id'])
+            sub = get_subscription_status(fresh)
             session['sub_status'] = sub['status']
 
             return redirect(url_for('dashboard'))
@@ -4540,6 +4510,109 @@ def upload_faqs():
 
     except Exception as e:
         app.logger.error(f"[Upload] Error: {e}", exc_info=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/faq/import-url', methods=['POST'])
+@login_required
+def import_faqs_from_url():
+    """
+    Fetch a webpage by URL, extract visible text, then use AI to parse
+    Q&A pairs from it — same enrichment pipeline as PDF/CSV uploads.
+    """
+    try:
+        data      = request.get_json(silent=True) or {}
+        client_id = data.get('client_id')
+        url       = (data.get('url') or '').strip()
+
+        if not models.verify_client_ownership(current_user.id, client_id):
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+        if not url:
+            return jsonify({'success': False, 'error': 'No URL provided'}), 400
+
+        import re as _re
+        if not _re.match(r'^https?://', url):
+            url = 'https://' + url
+
+        # ── Fetch the page ────────────────────────────────────────────
+        import urllib.request
+        import urllib.error
+        import html as _html
+        try:
+            req = urllib.request.Request(
+                url,
+                headers={'User-Agent': 'Mozilla/5.0 (compatible; LumviBot/1.0)'},
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                raw_bytes = resp.read(500_000)   # cap at 500 KB
+        except urllib.error.HTTPError as e:
+            return jsonify({'success': False, 'error': f'Could not fetch URL: HTTP {e.code}'}), 400
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Could not fetch URL: {e}'}), 400
+
+        # ── Strip HTML tags → plain text ──────────────────────────────
+        charset = 'utf-8'
+        try:
+            html_text = raw_bytes.decode(charset, errors='replace')
+        except Exception:
+            html_text = raw_bytes.decode('latin-1', errors='replace')
+
+        # Remove scripts, styles, nav, footer noise
+        html_text = _re.sub(r'(?is)<(script|style|nav|footer|header)[^>]*>.*?</\1>', ' ', html_text)
+        html_text = _re.sub(r'<[^>]+>', ' ', html_text)          # strip all tags
+        html_text = _html.unescape(html_text)                     # decode &amp; etc.
+        html_text = _re.sub(r'[ \t]{2,}', ' ', html_text)        # collapse spaces
+        html_text = _re.sub(r'\n{3,}', '\n\n', html_text).strip()# collapse blank lines
+
+        if len(html_text) < 50:
+            return jsonify({'success': False, 'error': 'Page had no readable text content.'}), 400
+
+        # ── AI extraction (reuse existing helper) ─────────────────────
+        raw_items = extract_faqs_from_text(html_text[:6000])   # cap prompt size
+
+        if not raw_items:
+            return jsonify({
+                'success': False,
+                'error':   'No FAQ pairs found on that page. Try a dedicated FAQ/Help page URL.',
+            }), 400
+
+        app.logger.info(f"[ImportURL] client={client_id} url={url} raw={len(raw_items)}")
+
+        # ── Validate + dedup + background enrich (same as file upload) ─
+        valid_faqs, errors = models.validate_and_enrich_faqs(raw_items, client_id)
+
+        if not valid_faqs:
+            return jsonify({
+                'success': False,
+                'error':   'All extracted items failed validation (duplicates or missing fields).',
+                'validation_errors': errors[:10],
+            }), 400
+
+        import threading
+        t = threading.Thread(
+            target=_bg_enrich_and_save,
+            args=(client_id, valid_faqs),
+            daemon=True,
+        )
+        t.start()
+
+        response = {
+            'success':    True,
+            'message':    (
+                f'Found {len(valid_faqs)} FAQ{"s" if len(valid_faqs) != 1 else ""} on that page — '
+                'your knowledge base will be ready in about 30–60 seconds.'
+            ),
+            'count':      len(valid_faqs),
+            'processing': True,
+        }
+        if errors:
+            response['skipped']           = len(errors)
+            response['validation_errors'] = errors[:10]
+        return jsonify(response)
+
+    except Exception as e:
+        app.logger.error(f'[ImportURL] Error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

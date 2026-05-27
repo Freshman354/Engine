@@ -1,1378 +1,1044 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FAQ Manager — Lumvi</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Knowledge Base — Lumvi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-    --cream:   #F7F4EF;
-    --panel:   #EDEAE3;
-    --cream2:  #F0EBE1;
-    --gold:    #B8924A;
-    --gold-lt: rgba(184,146,74,0.10);
-    --gold-dk: #9A7A3A;
-    --dark:    #1C1917;
-    --mid:     #57534E;
-    --sub:     #A8A29E;
-    --border:  #E7E2DA;
-    --white:   #FFFFFF;
-    --success: #16A34A;
-    --success-lt: #F0FDF4;
-    --danger:  #EF4444;
-    --danger-lt: #FEF2F2;
-    --warning: #D97706;
-    --warning-lt: #FFFBEB;
+  --bg:        #F5F5F7;
+  --surface:   #FFFFFF;
+  --surface2:  #F9F9FB;
+  --border:    #E8E8EC;
+  --border2:   #DDDDE5;
+  --ink:       #0D0D14;
+  --ink2:      #3D3D52;
+  --ink3:      #7B7B9A;
+  --ink4:      #ADADC4;
+  --accent:    #5E5CE6;
+  --accent-lt: rgba(94,92,230,0.08);
+  --accent-md: rgba(94,92,230,0.15);
+  --accent-dk: #4340C4;
+  --green:     #12B76A;
+  --green-lt:  #ECFDF5;
+  --red:       #F04438;
+  --red-lt:    #FEF3F2;
+  --amber:     #F79009;
+  --amber-lt:  #FFFAEB;
+  --blue:      #2E90FA;
+  --blue-lt:   #EFF8FF;
+  --sidebar-w: 252px;
+  --topbar-h:  56px;
+  --radius:    10px;
+  --radius-lg: 14px;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06),0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.08),0 2px 6px rgba(0,0,0,0.04);
+  --shadow-lg: 0 20px 48px rgba(0,0,0,0.14),0 8px 16px rgba(0,0,0,0.06);
 }
 
-body {
-    font-family: 'DM Sans', sans-serif;
-    background: var(--cream);
-    color: var(--dark);
-    min-height: 100vh;
-}
+body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:var(--ink); min-height:100vh; display:flex; overflow-x:hidden; }
 
-/* ── TOPBAR ── */
+/* ═══ SIDEBAR ═══ */
+.sidebar {
+  width:var(--sidebar-w); background:var(--ink); height:100vh;
+  position:fixed; top:0; left:0; display:flex; flex-direction:column; z-index:200; flex-shrink:0;
+}
+.sidebar-logo {
+  height:var(--topbar-h); display:flex; align-items:center; gap:10px;
+  padding:0 18px; border-bottom:1px solid rgba(255,255,255,0.07); flex-shrink:0;
+}
+.logo-mark { width:28px;height:28px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.logo-mark svg { width:15px;height:15px;color:#fff; }
+.logo-name { font-size:15px;font-weight:800;color:#fff;letter-spacing:-0.03em; }
+
+.sidebar-nav { flex:1; overflow-y:auto; padding:16px 10px; }
+.nav-section-label { font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:rgba(255,255,255,0.28);padding:0 8px;margin:16px 0 6px; }
+.nav-section-label:first-child { margin-top:0; }
+
+.nav-item {
+  display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;
+  font-size:13.5px;font-weight:500;color:rgba(255,255,255,0.5);cursor:pointer;
+  transition:all 0.14s;text-decoration:none;margin-bottom:1px;
+}
+.nav-item:hover { background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.85); }
+.nav-item.active { background:var(--accent);color:#fff;font-weight:700; }
+.nav-item svg { width:15px;height:15px;flex-shrink:0;opacity:0.7; }
+.nav-item.active svg { opacity:1; }
+.nav-badge {
+  margin-left:auto;font-size:10px;font-weight:700;background:rgba(255,255,255,0.1);
+  color:rgba(255,255,255,0.5);border-radius:20px;padding:2px 7px;min-width:20px;text-align:center;
+}
+.nav-item.active .nav-badge { background:rgba(255,255,255,0.2);color:#fff; }
+
+.sidebar-footer { padding:12px 10px;border-top:1px solid rgba(255,255,255,0.07);flex-shrink:0; }
+.plan-card {
+  background:rgba(94,92,230,0.18);border:1px solid rgba(94,92,230,0.3);
+  border-radius:10px;padding:12px 13px;display:flex;align-items:center;gap:10px;
+}
+.plan-card-icon { width:30px;height:30px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.plan-card-icon svg { width:14px;height:14px;color:#fff; }
+.plan-card-name { font-size:12.5px;font-weight:700;color:#fff; }
+.plan-card-meta { font-size:11px;color:rgba(255,255,255,0.38);margin-top:2px; }
+
+/* ═══ MAIN ═══ */
+.main { margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh; }
+
 .topbar {
-    background: var(--white);
-    border-bottom: 1px solid var(--border);
-    padding: 0 32px;
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: sticky;
-    top: 0;
-    z-index: 100;
+  height:var(--topbar-h);background:var(--surface);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;padding:0 24px;
+  position:sticky;top:0;z-index:100;
 }
+.topbar-left { display:flex;align-items:center;gap:8px; }
+.breadcrumb { display:flex;align-items:center;gap:5px;font-size:13px;color:var(--ink3); }
+.breadcrumb a { color:var(--ink3);text-decoration:none;transition:color 0.14s; }
+.breadcrumb a:hover { color:var(--ink); }
+.bc-sep { color:var(--ink4); }
+.page-title { font-size:14px;font-weight:800;color:var(--ink);letter-spacing:-0.02em; }
+.topbar-right { display:flex;align-items:center;gap:8px; }
+.tb-pill { font-size:12px;font-weight:600;color:var(--ink3);background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 12px; }
+.tb-pill strong { color:var(--ink); }
+.limit-warn { font-size:11px;font-weight:700;color:var(--amber);background:var(--amber-lt);border:1px solid rgba(247,144,9,0.2);border-radius:20px;padding:4px 10px;display:none; }
 
-.topbar-left { display: flex; align-items: center; gap: 16px; }
+/* ═══ CONTENT ═══ */
+.content { flex:1;padding:22px 24px;max-width:1080px; }
 
-.back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--sub);
-    text-decoration: none;
-    padding: 6px 10px;
-    border-radius: 7px;
-    transition: all 0.2s;
-    border: 1px solid transparent;
+/* ── STAT STRIP ── */
+.stat-strip { display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px; }
+.stat-card {
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  padding:16px 18px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-sm);
+  transition:box-shadow 0.18s,transform 0.18s;cursor:default;
 }
-.back-link:hover { color: var(--dark); background: var(--cream); border-color: var(--border); }
+.stat-card:hover { box-shadow:var(--shadow-md);transform:translateY(-1px); }
+.stat-icon { width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.si-purple { background:var(--accent-lt); } .si-purple svg { color:var(--accent); }
+.si-blue   { background:var(--blue-lt); }   .si-blue svg   { color:var(--blue); }
+.si-amber  { background:var(--amber-lt); }  .si-amber svg  { color:var(--amber); }
+.si-green  { background:var(--green-lt); }  .si-green svg  { color:var(--green); }
+.stat-icon svg { width:17px;height:17px; }
+.stat-val { font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-0.04em;line-height:1; }
+.stat-label { font-size:10.5px;font-weight:600;color:var(--ink3);margin-top:3px;text-transform:uppercase;letter-spacing:0.05em; }
 
-.topbar-divider { width: 1px; height: 20px; background: var(--border); }
-
-.topbar-title {
-    font-family: 'Fraunces', serif;
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--dark);
+/* ── TOOLBAR ── */
+.toolbar {
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  padding:9px 12px;display:flex;align-items:center;gap:8px;margin-bottom:12px;
+  box-shadow:var(--shadow-sm);flex-wrap:wrap;
 }
-
-.topbar-right { display: flex; align-items: center; gap: 10px; }
-
-.plan-badge {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--mid);
-    background: var(--cream);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 4px 12px;
-}
-
-.plan-badge strong { color: var(--dark); }
-
-.faq-counter {
-    font-size: 12px;
-    color: var(--sub);
-    padding: 4px 10px;
-    border-radius: 20px;
-    background: var(--gold-lt);
-    border: 1px solid rgba(184,146,74,0.2);
-    font-weight: 500;
-}
-
-.limit-warning {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--warning);
-    background: var(--warning-lt);
-    border: 1px solid rgba(217,119,6,0.2);
-    border-radius: 20px;
-    padding: 4px 10px;
-    display: none;
-}
-
-/* ── MAIN LAYOUT ── */
-.page-wrap { max-width: 1080px; margin: 0 auto; padding: 28px 24px; }
-
-/* ── CONTROLS BAR ── */
-.controls {
-    background: var(--white);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 16px 20px;
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-}
-
 .search-wrap {
-    display: flex;
-    align-items: center;
-    background: var(--cream);
-    border: 1.5px solid var(--border);
-    border-radius: 9px;
-    padding: 0 12px;
-    flex: 1;
-    min-width: 200px;
-    transition: border-color 0.2s;
+  flex:1;min-width:180px;display:flex;align-items:center;gap:8px;
+  background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius);
+  padding:0 12px;transition:all 0.15s;
 }
-.search-wrap:focus-within { border-color: var(--gold); background: var(--white); }
+.search-wrap:focus-within { border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-lt); }
+.search-wrap svg { width:14px;height:14px;color:var(--ink4);flex-shrink:0; }
+.search-wrap input { flex:1;padding:9px 0;border:none;background:transparent;font-size:13.5px;font-family:inherit;color:var(--ink);outline:none; }
+.search-wrap input::placeholder { color:var(--ink4); }
+.search-clear { background:none;border:none;cursor:pointer;color:var(--ink4);font-size:13px;padding:2px 4px;border-radius:4px; }
+.search-clear:hover { color:var(--ink2); }
+.t-divider { width:1px;height:24px;background:var(--border);flex-shrink:0; }
 
-.search-icon {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    color: var(--sub);
-    margin-right: 8px;
+/* ── FILTER TABS ── */
+.filter-tabs { display:flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:3px;flex-shrink:0; }
+.filter-tab {
+  display:flex;align-items:center;gap:5px;padding:6px 11px;border-radius:6px;
+  font-size:12.5px;font-weight:600;font-family:inherit;color:var(--ink3);
+  border:none;background:transparent;cursor:pointer;transition:all 0.14s;white-space:nowrap;
 }
-
-.search-wrap input {
-    flex: 1;
-    padding: 10px 0;
-    border: none;
-    background: transparent;
-    font-size: 14px;
-    color: var(--dark);
-    font-family: 'DM Sans', sans-serif;
-    outline: none;
-}
-.search-wrap input::placeholder { color: var(--sub); }
-
-.search-clear {
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--sub);
-    font-size: 13px;
-    padding: 2px 4px;
-    border-radius: 4px;
-    line-height: 1;
-    flex-shrink: 0;
-}
-.search-clear:hover { color: var(--dark); }
-
-.controls-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.filter-tab:hover { color:var(--ink);background:rgba(0,0,0,0.04); }
+.filter-tab.active { background:var(--surface);color:var(--accent);box-shadow:var(--shadow-sm); }
+.filter-tab svg { width:11px;height:11px; }
+.tab-count { font-size:10px;font-weight:700;background:var(--accent-lt);color:var(--accent);border-radius:20px;padding:1px 6px;min-width:18px;text-align:center; }
+.filter-tab.active .tab-count { background:var(--accent);color:#fff; }
 
 /* ── BUTTONS ── */
 .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 9px 16px;
-    border-radius: 9px;
-    font-family: 'DM Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    border: none;
-    transition: all 0.2s;
-    white-space: nowrap;
-    text-decoration: none;
+  display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--radius);
+  font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;border:none;
+  transition:all 0.15s;white-space:nowrap;text-decoration:none;
 }
+.btn-primary { background:var(--accent);color:#fff;box-shadow:0 1px 4px rgba(94,92,230,0.3); }
+.btn-primary:hover { background:var(--accent-dk);transform:translateY(-1px);box-shadow:0 4px 12px rgba(94,92,230,0.3); }
+.btn-outline { background:var(--surface);color:var(--ink2);border:1px solid var(--border); }
+.btn-outline:hover { border-color:var(--accent);color:var(--accent);background:var(--accent-lt); }
+.btn-ghost { background:transparent;color:var(--ink3);border:1px solid var(--border); }
+.btn-ghost:hover { background:var(--surface2);color:var(--ink); }
+.btn-danger { background:var(--red-lt);color:var(--red);border:1px solid rgba(240,68,56,0.2); }
+.btn-danger:hover { background:var(--red);color:#fff; }
+.btn-danger-solid { background:var(--red);color:#fff; }
+.btn-danger-solid:hover { background:#d63129; }
+.btn-sm { padding:5px 11px;font-size:12px;border-radius:7px; }
+.btn:disabled { opacity:0.5;cursor:not-allowed;transform:none!important; }
 
-.btn-primary { background: var(--gold); color: #fff; box-shadow: 0 2px 8px rgba(184,146,74,0.3); }
-.btn-primary:hover { background: var(--gold-dk); transform: translateY(-1px); }
-.btn-outline { background: var(--white); color: var(--mid); border: 1px solid var(--border); }
-.btn-outline:hover { border-color: var(--gold); color: var(--gold-dk); background: var(--gold-lt); }
-.btn-danger-outline { background: var(--white); color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
-.btn-danger-outline:hover { background: var(--danger-lt); border-color: var(--danger); }
-.btn-danger-solid { background: var(--danger); color: #fff; }
-.btn-danger-solid:hover { background: #dc2626; }
-.btn-ghost { background: transparent; color: var(--mid); border: 1px solid var(--border); }
-.btn-ghost:hover { background: var(--cream); }
-.btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 7px; }
+/* ── RESULT COUNT ── */
+.result-count { font-size:12px;color:var(--ink3);margin-bottom:10px;padding:0 2px; }
 
-/* ── SEARCH COUNT ── */
-.search-count {
-    font-size: 12px;
-    color: var(--sub);
-    margin-bottom: 12px;
-    padding: 0 2px;
+/* ── FAQ TABLE ── */
+.faq-table-wrap { background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);overflow:hidden; }
+.faq-table-head {
+  display:grid;grid-template-columns:1fr 1.35fr 110px 92px;
+  padding:9px 18px;background:var(--surface2);border-bottom:1px solid var(--border);
 }
+.faq-th { font-size:10.5px;font-weight:800;color:var(--ink3);text-transform:uppercase;letter-spacing:0.07em; }
 
-/* ── FAQ LIST ── */
-.faq-list { display: flex; flex-direction: column; gap: 1px; }
+.faq-list { display:flex;flex-direction:column; }
 
 .faq-item {
-    background: var(--white);
-    border: 1px solid var(--border);
-    border-radius: 0;
-    padding: 18px 20px;
-    transition: background 0.15s;
-    position: relative;
+  display:grid;grid-template-columns:1fr 1.35fr 110px 92px;
+  border-bottom:1px solid var(--border);transition:background 0.12s;
 }
+.faq-item:last-child { border-bottom:none; }
+.load-more-row { padding:14px 18px;text-align:center;border-top:1px solid var(--border); }
+/* When load-more-row is present, the last faq-item is no longer :last-child,
+   so we explicitly remove its border to avoid doubling with load-more-row's top border */
+.faq-item:has(+ .load-more-row) { border-bottom:none; }
+.faq-item:hover { background:#FAFAFD; }
 
-.faq-item:first-child { border-radius: 14px 14px 0 0; }
-.faq-item:last-child { border-radius: 0 0 14px 14px; border-bottom: 1px solid var(--border); }
-.faq-item:first-child:last-child { border-radius: 14px; }
-.faq-item + .faq-item { border-top: none; }
-.faq-item:hover { background: #FDFCFA; }
+.faq-cell { padding:14px 18px;display:flex;align-items:flex-start;min-width:0; }
 
-.faq-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
+.faq-q { font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.45;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden; }
+.faq-a { font-size:13px;font-weight:400;color:var(--ink3);line-height:1.55;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden; }
+
+.cell-tags { flex-wrap:wrap;gap:5px;align-items:flex-start; }
+.kw-tag {
+  font-size:10px;font-weight:600;font-family:'JetBrains Mono',monospace;
+  color:var(--accent);background:var(--accent-lt);border:1px solid var(--accent-md);
+  border-radius:5px;padding:2px 7px;
 }
+.cell-actions { justify-content:flex-end;gap:5px;align-items:flex-start; }
 
-.faq-body { flex: 1; min-width: 0; }
+/* ── EMPTY / LOADING ── */
+.empty-wrap { padding:72px 24px;text-align:center; }
+.empty-icon { width:52px;height:52px;background:var(--accent-lt);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px; }
+.empty-icon svg { width:24px;height:24px;color:var(--accent); }
+.empty-wrap h3 { font-size:17px;font-weight:800;color:var(--ink);margin-bottom:8px;letter-spacing:-0.02em; }
+.empty-wrap p { font-size:13.5px;color:var(--ink3);line-height:1.6;margin-bottom:20px; }
 
-.faq-question {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--dark);
-    margin-bottom: 6px;
-    line-height: 1.45;
-}
-
-.faq-answer {
-    font-size: 13px;
-    color: var(--mid);
-    font-weight: 300;
-    line-height: 1.6;
-    margin-bottom: 10px;
-}
-
-.faq-keywords {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-}
-
-.keyword-tag {
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--gold-dk);
-    background: var(--gold-lt);
-    border: 1px solid rgba(184,146,74,0.18);
-    border-radius: 5px;
-    padding: 2px 8px;
-    font-family: 'DM Mono', monospace;
-}
-
-.faq-item-actions {
-    display: flex;
-    gap: 6px;
-    flex-shrink: 0;
-    align-items: flex-start;
-}
-
-/* ── EMPTY STATE ── */
-.empty-wrap {
-    background: var(--white);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 64px 24px;
-    text-align: center;
-}
-
-.empty-wrap h3 {
-    font-family: 'Fraunces', serif;
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--dark);
-    margin-bottom: 8px;
-}
-
-.empty-wrap p { font-size: 14px; color: var(--sub); font-weight: 300; line-height: 1.6; margin-bottom: 20px; }
-
-.empty-icon-box {
-    width: 56px;
-    height: 56px;
-    border-radius: 14px;
-    background: var(--gold-lt);
-    border: 1px solid rgba(184,146,74,0.2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 18px;
-}
-
-.empty-icon-box svg { width: 24px; height: 24px; color: var(--gold); }
-
-/* ── MODALS ── */
+/* ═══ MODALS ═══ */
 .modal {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(28,25,23,0.55);
-    backdrop-filter: blur(4px);
-    z-index: 1000;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
+  display:none;position:fixed;inset:0;background:rgba(13,13,20,0.52);
+  backdrop-filter:blur(6px);z-index:1000;align-items:center;justify-content:center;padding:20px;
 }
-
 .modal-box {
-    background: var(--white);
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    padding: 32px;
-    width: 100%;
-    max-width: 520px;
-    box-shadow: 0 24px 60px rgba(0,0,0,0.12);
-    animation: slideUp 0.22s ease;
+  background:var(--surface);border:1px solid var(--border);border-radius:18px;
+  width:100%;max-width:520px;box-shadow:var(--shadow-lg);
+  animation:mIn 0.2s cubic-bezier(.34,1.3,.64,1);overflow:hidden;
 }
+.modal-box.lg { max-width:600px; }
+.modal-box.sm { max-width:420px; }
+@keyframes mIn { from{transform:translateY(14px) scale(0.97);opacity:0} to{transform:translateY(0) scale(1);opacity:1} }
 
-.modal-box.sm { max-width: 420px; text-align: center; }
-.modal-box.lg { max-width: 600px; }
+.modal-hd { display:flex;align-items:flex-start;justify-content:space-between;padding:22px 24px 0; }
+.modal-label { font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:0.1em;color:var(--accent);margin-bottom:4px; }
+.modal-hd h2 { font-size:18px;font-weight:800;color:var(--ink);letter-spacing:-0.025em; }
+.modal-x { width:30px;height:30px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--ink3);font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.14s;line-height:1;flex-shrink:0; }
+.modal-x:hover { background:var(--border2);color:var(--ink); }
 
-.modal-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 24px;
+.modal-body { padding:20px 24px 24px; }
+.modal-ft { display:flex;gap:8px;justify-content:flex-end;padding:14px 24px;border-top:1px solid var(--border);background:var(--surface2); }
+
+.form-group { margin-bottom:16px; }
+.form-group label { display:block;font-size:11.5px;font-weight:700;color:var(--ink2);margin-bottom:6px; }
+.form-group input, .form-group textarea {
+  width:100%;padding:10px 13px;background:var(--surface2);border:1.5px solid var(--border);
+  border-radius:var(--radius);font-size:13.5px;font-family:inherit;color:var(--ink);outline:none;transition:all 0.15s;
 }
+.form-group input:focus, .form-group textarea:focus { border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-lt); }
+.form-group input::placeholder, .form-group textarea::placeholder { color:var(--ink4); }
+.form-group textarea { resize:vertical;min-height:96px;line-height:1.6; }
+.form-hint { font-size:11px;color:var(--ink4);margin-top:5px; }
 
-.modal-header h2 {
-    font-family: 'Fraunces', serif;
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--dark);
+/* confirm modal */
+.confirm-body { padding:28px 24px;text-align:center; }
+.confirm-icon { width:50px;height:50px;border-radius:14px;background:var(--red-lt);border:1px solid rgba(240,68,56,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 14px; }
+.confirm-icon svg { width:22px;height:22px;color:var(--red); }
+.confirm-body h2 { font-size:18px;font-weight:800;color:var(--ink);margin-bottom:8px;letter-spacing:-0.02em; }
+.confirm-body p { font-size:13.5px;color:var(--ink3);line-height:1.6; }
+.confirm-count { display:inline-block;font-weight:800;color:var(--red);background:var(--red-lt);padding:3px 10px;border-radius:6px;font-size:13px;margin:10px 0 14px; }
+.confirm-actions { display:flex;gap:8px;justify-content:center;margin-top:18px; }
+
+/* upload modal */
+.upload-tabs { display:flex;gap:3px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:3px;margin-bottom:18px; }
+.upload-tab { flex:1;padding:8px 10px;border:none;border-radius:7px;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--ink3);background:transparent;cursor:pointer;transition:all 0.14s;display:flex;align-items:center;justify-content:center;gap:6px; }
+.upload-tab:hover { color:var(--ink);background:rgba(0,0,0,0.04); }
+.upload-tab.active { background:var(--surface);color:var(--ink);box-shadow:var(--shadow-sm); }
+.upload-tab svg { width:13px;height:13px; }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+
+.format-row { display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px; }
+.format-card { background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;color:var(--ink3);line-height:1.7; }
+.format-card strong { display:block;color:var(--ink);font-size:13px;font-weight:700;margin-bottom:6px; }
+.format-card code { font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);background:var(--accent-lt);padding:1px 5px;border-radius:3px; }
+
+.template-link { display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--accent);font-weight:600;cursor:pointer;margin-bottom:14px;text-decoration:none; }
+.template-link:hover { text-decoration:underline; }
+.template-link svg { width:14px;height:14px; }
+
+.drop-zone { border:2px dashed var(--border);border-radius:12px;padding:28px 20px;text-align:center;cursor:pointer;transition:all 0.2s;background:var(--surface2);margin-bottom:16px; }
+.drop-zone:hover, .drop-zone.dragover { border-color:var(--accent);background:var(--accent-lt); }
+.dz-icon { margin:0 auto 10px;width:36px;height:36px;color:var(--ink4); }
+.drop-zone p { font-size:13.5px;color:var(--ink2);font-weight:500;margin-bottom:4px; }
+.drop-zone .file-types { font-size:12px;color:var(--ink4); }
+.sel-file { font-size:13px;color:var(--accent);font-weight:600;margin-top:8px; }
+
+.progress-wrap { margin-bottom:16px;display:none; }
+.progress-track { background:var(--border);border-radius:20px;height:5px;overflow:hidden;margin-bottom:8px; }
+.progress-bar { background:var(--accent);height:100%;width:0%;transition:width 0.4s;border-radius:20px; }
+.progress-label { font-size:12px;color:var(--ink3);text-align:center; }
+
+.upload-tip { font-size:12px;color:var(--ink3);background:var(--blue-lt);border-left:3px solid var(--blue);border-radius:8px;padding:11px 13px;line-height:1.6;margin-bottom:16px; }
+.upload-tip strong { color:var(--blue); }
+
+.url-examples { font-size:12px;color:var(--ink4);line-height:1.7;margin-bottom:14px; }
+.url-examples strong { color:var(--ink2);display:block;margin-bottom:4px; }
+.url-examples code { font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);background:var(--accent-lt);padding:1px 5px;border-radius:3px; }
+.url-input-row { display:flex;gap:8px;margin-bottom:14px; }
+.url-input-row input { flex:1;padding:10px 13px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius);font-size:13.5px;font-family:inherit;color:var(--ink);outline:none;transition:all 0.15s; }
+.url-input-row input:focus { border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-lt); }
+.url-input-row input::placeholder { color:var(--ink4); }
+
+/* toast */
+#toast { position:fixed;bottom:24px;right:24px;z-index:9999;padding:13px 18px;border-radius:12px;font-size:13.5px;font-weight:600;display:none;box-shadow:var(--shadow-lg);max-width:340px;animation:tIn 0.22s ease; }
+@keyframes tIn { from{transform:translateY(8px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+/* hamburger — hidden on desktop */
+#menu-btn { display:none; }
+
+/* sidebar overlay on mobile */
+.sidebar-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:199; }
+.sidebar-overlay.visible { display:block; }
+
+/* responsive */
+@media(max-width:1040px) { .stat-strip{grid-template-columns:repeat(2,1fr);} }
+@media(max-width:860px) {
+  #menu-btn { display:inline-flex; }
+  .sidebar{transform:translateX(-100%);transition:transform 0.25s;}
+  .sidebar.open{transform:translateX(0);}
+  .main{margin-left:0;}
+  .faq-table-head{display:none;}
+  .faq-item{grid-template-columns:1fr;} 
+  .faq-cell:nth-child(3){display:none;}
+  .content{padding:14px;}
 }
-
-.modal-close {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: var(--cream);
-    border: 1px solid var(--border);
-    color: var(--mid);
-    font-size: 18px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s;
-    line-height: 1;
+@media(max-width:540px) {
+  .stat-strip{grid-template-columns:1fr 1fr;}
+  .filter-tabs{display:none;}
+  .format-row{grid-template-columns:1fr;}
 }
-.modal-close:hover { background: var(--panel); color: var(--dark); }
-
-.form-group { margin-bottom: 18px; }
-
-.form-group label {
-    display: block;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--mid);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-bottom: 7px;
-}
-
-.form-group input,
-.form-group textarea {
-    width: 100%;
-    padding: 11px 14px;
-    background: var(--cream);
-    border: 1.5px solid var(--border);
-    border-radius: 9px;
-    font-size: 14px;
-    color: var(--dark);
-    font-family: 'DM Sans', sans-serif;
-    outline: none;
-    transition: all 0.2s;
-}
-
-.form-group input::placeholder,
-.form-group textarea::placeholder { color: var(--sub); }
-
-.form-group input:focus,
-.form-group textarea:focus {
-    border-color: var(--gold);
-    background: var(--white);
-    box-shadow: 0 0 0 3px var(--gold-lt);
-}
-
-.form-group textarea {
-    resize: vertical;
-    min-height: 100px;
-    line-height: 1.6;
-}
-
-.form-hint {
-    font-size: 11px;
-    color: var(--sub);
-    margin-top: 5px;
-    font-weight: 300;
-}
-
-.modal-actions {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-    margin-top: 8px;
-}
-
-/* ── DELETE CONFIRM ── */
-.confirm-icon-box {
-    width: 52px;
-    height: 52px;
-    border-radius: 14px;
-    background: var(--danger-lt);
-    border: 1px solid rgba(239,68,68,0.2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 16px;
-}
-.confirm-icon-box svg { width: 22px; height: 22px; color: var(--danger); }
-.modal-box.sm h2 { font-family: 'Fraunces', serif; font-size: 18px; font-weight: 700; margin-bottom: 10px; }
-.modal-box.sm p { font-size: 14px; color: var(--mid); line-height: 1.6; margin-bottom: 6px; }
-.confirm-count { display: inline-block; font-weight: 700; color: var(--danger); background: var(--danger-lt); padding: 4px 12px; border-radius: 7px; font-size: 14px; margin: 10px 0 18px; }
-.confirm-actions { display: flex; gap: 10px; justify-content: center; margin-top: 4px; }
-
-/* ── UPLOAD MODAL ── */
-.format-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-.format-card {
-    background: var(--cream);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px;
-    font-size: 12px;
-    color: var(--mid);
-    line-height: 1.7;
-}
-.format-card strong { display: block; color: var(--dark); font-size: 13px; margin-bottom: 6px; }
-.format-card code { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--gold-dk); background: var(--gold-lt); padding: 1px 5px; border-radius: 3px; }
-
-.template-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    color: var(--gold-dk);
-    font-weight: 600;
-    cursor: pointer;
-    margin-bottom: 14px;
-    text-decoration: none;
-}
-.template-link:hover { text-decoration: underline; }
-.template-link svg { width: 14px; height: 14px; }
-
-.drop-zone {
-    border: 2px dashed var(--border);
-    border-radius: 12px;
-    padding: 28px 20px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    background: var(--cream);
-    margin-bottom: 16px;
-}
-.drop-zone:hover, .drop-zone.dragover { border-color: var(--gold); background: var(--gold-lt); }
-.drop-zone-icon { margin: 0 auto 10px; width: 36px; height: 36px; color: var(--sub); }
-.drop-zone p { font-size: 14px; color: var(--mid); font-weight: 500; margin-bottom: 4px; }
-.drop-zone .file-types { font-size: 12px; color: var(--sub); font-weight: 300; }
-.selected-file { font-size: 13px; color: var(--gold-dk); font-weight: 600; margin-top: 8px; }
-
-.progress-wrap { margin-bottom: 16px; display: none; }
-.progress-track { background: var(--border); border-radius: 20px; height: 6px; overflow: hidden; margin-bottom: 8px; }
-.progress-bar { background: var(--gold); height: 100%; width: 0%; transition: width 0.4s; border-radius: 20px; }
-.progress-label { font-size: 12px; color: var(--sub); text-align: center; }
-
-.upload-tip {
-    font-size: 12px;
-    color: var(--mid);
-    background: var(--warning-lt);
-    border-left: 3px solid var(--warning);
-    border-radius: 8px;
-    padding: 12px 14px;
-    line-height: 1.6;
-    margin-bottom: 16px;
-}
-.upload-tip strong { color: var(--warning); }
-
-/* ── TOAST ── */
-#toast {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    z-index: 9999;
-    padding: 13px 20px;
-    border-radius: 10px;
-    font-size: 14px;
-    font-weight: 600;
-    display: none;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-    max-width: 320px;
-}
-
-@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
-/* ── RESPONSIVE ── */
-@media (max-width: 768px) {
-    .topbar { padding: 0 16px; }
-    .topbar-title { display: none; }
-    .topbar-divider { display: none; }
-    .page-wrap { padding: 16px; }
-    .controls { padding: 12px 14px; gap: 10px; }
-    .controls-actions { width: 100%; justify-content: space-between; }
-    .controls-actions .btn { flex: 1; justify-content: center; }
-    .faq-item { padding: 14px 16px; }
-    .faq-item-actions { flex-direction: column; gap: 4px; }
-    .format-row { grid-template-columns: 1fr; }
-    .modal-box { padding: 24px; }
-}
-
-@media (max-width: 480px) {
-    .topbar-right .plan-badge { display: none; }
-    .faq-row { flex-direction: column; gap: 12px; }
-    .faq-item-actions { flex-direction: row; }
-}
-    </style>
+</style>
 </head>
 <body>
 
-<!-- TOPBAR -->
-<div class="topbar">
+<!-- ══════ SIDEBAR ══════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    </div>
+    <span class="logo-name">Lumvi</span>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Workspace</div>
+    <a href="/dashboard" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </a>
+    <a href="#" class="nav-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+      Knowledge Base
+      <span class="nav-badge" id="nav-count">0</span>
+    </a>
+    <a href="#" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Conversations
+    </a>
+    <a href="#" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Leads
+    </a>
+
+    <div class="nav-section-label">Configure</div>
+    <a href="#" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+      Widget
+    </a>
+    <a href="#" class="nav-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Analytics
+    </a>
+
+    <div class="nav-section-label">Support</div>
+    <a href="/help" class="nav-item" target="_blank">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Help Center
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="plan-card">
+      <div class="plan-card-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      </div>
+      <div>
+        <div class="plan-card-name" id="sidebar-plan">Loading…</div>
+        <div class="plan-card-meta"><span id="faq-count">0</span> / <span id="faq-limit">999</span> FAQs used</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ══════ MAIN ══════ -->
+<div class="main">
+
+  <header class="topbar">
     <div class="topbar-left">
-        <a href="/dashboard" class="back-link">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-            Dashboard
-        </a>
-        <div class="topbar-divider"></div>
-        <span class="topbar-title">FAQ Manager</span>
+      <button class="btn btn-ghost btn-sm" id="menu-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="breadcrumb">
+        <a href="/dashboard">Dashboard</a>
+        <span class="bc-sep">›</span>
+        <span class="page-title">Knowledge Base</span>
+      </div>
     </div>
     <div class="topbar-right">
-        <span class="plan-badge">Plan: <strong id="user-plan">Loading</strong></span>
-        <span class="faq-counter"><span id="faq-count">0</span> / <span id="faq-limit">999</span> FAQs</span>
-        <span class="limit-warning" id="limit-warning">Limit Reached</span>
+      <span class="tb-pill"><strong id="tb-count">0</strong> FAQs</span>
+      <span class="limit-warn" id="limit-warning">⚠ Limit Reached</span>
+      <button class="btn btn-outline btn-sm" onclick="exportPDF()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+      </button>
+      <button class="btn btn-primary btn-sm" onclick="openAddModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New FAQ
+      </button>
     </div>
-</div>
+  </header>
 
-<!-- MAIN -->
-<div class="page-wrap">
+  <div class="content">
 
-    <!-- CONTROLS -->
-    <div class="controls">
-        <div class="search-wrap">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="faq-search" placeholder="Search questions, answers or keywords…" oninput="filterFAQs()" autocomplete="off">
-            <button class="search-clear" id="search-clear" onclick="clearSearch()" style="display:none;">✕</button>
-        </div>
-        <div class="controls-actions">
-            <button class="btn btn-outline" onclick="exportPDF()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                Export
-            </button>
-            <button class="btn btn-outline" onclick="showUploadModal()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
-                Upload
-            </button>
-            <button class="btn btn-danger-outline" onclick="showDeleteAllModal()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-                Delete All
-            </button>
-            <button class="btn btn-primary" onclick="openAddModal()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Add FAQ
-            </button>
-        </div>
+    <!-- STATS -->
+    <div class="stat-strip">
+      <div class="stat-card">
+        <div class="stat-icon si-purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+        <div><div class="stat-val" id="s-total">0</div><div class="stat-label">Total FAQs</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon si-blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+        <div><div class="stat-val" id="s-web">0</div><div class="stat-label">Website Pages</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon si-amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div><div class="stat-val" id="s-file">0</div><div class="stat-label">Docs &amp; CSV</div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon si-green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+        <div><div class="stat-val" id="s-accuracy">–</div><div class="stat-label">Match Accuracy</div></div>
+      </div>
     </div>
 
-    <div class="search-count" id="search-results-count" style="display:none;"></div>
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="faq-search" placeholder="Search questions, answers, keywords…" oninput="filterFAQs()" autocomplete="off">
+        <button class="search-clear" id="search-clear" onclick="clearSearch()" style="display:none;">✕</button>
+      </div>
+      <div class="t-divider"></div>
+      <div class="filter-tabs">
+        <button class="filter-tab active" id="ft-all"    onclick="setFilter('all')">All <span class="tab-count" id="tc-all">0</span></button>
+        <button class="filter-tab"        id="ft-web"    onclick="setFilter('web')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Website <span class="tab-count" id="tc-web">0</span>
+        </button>
+        <button class="filter-tab"        id="ft-file"   onclick="setFilter('file')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          Docs <span class="tab-count" id="tc-file">0</span>
+        </button>
+        <button class="filter-tab"        id="ft-manual" onclick="setFilter('manual')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Manual <span class="tab-count" id="tc-manual">0</span>
+        </button>
+      </div>
+      <div class="t-divider"></div>
+      <button class="btn btn-outline btn-sm" onclick="showUploadModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+        Import
+      </button>
+      <button class="btn btn-danger btn-sm" onclick="showDeleteAllModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        Clear All
+      </button>
+    </div>
 
-    <!-- FAQ LIST -->
-    <div class="faq-list" id="faq-list">
+    <div class="result-count" id="result-count" style="display:none;"></div>
+
+    <!-- FAQ TABLE -->
+    <div class="faq-table-wrap">
+      <div class="faq-table-head">
+        <div class="faq-th">Question</div>
+        <div class="faq-th">Answer</div>
+        <div class="faq-th">Keywords</div>
+        <div class="faq-th" style="text-align:right;">Actions</div>
+      </div>
+      <div class="faq-list" id="faq-list">
         <div class="empty-wrap">
-            <div class="empty-icon-box">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            </div>
-            <h3>Loading FAQs…</h3>
-            <p>Please wait while we fetch your knowledge base.</p>
+          <div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <h3>Loading knowledge base…</h3>
+          <p>Fetching your FAQs.</p>
         </div>
+      </div>
     </div>
 
+  </div>
 </div>
 
 <!-- TOAST -->
 <div id="toast"></div>
+<!-- SIDEBAR OVERLAY (mobile) -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
 
-<!-- ADD / EDIT MODAL -->
+<!-- ══════ ADD / EDIT MODAL ══════ -->
 <div class="modal" id="faq-modal">
-    <div class="modal-box">
-        <div class="modal-header">
-            <h2 id="modal-title">Add FAQ</h2>
-            <button class="modal-close" onclick="closeModal()">×</button>
-        </div>
-        <form id="faq-form">
-            <input type="hidden" id="faq-id">
-            <div class="form-group">
-                <label>Question</label>
-                <input type="text" id="faq-question" placeholder="e.g. What are your business hours?" required>
-                <div class="form-hint">The question a visitor would ask the chatbot</div>
-            </div>
-            <div class="form-group">
-                <label>Answer</label>
-                <textarea id="faq-answer" placeholder="e.g. We're open Monday to Friday, 9 AM – 6 PM EST." required></textarea>
-                <div class="form-hint">The response the chatbot will deliver</div>
-            </div>
-            <div class="form-group">
-                <label>Trigger Keywords</label>
-                <input type="text" id="faq-triggers" placeholder="hours, time, open, available, schedule">
-                <div class="form-hint">Comma-separated words that help the AI match this FAQ</div>
-            </div>
-            <div class="modal-actions">
-                <button type="button" class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary">Save FAQ</button>
-            </div>
-        </form>
+  <div class="modal-box">
+    <div class="modal-hd">
+      <div>
+        <div class="modal-label" id="modal-label">New Entry</div>
+        <h2 id="modal-title">Add FAQ</h2>
+      </div>
+      <button class="modal-x" onclick="closeModal()">×</button>
     </div>
+    <div class="modal-body">
+      <form id="faq-form" onsubmit="return false;">
+        <input type="hidden" id="faq-id">
+        <div class="form-group">
+          <label>Question</label>
+          <input type="text" id="faq-question" placeholder="e.g. What are your business hours?">
+          <div class="form-hint">The question a visitor would ask your chatbot</div>
+        </div>
+        <div class="form-group">
+          <label>Answer</label>
+          <textarea id="faq-answer" placeholder="e.g. We're open Monday to Friday, 9 AM – 6 PM EST."></textarea>
+          <div class="form-hint">The response the chatbot will deliver</div>
+        </div>
+        <div class="form-group">
+          <label>Trigger Keywords</label>
+          <input type="text" id="faq-triggers" placeholder="hours, open, schedule, available, time">
+          <div class="form-hint">Comma-separated — helps the AI match this FAQ accurately</div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitFAQ()">Save FAQ</button>
+    </div>
+  </div>
 </div>
 
-<!-- DELETE ALL MODAL -->
+<!-- ══════ DELETE ALL MODAL ══════ -->
 <div class="modal" id="delete-all-modal">
-    <div class="modal-box sm">
-        <div class="confirm-icon-box">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-        </div>
-        <h2>Delete All FAQs?</h2>
-        <p>You are about to permanently delete</p>
-        <div class="confirm-count"><span id="delete-all-count">all</span> FAQs</div>
-        <p style="font-size:13px;color:var(--danger);font-weight:500;">This action cannot be undone.</p>
-        <div class="confirm-actions">
-            <button class="btn btn-ghost" onclick="closeDeleteAllModal()">Cancel</button>
-            <button class="btn btn-danger-solid" onclick="confirmDeleteAll()" id="confirm-delete-btn">Delete All</button>
-        </div>
+  <div class="modal-box sm">
+    <div class="confirm-body">
+      <div class="confirm-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></div>
+      <h2>Clear Knowledge Base?</h2>
+      <p>This will permanently delete</p>
+      <div class="confirm-count"><span id="delete-all-count">all</span> FAQs</div>
+      <p style="font-size:12.5px;color:var(--red);font-weight:600;">This cannot be undone.</p>
+      <div class="confirm-actions">
+        <button class="btn btn-ghost" onclick="closeDeleteAllModal()">Cancel</button>
+        <button class="btn btn-danger-solid" id="confirm-delete-btn" onclick="confirmDeleteAll()">Delete All</button>
+      </div>
     </div>
+  </div>
 </div>
 
-<!-- UPLOAD MODAL -->
+<!-- ══════ UPLOAD / IMPORT MODAL ══════ -->
 <div class="modal" id="upload-modal">
-    <div class="modal-box lg">
-        <div class="modal-header">
-            <h2>Upload FAQs</h2>
-            <button class="modal-close" onclick="closeUploadModal()">×</button>
-        </div>
+  <div class="modal-box lg">
+    <div class="modal-hd">
+      <div>
+        <div class="modal-label">Import</div>
+        <h2>Add to Knowledge Base</h2>
+      </div>
+      <button class="modal-x" onclick="closeUploadModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="upload-tabs">
+        <button class="upload-tab active" id="utab-file" onclick="switchTab('file')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          File Upload
+        </button>
+        <button class="upload-tab" id="utab-url" onclick="switchTab('url')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          From Website
+        </button>
+      </div>
+
+      <div class="tab-panel active" id="upanel-file">
         <div class="format-row">
-            <div class="format-card">
-                <strong>CSV / Excel</strong>
-                Column 1: <code>question</code><br>
-                Column 2: <code>answer</code><br>
-                Column 3: <code>category</code>
-            </div>
-            <div class="format-card">
-                <strong>PDF Document</strong>
-                Use <code>Q:</code> before each question<br>
-                Use <code>A:</code> before each answer<br>
-                Or upload any doc — AI extracts automatically
-            </div>
+          <div class="format-card"><strong>CSV / Excel</strong>Column 1: <code>question</code><br>Column 2: <code>answer</code><br>Column 3: <code>category</code></div>
+          <div class="format-card"><strong>PDF Document</strong>Use <code>Q:</code> before questions<br>Use <code>A:</code> before answers<br>Or any doc — AI extracts it</div>
         </div>
         <span class="template-link" onclick="downloadCSVTemplate()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Download CSV template
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download CSV template
         </span>
         <div class="drop-zone" id="drop-zone" onclick="document.getElementById('faq-file-input').click()">
-            <svg class="drop-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            <p>Click to select or drag and drop a file</p>
-            <div class="selected-file" id="selected-file-name" style="display:none;"></div>
-            <p class="file-types">CSV, Excel (.xlsx), or PDF — max 10 MB</p>
-            <input type="file" id="faq-file-input" accept=".csv,.xlsx,.xls,.pdf" style="display:none;" onchange="handleFileSelect(event)">
+          <svg class="dz-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <p>Click to select or drag &amp; drop</p>
+          <div class="sel-file" id="selected-file-name" style="display:none;"></div>
+          <p class="file-types">CSV, Excel (.xlsx), or PDF — max 10 MB</p>
+          <input type="file" id="faq-file-input" accept=".csv,.xlsx,.xls,.pdf" style="display:none;" onchange="handleFileSelect(event)">
         </div>
         <div class="progress-wrap" id="progress-area">
-            <div class="progress-track"><div class="progress-bar" id="progress-fill"></div></div>
-            <p class="progress-label" id="progress-status">Processing…</p>
+          <div class="progress-track"><div class="progress-bar" id="progress-fill"></div></div>
+          <p class="progress-label" id="progress-status">Processing…</p>
         </div>
-        <div class="upload-tip"><strong>Tip:</strong> Download the CSV template to see the exact format. PDF uploads use AI extraction — Q: and A: labels give the best accuracy.</div>
-        <div class="modal-actions">
-            <button class="btn btn-ghost" onclick="closeUploadModal()">Cancel</button>
-            <button class="btn btn-primary" id="upload-submit-btn" onclick="startUpload()" disabled>Upload</button>
+        <div class="upload-tip"><strong>Tip:</strong> Use the CSV template for best results. PDF uploads use AI extraction — Q: and A: labels improve accuracy.</div>
+      </div>
+
+      <div class="tab-panel" id="upanel-url">
+        <div class="url-examples">
+          <strong>Paste the URL of any FAQ or Help page</strong>
+          Examples: <code>yoursite.com/faq</code> · <code>yoursite.com/help</code> · <code>support.yoursite.com</code>
         </div>
+        <div class="url-input-row">
+          <input type="url" id="faq-url-input" placeholder="https://yoursite.com/faq" oninput="onUrlInput()" onkeydown="if(event.key==='Enter')startUrlImport()">
+        </div>
+        <div class="progress-wrap" id="url-progress-area">
+          <div class="progress-track"><div class="progress-bar" id="url-progress-fill"></div></div>
+          <p class="progress-label" id="url-progress-status">Fetching page…</p>
+        </div>
+        <div class="upload-tip"><strong>How it works:</strong> Lumvi fetches the page, strips noise, then uses AI to extract every Q&amp;A pair automatically.</div>
+      </div>
     </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeUploadModal()">Cancel</button>
+      <button class="btn btn-primary" id="upload-btn" onclick="startUpload()" disabled>Upload</button>
+    </div>
+  </div>
 </div>
 
 <script>
-    // ── INIT ──────────────────────────────────────────────────────
-    const urlParams = new URLSearchParams(window.location.search);
-    const CLIENT_ID = urlParams.get('client_id');
+// ── INIT ──────────────────────────────────────────────────────────
+const urlParams = new URLSearchParams(window.location.search);
+const CLIENT_ID = urlParams.get('client_id');
+if (!CLIENT_ID) { alert('No client ID provided.'); window.location.href = '/dashboard'; }
 
-    if (!CLIENT_ID) {
-        alert('No client ID provided.');
-        window.location.href = '/dashboard';
+let currentFAQs  = [];
+let editingIndex = -1;
+let faqLimit     = 999;
+let selectedFile = null;
+let _filter      = 'all';
+let _search      = '';
+let _visible     = 50;
+let _dirty       = false;
+const PS         = 50;
+
+window.onload = () => { loadFAQs(); loadClientInfo(); };
+
+// ── CLIENT INFO (plan + limit) ────────────────────────────────────
+async function loadClientInfo() {
+  try {
+    const res  = await fetch(`/api/client-info?client_id=${CLIENT_ID}`);
+    const data = await res.json();
+    if (data.success) {
+      if (data.plan)  document.getElementById('sidebar-plan').textContent = data.plan;
+      if (data.limit) { faqLimit = data.limit; updateStats(); }
     }
+  } catch { /* non-critical — silently ignore */ }
+}
 
-    let currentFAQs = [];
-    let editingIndex = -1;
-    let faqLimit = 999;
-    let selectedFile = null;
-    // Fix 4a: pagination — show 50 at a time, Load More to reveal the rest
-    const PAGE_SIZE = 50;
-    let _visibleCount = PAGE_SIZE;
+// ── SOURCE DETECT ─────────────────────────────────────────────────
+function _src(f) {
+  const c = (f.category||'').toLowerCase();
+  if (c.includes('web')||c.includes('url')||f.source_url) return 'web';
+  if (c.includes('pdf')||c.includes('csv')||c.includes('excel')||c.includes('file')||c.includes('import')) return 'file';
+  return 'manual';
+}
 
-    window.onload = function() { loadFAQs(); };
+// ── LOAD DATA ─────────────────────────────────────────────────────
+async function loadFAQs() {
+  try {
+    const res  = await fetch(`/api/faqs?client_id=${CLIENT_ID}`);
+    const data = await res.json();
+    if (data.success) {
+      currentFAQs = data.faqs||[];
+      _visible=PS; _filter='all'; _search='';
+      document.getElementById('faq-search').value='';
+      document.getElementById('search-clear').style.display='none';
+      document.getElementById('result-count').style.display='none';
+      updateStats(); applyFilter();
+    } else showError();
+  } catch { showError(); }
+}
 
-    // ── DATA ──────────────────────────────────────────────────────
-    async function loadFAQs() {
-        if (!CLIENT_ID) return;
-        try {
-            const res = await fetch(`/api/faqs?client_id=${CLIENT_ID}`);
-            const data = await res.json();
-            if (data.success) {
-                currentFAQs = data.faqs || [];
-                _visibleCount = PAGE_SIZE;   // reset pagination on fresh load
-                document.getElementById('faq-search').value = '';
-                document.getElementById('search-clear').style.display = 'none';
-                document.getElementById('search-results-count').style.display = 'none';
-                renderFAQs();
-                updateFaqCount();
-            } else { showError(); }
-        } catch { showError(); }
-    }
+function updateStats() {
+  const tot  = currentFAQs.length;
+  const wCnt = currentFAQs.filter(f=>_src(f)==='web').length;
+  const fCnt = currentFAQs.filter(f=>_src(f)==='file').length;
+  const mCnt = currentFAQs.filter(f=>_src(f)==='manual').length;
+  const wTrg = currentFAQs.filter(f=>(f.triggers||[]).length>0).length;
+  const acc  = tot===0 ? '–' : Math.min(99,Math.round(70+(wTrg/tot)*29))+'%';
 
-    function updateFaqCount() {
-        document.getElementById('faq-count').textContent = currentFAQs.length;
-        document.getElementById('faq-limit').textContent = faqLimit;
-        document.getElementById('limit-warning').style.display =
-            currentFAQs.length >= faqLimit ? 'inline' : 'none';
-    }
+  document.getElementById('s-total').textContent   = tot;
+  document.getElementById('s-web').textContent     = wCnt;
+  document.getElementById('s-file').textContent    = fCnt;
+  document.getElementById('s-accuracy').textContent= acc;
+  document.getElementById('tc-all').textContent    = tot;
+  document.getElementById('tc-web').textContent    = wCnt;
+  document.getElementById('tc-file').textContent   = fCnt;
+  document.getElementById('tc-manual').textContent = mCnt;
+  document.getElementById('faq-count').textContent = tot;
+  document.getElementById('tb-count').textContent  = tot;
+  document.getElementById('nav-count').textContent = tot;
+  document.getElementById('faq-limit').textContent = faqLimit;
+  document.getElementById('limit-warning').style.display = tot>=faqLimit?'inline':'none';
+}
 
-    // ── RENDER ────────────────────────────────────────────────────
-    function renderFAQs(faqs) {
-        const list      = faqs !== undefined ? faqs : currentFAQs;
-        const container = document.getElementById('faq-list');
+// ── FILTER / SEARCH ───────────────────────────────────────────────
+function setFilter(src) {
+  _filter=src; _visible=PS;
+  ['all','web','file','manual'].forEach(s=>document.getElementById('ft-'+s).classList.toggle('active',s===src));
+  applyFilter();
+}
 
-        if (list.length === 0) {
-            // Reset visible count on empty state
-            _visibleCount = PAGE_SIZE;
-            const q = document.getElementById('faq-search').value.trim();
-            container.innerHTML = q
-                ? `<div class="empty-wrap">
-                    <div class="empty-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
-                    <h3>No results for "${escapeHtml(q)}"</h3>
-                    <p>Try a different keyword or clear the search.</p>
-                   </div>`
-                : `<div class="empty-wrap">
-                    <div class="empty-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></div>
-                    <h3>No FAQs yet</h3>
-                    <p>Add your first FAQ manually or upload a CSV, Excel, or PDF file.</p>
-                    <button class="btn btn-primary" onclick="openAddModal()">Add First FAQ</button>
-                   </div>`;
-            return;
-        }
+let _st=null;
+function filterFAQs() {
+  clearTimeout(_st);
+  _st=setTimeout(()=>{
+    _search=sanitizeInput(document.getElementById('faq-search').value).trim().toLowerCase();
+    document.getElementById('search-clear').style.display=_search?'block':'none';
+    _visible=PS; applyFilter();
+  },280);
+}
 
-        // Determine how many to show (pagination window)
-        const visible = list.slice(0, _visibleCount);
-        const remaining = list.length - _visibleCount;
+function clearSearch() {
+  document.getElementById('faq-search').value='';
+  document.getElementById('search-clear').style.display='none';
+  _search=''; _visible=PS; applyFilter();
+}
 
-        container.innerHTML = visible.map((faq, i) => {
-            const realIndex = faqs !== undefined ? currentFAQs.indexOf(faq) : i;
-            // Fix 4b: strip whitespace from each keyword individually before rendering
-            const triggers  = (faq.triggers || [])
-                .map(t => sanitizeInput(t))
-                .filter(Boolean)
-                .map(t => `<span class="keyword-tag">${escapeHtml(t)}</span>`)
-                .join('');
-            return `
-            <div class="faq-item">
-                <div class="faq-row">
-                    <div class="faq-body">
-                        <div class="faq-question">${escapeHtml(faq.question)}</div>
-                        <div class="faq-answer">${escapeHtml(faq.answer)}</div>
-                        ${triggers ? `<div class="faq-keywords">${triggers}</div>` : ''}
-                    </div>
-                    <div class="faq-item-actions">
-                        <button class="btn btn-outline btn-sm" onclick="editFAQ(${realIndex})">Edit</button>
-                        <button class="btn btn-danger-outline btn-sm" onclick="deleteFAQ(${realIndex})">Delete</button>
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
+function applyFilter() {
+  let list=currentFAQs;
+  if (_filter!=='all') list=list.filter(f=>_src(f)===_filter);
+  if (_search) list=list.filter(f=>{
+    const kw=(f.triggers||[]).join(' ').toLowerCase();
+    return f.question.toLowerCase().includes(_search)||f.answer.toLowerCase().includes(_search)||kw.includes(_search);
+  });
+  const rEl=document.getElementById('result-count');
+  if (_search||_filter!=='all') {
+    rEl.style.display='block';
+    rEl.textContent=`${list.length} FAQ${list.length!==1?'s':''} shown`;
+  } else { rEl.style.display='none'; }
+  renderFAQs(list);
+}
 
-        // Append Load More button if more items exist
-        if (remaining > 0) {
-            const loadMoreBtn = document.createElement('div');
-            loadMoreBtn.style.cssText = 'text-align:center;padding:20px 0 8px;';
-            loadMoreBtn.innerHTML = `
-                <button class="btn btn-outline" onclick="_loadMore()" style="min-width:180px;">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-                    Load ${Math.min(remaining, PAGE_SIZE)} more
-                    <span style="color:var(--sub);font-weight:400;"> (${remaining} remaining)</span>
-                </button>`;
-            container.appendChild(loadMoreBtn);
-        }
-    }
+// ── RENDER ────────────────────────────────────────────────────────
+function renderFAQs(list) {
+  const el=document.getElementById('faq-list');
+  if (!list||!list.length) {
+    el.innerHTML=_search
+      ?`<div class="empty-wrap"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><h3>No results for "${escapeHtml(_search)}"</h3><p>Try a different keyword or clear the search.</p></div>`
+      :`<div class="empty-wrap"><div class="empty-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div><h3>No FAQs yet</h3><p>Add your first FAQ manually or import from a file or website.</p><button class="btn btn-primary" style="margin:0 auto;" onclick="openAddModal()">Add First FAQ</button></div>`;
+    return;
+  }
+  const visible=list.slice(0,_visible), rem=list.length-_visible;
+  el.innerHTML=visible.map(faq=>{
+    const ri=currentFAQs.findIndex(f=>f.id===faq.id);
+    const tags=(faq.triggers||[]).map(t=>sanitizeInput(t)).filter(Boolean).map(t=>`<span class="kw-tag">${escapeHtml(t)}</span>`).join('');
+    return `<div class="faq-item">
+      <div class="faq-cell"><div class="faq-q">${escapeHtml(faq.question)}</div></div>
+      <div class="faq-cell"><div class="faq-a">${escapeHtml(faq.answer)}</div></div>
+      <div class="faq-cell cell-tags">${tags||'<span style="color:var(--ink4);font-size:12px;">—</span>'}</div>
+      <div class="faq-cell cell-actions">
+        <button class="btn btn-outline btn-sm" onclick="editFAQ(${ri})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteFAQ(${ri})" title="Delete">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+  if (rem>0) {
+    const d=document.createElement('div'); d.className='load-more-row';
+    d.innerHTML=`<button class="btn btn-outline" onclick="_more()" style="min-width:180px;">Load ${Math.min(rem,PS)} more <span style="color:var(--ink4);font-weight:400;">(${rem} left)</span></button>`;
+    el.appendChild(d);
+  }
+}
 
-    function _loadMore() {
-        _visibleCount += PAGE_SIZE;
-        // Re-run the active filter so Load More respects current search
-        const q = document.getElementById('faq-search').value.trim().toLowerCase();
-        if (q) {
-            const filtered = currentFAQs.filter(f => {
-                const kw = (f.triggers || []).join(' ').toLowerCase();
-                return f.question.toLowerCase().includes(q)
-                    || f.answer.toLowerCase().includes(q)
-                    || kw.includes(q);
-            });
-            renderFAQs(filtered);
-        } else {
-            renderFAQs();
-        }
-    }
+function _more() { _visible+=PS; applyFilter(); }
 
-    // ── SEARCH ────────────────────────────────────────────────────
-    // Debounce: prevents the UI from re-rendering on every keystroke.
-    // The search only fires 300ms after the user stops typing.
-    let _searchTimer = null;
-    function filterFAQs() {
-        clearTimeout(_searchTimer);
-        _searchTimer = setTimeout(_doFilter, 300);
-    }
+// ── ADD / EDIT ────────────────────────────────────────────────────
+function openAddModal() {
+  document.getElementById('modal-title').textContent='Add FAQ';
+  document.getElementById('modal-label').textContent='New Entry';
+  document.getElementById('faq-form').reset();
+  document.getElementById('faq-id').value='';
+  editingIndex=-1;
+  document.getElementById('faq-modal').style.display='flex';
+  setTimeout(()=>document.getElementById('faq-question').focus(),80);
+}
 
-    function _doFilter() {
-        const q = sanitizeInput(document.getElementById('faq-search').value).trim().toLowerCase();
-        const clearBtn = document.getElementById('search-clear');
-        const countEl  = document.getElementById('search-results-count');
-        clearBtn.style.display = q ? 'block' : 'none';
-        if (!q) { countEl.style.display = 'none'; renderFAQs(); return; }
-        const filtered = currentFAQs.filter(f => {
-            const kw = (f.triggers || []).join(' ').toLowerCase();
-            return f.question.toLowerCase().includes(q)
-                || f.answer.toLowerCase().includes(q)
-                || kw.includes(q);
-        });
-        countEl.style.display  = 'block';
-        countEl.textContent    = `${filtered.length} of ${currentFAQs.length} FAQs match "${q}"`;
-        renderFAQs(filtered);
-    }
+function editFAQ(i) {
+  const f=currentFAQs[i];
+  document.getElementById('modal-title').textContent='Edit FAQ';
+  document.getElementById('modal-label').textContent='Editing';
+  document.getElementById('faq-id').value=f.id;
+  document.getElementById('faq-question').value=f.question;
+  document.getElementById('faq-answer').value=f.answer;
+  let tr=f.triggers||[];
+  if (typeof tr==='string'){try{tr=JSON.parse(tr);}catch{tr=tr.split(',').map(t=>t.trim()).filter(Boolean);}}
+  document.getElementById('faq-triggers').value=Array.isArray(tr)?tr.join(', '):'';
+  editingIndex=i;
+  document.getElementById('faq-modal').style.display='flex';
+  setTimeout(()=>document.getElementById('faq-question').focus(),80);
+}
 
-    function clearSearch() {
-        document.getElementById('faq-search').value = '';
-        document.getElementById('search-clear').style.display = 'none';
-        document.getElementById('search-results-count').style.display = 'none';
-        renderFAQs();
-    }
+['faq-question','faq-answer','faq-triggers'].forEach(id=>document.getElementById(id)?.addEventListener('input',()=>_dirty=true));
+document.getElementById('faq-form').addEventListener('submit',e=>{ e.preventDefault(); submitFAQ(); });
 
-    // ── ADD / EDIT ────────────────────────────────────────────────
-    function openAddModal() {
-        document.getElementById('modal-title').textContent = 'Add FAQ';
-        document.getElementById('faq-form').reset();
-        document.getElementById('faq-id').value = '';
-        editingIndex = -1;
-        _markClean();
-        document.getElementById('faq-modal').style.display = 'flex';
-        setTimeout(() => document.getElementById('faq-question').focus(), 100);
-    }
+async function submitFAQ() {
+  const q=sanitizeInput(document.getElementById('faq-question').value);
+  const a=sanitizeInput(document.getElementById('faq-answer').value);
+  const tr=document.getElementById('faq-triggers').value.split(',').map(t=>sanitizeInput(t)).filter(Boolean);
+  if (!q){showError('Question cannot be empty.');return;}
+  if (!a){showError('Answer cannot be empty.');return;}
+  const nf={id:editingIndex>=0?currentFAQs[editingIndex].id:`faq_${Date.now()}`,question:q,answer:a,triggers:tr};
+  const up=editingIndex>=0?currentFAQs.map((f,i)=>i===editingIndex?nf:f):[...currentFAQs,nf];
+  try {
+    const res=await fetch('/api/faqs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:CLIENT_ID,faqs:up})});
+    const d=await res.json();
+    if (d.success){currentFAQs=up;_dirty=false;closeModal();showSuccess(editingIndex>=0?'FAQ updated.':'FAQ added.');updateStats();applyFilter();}
+    else showError(d.error);
+  } catch {showError();}
+}
 
-    function editFAQ(index) {
-        const faq = currentFAQs[index];
-        document.getElementById('modal-title').textContent = 'Edit FAQ';
-        document.getElementById('faq-id').value = faq.id;
-        document.getElementById('faq-question').value = faq.question;
-        document.getElementById('faq-answer').value = faq.answer;
-        let triggers = faq.triggers || [];
-        if (typeof triggers === 'string') {
-            try { triggers = JSON.parse(triggers); }
-            catch { triggers = triggers.split(',').map(t => t.trim()).filter(Boolean); }
-        }
-        document.getElementById('faq-triggers').value = Array.isArray(triggers) ? triggers.join(', ') : '';
-        editingIndex = index;
-        _markClean();
-        document.getElementById('faq-modal').style.display = 'flex';
-        setTimeout(() => document.getElementById('faq-question').focus(), 100);
-    }
+async function deleteFAQ(i) {
+  if (!confirm('Remove this FAQ?')) return;
+  const up=currentFAQs.filter((_,j)=>j!==i);
+  try {
+    const res=await fetch('/api/faqs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:CLIENT_ID,faqs:up})});
+    const d=await res.json();
+    if (d.success){currentFAQs=up;showSuccess('FAQ deleted.');updateStats();applyFilter();}
+    else showError();
+  } catch {showError();}
+}
 
-    // Mark modal dirty whenever the user types in it
-    ['faq-question', 'faq-answer', 'faq-triggers'].forEach(id => {
-        document.getElementById(id)?.addEventListener('input', _markDirty);
-    });
+function closeModal() { _dirty=false; document.getElementById('faq-modal').style.display='none'; }
 
-    document.getElementById('faq-form').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        // Sanitize all inputs before sending to the API
-        const question = sanitizeInput(document.getElementById('faq-question').value);
-        const answer   = sanitizeInput(document.getElementById('faq-answer').value);
-        // Fix 4b: strip whitespace from each keyword individually
-        const triggers = document.getElementById('faq-triggers').value
-            .split(',')
-            .map(t => sanitizeInput(t))
-            .filter(Boolean);
+// ── DELETE ALL ────────────────────────────────────────────────────
+function showDeleteAllModal() {
+  if (!currentFAQs.length){showError('No FAQs to delete.');return;}
+  document.getElementById('delete-all-count').textContent=currentFAQs.length;
+  document.getElementById('delete-all-modal').style.display='flex';
+}
+function closeDeleteAllModal() { document.getElementById('delete-all-modal').style.display='none'; }
 
-        if (!question) { showError('Question cannot be empty.'); return; }
-        if (!answer)   { showError('Answer cannot be empty.'); return; }
+async function confirmDeleteAll() {
+  const btn=document.getElementById('confirm-delete-btn');
+  btn.disabled=true; btn.textContent='Deleting…';
+  try {
+    const res=await fetch('/api/faqs/delete-all',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:CLIENT_ID})});
+    const d=await res.json();
+    if (d.success){currentFAQs=[];closeDeleteAllModal();showSuccess('All FAQs deleted.');updateStats();applyFilter();}
+    else showError(d.error);
+  } catch {showError('Failed to delete.');}
+  finally {btn.disabled=false;btn.textContent='Delete All';}
+}
 
-        const newFAQ = {
-            id: editingIndex >= 0 ? currentFAQs[editingIndex].id : `faq_${Date.now()}`,
-            question, answer, triggers
-        };
-        const updated = editingIndex >= 0
-            ? currentFAQs.map((f, i) => i === editingIndex ? newFAQ : f)
-            : [...currentFAQs, newFAQ];
-        try {
-            const res = await fetch('/api/faqs', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ client_id: CLIENT_ID, faqs: updated })
-            });
-            const data = await res.json();
-            if (data.success) {
-                currentFAQs = updated;
-                _markClean();           // clear dirty flag on successful save
-                renderFAQs();
-                closeModal();
-                showSuccess(editingIndex >= 0 ? 'FAQ updated successfully.' : 'FAQ added successfully.');
-                updateFaqCount();
-            } else { showError(data.error); }
-        } catch { showError(); }
-    });
+// ── EXPORT PDF ────────────────────────────────────────────────────
+async function exportPDF() {
+  if (!currentFAQs.length){showError('No FAQs to export.');return;}
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  const W=doc.internal.pageSize.getWidth(), H=doc.internal.pageSize.getHeight(), m=16;
+  doc.setFillColor(13,13,20); doc.rect(0,0,W,26,'F');
+  doc.setFontSize(13);doc.setFont('helvetica','bold');doc.setTextColor(255,255,255);
+  doc.text('Lumvi — Knowledge Base',m,14);
+  doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(173,173,196);
+  doc.text(`${new Date().toLocaleDateString()} · ${currentFAQs.length} FAQs`,W-m,14,{align:'right'});
+  let y=34;
+  currentFAQs.forEach((faq,i)=>{
+    const qL=doc.splitTextToSize(faq.question,W-m*2-14);
+    const aL=doc.splitTextToSize(faq.answer,W-m*2-14);
+    const bH=12+qL.length*5.2+aL.length*4.8+8;
+    if (y+bH>H-18){doc.addPage();y=18;}
+    doc.setFillColor(245,245,247);doc.roundedRect(m,y,W-m*2,bH,3,3,'F');
+    doc.setFillColor(94,92,230);doc.roundedRect(m,y,3,bH,1.5,1.5,'F');
+    doc.setFontSize(7);doc.setTextColor(173,173,196);doc.setFont('helvetica','normal');
+    doc.text(`${i+1}`,m+8,y+6);
+    doc.setTextColor(13,13,20);doc.setFontSize(10);doc.setFont('helvetica','bold');
+    doc.text(qL,m+14,y+8);
+    const aY=y+8+qL.length*5.2+2;
+    doc.setTextColor(61,61,82);doc.setFontSize(9);doc.setFont('helvetica','normal');
+    doc.text(aL,m+14,aY);
+    y+=bH+5;
+  });
+  doc.setFontSize(8);doc.setTextColor(173,173,196);
+  doc.text('Generated by Lumvi · lumvi.net',W/2,H-8,{align:'center'});
+  doc.save(`lumvi-kb-${CLIENT_ID}-${Date.now()}.pdf`);
+  showSuccess(`Exported ${currentFAQs.length} FAQs.`);
+}
 
-    async function deleteFAQ(index) {
-        if (!confirm('Remove this FAQ?')) return;
-        const updated = currentFAQs.filter((_, i) => i !== index);
-        try {
-            const res = await fetch('/api/faqs', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ client_id: CLIENT_ID, faqs: updated })
-            });
-            const data = await res.json();
-            if (data.success) { currentFAQs = updated; renderFAQs(); showSuccess('FAQ deleted.'); updateFaqCount(); }
-            else showError();
-        } catch { showError(); }
-    }
+// ── UPLOAD / IMPORT ───────────────────────────────────────────────
+function showUploadModal() { _resetUpload(); document.getElementById('upload-modal').style.display='flex'; }
+function closeUploadModal() { document.getElementById('upload-modal').style.display='none'; _resetUpload(); _dirty=false; }
 
-    function closeModal() { _markClean(); document.getElementById('faq-modal').style.display = 'none'; }
+function _resetUpload() {
+  selectedFile=null;
+  document.getElementById('faq-file-input').value='';
+  const n=document.getElementById('selected-file-name'); n.style.display='none'; n.textContent='';
+  ['progress-area','url-progress-area'].forEach(id=>document.getElementById(id).style.display='none');
+  // Fix 3: reset progress bars via individual properties, not cssText
+  const pf=document.getElementById('progress-fill');
+  pf.style.width='0%'; pf.style.background='';
+  const uf=document.getElementById('url-progress-fill');
+  uf.style.width='0%'; uf.style.background='';
+  document.getElementById('progress-status').textContent='Processing…';
+  document.getElementById('progress-status').style.color='';
+  document.getElementById('url-progress-status').textContent='Fetching page…';
+  document.getElementById('url-progress-status').style.color='';
+  document.getElementById('faq-url-input').value='';
+  // Reset to file tab state directly — don't call switchTab to avoid
+  // circular dependency and premature DOM reads (Fix 2)
+  document.getElementById('utab-file').classList.add('active');
+  document.getElementById('utab-url').classList.remove('active');
+  document.getElementById('upanel-file').classList.add('active');
+  document.getElementById('upanel-url').classList.remove('active');
+  const btn=document.getElementById('upload-btn');
+  btn.textContent='Upload'; btn.onclick=startUpload; btn.disabled=true;
+}
 
-    // ── DELETE ALL ────────────────────────────────────────────────
-    function showDeleteAllModal() {
-        if (currentFAQs.length === 0) { showError('There are no FAQs to delete.'); return; }
-        document.getElementById('delete-all-count').textContent = currentFAQs.length;
-        document.getElementById('delete-all-modal').style.display = 'flex';
-    }
-    function closeDeleteAllModal() { document.getElementById('delete-all-modal').style.display = 'none'; }
+function switchTab(tab) {
+  document.getElementById('utab-file').classList.toggle('active',tab==='file');
+  document.getElementById('utab-url').classList.toggle('active',tab==='url');
+  document.getElementById('upanel-file').classList.toggle('active',tab==='file');
+  document.getElementById('upanel-url').classList.toggle('active',tab==='url');
+  const btn=document.getElementById('upload-btn');
+  if (tab==='url') { btn.textContent='Import FAQs'; btn.onclick=startUrlImport; btn.disabled=document.getElementById('faq-url-input').value.trim().length<4; }
+  else             { btn.textContent='Upload'; btn.onclick=startUpload; btn.disabled=!selectedFile; }
+}
 
-    async function confirmDeleteAll() {
-        const btn = document.getElementById('confirm-delete-btn');
-        btn.disabled = true; btn.textContent = 'Deleting…';
-        try {
-            const res = await fetch('/api/faqs/delete-all', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ client_id: CLIENT_ID })
-            });
-            const data = await res.json();
-            if (data.success) {
-                currentFAQs = [];
-                renderFAQs();
-                updateFaqCount();
-                closeDeleteAllModal();
-                showSuccess('All FAQs deleted.');
-            } else showError(data.error);
-        } catch { showError('Failed to delete FAQs.'); }
-        finally { btn.disabled = false; btn.textContent = 'Delete All'; }
-    }
+function onUrlInput() {
+  document.getElementById('upload-btn').disabled=document.getElementById('faq-url-input').value.trim().length<4;
+}
 
-    // ── EXPORT PDF ────────────────────────────────────────────────
-    async function exportPDF() {
-        if (currentFAQs.length === 0) { showError('No FAQs to export.'); return; }
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-        const pageW = doc.internal.pageSize.getWidth();
-        const pageH = doc.internal.pageSize.getHeight();
-        const margin = 16;
+function handleFileSelect(e) {
+  const f=e.target.files[0]; if(!f) return;
+  const ext=f.name.split('.').pop().toLowerCase();
+  if (!['csv','xlsx','xls','pdf'].includes(ext)){showError('Upload a .csv, .xlsx, or .pdf file.');document.getElementById('faq-file-input').value='';return;}
+  if (f.size>10*1024*1024){showError('File too large — max 10 MB.');return;}
+  selectedFile=f;
+  const n=document.getElementById('selected-file-name'); n.textContent=f.name; n.style.display='block';
+  document.getElementById('upload-btn').disabled=false;
+}
 
-        doc.setFillColor(247, 244, 239);
-        doc.rect(0, 0, pageW, 28, 'F');
-        doc.setFontSize(14); doc.setFont('helvetica', 'bold');
-        doc.setTextColor(28, 25, 23);
-        doc.text('Lumvi — FAQ Export', margin, 14);
-        doc.setFontSize(8); doc.setFont('helvetica', 'normal');
-        doc.setTextColor(168, 162, 158);
-        doc.text(`Generated: ${new Date().toLocaleDateString()} · ${currentFAQs.length} FAQs · Client: ${CLIENT_ID}`, pageW - margin, 14, { align: 'right' });
-        doc.setDrawColor(231, 226, 218);
-        doc.line(margin, 28, pageW - margin, 28);
+async function _validateFile(f) {
+  const ext=f.name.split('.').pop().toLowerCase(), text=await f.text();
+  if (ext==='csv') {
+    const lines=text.split(/\r?\n/).filter(l=>l.trim());
+    if (lines.length<2) return{ok:false,error:'CSV has no data rows.'};
+    const h=lines[0].split(',').map(x=>x.trim().toLowerCase().replace(/^"|"$/g,''));
+    if (!h.find(x=>x==='question')) return{ok:false,error:'CSV missing "question" column.'};
+    if (!h.find(x=>x==='answer'))   return{ok:false,error:'CSV missing "answer" column.'};
+    return{ok:true,count:lines.length-1};
+  }
+  return{ok:true};
+}
 
-        let y = 36;
-        currentFAQs.forEach((faq, i) => {
-            const qLines = doc.splitTextToSize(faq.question, pageW - margin * 2 - 16);
-            const aLines = doc.splitTextToSize(faq.answer, pageW - margin * 2 - 16);
-            const blockH = 14 + (qLines.length * 5.5) + (aLines.length * 5) + 10;
-            if (y + blockH > pageH - 20) { doc.addPage(); y = 20; }
-            doc.setFillColor(247, 244, 239);
-            doc.roundedRect(margin, y, pageW - margin * 2, blockH, 3, 3, 'F');
-            doc.setFillColor(184, 146, 74);
-            doc.roundedRect(margin, y, 4, blockH, 2, 2, 'F');
-            doc.setFontSize(7); doc.setFont('helvetica', 'normal');
-            doc.setTextColor(168, 162, 158);
-            doc.text(`${i + 1}`, margin + 10, y + 6);
-            doc.setTextColor(28, 25, 23); doc.setFontSize(10); doc.setFont('helvetica', 'bold');
-            doc.text(qLines, margin + 16, y + 9);
-            const aY = y + 9 + qLines.length * 5.5 + 2;
-            doc.setTextColor(87, 83, 78); doc.setFontSize(9); doc.setFont('helvetica', 'normal');
-            doc.text(aLines, margin + 16, aY);
-            if (faq.triggers && faq.triggers.length > 0) {
-                const tY = aY + aLines.length * 5 + 2;
-                doc.setTextColor(154, 122, 58); doc.setFontSize(7.5); doc.setFont('helvetica', 'italic');
-                doc.text('Keywords: ' + faq.triggers.slice(0, 8).join(', '), margin + 16, tY);
-            }
-            y += blockH + 5;
-        });
+async function startUpload() {
+  if (!selectedFile) return;
+  const fill=document.getElementById('progress-fill'), st=document.getElementById('progress-status');
+  const area=document.getElementById('progress-area'), btn=document.getElementById('upload-btn');
+  area.style.display='block'; fill.style.width='15%'; fill.style.background=''; st.textContent='Validating…'; btn.disabled=true;
+  const v=await _validateFile(selectedFile);
+  if (!v.ok){fill.style.width='100%';fill.style.background='var(--red)';st.textContent='❌ '+v.error;st.style.color='var(--red)';btn.disabled=false;showError(v.error);return;}
+  fill.style.width='45%'; st.textContent=`Uploading ${v.count||''} FAQs…`;
+  const fd=new FormData(); fd.append('file',selectedFile); fd.append('client_id',CLIENT_ID);
+  try {
+    fill.style.width='75%'; st.textContent='Processing on server…';
+    const res=await fetch('/api/faq/upload',{method:'POST',body:fd});
+    fill.style.width='100%';
+    const d=await res.json();
+    if (d.success){st.textContent=d.message;st.style.color='var(--green)';setTimeout(()=>{closeUploadModal();loadFAQs();showSuccess(d.message);},1200);}
+    else{const e=d.error||'Upload failed.';fill.style.background='var(--red)';st.textContent='❌ '+e;st.style.color='var(--red)';btn.disabled=false;showError(e);}
+  } catch{const e='Network error.';fill.style.background='var(--red)';st.textContent=e;st.style.color='var(--red)';btn.disabled=false;showError(e);}
+}
 
-        doc.setFontSize(8); doc.setTextColor(168, 162, 158); doc.setFont('helvetica', 'normal');
-        doc.text('Generated by Lumvi · lumvi.net', pageW / 2, pageH - 8, { align: 'center' });
-        doc.save(`faqs-${CLIENT_ID}-${Date.now()}.pdf`);
-        showSuccess(`Exported ${currentFAQs.length} FAQs.`);
-    }
+async function startUrlImport() {
+  const url=document.getElementById('faq-url-input').value.trim(); if(!url) return;
+  const fill=document.getElementById('url-progress-fill'), st=document.getElementById('url-progress-status');
+  const area=document.getElementById('url-progress-area'), btn=document.getElementById('upload-btn');
+  area.style.display='block'; fill.style.width='20%'; fill.style.background=''; st.textContent='Fetching page…'; btn.disabled=true;
+  try {
+    fill.style.width='55%'; st.textContent='Extracting FAQs with AI…';
+    const res=await fetch('/api/faq/import-url',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,client_id:CLIENT_ID})});
+    fill.style.width='100%';
+    const d=await res.json();
+    if (d.success){st.textContent=d.message;st.style.color='var(--green)';setTimeout(()=>{closeUploadModal();loadFAQs();showSuccess(d.message);},1400);}
+    else{const e=d.error||'Import failed.';fill.style.background='var(--red)';st.textContent='❌ '+e;st.style.color='var(--red)';btn.disabled=false;showError(e);}
+  } catch{const e='Network error.';fill.style.background='var(--red)';st.textContent=e;st.style.color='var(--red)';btn.disabled=false;showError(e);}
+}
 
-    // ── UPLOAD ────────────────────────────────────────────────────
-    function showUploadModal() { document.getElementById('upload-modal').style.display = 'flex'; resetUploadModal(); }
-    function closeUploadModal() { document.getElementById('upload-modal').style.display = 'none'; resetUploadModal(); }
+const dz=document.getElementById('drop-zone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragover');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));
+dz.addEventListener('drop',e=>{
+  e.preventDefault();dz.classList.remove('dragover');
+  const f=e.dataTransfer.files[0];
+  if(f){const dt=new DataTransfer();dt.items.add(f);document.getElementById('faq-file-input').files=dt.files;handleFileSelect({target:{files:[f]}});}
+});
 
-    function resetUploadModal() {
-        selectedFile = null;
-        document.getElementById('faq-file-input').value = '';
-        const nameEl = document.getElementById('selected-file-name');
-        nameEl.style.display = 'none'; nameEl.textContent = '';
-        document.getElementById('progress-area').style.display = 'none';
-        document.getElementById('progress-fill').style.width = '0%';
-        document.getElementById('progress-status').textContent = 'Processing…';
-        document.getElementById('progress-status').style.color = '';
-        document.getElementById('upload-submit-btn').disabled = true;
-    }
+function downloadCSVTemplate() {
+  const csv=`question,answer,category\nWhat are your business hours?,"We're open Monday–Friday 9 AM – 6 PM EST.",General\nHow much does it cost?,"Starter: $49/mo | Pro: $99/mo.",Pricing\nDo you offer refunds?,"Yes. 7-day money-back guarantee.",Policies`;
+  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  const a=document.createElement('a'); a.href=url; a.download='lumvi-faq-template.csv'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 100);
+}
 
-    function handleFileSelect(event) {
-        const file = event.target.files[0];
-        if (!file) return;
+// ── TOAST ────────────────────────────────────────────────────────
+function showToast(msg,type) {
+  const t=document.getElementById('toast');
+  t.textContent=msg;
+  t.style.background=type==='success'?'#052e16':'#450a0a';
+  t.style.color=type==='success'?'#4ade80':'#fca5a5';
+  t.style.border=type==='success'?'1px solid #16a34a':'1px solid #dc2626';
+  t.style.display='block'; clearTimeout(t._t);
+  t._t=setTimeout(()=>t.style.display='none',3500);
+}
+function showSuccess(m){showToast(m||'Changes saved.','success');}
+function showError(m){showToast(m||'An error occurred.','error');}
 
-        // Client-side type check before anything goes to the server
-        const ext = file.name.split('.').pop().toLowerCase();
-        if (!['csv', 'json', 'pdf', 'xlsx', 'xls'].includes(ext)) {
-            showError('Invalid file type. Please upload a .csv, .xlsx, .json, or .pdf file.');
-            document.getElementById('faq-file-input').value = '';
-            return;
-        }
-        if (file.size > 10 * 1024 * 1024) {
-            showError('File too large. Maximum size is 10 MB.');
-            return;
-        }
-        selectedFile = file;
-        const nameEl = document.getElementById('selected-file-name');
-        nameEl.textContent = file.name; nameEl.style.display = 'block';
-        document.getElementById('upload-submit-btn').disabled = false;
-    }
+function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+function sanitizeInput(s){if(typeof s!=='string')return'';return s.replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim();}
 
-    async function _validateUploadFile(file) {
-        /**
-         * Client-side validation + parsing before sending to server.
-         * For PDF/XLSX we extract FAQs here and store them in parsedFAQs
-         * so startUpload() can import them directly without a server round-trip.
-         * Returns { ok: true, count, faqs? } or { ok: false, error }
-         */
-        const ext = file.name.split('.').pop().toLowerCase();
+// ── MOBILE SIDEBAR ───────────────────────────────────────────────
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebar-overlay');
+  const open = sb.classList.toggle('open');
+  ov.classList.toggle('visible', open);
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-overlay').classList.remove('visible');
+}
 
-        // ── JSON ──────────────────────────────────────────────────
-        if (ext === 'json') {
-            let rows;
-            try { rows = JSON.parse(await file.text()); }
-            catch { return { ok: false, error: 'Invalid JSON — could not parse the file.' }; }
-            if (!Array.isArray(rows)) return { ok: false, error: 'JSON must be an array of objects.' };
-            for (let i = 0; i < rows.length; i++) {
-                const r = rows[i];
-                const q = r.question || r.Question || r.q || r.Q;
-                const a = r.answer   || r.Answer   || r.a || r.A;
-                if (!q) return { ok: false, error: `Row ${i + 1}: missing "question" field.` };
-                if (!a) return { ok: false, error: `Row ${i + 1}: missing "answer" field.` };
-            }
-            return { ok: true, count: rows.length };
-        }
-
-        // ── CSV ───────────────────────────────────────────────────
-        if (ext === 'csv') {
-            const text    = await file.text();
-            const lines   = text.split(/\r?\n/).filter(l => l.trim());
-            if (lines.length < 2) return { ok: false, error: 'CSV is empty or has no data rows.' };
-            const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''));
-            const qIdx    = headers.findIndex(h => h === 'question');
-            const aIdx    = headers.findIndex(h => h === 'answer');
-            if (qIdx === -1) return { ok: false, error: 'CSV is missing a "Question" header column.' };
-            if (aIdx === -1) return { ok: false, error: 'CSV is missing an "Answer" header column.' };
-            for (let i = 1; i < lines.length; i++) {
-                const cells = lines[i].match(/("(?:[^"]|"")*"|[^,]*)/g) || [];
-                const clean = cells.map(c => c.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
-                if (!clean[qIdx]) return { ok: false, error: `Row ${i + 1}: Question is empty.` };
-                if (!clean[aIdx]) return { ok: false, error: `Row ${i + 1}: Answer is empty.` };
-            }
-            return { ok: true, count: lines.length - 1 };
-        }
-
-        // ── XLSX / XLS ────────────────────────────────────────────
-        if (ext === 'xlsx' || ext === 'xls') {
-            if (typeof XLSX === 'undefined') return { ok: false, error: 'Excel parser not loaded yet — please try again.' };
-            const buf  = await file.arrayBuffer();
-            const wb   = XLSX.read(buf, { type: 'array' });
-            const ws   = wb.Sheets[wb.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-            if (!rows.length) return { ok: false, error: 'Spreadsheet appears to be empty.' };
-            const faqs = [];
-            for (let i = 0; i < rows.length; i++) {
-                const r = rows[i];
-                const q = (r.question || r.Question || r.q || r.Q || '').toString().trim();
-                const a = (r.answer   || r.Answer   || r.a || r.A || '').toString().trim();
-                if (!q) return { ok: false, error: `Row ${i + 2}: Question column is empty.` };
-                if (!a) return { ok: false, error: `Row ${i + 2}: Answer column is empty.` };
-                faqs.push({ id: `faq_${Date.now()}_${i}`, question: q, answer: a, triggers: [] });
-            }
-            return { ok: true, count: faqs.length, faqs };
-        }
-
-        // ── PDF ───────────────────────────────────────────────────
-        if (ext === 'pdf') {
-            if (typeof pdfjsLib === 'undefined') return { ok: false, error: 'PDF parser not loaded yet — please try again.' };
-            pdfjsLib.GlobalWorkerOptions.workerSrc =
-                'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-            const buf      = await file.arrayBuffer();
-            const pdf      = await pdfjsLib.getDocument({ data: buf }).promise;
-            let fullText   = '';
-            for (let p = 1; p <= pdf.numPages; p++) {
-                const page    = await pdf.getPage(p);
-                const content = await page.getTextContent();
-                fullText     += content.items.map(s => s.str).join(' ') + '\n';
-            }
-
-            // Strategy 1: explicit Q: / A: markers
-            const qaRegex = /Q\s*[:：]\s*(.+?)\s*A\s*[:：]\s*(.+?)(?=Q\s*[:：]|$)/gis;
-            const faqs    = [];
-            let match;
-            while ((match = qaRegex.exec(fullText)) !== null) {
-                const q = match[1].trim();
-                const a = match[2].trim();
-                if (q && a) faqs.push({ id: `faq_${Date.now()}_${faqs.length}`, question: q, answer: a, triggers: [] });
-            }
-
-            if (faqs.length > 0) return { ok: true, count: faqs.length, faqs };
-
-            // Strategy 2: numbered list  "1. Question … Answer …"
-            const numbered = fullText.match(/\d+\.\s+.+/g) || [];
-            if (numbered.length >= 2) {
-                for (let i = 0; i < numbered.length - 1; i += 2) {
-                    const q = numbered[i].replace(/^\d+\.\s+/, '').trim();
-                    const a = numbered[i + 1].replace(/^\d+\.\s+/, '').trim();
-                    if (q && a) faqs.push({ id: `faq_${Date.now()}_${faqs.length}`, question: q, answer: a, triggers: [] });
-                }
-                if (faqs.length > 0) return { ok: true, count: faqs.length, faqs };
-            }
-
-            // Strategy 3: sentence pairs (fallback — every two sentences become a Q&A)
-            const sentences = fullText.split(/(?<=[.?!])\s+/).map(s => s.trim()).filter(s => s.length > 20);
-            if (sentences.length >= 2) {
-                for (let i = 0; i < sentences.length - 1; i += 2) {
-                    faqs.push({ id: `faq_${Date.now()}_${faqs.length}`, question: sentences[i], answer: sentences[i + 1], triggers: [] });
-                }
-                return { ok: true, count: faqs.length, faqs, warn: 'No Q: / A: markers found — FAQs were extracted automatically. Please review them.' };
-            }
-
-            return { ok: false, error: 'Could not extract any Q&A pairs from the PDF. Add "Q:" before questions and "A:" before answers for best results.' };
-        }
-
-        return { ok: true };
-    }
-
-    // Holds FAQs parsed client-side (PDF / XLSX) before upload
-    let parsedFAQs = null;
-
-    async function startUpload() {
-        if (!selectedFile) return;
-        const progressArea   = document.getElementById('progress-area');
-        const progressFill   = document.getElementById('progress-fill');
-        const progressStatus = document.getElementById('progress-status');
-        const submitBtn      = document.getElementById('upload-submit-btn');
-
-        progressArea.style.display  = 'block';
-        progressFill.style.width    = '15%';
-        progressStatus.textContent  = 'Validating file…';
-        progressStatus.style.color  = '';
-        submitBtn.disabled          = true;
-        parsedFAQs = null;
-
-        const validation = await _validateUploadFile(selectedFile);
-        if (!validation.ok) {
-            progressFill.style.width      = '100%';
-            progressFill.style.background = 'var(--danger)';
-            progressStatus.textContent    = `❌ ${validation.error}`;
-            progressStatus.style.color    = 'var(--danger)';
-            submitBtn.disabled            = false;
-            showError(validation.error);
-            return;
-        }
-
-        // Show any non-fatal warnings (e.g. PDF auto-extraction fallback)
-        if (validation.warn) showError(validation.warn);
-
-        // PDF and XLSX are parsed client-side — import directly without a server upload
-        if (validation.faqs) {
-            parsedFAQs = validation.faqs;
-            progressFill.style.width    = '60%';
-            progressStatus.textContent  = `Importing ${parsedFAQs.length} FAQs…`;
-            progressFill.style.background = '';
-
-            const updated = [...currentFAQs, ...parsedFAQs];
-            try {
-                const res  = await fetch('/api/faqs', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ client_id: CLIENT_ID, faqs: updated })
-                });
-                progressFill.style.width = '100%';
-                const data = await res.json();
-                if (data.success) {
-                    currentFAQs = updated;
-                    progressStatus.textContent = `✅ Imported ${parsedFAQs.length} FAQs successfully.`;
-                    progressStatus.style.color = 'var(--success)';
-                    setTimeout(() => { closeUploadModal(); renderFAQs(); updateFaqCount(); showSuccess(`Imported ${parsedFAQs.length} FAQs.`); }, 1200);
-                } else {
-                    const errMsg = data.error || 'Import failed — please check your file.';
-                    progressStatus.textContent = `❌ ${errMsg}`;
-                    progressStatus.style.color = 'var(--danger)';
-                    submitBtn.disabled = false;
-                    showError(errMsg);
-                }
-            } catch {
-                const errMsg = 'Network error — import failed. Please try again.';
-                progressStatus.textContent = errMsg;
-                progressStatus.style.color = 'var(--danger)';
-                submitBtn.disabled = false;
-                showError(errMsg);
-            }
-            return;
-        }
-
-        // CSV / JSON — send raw file to server as before
-        progressFill.style.width    = '40%';
-        progressStatus.textContent  = `Uploading ${validation.count || ''} FAQs…`;
-        progressFill.style.background = '';
-
-        const formData = new FormData();
-        formData.append('file', selectedFile);
-        formData.append('client_id', CLIENT_ID);
-        try {
-            progressFill.style.width   = '70%';
-            progressStatus.textContent = 'Processing on server…';
-            const res  = await fetch('/api/faq/upload', { method: 'POST', body: formData });
-            progressFill.style.width   = '100%';
-            const data = await res.json();
-            if (data.success) {
-                progressStatus.textContent = data.message;
-                progressStatus.style.color = 'var(--success)';
-                setTimeout(() => { closeUploadModal(); loadFAQs(); showSuccess(data.message); }, 1200);
-            } else {
-                const errMsg = data.error || 'Upload failed — please check the file format.';
-                progressStatus.textContent = `❌ ${errMsg}`;
-                progressStatus.style.color = 'var(--danger)';
-                submitBtn.disabled = false;
-                showError(errMsg);
-            }
-        } catch {
-            const errMsg = 'Network error — upload failed. Please try again.';
-            progressStatus.textContent = errMsg;
-            progressStatus.style.color = 'var(--danger)';
-            submitBtn.disabled = false;
-            showError(errMsg);
-        }
-    }
-
-    const dropZone = document.getElementById('drop-zone');
-    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
-    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-    dropZone.addEventListener('drop', e => {
-        e.preventDefault(); dropZone.classList.remove('dragover');
-        const file = e.dataTransfer.files[0];
-        if (file) {
-            const dt = new DataTransfer(); dt.items.add(file);
-            document.getElementById('faq-file-input').files = dt.files;
-            handleFileSelect({ target: { files: [file] } });
-        }
-    });
-
-    function downloadCSVTemplate() {
-        const csv = `question,answer,category\nWhat are your business hours?,"We're open Monday–Friday 9 AM – 6 PM EST. Saturday 10 AM – 4 PM. Closed Sundays.",General\nHow much does it cost?,"Starter: $49/mo | Pro: $99/mo | Agency: $299/mo.",Pricing\nDo you offer refunds?,"Yes. We offer a 7-day money-back guarantee.",Policies`;
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = 'lumvi-faq-template.csv'; a.click();
-        URL.revokeObjectURL(url);
-    }
-
-    // ── TOAST ─────────────────────────────────────────────────────
-    function showToast(msg, type) {
-        const t = document.getElementById('toast');
-        t.textContent = msg;
-        t.style.background = type === 'success' ? '#064e3b' : '#450a0a';
-        t.style.color      = type === 'success' ? '#6ee7b7' : '#fca5a5';
-        t.style.border     = type === 'success' ? '1px solid #059669' : '1px solid #dc2626';
-        t.style.display    = 'block';
-        clearTimeout(t._timer);
-        t._timer = setTimeout(() => { t.style.display = 'none'; }, 3500);
-    }
-    function showSuccess(msg) { showToast(msg || 'Changes saved.', 'success'); }
-    function showError(msg)   { showToast(msg || 'An error occurred. Please try again.', 'error'); }
-
-    function escapeHtml(text) {
-        const d = document.createElement('div');
-        d.textContent = text;
-        return d.innerHTML;
-    }
-
-    /**
-     * sanitizeInput — strips HTML tags and trims whitespace.
-     * Use before any user input is sent to the API or inserted into the DOM.
-     * Prevents HTML injection while keeping all plain-text content intact.
-     */
-    function sanitizeInput(str) {
-        if (typeof str !== 'string') return '';
-        // Strip HTML tags, collapse extra whitespace
-        return str.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-    }
-
-    // ── UNSAVED-CHANGES GUARD ─────────────────────────────────────
-    // Warn the user if they attempt to navigate away while the modal is open
-    // and has unsaved content.
-    let _modalDirty = false;
-
-    function _markDirty()  { _modalDirty = true; }
-    function _markClean()  { _modalDirty = false; }
-
-    window.addEventListener('beforeunload', function(e) {
-        if (!_modalDirty) return;
-        const msg = 'You have unsaved changes. Leave anyway?';
-        e.preventDefault();
-        e.returnValue = msg;
-        return msg;
-    });
-
-    // ── CLOSE ON BACKDROP / ESC ───────────────────────────────────
-    document.addEventListener('click', function(e) {
-        if (e.target === document.getElementById('faq-modal'))        closeModal();
-        if (e.target === document.getElementById('upload-modal'))     closeUploadModal();
-        if (e.target === document.getElementById('delete-all-modal')) closeDeleteAllModal();
-    });
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') { closeModal(); closeUploadModal(); closeDeleteAllModal(); }
-    });
+// ── GUARDS ────────────────────────────────────────────────────────
+window.addEventListener('beforeunload',e=>{if(!_dirty)return;e.preventDefault();e.returnValue='Unsaved changes. Leave?';});
+document.addEventListener('click',e=>{
+  if(e.target===document.getElementById('faq-modal'))        closeModal();
+  if(e.target===document.getElementById('upload-modal'))     closeUploadModal();
+  if(e.target===document.getElementById('delete-all-modal')) closeDeleteAllModal();
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeUploadModal();closeDeleteAllModal();}});
 </script>
 </body>
 </html>
