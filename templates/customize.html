@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Theme Customization — Lumvi</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400&display=swap&family=Inter:wght@400;600&family=Nunito:wght@400;600&family=Poppins:wght@400;600" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -114,6 +114,32 @@ input[type=color]::-webkit-color-swatch{border-radius:6px;border:none;}
 /* LOCKED */
 .locked-wrap{position:relative;}
 .lock-over{position:absolute;inset:0;background:rgba(247,244,239,0.88);border-radius:9px;display:flex;align-items:center;justify-content:center;z-index:2;}
+.theme-pill{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:10px 8px;border:1.5px solid var(--border);border-radius:10px;
+  font-size:11px;font-weight:600;color:var(--mid);cursor:pointer;
+  background:var(--white);transition:all 0.15s;font-family:'DM Sans',sans-serif;
+}
+.theme-pill:hover{border-color:var(--gold);color:var(--dark);}
+.theme-pill.active{border-color:var(--gold);color:var(--dark);background:var(--gold-lt);box-shadow:0 0 0 3px rgba(184,146,74,0.1);}
+.theme-swatch{width:28px;height:18px;border-radius:5px;flex-shrink:0;}
+.font-pill{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;
+  font-size:12px;font-weight:600;color:var(--mid);cursor:pointer;
+  background:var(--white);transition:all 0.15s;font-family:'DM Sans',sans-serif;
+  text-align:left;
+}
+.font-pill:hover{border-color:var(--gold);color:var(--dark);}
+.font-pill.active{border-color:var(--gold);color:var(--dark);background:var(--gold-lt);box-shadow:0 0 0 3px rgba(184,146,74,0.1);}
+.bubble-pill{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:10px 8px;border:1.5px solid var(--border);border-radius:10px;
+  font-size:11px;font-weight:600;color:var(--mid);cursor:pointer;
+  background:var(--white);transition:all 0.15s;font-family:'DM Sans',sans-serif;
+}
+.bubble-pill:hover{border-color:var(--gold);color:var(--dark);}
+.bubble-pill.active{border-color:var(--gold);color:var(--dark);background:var(--gold-lt);box-shadow:0 0 0 3px rgba(184,146,74,0.1);}
 .lock-chip{display:flex;align-items:center;gap:5px;padding:5px 11px;background:var(--white);border:1px solid var(--border);border-radius:20px;font-size:11.5px;font-weight:600;color:var(--mid);}
 .lock-chip svg{width:11px;height:11px;color:var(--warning);}
 .upgrade-box{padding:13px 15px;background:var(--warning-lt);border:1px solid rgba(217,119,6,0.2);border-radius:10px;display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;}
@@ -583,6 +609,112 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
       </div>
 
 
+      <!-- ── WIDGET STYLE ── -->
+      <div class="card" id="card-style">
+        <div class="card-header" onclick="tog('style')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+          <span style="font-weight:700;font-size:14px;color:var(--dark);">Widget Style</span>
+          <svg class="chevron" id="chev-style" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="card-body" id="body-style">
+
+          <!-- Theme -->
+          <div class="field-group">
+            <label class="field-label">Theme</label>
+            <p style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.5;">Choose a preset theme. Your brand color is always applied on top.</p>
+            <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;" id="themeGrid">
+              {% set cur_theme = branding.get('branding',{}).get('widget_theme','lumvi') %}
+              <button type="button" onclick="setTheme('lumvi')" class="theme-pill {% if cur_theme == 'lumvi' or not cur_theme %}active{% endif %}" data-theme="lumvi" style="--th:#111111;">
+                <span class="theme-swatch" style="background:#111111;"></span>Lumvi
+              </button>
+              <button type="button" onclick="setTheme('light')" class="theme-pill {% if cur_theme == 'light' %}active{% endif %}" data-theme="light" style="--th:#F0EDE7;">
+                <span class="theme-swatch" style="background:#F0EDE7;border:1.5px solid #E0DBD4;"></span>Light
+              </button>
+              <button type="button" onclick="setTheme('dark')" class="theme-pill {% if cur_theme == 'dark' %}active{% endif %}" data-theme="dark" style="--th:#0D0D0D;">
+                <span class="theme-swatch" style="background:#0D0D0D;"></span>Dark
+              </button>
+              <button type="button" onclick="setTheme('warm')" class="theme-pill {% if cur_theme == 'warm' %}active{% endif %}" data-theme="warm" style="--th:#2C1F1A;">
+                <span class="theme-swatch" style="background:#2C1F1A;"></span>Warm
+              </button>
+              <button type="button" onclick="setTheme('minimal')" class="theme-pill {% if cur_theme == 'minimal' %}active{% endif %}" data-theme="minimal" style="--th:#1A1A1A;">
+                <span class="theme-swatch" style="background:#FAFAFA;border:1.5px solid #E0E0E0;"></span>Minimal
+              </button>
+            </div>
+            <input type="hidden" id="widget_theme" value="{{ branding.get('branding',{}).get('widget_theme','lumvi') }}">
+          </div>
+
+          <!-- Header color override -->
+          <div class="field-group">
+            <label class="field-label">Header Color Override <span style="font-size:10px;font-weight:400;color:var(--sub);">(optional — overrides theme header)</span></label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="color" id="header_color_pick"
+                value="{{ branding.get('branding',{}).get('header_color','') or '#111111' }}"
+                oninput="document.getElementById('header_color').value=this.value; up();">
+              <input type="text" id="header_color" placeholder="Leave empty to use theme default"
+                value="{{ branding.get('branding',{}).get('header_color','') }}"
+                oninput="if(/^#[0-9A-Fa-f]{6}$/.test(this.value))document.getElementById('header_color_pick').value=this.value; up();"
+                style="flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:'DM Mono',monospace;color:var(--dark);background:var(--white);outline:none;">
+              <button type="button" onclick="document.getElementById('header_color').value='';document.getElementById('header_color_pick').value='#111111';up();"
+                style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-weight:600;color:var(--sub);background:var(--white);cursor:pointer;">Clear</button>
+            </div>
+          </div>
+
+          <!-- Font -->
+          <div class="field-group">
+            <label class="field-label">Font</label>
+            <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;" id="fontGrid">
+              {% set cur_font = branding.get('branding',{}).get('widget_font','dm_sans') %}
+              <button type="button" onclick="setFont('dm_sans')" class="font-pill {% if cur_font == 'dm_sans' or not cur_font %}active{% endif %}" data-font="dm_sans">
+                <span style="font-family:'DM Sans',sans-serif;font-size:15px;">Ag</span>
+                <span>DM Sans <span style="font-style:italic;">+ Serif</span></span>
+              </button>
+              <button type="button" onclick="setFont('inter')" class="font-pill {% if cur_font == 'inter' %}active{% endif %}" data-font="inter">
+                <span style="font-family:'Inter',sans-serif;font-size:15px;">Ag</span>
+                <span>Inter</span>
+              </button>
+              <button type="button" onclick="setFont('nunito')" class="font-pill {% if cur_font == 'nunito' %}active{% endif %}" data-font="nunito">
+                <span style="font-family:'Nunito',sans-serif;font-size:15px;">Ag</span>
+                <span>Nunito</span>
+              </button>
+              <button type="button" onclick="setFont('poppins')" class="font-pill {% if cur_font == 'poppins' %}active{% endif %}" data-font="poppins">
+                <span style="font-family:'Poppins',sans-serif;font-size:15px;">Ag</span>
+                <span>Poppins</span>
+              </button>
+            </div>
+            <input type="hidden" id="widget_font" value="{{ branding.get('branding',{}).get('widget_font','dm_sans') }}">
+          </div>
+
+          <!-- Bubble Style -->
+          <div class="field-group">
+            <label class="field-label">Message Bubble Style</label>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">
+              {% set cur_bs = branding.get('branding',{}).get('bubble_style','rounded') %}
+              <button type="button" onclick="setBubble('rounded')" class="bubble-pill {% if cur_bs == 'rounded' or not cur_bs %}active{% endif %}" data-bs="rounded">
+                <svg viewBox="0 0 60 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:56px;">
+                  <rect x="0" y="2" width="44" height="20" rx="3" ry="16" fill="currentColor" opacity=".18"/>
+                  <rect x="2" y="2" width="44" height="20" rx="16" ry="16" fill="currentColor" opacity=".18"/>
+                </svg>
+                Rounded
+              </button>
+              <button type="button" onclick="setBubble('pill')" class="bubble-pill {% if cur_bs == 'pill' %}active{% endif %}" data-bs="pill">
+                <svg viewBox="0 0 60 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:56px;">
+                  <rect x="2" y="2" width="44" height="20" rx="10" fill="currentColor" opacity=".18"/>
+                </svg>
+                Pill
+              </button>
+              <button type="button" onclick="setBubble('sharp')" class="bubble-pill {% if cur_bs == 'sharp' %}active{% endif %}" data-bs="sharp">
+                <svg viewBox="0 0 60 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:56px;">
+                  <rect x="2" y="2" width="44" height="20" rx="2" fill="currentColor" opacity=".18"/>
+                </svg>
+                Sharp
+              </button>
+            </div>
+            <input type="hidden" id="bubble_style" value="{{ branding.get('branding',{}).get('bubble_style','rounded') }}">
+          </div>
+
+        </div>
+      </div>
+
       <!-- ── CUSTOM CSS ── -->
       <div class="field">
         <label>Custom CSS
@@ -906,6 +1038,30 @@ const wmEl = document.getElementById('welcome_message');
 if (wmEl) wcc(wmEl);
 
 // ── Colour sync ───────────────────────────────────────────────────────
+function setTheme(t) {
+  document.getElementById('widget_theme').value = t;
+  document.querySelectorAll('#themeGrid .theme-pill').forEach(el => {
+    el.classList.toggle('active', el.dataset.theme === t);
+  });
+  up();
+}
+
+function setFont(f) {
+  document.getElementById('widget_font').value = f;
+  document.querySelectorAll('#fontGrid .font-pill').forEach(el => {
+    el.classList.toggle('active', el.dataset.font === f);
+  });
+  up();
+}
+
+function setBubble(b) {
+  document.getElementById('bubble_style').value = b;
+  document.querySelectorAll('.bubble-pill').forEach(el => {
+    el.classList.toggle('active', el.dataset.bs === b);
+  });
+  up();
+}
+
 function syncC(v)  { document.getElementById('primary_color').value = v; up(); }
 function syncCT(v) {
   if (/^#[0-9A-Fa-f]{6}$/.test(v)) {
@@ -1127,6 +1283,10 @@ async function save() {
       company_name:  document.getElementById('company_name').value.trim(),
       tagline:       document.getElementById('tagline').value.trim(),
       primary_color: document.getElementById('primary_color').value.trim() || '#B8924A',
+      widget_theme:  document.getElementById('widget_theme')?.value  || 'lumvi',
+      widget_font:   document.getElementById('widget_font')?.value   || 'dm_sans',
+      bubble_style:  document.getElementById('bubble_style')?.value  || 'rounded',
+      header_color:  document.getElementById('header_color')?.value  || '',
       ...((_logo) ? {logo: _logo} : {}),
     },
     bot_settings: {

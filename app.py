@@ -2654,6 +2654,10 @@ def widget():
             'lead_triggers':    ['contact', 'sales', 'demo', 'speak', 'talk', 'human', 'agent'],
             'lead_q3':          '',
             'lead_q4':          '',
+            'widget_theme':     'lumvi',
+            'widget_font':      'dm_sans',
+            'bubble_style':     'rounded',
+            'header_color':     '',
         }
     else:
         client = dict(client)
@@ -2677,6 +2681,11 @@ def widget():
         client['custom_css']       = client.get('custom_css') or ''
         client['contact']          = contact
         client['branding_settings'] = branding_settings
+        # ── Widget style settings ──────────────────────────────
+        client['widget_theme']     = branding.get('widget_theme',  'lumvi')
+        client['widget_font']      = branding.get('widget_font',   'dm_sans')
+        client['bubble_style']     = branding.get('bubble_style',  'rounded')
+        client['header_color']     = branding.get('header_color',  '')   # optional hex override
         # Expose lead_triggers so the widget can short-circuit on QR taps
         client['lead_triggers']    = branding_settings.get('bot_settings', {}).get(
             'lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk', 'human', 'agent']
