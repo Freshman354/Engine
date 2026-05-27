@@ -55,6 +55,31 @@ app.config['REMEMBER_COOKIE_DURATION']    = timedelta(days=30)
 app.config['REMEMBER_COOKIE_SECURE']      = True
 app.config['REMEMBER_COOKIE_HTTPONLY']    = True
 
+# ── Server-side sessions via Redis ───────────────────────────────────
+# Flask's default client-side sessions store the session in a signed
+# cookie. Under multiple Gunicorn workers a redirect can land on a
+# different worker that hasn't "seen" the new cookie yet, causing a
+# 500 on the first post-login request (dashboard). Server-side sessions
+# stored in Redis are visible to every worker instantly.
+#
+# Falls back gracefully to the default cookie session if REDIS_URL is
+# not set (e.g. local dev), so nothing breaks without Redis.
+_redis_url = os.environ.get('REDIS_URL')
+if _redis_url:
+    try:
+        import redis as _redis_lib
+        from flask_session import Session as _FlaskSession
+        app.config['SESSION_TYPE']             = 'redis'
+        app.config['SESSION_REDIS']            = _redis_lib.from_url(_redis_url)
+        app.config['SESSION_USE_SIGNER']       = True   # tamper-proof session IDs
+        app.config['SESSION_KEY_PREFIX']       = 'lumvi_sess:'
+        app.config['SESSION_PERMANENT']        = True
+        _FlaskSession(app)
+        print("✅ Server-side Redis sessions enabled")
+    except ImportError:
+        print("⚠️  flask-session or redis not installed — falling back to cookie sessions. "
+              "Run: pip install flask-session redis")
+
 # Admin blueprint — registered AFTER SECRET_KEY is configured
 from admin_routes import admin_bp
 app.register_blueprint(admin_bp)
@@ -2315,14 +2340,19 @@ def login():
                     app.logger.info(f"Auto-downgraded user {user_data['id']} to free on login")
 
             user = User(user_data)
-            session.pop('_user_cache', None)  # bust cache so load_user re-fetches on next request
+            session.pop('_user_cache', None)  # bust stale cache before login
             session.permanent = True          # apply PERMANENT_SESSION_LIFETIME (30 days)
             login_user(user, remember=True)
+            # Pre-warm the user cache immediately so load_user on the very next
+            # request (the dashboard redirect) never needs a cold DB hit.
+            # Without this, a multi-worker setup can 500 when the redirect lands
+            # on a different worker before the session write has propagated.
+            session['_user_cache'] = dict(user_data)
             models.track_event('login', user_id=user_data['id'], metadata={'email': email})
 
-            # Pass subscription status to dashboard via session
-            fresh = models.get_user_by_id(user_data['id'])
-            sub = get_subscription_status(fresh)
+            # Pass subscription status to dashboard via session.
+            # Reuse user_data already in memory — no extra DB round-trip needed.
+            sub = get_subscription_status(user_data)
             session['sub_status'] = sub['status']
 
             return redirect(url_for('dashboard'))
