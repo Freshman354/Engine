@@ -348,16 +348,23 @@ def load_user(user_id):
     #
     # Solution: store the user dict in the Flask session. The cache is
     # busted on login and logout so it can never serve stale data.
-    uid = int(user_id)
-    cached = session.get('_user_cache')
-    if cached and isinstance(cached, dict) and cached.get('id') == uid:
-        return User(cached)
-    # Cache miss — query DB and warm the session cache
-    user_data = models.get_user_by_id(uid)
-    if user_data:
-        session['_user_cache'] = dict(user_data)
-        return User(user_data)
-    return None
+    #
+    # Wrapped in try/except so a stale-connection DB error on first request
+    # after idle returns None (treats user as anonymous) rather than 500ing.
+    try:
+        uid = int(user_id)
+        cached = session.get('_user_cache')
+        if cached and isinstance(cached, dict) and cached.get('id') == uid:
+            return User(cached)
+        # Cache miss — query DB and warm the session cache
+        user_data = models.get_user_by_id(uid)
+        if user_data:
+            session['_user_cache'] = dict(user_data)
+            return User(user_data)
+        return None
+    except Exception as e:
+        app.logger.error(f'[load_user] {e}')
+        return None
 
 # Initialize database on startup
 try:

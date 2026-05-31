@@ -83,15 +83,60 @@ class _PooledConn:
 
 
 def get_db():
-    """Check out a connection from the pool. Returns (_PooledConn, RealDictCursor).
-    Callers do cursor.close() then conn.close() — conn.close() returns the
-    connection to the pool, it does NOT destroy the socket.
+    """Check out a *live* connection from the pool. Returns (_PooledConn, RealDictCursor).
+
+    Render / Heroku Postgres closes idle connections after ~5 minutes.
+    psycopg2's ThreadedConnectionPool doesn't detect this — it happily
+    hands out a dead socket, which raises OperationalError on the first
+    query, causing a 500 on the user's first request after an idle period.
+
+    Fix: up to 3 attempts.  Each time, inspect the raw connection's state
+    before handing it out.  If it looks stale, discard it (close=True
+    destroys the socket and lets the pool open a fresh one) and retry.
     """
-    raw = _get_pool().getconn()
+    pool = _get_pool()
+    last_err = None
+    for _attempt in range(3):
+        raw = pool.getconn()
+        # conn.closed is non-zero when psycopg2 has already marked the
+        # socket as dead (e.g. after a previous unrecovered OperationalError).
+        if raw.closed:
+            try:
+                pool.putconn(raw, close=True)
+            except Exception:
+                pass
+            continue
+        # STATUS_READY  = idle, ready for a new command (the happy path).
+        # STATUS_BEGIN  = inside an open transaction — also usable.
+        # Anything else (STATUS_IN_TRANSACTION_INERROR, STATUS_INTRANS_INERROR,
+        # or the legacy integer 4) means the connection is in an aborted
+        # transaction and must be rolled back before reuse.
+        if raw.status not in (
+            psycopg2.extensions.STATUS_READY,
+            psycopg2.extensions.STATUS_BEGIN,
+        ):
+            try:
+                raw.rollback()
+            except Exception as e:
+                last_err = e
+                try:
+                    pool.putconn(raw, close=True)
+                except Exception:
+                    pass
+                continue
+        raw.cursor_factory = psycopg2.extras.RealDictCursor
+        conn = _PooledConn(raw)
+        cursor = conn.cursor()
+        return conn, cursor
+
+    # All retry slots consumed — let the pool raise naturally so the
+    # caller's except-block (or a 500 handler) sees the real error.
+    if last_err:
+        raise last_err
+    raw = pool.getconn()          # may raise PoolError if exhausted
     raw.cursor_factory = psycopg2.extras.RealDictCursor
     conn = _PooledConn(raw)
-    cursor = conn.cursor()
-    return conn, cursor
+    return conn, conn.cursor()
 
 
 def get_db_connection():
@@ -1222,45 +1267,77 @@ def migrate_password_reset_tokens():
 
 def save_password_reset_token(user_id, token, expires_at):
     """Save a password reset token (one per user — delete old ones first)."""
-    conn, cursor = get_db()
-    cursor.execute('DELETE FROM password_reset_tokens WHERE user_id = %s', (user_id,))
-    cursor.execute(
-        'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (%s, %s, %s)',
-        (user_id, token, expires_at)
-    )
-    conn.commit()
-    cursor.close()
-    conn.close()
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('DELETE FROM password_reset_tokens WHERE user_id = %s', (user_id,))
+        cursor.execute(
+            'INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (%s, %s, %s)',
+            (user_id, token, expires_at)
+        )
+        conn.commit()
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 
 def get_password_reset_token(token):
     """Return token row if it exists, else None."""
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM password_reset_tokens WHERE token = %s', (token,))
-    row = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    return dict(row) if row else None
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT * FROM password_reset_tokens WHERE token = %s', (token,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_password_reset_token] {e}')
+        return None
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 
 def delete_password_reset_token(token):
     """Delete a used or expired token."""
-    conn, cursor = get_db()
-    cursor.execute('DELETE FROM password_reset_tokens WHERE token = %s', (token,))
-    conn.commit()
-    cursor.close()
-    conn.close()
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('DELETE FROM password_reset_tokens WHERE token = %s', (token,))
+        conn.commit()
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 
 def update_user_password(user_id, new_password):
     """Hash and save a new password for a user."""
     import bcrypt
     hashed = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    conn, cursor = get_db()
-    cursor.execute('UPDATE users SET password_hash = %s WHERE id = %s', (hashed, user_id))
-    conn.commit()
-    cursor.close()
-    conn.close()
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('UPDATE users SET password_hash = %s WHERE id = %s', (hashed, user_id))
+        conn.commit()
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 def create_client(user_id, company_name, branding_settings=None, vertical=None):
     """
@@ -1268,74 +1345,91 @@ def create_client(user_id, company_name, branding_settings=None, vertical=None):
     If the owner is an agency and has agency_branding_settings, those are
     auto-applied to the new client unless branding_settings is explicitly passed.
     """
-    conn, cursor = get_db()
-    import re as _re
-    slug      = _re.sub(r'[^a-z0-9-]', '', company_name.lower().replace(' ', '-'))
-    client_id = f"{slug}-{secrets.token_hex(4)}"
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        import re as _re
+        slug      = _re.sub(r'[^a-z0-9-]', '', company_name.lower().replace(' ', '-'))
+        client_id = f"{slug}-{secrets.token_hex(4)}"
 
-    # Auto-inherit agency defaults when nothing is passed
-    if branding_settings is None:
-        owner = get_user_by_id(user_id)
-        agency_raw = (owner or {}).get('agency_branding_settings')
-        if agency_raw:
-            try:
-                agency_bs = json.loads(agency_raw) if isinstance(agency_raw, str) else agency_raw
-                # Deep-copy and personalise for this client
-                branding_settings = {
-                    'branding': dict(agency_bs.get('branding', {})),
-                    'bot_settings': dict(agency_bs.get('bot_settings', {})),
-                    'contact': dict(agency_bs.get('contact', {})),
-                    'integrations': {},
-                    'vertical': vertical or agency_bs.get('vertical', 'general'),
-                }
-                # Reset company-specific fields so owner fills them in
-                branding_settings['branding']['company_name'] = company_name
-            except Exception:
-                branding_settings = None
+        # Auto-inherit agency defaults when nothing is passed
+        if branding_settings is None:
+            owner = get_user_by_id(user_id)
+            agency_raw = (owner or {}).get('agency_branding_settings')
+            if agency_raw:
+                try:
+                    agency_bs = json.loads(agency_raw) if isinstance(agency_raw, str) else agency_raw
+                    # Deep-copy and personalise for this client
+                    branding_settings = {
+                        'branding': dict(agency_bs.get('branding', {})),
+                        'bot_settings': dict(agency_bs.get('bot_settings', {})),
+                        'contact': dict(agency_bs.get('contact', {})),
+                        'integrations': {},
+                        'vertical': vertical or agency_bs.get('vertical', 'general'),
+                    }
+                    # Reset company-specific fields so owner fills them in
+                    branding_settings['branding']['company_name'] = company_name
+                except Exception:
+                    branding_settings = None
 
-    if branding_settings is None:
-        branding_settings = {
-            'branding': {
-                'company_name': company_name,
-                'primary_color': '#B8924A',
-                'remove_branding': False,
-            },
-            'bot_settings': {
-                'bot_name': 'Support Assistant',
-                'welcome_message': 'Hi! How can I help you today?',
-            },
-            'contact': {},
-            'integrations': {},
-            'vertical': vertical or 'general',
-        }
+        if branding_settings is None:
+            branding_settings = {
+                'branding': {
+                    'company_name': company_name,
+                    'primary_color': '#B8924A',
+                    'remove_branding': False,
+                },
+                'bot_settings': {
+                    'bot_name': 'Support Assistant',
+                    'welcome_message': 'Hi! How can I help you today?',
+                },
+                'contact': {},
+                'integrations': {},
+                'vertical': vertical or 'general',
+            }
 
-    primary_color = branding_settings.get('branding', {}).get('primary_color')
-    welcome_msg   = branding_settings.get('bot_settings', {}).get('welcome_message')
-    remove_flag   = bool(branding_settings.get('branding', {}).get('remove_branding', False))
+        primary_color = branding_settings.get('branding', {}).get('primary_color')
+        welcome_msg   = branding_settings.get('bot_settings', {}).get('welcome_message')
+        remove_flag   = bool(branding_settings.get('branding', {}).get('remove_branding', False))
 
-    cursor.execute(
-        '''INSERT INTO clients
-               (user_id, client_id, company_name, branding_settings,
-                widget_color, welcome_message, remove_branding)
-           VALUES (%s, %s, %s, %s, %s, %s, %s)''',
-        (user_id, client_id, company_name,
-         json.dumps(branding_settings),
-         primary_color, welcome_msg, remove_flag)
-    )
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return client_id
+        cursor.execute(
+            '''INSERT INTO clients
+                   (user_id, client_id, company_name, branding_settings,
+                    widget_color, welcome_message, remove_branding)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)''',
+            (user_id, client_id, company_name,
+             json.dumps(branding_settings),
+             primary_color, welcome_msg, remove_flag)
+        )
+        conn.commit()
+        return client_id
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 
 def get_user_clients(user_id):
-    """Get all clients for a user"""
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM clients WHERE user_id = %s', (user_id,))
-    clients = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return [dict(client) for client in clients]
+    """Get all clients for a user. Returns [] on DB error (never raises)."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT * FROM clients WHERE user_id = %s', (user_id,))
+        return [dict(c) for c in cursor.fetchall()]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_user_clients] {e}')
+        return []
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 
 # =====================================================================
