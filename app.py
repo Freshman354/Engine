@@ -2819,7 +2819,7 @@ def trigger_reindex():
 
     try:
         from ai_helper import get_ai_helper
-        helper  = get_ai_helper()
+        helper  = get_ai_helper(Config.GEMINI_API_KEY, Config.GEMINI_MODEL)
         results = helper.reindex_all_clients()
 
         succeeded = {cid: n for cid, n in results.items() if n >= 0}
