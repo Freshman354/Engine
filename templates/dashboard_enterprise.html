@@ -318,6 +318,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                     <a href="/upgrade" class="btn btn-upgrade">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>Upgrade
                     </a>
+                {% elif plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
+                    <a href="/upgrade" class="btn btn-upgrade" title="Add a payment method to create extra seats">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Add Payment Method
+                    </a>
                 {% else %}
                     <button class="btn btn-primary" onclick="openNewClientModal()">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Client
@@ -359,12 +363,34 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 <div class="stat-sub">{% if limit_reached %}<span style="color:var(--warning);font-weight:600;">Limit reached</span>{% else %}Slots available{% endif %}</div>
             </div>
         </div>
+        {% if plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
+        <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span style="font-size:13.5px;color:#92400E;line-height:1.5;">
+                <strong>Payment method required.</strong> You have {{ client_count - agency_included_clients }} extra seat{{ 's' if (client_count - agency_included_clients) != 1 else '' }} above your {{ agency_included_clients }} included — each costs ${{ agency_seat_price|int }}/mo.
+                <a href="/upgrade" style="color:#B45309;font-weight:700;text-decoration:underline;">Add a payment method →</a>
+            </span>
+        </div>
+        {% elif plan_type == 'agency' and agency_extra_seats > 0 %}
+        <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            <span style="font-size:13.5px;color:#166534;line-height:1.5;">
+                {{ agency_overage_label }}
+            </span>
+        </div>
+        {% endif %}
         <div class="section-header">
             <span class="section-title">Your Clients</span>
             {% if not limit_reached %}
-            <button class="btn btn-primary" onclick="openNewClientModal()">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Client
-            </button>
+                {% if plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
+                    <a href="/upgrade" class="btn btn-upgrade" title="Add a payment method to create extra seats">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Add Payment Method
+                    </a>
+                {% else %}
+                    <button class="btn btn-primary" onclick="openNewClientModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Client
+                    </button>
+                {% endif %}
             {% endif %}
         </div>
         {% if clients %}
@@ -463,6 +489,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 </div>
                 <div class="vertical-preview" id="vertical-preview"><span id="preview-text">Friendly, professional assistant. Suitable for any business type.</span></div>
             </div>
+            {% if plan_type == 'agency' and client_count >= agency_included_clients %}
+            <div style="background:#FEF9EC;border:1px solid #F59E0B;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#92400E;line-height:1.5;">
+                <strong>Extra seat:</strong> This client will be billed at <strong>${{ agency_seat_price|int }}/mo</strong> on your next invoice (seat {{ client_count + 1 }}, {{ agency_included_clients }} included in your plan).
+            </div>
+            {% endif %}
             <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Create Client</button>
         </form>
     </div>

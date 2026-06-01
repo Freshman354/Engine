@@ -2823,6 +2823,8 @@ def get_agency_users_with_overage(included_clients: int = 20):
             FROM users u
             JOIN clients c ON c.user_id = u.id AND c.is_active = TRUE
             WHERE u.plan_type IN ('agency', 'growth')
+              AND u.subscription_status IN ('active', 'trialing')
+              AND u.subscription_id IS NOT NULL
             GROUP BY u.id, u.email
             HAVING COUNT(c.client_id) > %s
             ORDER BY client_count DESC

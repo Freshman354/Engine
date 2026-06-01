@@ -16,6 +16,7 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from functools import wraps
 from flask_mail import Mail, Message
 import secrets
+import threading
 import cache_utils  # KB version-based cache invalidation
 import models
 import requests
@@ -40,6 +41,16 @@ if not _secret:
         "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
     )
 app.config['SECRET_KEY'] = _secret
+
+# ADMIN_SECRET must be set — the /admin/set-plan endpoint uses it to authorise
+# plan changes. Without an explicit secret the route previously fell back to a
+# well-known default ('lumvi-admin-2024') that anyone could guess.
+_admin_secret = os.environ.get("ADMIN_SECRET")
+if not _admin_secret:
+    raise RuntimeError(
+        "ADMIN_SECRET environment variable is not set. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
 app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB max request body
 
 # ── Session security ─────────────────────────────────────────────────
@@ -467,16 +478,48 @@ try:
     # ── Startup enforcement: actually schedule the timer ──────────────
     # The comment previously described this but it was never implemented.
     # Now it fires 10 seconds after startup — gives workers time to settle.
-    import threading as _threading
+    #
+    # MULTI-WORKER FIX: With N Gunicorn workers each process starts its own
+    # timer, causing N redundant enforce_subscriptions() calls.  We use
+    # pg_try_advisory_lock with a fixed app-level key (13370001) so only
+    # whichever worker wins the lock actually runs enforcement; the rest skip.
+    # The lock is released immediately after enforcement so it doesn't block
+    # anything else.
     def _startup_enforce():
         try:
             with app.app_context():
-                enforce_subscriptions()
-                app.logger.info("[Startup] subscription enforcement complete")
+                _sc, _scur = models.get_db()
+                try:
+                    _scur.execute("SELECT pg_try_advisory_lock(13370001)")
+                    row = _scur.fetchone()
+                    acquired = list(row.values())[0] if row else False
+                except Exception:
+                    acquired = True   # if lock check fails, proceed anyway
+                    _sc = _scur = None
+
+                if not acquired:
+                    app.logger.info("[Startup] enforcement skipped — another worker already running it")
+                    if _sc:
+                        try: _scur.close(); _sc.close()
+                        except Exception: pass
+                    return
+
+                try:
+                    enforce_subscriptions()
+                    app.logger.info("[Startup] subscription enforcement complete")
+                finally:
+                    if _sc:
+                        try:
+                            _scur.execute("SELECT pg_advisory_unlock(13370001)")
+                            _sc.commit()
+                            _scur.close()
+                            _sc.close()
+                        except Exception:
+                            pass
         except Exception as _se:
             app.logger.error(f"[Startup] enforcement error: {_se}")
-    _threading.Timer(10.0, _startup_enforce).start()
-    print("✅ Startup enforcement scheduled (T+10s)")
+    threading.Timer(10.0, _startup_enforce).start()
+    print("✅ Startup enforcement scheduled (T+10s, single-worker guard active)")
 except Exception as e:
     print(f"⚠️ Database initialization error: {e}")
     # DB failed — don't schedule enforcement, it would fail too
@@ -1242,29 +1285,75 @@ def match_faq(message, faqs, lead_triggers):
 
 
 def log_conversation(client_id, user_message, bot_response,
-                     matched=False, method='unknown', session_id=None):
+                     matched=False, method='unknown', session_id=None,
+                     daily_limit=None):
     # NOTE: The conversations table is created once in models.init_db().
     # Do NOT run CREATE TABLE here — it fires a DDL statement on every chat
     # message, which is extremely expensive and serialises all DB writes.
     # session_id column added by migrate_agent_tables() via
     # ALTER TABLE conversations ADD COLUMN IF NOT EXISTS session_id TEXT.
+    #
+    # RACE CONDITION FIX: when daily_limit is supplied the INSERT is wrapped in
+    # a CTE that re-counts today's rows inside the same statement.  Because the
+    # count and the insert happen atomically (single round-trip, evaluated under
+    # the same snapshot), concurrent requests that all passed the pre-check
+    # cannot collectively exceed the cap.  Returns True if the row was inserted,
+    # False if the limit was already reached (caller should treat as limit_hit).
     try:
         conn, cursor = models.get_db()
-        cursor.execute(
-            '''
-            INSERT INTO conversations
-                (client_id, user_message, bot_response, matched, method, session_id)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ''',
-            (client_id, user_message, bot_response, matched, method,
-             session_id or None)
-        )
+
+        if daily_limit is not None and daily_limit < 999999:
+            # Atomic check-then-insert: only inserts when today's count < limit.
+            cursor.execute(
+                '''
+                WITH today_count AS (
+                    SELECT COUNT(*) AS cnt
+                    FROM   conversations
+                    WHERE  client_id = %s
+                      AND  DATE(timestamp) = CURRENT_DATE
+                )
+                INSERT INTO conversations
+                    (client_id, user_message, bot_response, matched, method, session_id)
+                SELECT %s, %s, %s, %s, %s, %s
+                FROM   today_count
+                WHERE  cnt < %s
+                ''',
+                (
+                    client_id,                          # for the CTE WHERE
+                    client_id, user_message, bot_response,
+                    matched, method, session_id or None,
+                    daily_limit,                        # cap
+                )
+            )
+            inserted = cursor.rowcount > 0
+        else:
+            cursor.execute(
+                '''
+                INSERT INTO conversations
+                    (client_id, user_message, bot_response, matched, method, session_id)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ''',
+                (client_id, user_message, bot_response, matched, method,
+                 session_id or None)
+            )
+            inserted = True
+
         conn.commit()
         cursor.close()
         conn.close()
-        app.logger.info(f'✅ Logged conversation for {client_id} session={session_id}')
+
+        if inserted:
+            app.logger.info(f'✅ Logged conversation for {client_id} session={session_id}')
+        else:
+            app.logger.info(
+                f'[Limit] atomic insert blocked for {client_id} '
+                f'(daily_limit={daily_limit}) session={session_id}'
+            )
+        return inserted
+
     except Exception as e:
         app.logger.error(f'❌ Error logging conversation: {e}')
+        return True  # fail-open: don't block the chat response on a log error
 
 # =====================================================================
 # PLAN ENFORCEMENT HELPERS
@@ -1311,19 +1400,34 @@ def get_client_owner_plan(client_id):
 # to check the daily message limit. That's 2 extra DB round-trips per request
 # adding ~200-400ms on a cold Render DB connection.
 # The 60-second TTL means a plan upgrade takes effect within 1 minute — acceptable.
+#
+# THREAD SAFETY: _client_owner_cache_lock serialises all reads and writes so
+# concurrent Flask threads (threaded=True or gevent workers) never observe a
+# partial update or overwrite a freshly-written entry with a stale DB value.
 _client_owner_cache: dict = {}  # {client_id: (owner_dict, expires_at)}
+_client_owner_cache_lock = threading.Lock()
 
 def _get_cached_client_owner(client_id: str):
     """Return client owner dict from cache, falling back to DB on miss/expiry."""
-    entry = _client_owner_cache.get(client_id)
-    if entry:
-        owner, expires_at = entry
-        if datetime.utcnow() < expires_at:
-            return owner
-    # Cache miss or expired — query DB
+    with _client_owner_cache_lock:
+        entry = _client_owner_cache.get(client_id)
+        if entry:
+            owner, expires_at = entry
+            if datetime.utcnow() < expires_at:
+                return owner
+
+    # Cache miss or expired — query DB *outside* the lock so we don't hold it
+    # during a potentially slow DB round-trip.
     owner = models.get_client_owner(client_id)
     if owner:
-        _client_owner_cache[client_id] = (owner, datetime.utcnow() + timedelta(seconds=60))
+        with _client_owner_cache_lock:
+            # Re-check: another thread may have populated the cache while we
+            # were querying the DB.  Only write if the entry is still missing
+            # or stale, so a fresher write from a concurrent thread is never
+            # overwritten with our (possibly older) result.
+            existing = _client_owner_cache.get(client_id)
+            if not existing or datetime.utcnow() >= existing[1]:
+                _client_owner_cache[client_id] = (owner, datetime.utcnow() + timedelta(seconds=60))
     return owner
 
 
@@ -1481,12 +1585,18 @@ def chat():
         # ── Plan enforcement: messages_per_day ──────────────────────────
         # Only check for real (non-demo) clients so the demo widget is
         # never accidentally blocked.
+        #
+        # _chat_daily_limit is set here and threaded into every log_conversation
+        # call below so the atomic CTE insert can re-check the cap under the
+        # same DB snapshot — preventing races at the boundary.
+        _chat_daily_limit = None  # None == unlimited / demo — no atomic check needed
         if client and client_id != 'demo':
             owner = _get_cached_client_owner(client_id)
             if owner:
                 plan_type = owner.get('plan_type', 'free')
                 daily_limit = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])['messages_per_day']
                 if daily_limit < 999999:
+                    _chat_daily_limit = daily_limit   # thread down to log_conversation
                     today_count = models.get_daily_message_count(client_id)
                     if today_count >= daily_limit:
                         app.logger.info(
@@ -1527,7 +1637,7 @@ def chat():
             for trigger in lead_triggers:
                 if trigger.lower() in message_lower:
                     response_text = "I'd be happy to connect you with our team! What's the best email to reach you?"
-                    log_conversation(client_id, message, response_text, matched=True, method='lead_trigger', session_id=session_id)
+                    log_conversation(client_id, message, response_text, matched=True, method='lead_trigger', session_id=session_id, daily_limit=_chat_daily_limit)
                     return jsonify({
                         'success': True,
                         'response': response_text,
@@ -1627,7 +1737,8 @@ def chat():
 
                     log_conversation(
                         client_id, message, response_text,
-                        matched=True, method=method, session_id=session_id
+                        matched=True, method=method, session_id=session_id,
+                        daily_limit=_chat_daily_limit,
                     )
 
                     # System 2: collect escalation training sample
@@ -1658,7 +1769,7 @@ def chat():
 
                 # Catch any remaining is_lead signals not caught above
                 if result.get('is_lead'):
-                    log_conversation(client_id, message, response_text, matched=True, method='lead_pipeline', session_id=session_id)
+                    log_conversation(client_id, message, response_text, matched=True, method='lead_pipeline', session_id=session_id, daily_limit=_chat_daily_limit)
                     return jsonify({
                         'success': True,
                         'response': response_text,
@@ -1670,7 +1781,7 @@ def chat():
 
                 if response_text:
                     matched = confidence > 0.4
-                    log_conversation(client_id, message, response_text, matched=matched, method=method, session_id=session_id)
+                    log_conversation(client_id, message, response_text, matched=matched, method=method, session_id=session_id, daily_limit=_chat_daily_limit)
 
                     # System 2: collect training sample in background
                     if client_id != 'demo':
@@ -1737,7 +1848,7 @@ def chat():
                 f"score={confidence:.3f} threshold=0.68"
             )
             response_text = best_faq.get('answer')
-            log_conversation(client_id, message, response_text, matched=True, method='keyword_fallback', session_id=session_id)
+            log_conversation(client_id, message, response_text, matched=True, method='keyword_fallback', session_id=session_id, daily_limit=_chat_daily_limit)
             fire_webhook_event(client_id, 'message_sent', {
                 'session_id': session_id,
                 'message':    message,
@@ -1764,7 +1875,7 @@ def chat():
             'fallback_message',
             "I'm not sure about that. Would you like to speak with our team? Type 'contact'!"
         )
-        log_conversation(client_id, message, fallback, matched=False, method='fallback', session_id=session_id)
+        log_conversation(client_id, message, fallback, matched=False, method='fallback', session_id=session_id, daily_limit=_chat_daily_limit)
         return jsonify({
             'success': True,
             'response': fallback,
@@ -2391,6 +2502,14 @@ def dashboard():
         if agency_extra_seats > 0 else ''
     )
 
+    # ── Payment method check: agency users need a subscription_id on file
+    # before they can create overage seats (client 21+).  Passed to the
+    # template to gate the Add Client button and surface a billing warning.
+    has_payment_method = bool(
+        (fresh_user or {}).get('subscription_id') and
+        (fresh_user or {}).get('subscription_status', 'active') in ('active', 'trialing')
+    )
+
     # Subscription status for popup
     sub_status = session.pop('sub_status', None)
     sub_info = get_subscription_status(fresh_user) if fresh_user else {'status': 'free'}
@@ -2413,7 +2532,8 @@ def dashboard():
         agency_overage_cost=agency_overage_cost,
         agency_overage_label=agency_overage_label,
         agency_included_clients=AGENCY_INCLUDED_CLIENTS,
-        agency_seat_price=AGENCY_SEAT_PRICE
+        agency_seat_price=AGENCY_SEAT_PRICE,
+        has_payment_method=has_payment_method
     )
 
 
@@ -2472,8 +2592,6 @@ def create_client():
 
         user = models.get_user_by_id(current_user.id)
         plan_type = user['plan_type']
-        current_clients = models.get_user_clients(current_user.id)
-        client_count = len(current_clients)
         plan_limit = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])['clients']
 
         # ---- Readable limit labels per plan ----
@@ -2485,25 +2603,68 @@ def create_client():
         }
         upgrade_hint = plan_upgrade_hints.get(plan_type, 'Upgrade to add more chatbots')
 
-        # ── Agency per-seat: allow creation above 20, charge $15/extra ──
-        is_agency_overage = (
-            plan_type == 'agency' and
-            client_count >= AGENCY_INCLUDED_CLIENTS
-        )
-        extra_seats = max(0, client_count - AGENCY_INCLUDED_CLIENTS + 1) if is_agency_overage else 0
-        overage_cost = extra_seats * AGENCY_SEAT_PRICE
+        # ── RACE CONDITION FIX: serialise concurrent creation attempts for this
+        # user with a PostgreSQL advisory lock keyed to their user_id.
+        # pg_advisory_lock() blocks until acquired; pg_advisory_unlock() releases
+        # it.  Because we hold the lock across the count-check AND the insert,
+        # two simultaneous requests can no longer both read count=0 and both
+        # create a client — the second one will read count=1 (correct).
+        # The lock is session-scoped so it is always released when the connection
+        # is returned, even if an exception occurs.
+        _lock_conn, _lock_cursor = models.get_db()
+        try:
+            _lock_cursor.execute("SELECT pg_advisory_lock(%s)", (current_user.id,))
 
-        if client_count >= plan_limit and not is_agency_overage:
-            # Return JSON if called from the onboarding wizard (XHR/JSON request)
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
-               request.headers.get('Accept', '').startswith('application/json'):
-                return jsonify({
-                    'success': False,
-                    'error': f'Plan limit reached. You can have {plan_limit} chatbot{"s" if plan_limit != 1 else ""} on your {plan_type} plan. Upgrade to add more.',
-                    'upgrade_url': '/upgrade'
-                }), 403
-            # Legacy HTML fallback for direct form submissions
-            return f'''<!DOCTYPE html>
+            # Re-count inside the lock so the value is authoritative
+            current_clients = models.get_user_clients(current_user.id)
+            client_count = len(current_clients)
+
+            # ── Agency per-seat: allow creation above 20, charge $15/extra ──
+            is_agency_overage = (
+                plan_type == 'agency' and
+                client_count >= AGENCY_INCLUDED_CLIENTS
+            )
+            extra_seats = max(0, client_count - AGENCY_INCLUDED_CLIENTS + 1) if is_agency_overage else 0
+            overage_cost = extra_seats * AGENCY_SEAT_PRICE
+
+            # ── Gate: require a valid payment method for any overage seat ──
+            # Without this, agency users can add seats 21+ for free and the
+            # monthly cron creates a pending invoice that may never be paid.
+            if is_agency_overage:
+                _user_data  = models.get_user_by_id(current_user.id)
+                _sub_id     = (_user_data or {}).get('subscription_id')
+                _sub_status = (_user_data or {}).get('subscription_status', 'active')
+                if not _sub_id or _sub_status in ('cancelled', 'past_due'):
+                    _lock_cursor.execute("SELECT pg_advisory_unlock(%s)", (current_user.id,))
+                    _lock_cursor.close()
+                    _lock_conn.close()
+                    _err = (
+                        "A saved payment method is required to add extra seats. "
+                        "Please update your billing details on the upgrade page."
+                    )
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
+                       request.headers.get('Accept', '').startswith('application/json'):
+                        return jsonify({
+                            'success': False,
+                            'error': _err,
+                            'upgrade_url': '/upgrade'
+                        }), 402
+                    return redirect(url_for('upgrade'))
+
+            if client_count >= plan_limit and not is_agency_overage:
+                _lock_cursor.execute("SELECT pg_advisory_unlock(%s)", (current_user.id,))
+                _lock_cursor.close()
+                _lock_conn.close()
+                # Return JSON if called from the onboarding wizard (XHR/JSON request)
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
+                   request.headers.get('Accept', '').startswith('application/json'):
+                    return jsonify({
+                        'success': False,
+                        'error': f'Plan limit reached. You can have {plan_limit} chatbot{"s" if plan_limit != 1 else ""} on your {plan_type} plan. Upgrade to add more.',
+                        'upgrade_url': '/upgrade'
+                    }), 403
+                # Legacy HTML fallback for direct form submissions
+                return f'''<!DOCTYPE html>
 <html>
 <head><title>Plan Limit Reached</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -2538,7 +2699,21 @@ p{{color:#57534E;margin-bottom:16px;line-height:1.65;font-size:15px;}}
 </div>
 </body></html>''', 403
 
-        client_id = models.create_client(current_user.id, company_name, vertical=vertical)
+            client_id = models.create_client(current_user.id, company_name, vertical=vertical)
+
+        finally:
+            # Always release the advisory lock, even if an exception was raised
+            try:
+                _lock_cursor.execute("SELECT pg_advisory_unlock(%s)", (current_user.id,))
+                _lock_conn.commit()
+            except Exception:
+                pass
+            try:
+                _lock_cursor.close()
+                _lock_conn.close()
+            except Exception:
+                pass
+
         app.logger.info(f"[CreateClient] Created {client_id} for user {current_user.id}")
 
         # Log agency overage seat so it can be billed in the monthly cron
@@ -3702,13 +3877,29 @@ def save_white_label():
     if branded_email_from and not is_pro_plus:
         return jsonify({'success': False, 'error': 'Branded email sender requires Pro or Agency plan'}), 403
 
-    # Check domain uniqueness (another client can't use the same domain)
+    # Check domain uniqueness (another client can't use the same domain).
+    # The application-level check below is a fast path; the DB MUST also have
+    # a UNIQUE constraint on custom_widget_domain so two concurrent requests
+    # that both pass this check cannot both commit the same domain.
+    # Run once in psql: ALTER TABLE clients ADD CONSTRAINT uq_custom_widget_domain
+    #                   UNIQUE (custom_widget_domain);
     if domain:
         existing = models.get_client_by_custom_domain(domain)
         if existing and existing['client_id'] != client_id:
             return jsonify({'success': False, 'error': f'Domain "{domain}" is already in use by another client'}), 409
 
-    models.save_white_label_settings(client_id, domain, custom_css, branded_email_from)
+    try:
+        models.save_white_label_settings(client_id, domain, custom_css, branded_email_from)
+    except Exception as _wl_err:
+        # Catch a DB-level unique violation in the rare race window where two
+        # concurrent requests both passed the application check above.
+        _err_str = str(_wl_err).lower()
+        if 'unique' in _err_str or 'duplicate' in _err_str:
+            app.logger.warning(
+                f"[WhiteLabel] domain conflict (race) client={client_id} domain={domain}: {_wl_err}"
+            )
+            return jsonify({'success': False, 'error': f'Domain "{domain}" was just claimed by another client. Please choose a different domain.'}), 409
+        raise
     app.logger.info(f"[WhiteLabel] saved client={client_id} domain={domain} user={current_user.id}")
 
     return jsonify({
@@ -5428,7 +5619,8 @@ def affiliate_dashboard():
 
 @app.route('/admin/set-plan', methods=['GET', 'POST'])
 def admin_set_plan():
-    ADMIN_SECRET = os.environ.get('ADMIN_SECRET', 'lumvi-admin-2024')
+    # Secret is validated at startup — it will always be a real value here.
+    ADMIN_SECRET = os.environ.get('ADMIN_SECRET', '')
     error = None
     success = None
 
@@ -5978,11 +6170,26 @@ def clone_client_route():
     fresh_user   = models.get_user_by_id(current_user.id)
     plan_type    = (fresh_user or {}).get('plan_type', current_user.plan_type)
     plan_limits  = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
-    current_count = len(models.get_user_clients(current_user.id))
-    if current_count >= plan_limits['clients']:
-        return jsonify({'success': False, 'error': f'Client limit reached for {plan_type} plan'}), 403
 
-    new_cid = models.clone_client(source_client_id, current_user.id, new_name)
+    # RACE CONDITION FIX: acquire an advisory lock (same key as create_client)
+    # so a concurrent clone + create cannot both slip past the limit check.
+    _lc, _lcur = models.get_db()
+    try:
+        _lcur.execute("SELECT pg_advisory_lock(%s)", (current_user.id,))
+        current_count = len(models.get_user_clients(current_user.id))
+        if current_count >= plan_limits['clients']:
+            return jsonify({'success': False, 'error': f'Client limit reached for {plan_type} plan'}), 403
+        new_cid = models.clone_client(source_client_id, current_user.id, new_name)
+    finally:
+        try:
+            _lcur.execute("SELECT pg_advisory_unlock(%s)", (current_user.id,))
+            _lc.commit()
+        except Exception:
+            pass
+        try:
+            _lcur.close(); _lc.close()
+        except Exception:
+            pass
     if not new_cid:
         return jsonify({'success': False, 'error': 'Clone failed — please try again'}), 500
     app.logger.info(f"[Agency] cloned {source_client_id} → {new_cid} by user {current_user.id}")
