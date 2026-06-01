@@ -195,6 +195,30 @@ def analytics():
 
 
 # =====================================================================
+# SECTION: CONVERSION FUNNEL  (Decision 2 — baseline measurement)
+# =====================================================================
+
+@admin_bp.route('/conversion')
+@admin_required
+def conversion():
+    days = int(request.args.get('days', 14))
+    days = max(7, min(days, 90))  # clamp 7–90
+
+    funnel = _safe(models.get_conversion_funnel, {
+        'daily': [], 'total_views': 0,
+        'total_signups': 0, 'overall_rate': 0.0, 'days': days,
+    }, days)
+
+    ctx = _base_context()
+    ctx.update({
+        'section':     'conversion',
+        'funnel':      funnel,
+        'funnel_days': days,
+    })
+    return render_template('admin_dashboard.html', **ctx)
+
+
+# =====================================================================
 # SECTION: AI COSTS
 # =====================================================================
 

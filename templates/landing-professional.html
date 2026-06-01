@@ -462,22 +462,111 @@ footer p{color:var(--sub);font-size:12px;}
 </nav>
 
 <!-- HERO -->
+<style>
+/* ─── HERO CONTRAST LINE ──────────────────────────────────── */
+.hero-contrast{
+    display:inline-block;
+    font-family:'Outfit',sans-serif;
+    font-size:11px;font-weight:700;
+    letter-spacing:0.18em;text-transform:uppercase;
+    color:var(--gold-dk);
+    background:rgba(184,146,74,0.10);
+    border:1px solid rgba(184,146,74,0.22);
+    border-radius:999px;
+    padding:6px 16px;
+    margin-bottom:20px;
+    animation:fadeUp 0.7s ease both;
+}
+
+/* ─── PROFIT CARD ─────────────────────────────────────────── */
+.profit-card{
+    background:var(--white);
+    border:1px solid var(--border);
+    border-radius:16px;
+    overflow:hidden;
+    margin-bottom:32px;
+    animation:fadeUp 1s 0.2s ease both;
+    max-width:480px;
+}
+.profit-card-head{
+    display:grid;grid-template-columns:repeat(4,1fr);
+    background:var(--dark);
+    padding:10px 16px;
+}
+.profit-card-head span{
+    font-size:9.5px;font-weight:700;
+    letter-spacing:0.12em;text-transform:uppercase;
+    color:rgba(247,244,239,0.45);
+    text-align:center;
+}
+.profit-card-head span:first-child{text-align:left;}
+.profit-card-row{
+    display:grid;grid-template-columns:repeat(4,1fr);
+    padding:10px 16px;
+    border-bottom:1px solid var(--border);
+    align-items:center;
+}
+.profit-card-row:last-child{border-bottom:none;}
+.profit-card-row:nth-child(even){background:var(--cream);}
+.profit-card-row span{
+    font-size:13px;color:var(--mid);font-weight:400;
+    text-align:center;
+}
+.profit-card-row span:first-child{text-align:left;font-weight:500;color:var(--dark);}
+.profit-card-row .profit-val{
+    font-family:'Playfair Display',serif;
+    font-weight:800;color:var(--gold);font-size:14px;
+}
+</style>
+
 <section class="hero">
     <div class="hero-inner">
         <div>
-            <div class="hero-eyebrow"><span></span>White-Label AI Platform</div>
-            <h1>Launch Your Own<br>AI Chatbot SaaS —<br><span class="grad-text">Fully White-Label</span></h1>
-            <p>Create, brand, and resell AI-powered chatbots to your clients under your own name. No coding. No revenue sharing. Keep 100% of your profit.</p>
-            <div class="cta-group">
-                <a href="/signup" class="btn-primary">Start Free — No Card Required</a>
-                <a href="/demo" class="btn-outline">View Live Demo →</a>
+            <!-- [1] CONTRAST LINE -->
+            <div class="hero-contrast">Most chatbot platforms take 20–30% of what you charge your clients. Lumvi doesn't.</div>
+
+            <!-- [2] HEADLINE -->
+            <h1 style="animation:fadeUp 0.85s 0.05s ease both;">Add AI chatbots<br>to your agency.<br><span class="grad-text">Keep every dollar you charge.</span></h1>
+
+            <!-- [3] SUBHEADING -->
+            <p style="animation:fadeUp 1s 0.12s ease both;">Lumvi is a flat-fee white-label platform. Your brand. Your price. Zero revenue sharing. Your clients never see our name.</p>
+
+            <!-- [4] STATIC PROFIT CARD -->
+            <div class="profit-card">
+                <div class="profit-card-head">
+                    <span>Your clients</span>
+                    <span>You charge</span>
+                    <span>Lumvi costs</span>
+                    <span>Your profit</span>
+                </div>
+                <div class="profit-card-row">
+                    <span>5 clients</span>
+                    <span>$249/mo</span>
+                    <span>$99/mo</span>
+                    <span class="profit-val">$1,146/mo</span>
+                </div>
+                <div class="profit-card-row">
+                    <span>10 clients</span>
+                    <span>$249/mo</span>
+                    <span>$149/mo</span>
+                    <span class="profit-val">$2,341/mo</span>
+                </div>
+                <div class="profit-card-row">
+                    <span>20 clients</span>
+                    <span>$249/mo</span>
+                    <span>$299/mo</span>
+                    <span class="profit-val">$4,682/mo</span>
+                </div>
             </div>
-            <div class="trust-line">Built for agencies, SaaS founders, and digital resellers</div>
-            <div class="hero-stats">
-                <div class="hero-stat"><div class="hs-num">100%</div><div class="hs-lbl">Margin you keep</div></div>
-                <div class="hero-stat"><div class="hs-num">7 Days</div><div class="hs-lbl">Free trial, all plans</div></div>
-                <div class="hero-stat"><div class="hs-num">0</div><div class="hs-lbl">Revenue sharing</div></div>
+
+            <!-- [5] CTA ROW -->
+            <div class="cta-group" style="animation:fadeUp 1s 0.28s ease both;">
+                <a href="/signup" class="btn-primary">Start Free — 7 days, no card required</a>
+                <a href="#roi" class="btn-outline">See how the math works ↓</a>
             </div>
+
+            <!-- [6] TRUST BADGE -->
+            <div class="trust-line" style="animation:fadeUp 1s 0.36s ease both;">Powered by Anthropic Claude &nbsp;·&nbsp; No setup fees &nbsp;·&nbsp; Cancel anytime</div>
         </div>
         <div class="hero-visual">
             <iframe src="/static/lumvi-mockup.html" scrolling="no" frameborder="0" title="Lumvi platform preview"></iframe>

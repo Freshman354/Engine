@@ -366,6 +366,9 @@
         <a href="/admin/analytics" class="nav-item {% if section=='analytics' %}active{% endif %}">
             <span class="icon">📡</span> Events
         </a>
+        <a href="/admin/conversion" class="nav-item {% if section=='conversion' %}active{% endif %}">
+            <span class="icon">🎯</span> Conversion
+        </a>
         <a href="/admin/costs" class="nav-item {% if section=='costs' %}active{% endif %}">
             <span class="icon">🧮</span> AI Costs
         </a>
@@ -405,6 +408,7 @@
             {% elif section=='revenue' %}Revenue
             {% elif section=='leads' %}Leads
             {% elif section=='analytics' %}Analytics
+            {% elif section=='conversion' %}Conversion Funnel
             {% elif section=='costs' %}AI Costs
             {% elif section=='system' %}System
             {% else %}Panel{% endif %}
@@ -1072,6 +1076,195 @@
             </table>
         </div>
     </div>
+
+
+    <!-- ================================================================
+         SECTION: CONVERSION FUNNEL
+    ================================================================ -->
+    {% elif section == 'conversion' %}
+    {% set fd = funnel | default({}) %}
+    {% set daily = fd.get('daily', []) %}
+    {% set t_views = fd.get('total_views', 0) %}
+    {% set t_sigs = fd.get('total_signups', 0) %}
+    {% set o_rate = fd.get('overall_rate', 0.0) %}
+
+    <div class="page-header">
+        <h1>Conversion Funnel</h1>
+        <p>Landing page views &rarr; signup form &rarr; trial signups — last {{ funnel_days }} days</p>
+    </div>
+
+    <!-- Period switcher -->
+    <div style="display:flex;gap:8px;margin-bottom:24px;flex-wrap:wrap;">
+        {% for d, label in [(7,'7 days'),(14,'14 days'),(30,'30 days'),(90,'90 days')] %}
+        <a href="?days={{ d }}"
+           style="padding:5px 14px;border-radius:7px;font-size:12.5px;font-weight:600;text-decoration:none;border:1px solid {% if funnel_days == d %}rgba(201,168,76,0.4);background:rgba(201,168,76,0.1);color:var(--gold){% else %}var(--border);color:var(--muted){% endif %};">
+            {{ label }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <!-- Summary stat cards -->
+    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px;">
+        <div class="stat-card">
+            <div class="label">👁 Landing Page Views</div>
+            <div class="val" style="color:var(--gold);">{{ '{:,}'.format(t_views) }}</div>
+            <div class="sub">Unique loads in period</div>
+        </div>
+        <div class="stat-card c-success">
+            <div class="label">✅ Trial Signups</div>
+            <div class="val">{{ '{:,}'.format(t_sigs) }}</div>
+            <div class="sub">Paid plan free trials started</div>
+        </div>
+        <div class="stat-card {% if o_rate >= 3 %}c-success{% elif o_rate >= 1 %}c-warning{% else %}c-danger{% endif %}">
+            <div class="label">📈 Conversion Rate</div>
+            <div class="val">{{ '%.2f'|format(o_rate) }}%</div>
+            <div class="sub">
+                Views &rarr; trial signups
+                <span class="trend {% if o_rate >= 3 %}trend-up{% elif o_rate >= 1 %}trend-neutral{% else %}trend-down{% endif %}">
+                    {% if o_rate >= 3 %}Good{% elif o_rate >= 1 %}Low{% else %}No data{% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    {% if daily %}
+    <!-- Funnel chart -->
+    <div class="chart-card" style="margin-bottom:24px;">
+        <h3>📊 Daily Funnel — Views vs Trial Signups</h3>
+        <div class="chart-wrap" style="height:240px;">
+            <canvas id="funnelChart"></canvas>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Daily breakdown table -->
+    <div class="table-card">
+        <div class="table-card-header">
+            <h3>Daily Breakdown</h3>
+            {% if not daily %}
+            <span style="font-size:12px;color:var(--muted);">Tracking begins from first visit after deployment</span>
+            {% endif %}
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Landing Views</th>
+                        <th>Reached Signup Form</th>
+                        <th>Trial Signups</th>
+                        <th>Conversion Rate</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for d in daily %}
+                <tr>
+                    <td style="font-weight:600;">{{ d.day }}</td>
+                    <td style="font-family:'DM Mono',monospace;">{{ '{:,}'.format(d.landing_views) }}</td>
+                    <td style="font-family:'DM Mono',monospace;color:var(--muted);">{{ '{:,}'.format(d.signup_page_views) }}</td>
+                    <td style="font-family:'DM Mono',monospace;">
+                        {% if d.trial_signups > 0 %}
+                        <span style="color:var(--success);font-weight:700;">{{ d.trial_signups }}</span>
+                        {% else %}
+                        <span style="color:var(--muted);">0</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if d.conversion_rate >= 3 %}
+                            <span class="trend trend-up">{{ '%.2f'|format(d.conversion_rate) }}%</span>
+                        {% elif d.conversion_rate >= 1 %}
+                            <span class="trend trend-neutral">{{ '%.2f'|format(d.conversion_rate) }}%</span>
+                        {% elif d.landing_views > 0 %}
+                            <span style="color:var(--muted);font-size:12px;">{{ '%.2f'|format(d.conversion_rate) }}%</span>
+                        {% else %}
+                            <span style="color:var(--muted);font-size:12px;">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="empty">No data yet — deploy the updated app.py and wait for the first landing page visit.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if daily %}
+    <script>
+    (function() {
+        const raw = {{ daily | tojson | safe }};
+        const labels  = raw.map(d => d.day).reverse();
+        const views   = raw.map(d => d.landing_views).reverse();
+        const signups = raw.map(d => d.trial_signups).reverse();
+        const rates   = raw.map(d => d.conversion_rate).reverse();
+
+        new Chart(document.getElementById('funnelChart'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: 'Landing Views',
+                        data: views,
+                        backgroundColor: 'rgba(201,168,76,0.35)',
+                        borderColor: '#C9A84C',
+                        borderWidth: 2,
+                        borderRadius: 4,
+                        yAxisID: 'y',
+                        order: 2,
+                    },
+                    {
+                        label: 'Trial Signups',
+                        data: signups,
+                        type: 'line',
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34,197,94,0.08)',
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 5,
+                        pointBackgroundColor: '#22c55e',
+                        yAxisID: 'y1',
+                        order: 1,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: '#8a8a8a', font: { size: 11 } } },
+                    tooltip: {
+                        callbacks: {
+                            afterBody: (items) => {
+                                const i = items[0].dataIndex;
+                                return `Conversion: ${rates[i].toFixed(2)}%`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        position: 'left',
+                        beginAtZero: true,
+                        ticks: { color: '#5a5a5a', precision: 0 },
+                        grid: { color: 'rgba(255,255,255,0.03)' },
+                        title: { display: true, text: 'Landing Views', color: '#C9A84C', font: { size: 10 } }
+                    },
+                    y1: {
+                        position: 'right',
+                        beginAtZero: true,
+                        ticks: { color: '#5a5a5a', precision: 0 },
+                        grid: { drawOnChartArea: false },
+                        title: { display: true, text: 'Trial Signups', color: '#22c55e', font: { size: 10 } }
+                    },
+                    x: { ticks: { color: '#5a5a5a', maxTicksLimit: 14 }, grid: { display: false } }
+                }
+            }
+        });
+    })();
+    </script>
+    {% endif %}
 
 
     <!-- ================================================================

@@ -4952,5 +4952,112 @@ def get_event_counts():
         return {}
 
 
+def get_conversion_funnel(days=30):
+    """
+    Daily landing views → signup page views → trial signups → conversion rate.
+    Used by /admin/conversion-funnel dashboard page.
+    Returns list of dicts (newest first) + summary totals.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """
+            SELECT
+                DATE(created_at) AS day,
+                COUNT(*) FILTER (
+                    WHERE event_name = 'page_view'
+                    AND   metadata::json->>'page' = 'landing'
+                )                                                        AS landing_views,
+                COUNT(*) FILTER (
+                    WHERE event_name = 'signup_page_view'
+                )                                                        AS signup_page_views,
+                COUNT(*) FILTER (
+                    WHERE event_name = 'signup'
+                    AND   metadata IS NOT NULL
+                    AND   metadata::json->>'plan' != 'free'
+                )                                                        AS trial_signups
+            FROM analytics_events
+            WHERE created_at >= CURRENT_DATE - (%s * INTERVAL '1 day')
+            GROUP BY DATE(created_at)
+            ORDER BY day DESC
+            """,
+            (days,)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        daily = []
+        for r in rows:
+            views    = int(r['landing_views']    or 0)
+            sp_views = int(r['signup_page_views'] or 0)
+            signups  = int(r['trial_signups']     or 0)
+            rate     = round(signups / views * 100, 2) if views > 0 else 0.0
+            daily.append({
+                'day':               str(r['day']),
+                'landing_views':     views,
+                'signup_page_views': sp_views,
+                'trial_signups':     signups,
+                'conversion_rate':   rate,
+            })
+
+        total_views   = sum(d['landing_views']  for d in daily)
+        total_signups = sum(d['trial_signups']  for d in daily)
+        overall_rate  = round(total_signups / total_views * 100, 2) if total_views > 0 else 0.0
+
+        return {
+            'daily':         daily,
+            'total_views':   total_views,
+            'total_signups': total_signups,
+            'overall_rate':  overall_rate,
+            'days':          days,
+        }
+    except Exception:
+        return {
+            'daily': [], 'total_views': 0,
+            'total_signups': 0, 'overall_rate': 0.0, 'days': days,
+        }
+
+
+def get_all_clients() -> list:
+    """
+    Return every row from the clients table as a list of dicts.
+
+    Used by reindex_all_clients() in ai_helper.py to discover all client_ids
+    without needing to know them upfront.
+
+    Each dict contains every column from the clients table. The fields
+    reindex_all_clients() uses are:
+        client_id  — TEXT UNIQUE — the identifier passed to index_faqs()
+        company_name — for logging / progress reporting
+
+    Returns [] on any DB error so the caller can log and continue.
+    """
+    try:
+        conn, cursor = get_db()
+        try:
+            cursor.execute(
+                """
+                SELECT client_id, company_name, user_id, created_at
+                FROM   clients
+                ORDER  BY created_at ASC
+                """
+            )
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+            conn.close()
+
+        return [dict(r) for r in rows]
+
+    except Exception as _e:
+        import logging as _logging
+        _logging.getLogger('lumvi.models').error(
+            f"[get_all_clients] DB error: {type(_e).__name__}: {_e}",
+            exc_info=True,
+        )
+        return []
+
+
 if __name__ == '__main__':
     init_db()

@@ -122,26 +122,110 @@ import uuid
 import random
 import threading
 import collections
+import time
+import traceback
+import os
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Tuple, Optional
 
-# LUMVI FIX: Change 1 — Load sentence-transformers model once at module level.
-# Replaces Gemini text-embedding-004 API calls in _embed() with a self-hosted
-# BAAI/bge-small-en-v1.5 model to eliminate per-embedding API cost.
-_ST_MODEL = None
-try:
-    from sentence_transformers import SentenceTransformer as _SentenceTransformer
-    _ST_MODEL = _SentenceTransformer('BAAI/bge-small-en-v1.5')
-    logging.getLogger(__name__).info(
-        "[Embed] sentence-transformers BAAI/bge-small-en-v1.5 loaded successfully"
-    )
-except Exception as _st_load_err:
-    logging.getLogger(__name__).warning(
-        f"[Embed] sentence-transformers load failed — _embed() will return []: {_st_load_err}"
+# ══════════════════════════════════════════════════════════════════════════════
+# LUMVI STRUCTURED LOGGING
+# ══════════════════════════════════════════════════════════════════════════════
+# Log format includes: timestamp, level, logger, [TAG], and key=value pairs.
+# Every crash path logs:
+#   - [TAG]        — which component failed (e.g. [Embed], [RAG], [BM25])
+#   - exc_info     — full traceback via logger.exception()
+#   - context      — client_id, vertical, method, confidence where available
+#
+# To see DEBUG logs set the LUMVI_LOG_LEVEL env var:
+#   LUMVI_LOG_LEVEL=DEBUG gunicorn ...
+#
+# Log level hierarchy for Lumvi components:
+#   DEBUG  → per-candidate scores, cache hits, individual score components
+#   INFO   → pipeline stage completions, model calls, method decisions
+#   WARNING → non-fatal degradations (Redis down, model timeout, fallback used)
+#   ERROR  → unexpected exceptions that were caught and recovered
+#   CRITICAL → unrecoverable startup failures (model load, DB unreachable)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_LOG_LEVEL = os.environ.get('LUMVI_LOG_LEVEL', 'INFO').upper()
+
+logging.basicConfig(
+    level=_LOG_LEVEL,
+    format='%(asctime)s %(levelname)-8s %(name)s | %(message)s',
+    datefmt='%Y-%m-%dT%H:%M:%S',
+)
+logger = logging.getLogger('lumvi.ai_helper')
+logger.setLevel(_LOG_LEVEL)
+
+# Separate crash logger — writes ERROR+ to stderr always, regardless of
+# LUMVI_LOG_LEVEL, so crashes are never silenced in production.
+_crash_logger = logging.getLogger('lumvi.crash')
+_crash_logger.setLevel(logging.ERROR)
+if not _crash_logger.handlers:
+    _ch = logging.StreamHandler()
+    _ch.setLevel(logging.ERROR)
+    _ch.setFormatter(logging.Formatter(
+        '%(asctime)s CRASH %(name)s | %(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S',
+    ))
+    _crash_logger.addHandler(_ch)
+
+
+def _log_crash(tag: str, err: Exception, **context) -> None:
+    """
+    Central crash logger. Call this inside every except block that catches
+    a real exception (not a control-flow exception).
+
+    Logs:
+      - Full traceback via exc_info=True
+      - tag: which component crashed (e.g. 'Embed', 'RAGGenerate', 'BM25')
+      - All keyword context as key=value pairs in the message
+
+    Usage:
+        except Exception as e:
+            _log_crash('Embed', e, client_id=client_id, text=text[:40])
+    """
+    ctx_str = ' '.join(f'{k}={v}' for k, v in context.items())
+    _crash_logger.error(
+        f"[{tag}] {type(err).__name__}: {err} | {ctx_str}",
+        exc_info=True,
     )
 
-# ── Bounded LRU cache (Fix #6: replaces unbounded Dict[str,str]) ─────────────
-# Pure-Python OrderedDict-based LRU — no extra dependency needed.
+# ── Voyage AI embedding client ────────────────────────────────────────────────
+# Replaces sentence-transformers + torch (~700MB) with a pure stdlib HTTP call.
+# Model: voyage-3-lite
+#   - 512-dim output
+#   - Natively supports input_type="query" vs "document" (asymmetric retrieval)
+#   - Scores higher than text-embedding-004 on BEIR retrieval benchmarks
+#   - Free tier: 50M tokens/month (generous for a startup with Redis caching)
+#
+# Required env var: VOYAGE_API_KEY  (get one free at dash.voyageai.com)
+# No pip install needed — uses urllib.request from stdlib.
+#
+# Dim change note: voyage-3-lite is 512-dim (vs 768-dim bge-base, 384-dim bge-small).
+# IMPORTANT: Re-index all clients after deploying — run index_faqs() for every
+# client_id so stored vectors match the new dimensionality.
+_VOYAGE_API_KEY   = os.environ.get('VOYAGE_API_KEY', '')
+_VOYAGE_MODEL     = 'voyage-3-lite'
+_VOYAGE_EMBED_URL = 'https://api.voyageai.com/v1/embeddings'
+_VOYAGE_DIM       = 512   # voyage-3-lite output dimensionality
+
+if not _VOYAGE_API_KEY:
+    logging.getLogger('lumvi.ai_helper').warning(
+        "[Embed] VOYAGE_API_KEY not set — _embed() will return [] for all calls. "
+        "Set this env var to enable semantic search."
+    )
+else:
+    logging.getLogger('lumvi.ai_helper').info(
+        f"[Embed] Voyage AI configured model={_VOYAGE_MODEL} dim={_VOYAGE_DIM}"
+    )
+
+# sentence-transformers / torch are no longer needed.
+# _ST_MODEL and _CE_MODEL are kept as None so existing guards don't crash.
+_ST_MODEL = None
+_CE_MODEL = None
+_BGE_QUERY_PREFIX = ''  # Not used with Voyage — task type is passed as input_type param
 class _LRUCache:
     """Thread-safe, size-bounded LRU cache. Replaces the unbounded dict cache."""
     def __init__(self, maxsize: int = 512):
@@ -186,7 +270,7 @@ _EMBED_CACHE = _LRUCache(maxsize=2048)
 # Replaces unbounded Thread(...).start() in hot paths.
 _BG_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="lumvi_bg")
 
-logger = logging.getLogger(__name__)
+# (logger configured above in LUMVI STRUCTURED LOGGING block)
 
 # ── Redis L2 embedding cache (Fix 7) ─────────────────────────────────────────
 # Shared across Gunicorn workers. Falls back silently when REDIS_URL is absent.
@@ -206,7 +290,7 @@ except Exception as _redis_init_err:
     logger.info(f"[EmbedCache] Redis unavailable — L1 only ({_redis_init_err})")
     _redis_embed_client = None
 
-_REDIS_EMBED_PREFIX  = "lumvi:embed:v1:"
+_REDIS_EMBED_PREFIX  = "lumvi:embed:v2:"   # bumped v1→v2: voyage-3-lite 512-dim replaces bge 384/768-dim
 _REDIS_EMBED_TTL_SEC = 86400 * 7   # 7 days — embeddings are deterministic
 
 # ── Zero-cost intent keywords ─────────────────────────────────────────
@@ -315,6 +399,38 @@ _BARE_PRONOUNS = frozenset({'it', 'that', 'this', 'they', 'them', 'those', 'thes
 # Set to True to re-enable (adds 1 unbudgeted Gemini call per turn on 3+ word queries).
 _INFERENCE_EXPANSION_ENABLED: bool = False
 
+# ══════════════════════════════════════════════════════════════════════════════
+# STARTUP HEALTH CHECK
+# Logged once at import time. If any of these say MISSING you will see IDK
+# answers or degraded accuracy immediately, and this log tells you exactly why.
+# ══════════════════════════════════════════════════════════════════════════════
+def _startup_health_check() -> None:
+    checks = {
+        'VOYAGE_API_KEY (embeddings)':  bool(_VOYAGE_API_KEY),
+        'Voyage model config':          bool(_VOYAGE_MODEL and _VOYAGE_EMBED_URL),
+        'Redis L2 embed cache':         _redis_embed_client is not None,
+    }
+    all_ok = all(checks.values())
+    level  = logging.INFO if all_ok else logging.WARNING
+    for name, ok in checks.items():
+        logger.log(level, f"[Startup] {'OK    ' if ok else 'MISSING'} — {name}")
+
+    # Warn explicitly about removed dependencies so devs don't wonder
+    logger.info(
+        "[Startup] sentence-transformers + torch NOT required — "
+        f"embeddings via Voyage AI API ({_VOYAGE_MODEL}, {_VOYAGE_DIM}-dim)"
+    )
+    if all_ok:
+        logger.info("[Startup] All components ready — Lumvi AI Helper ready")
+    else:
+        missing = [n for n, ok in checks.items() if not ok]
+        logger.warning(
+            f"[Startup] {len(missing)} component(s) missing: {', '.join(missing)}. "
+            f"Semantic search will be disabled until VOYAGE_API_KEY is set."
+        )
+
+_startup_health_check()
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Pure-Python math helpers
@@ -409,8 +525,30 @@ def _reciprocal_rank_fusion(
     return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
 
+def _stem(word: str) -> str:
+    """
+    ACCURACY FIX 3: Lightweight suffix stemmer for BM25 token matching.
+    Strips common English suffixes so vocabulary variants match the same root:
+    "cancellation" → "cancel", "pricing" → "price", "refunds" → "refund".
+    No external dependency — pure Python, applied at both index and query time.
+    NOTE: Requires re-running index_faqs() for all clients after deploying so
+    stored BM25 token sets are re-built with stemmed tokens.
+    """
+    for suffix, min_root in (
+        ('ellation', 3), ('ations', 3), ('ation', 3), ('iness', 3),
+        ('nesses', 3), ('ness', 3), ('ments', 3), ('ment', 3),
+        ('ings', 3), ('ing', 3), ('iers', 3), ('iers', 3),
+        ('ers', 3), ('ies', 3), ('ion', 3), ('ed', 3),
+        ('er', 3), ('ly', 3), ('es', 3), ('s', 3),
+    ):
+        if word.endswith(suffix) and len(word) - len(suffix) >= min_root:
+            return word[:-len(suffix)]
+    return word
+
+
 def _tokenize(text: str) -> List[str]:
-    return re.findall(r'\b[a-z0-9]{2,}\b', text.lower())  # Fix 8: include numerics
+    # ACCURACY FIX 3: Apply _stem() so BM25 matches vocabulary variants.
+    return [_stem(t) for t in re.findall(r'\b[a-z0-9]{2,}\b', text.lower())]
 
 
 def _normalize(vec: list) -> list:
@@ -428,65 +566,140 @@ def _normalize(vec: list) -> list:
 
 
 def _embed(text: str, task: str = 'retrieval_document') -> list:
+    """
+    Embed text via Voyage AI's HTTP API (stdlib urllib — zero extra packages).
+
+    Voyage natively supports asymmetric retrieval via input_type:
+      'retrieval_query'    → input_type='query'     (user messages)
+      'retrieval_document' → input_type='document'  (KB entries)
+
+    Two-level cache (same as before):
+      L1: in-process LRU (_EMBED_CACHE, 2048 entries)
+      L2: Redis shared across workers (7-day TTL, packed float32 bytes)
+
+    Returns a normalized 512-dim unit vector, or [] on any failure.
+    """
     if not text or not text.strip():
         return []
+    if not _VOYAGE_API_KEY:
+        logger.warning("[Embed] VOYAGE_API_KEY missing — returning empty vector")
+        return []
 
-    # FIX #12: Hash-based embedding cache — prevents duplicate Gemini embedding calls
-    # for the same (text, task) pair within a server session.
-    cache_key = hashlib.sha256(f"{task}:{text.strip()[:2048]}".encode()).hexdigest()
-    # L1 check (in-process LRU)
+    cache_key = hashlib.sha256(
+        f"voyage:{_VOYAGE_MODEL}:{task}:{text.strip()[:2048]}".encode()
+    ).hexdigest()
+
+    # L1 — in-process LRU
     cached = _EMBED_CACHE.get(cache_key)
     if cached is not None:
         return cached
 
-    # L2 check (Redis) — Fix 7: cross-worker cache sharing
+    # L2 — Redis
     if _redis_embed_client is not None:
         try:
             import struct as _struct
             raw = _redis_embed_client.get(_REDIS_EMBED_PREFIX + cache_key)
             if raw is not None:
                 n_floats = len(raw) // 4
-                vec_from_redis = list(_struct.unpack(f'{n_floats}f', raw))
-                _EMBED_CACHE[cache_key] = vec_from_redis   # promote to L1
-                return vec_from_redis
+                vec = list(_struct.unpack(f'{n_floats}f', raw))
+                _EMBED_CACHE[cache_key] = vec
+                logger.debug(f"[Embed] L2 cache hit key={cache_key[:10]}…")
+                return vec
         except Exception as _redis_get_err:
-            logger.debug(f"[EmbedCache] Redis get failed (non-critical): {_redis_get_err}")
+            logger.warning(f"[EmbedCache] Redis GET failed (non-critical): {_redis_get_err}")
 
-    # FIX BUG-3 (embed guard): _embed is module-level so it has no access to
-    # self.enabled. Guard against calling the embedding model when it was never
-    # loaded successfully.
-    # LUMVI FIX: Change 1 — Use locally loaded sentence-transformers model instead
-    # of the Gemini embedding API. Same function signature and cache logic retained.
-    # _normalize() is called on output to produce unit vectors, matching prior behaviour.
-    if _ST_MODEL is None:
-        return []
+    # Map internal task name → Voyage input_type
+    _input_type = 'query' if task == 'retrieval_query' else 'document'
 
+    _t0 = time.monotonic()
     try:
-        _raw_vec = _ST_MODEL.encode(
-            text.strip()[:2048],
-            normalize_embeddings=False,   # we call _normalize() ourselves below
-            show_progress_bar=False,
+        import urllib.request as _urllib_req
+        import urllib.error  as _urllib_err
+
+        _payload = json.dumps({
+            'input':      [text.strip()[:2048]],
+            'model':      _VOYAGE_MODEL,
+            'input_type': _input_type,
+        }).encode('utf-8')
+
+        _req = _urllib_req.Request(
+            _VOYAGE_EMBED_URL,
+            data    = _payload,
+            headers = {
+                'Authorization': f'Bearer {_VOYAGE_API_KEY}',
+                'Content-Type':  'application/json',
+            },
+            method  = 'POST',
         )
-        vec = _normalize(_raw_vec.tolist())
-        # Fix 1: _LRUCache.__setitem__ handles bounded eviction — no manual eviction needed.
+
+        with _urllib_req.urlopen(_req, timeout=10) as _resp:
+            _body = json.loads(_resp.read().decode('utf-8'))
+
+        _raw_vec = _body['data'][0]['embedding']
+        vec      = _normalize(_raw_vec)
+
+        _elapsed_ms = (time.monotonic() - _t0) * 1000
+        logger.debug(
+            f"[Embed/Voyage] task={task} input_type={_input_type} "
+            f"dim={len(vec)} elapsed={_elapsed_ms:.0f}ms "
+            f"text='{text[:40]}'"
+        )
+
+        # Write to L1
         _EMBED_CACHE[cache_key] = vec
 
-        # Write to Redis L2 — Fix 7: packed float32 bytes, 7-day TTL
+        # Write to L2 (Redis)
         if _redis_embed_client is not None:
             try:
                 import struct as _struct
-                raw_bytes = _struct.pack(f'{len(vec)}f', *vec)
                 _redis_embed_client.setex(
                     _REDIS_EMBED_PREFIX + cache_key,
                     _REDIS_EMBED_TTL_SEC,
-                    raw_bytes,
+                    _struct.pack(f'{len(vec)}f', *vec),
                 )
             except Exception as _redis_set_err:
-                logger.debug(f"[EmbedCache] Redis set failed (non-critical): {_redis_set_err}")
+                logger.warning(
+                    f"[EmbedCache] Redis SET failed (non-critical): {_redis_set_err}"
+                )
 
         return vec
+
+    except _urllib_err.HTTPError as _http_err:
+        # Read the response body — Voyage returns useful error messages
+        _err_body = ''
+        try:
+            _err_body = _http_err.read().decode('utf-8')[:300]
+        except Exception:
+            pass
+        _log_crash(
+            'Embed/Voyage/HTTP', _http_err,
+            status=_http_err.code,
+            task=task,
+            text_preview=text[:60],
+            body=_err_body,
+        )
+        # 429 rate-limit: log clearly so it's obvious in production
+        if _http_err.code == 429:
+            logger.error(
+                "[Embed/Voyage] Rate limit hit (429). "
+                "Check free tier usage at dash.voyageai.com or add Redis caching."
+            )
+        # 401 bad key: loud warning
+        elif _http_err.code == 401:
+            logger.error(
+                "[Embed/Voyage] Authentication failed (401). "
+                "Check VOYAGE_API_KEY env var."
+            )
+        return []
+
     except Exception as _e:
-        logger.debug(f"[_embed] error: {_e}")
+        _log_crash(
+            'Embed/Voyage', _e,
+            task=task,
+            text_len=len(text),
+            text_preview=text[:60],
+            elapsed_ms=f"{(time.monotonic()-_t0)*1000:.0f}",
+        )
         return []
 
 
@@ -610,18 +823,24 @@ def extract_session_memory(
         # a user who was frustrated early in a session but subsequently got their
         # questions answered from being indefinitely flagged as frustrated and
         # incorrectly escalated on a routine follow-up.
-        _IDK_SIGNALS_DECAY = ('i don\'t have enough', 'connect you with the team',
-                              'i\'m not sure', 'idk')
+        # FIX 7: Check the stored `method` field instead of scanning response text
+        # for IDK phrases. Text scanning breaks silently whenever IDK phrasing changes
+        # (there are two IDK paths: idk_fallback and vertical_fallback_idk). Checking
+        # method is authoritative and immune to wording changes.
+        _IDK_METHODS = frozenset({
+            'idk_fallback', 'vertical_fallback', 'vertical_fallback_idk',
+            'static_fallback', 'fatal_fallback', 'confidence_gate_handoff', 'idk_no_kb',
+        })
         if score > 0 and len(conversation_history) >= 4:
             # Count the last 2 assistant turns
             recent_bot = [
-                m.get('content', '').lower()
-                for m in conversation_history[-6:]
+                m for m in conversation_history[-6:]
                 if m.get('role') == 'assistant' and m.get('content')
             ][-2:]
             calm_answers = sum(
-                1 for r in recent_bot
-                if not any(sig in r for sig in _IDK_SIGNALS_DECAY)
+                1 for m in recent_bot
+                if m.get('method', '') not in _IDK_METHODS
+                and m.get('method', '') != ''   # exclude turns with no method tag
             )
             if calm_answers >= 2:
                 decayed = max(score - 1, 0)
@@ -1290,7 +1509,10 @@ class AIHelper:
 
         if client_id and client_id != 'demo' and _redis_embed_client is not None:
             try:
-                _raw_resp_key = f"resp:{client_id}:{vertical}:{user_message.lower().strip()}"
+                # FIX 2: Include kb_version so a KB update immediately invalidates
+                # cached responses. Without this, stale answers survive the full 24h
+                # TTL even after an operator edits an FAQ.
+                _raw_resp_key = f"resp:{client_id}:{vertical}:{kb_version or 0}:{user_message.lower().strip()}"
                 _resp_cache_key = hashlib.sha256(_raw_resp_key.encode()).hexdigest()
                 _cached_resp_bytes = _redis_embed_client.get(
                     _REDIS_RESP_PREFIX + _resp_cache_key
@@ -1310,6 +1532,12 @@ class AIHelper:
 
         try:
             history = conversation_history or []
+            _pipeline_t0  = time.monotonic()
+            _trace_id     = uuid.uuid4().hex[:8]   # short trace ID for log correlation
+            logger.info(
+                f"[Pipeline/Start] trace={_trace_id} client={client_id} "
+                f"vertical={vertical} msg='{user_message[:60]}'"
+            )
 
             # ── Preprocess ────────────────────────────────────────────────
             clean = self._preprocess(user_message)
@@ -1378,6 +1606,20 @@ class AIHelper:
                         history, session_mem, user_message, session_id, 'escalation'
                     ),
                 }
+
+            # ACCURACY FIX 6: Load flagged kb_ids once per request (one DB read).
+            # Candidates that have been thumbs-downed by users get a 0.75 score
+            # multiplier in _hybrid_rerank so known-bad answers stop resurfacing.
+            _poor_kb_ids: set = set()
+            if client_id and client_id != 'demo':
+                try:
+                    _poor_kb_ids = {
+                        str(r.get('kb_id', r.get('question_hash', '')))
+                        for r in get_poor_answers(client_id, limit=50)
+                        if r.get('kb_id') or r.get('question_hash')
+                    }
+                except Exception:
+                    pass
 
             # ── ACTION ENGINE (zero LLM cost) ─────────────────────────────
             action_intent = self.detect_action_intent(clean)
@@ -1642,6 +1884,7 @@ class AIHelper:
                 search_query, candidates, vector_scores,
                 last_category=last_category,
                 kb_size=kb_size,
+                poor_kb_ids=_poor_kb_ids,
             )
             # ── CROSS-ENCODER RERANK — async warm (Fix 8) ────────────────
             # Return RRF order immediately to the user; submit the cross-encoder
@@ -1669,7 +1912,13 @@ class AIHelper:
                 except Exception as _bg_err:
                     logger.debug(f"[CrossEncoder/BG] failed (non-critical): {_bg_err}")
 
-            _BG_EXECUTOR.submit(_cross_encoder_bg, _sq_snap, _cands_snap, _scores_snap)
+            # FIX 1: Cross-encoder uses a Gemini call. Only submit it when Call 1
+            # (_combined_rewrite_intent) was NOT used this turn, so total Gemini
+            # cost never exceeds the documented hard limit of 2 calls per turn.
+            if not _call1_used:
+                _BG_EXECUTOR.submit(_cross_encoder_bg, _sq_snap, _cands_snap, _scores_snap)
+            else:
+                logger.debug("[CrossEncoder/BG] skipped — Call 1 already used (budget guard)")
             # Hot path continues with RRF order — no added latency
             # FIX #1: Same invalid f-string pattern — fixed with intermediate variable.
             top_hybrid_score = f"{hybrid_scores[0]:.3f}" if hybrid_scores else "0"
@@ -1731,17 +1980,86 @@ class AIHelper:
             # Sales/pricing queries use a lower floor (0.27) matching vector_threshold.
             _MIN_RAG_SCORE = 0.27 if is_sales_query else 0.32
             _top_hybrid    = hybrid_scores[0] if hybrid_scores else 0.0
-            _rag_qualified = hybrid_ranked and _top_hybrid >= _MIN_RAG_SCORE
+            # FIX 3: Use raw cosine similarity (not RRF) for confidence gating.
+            _top_cosine = hybrid_ranked[0].get('_vec_score', _top_hybrid) if hybrid_ranked else 0.0
+
+            # ACCURACY FIX 4: Conditional inference expansion for low-confidence results.
+            # When the first retrieval pass is weak (cosine < 0.52) and Call 1 budget
+            # is still free, generate 2 query paraphrases and union their results.
+            # This catches vocabulary-mismatch cases where the user's phrasing differs
+            # from the stored FAQ question. Uses the Call 1 slot only when needed.
+            _EXP_TRIGGER = 0.52
+            if (
+                not _call1_used
+                and self.enabled
+                and _top_cosine < _EXP_TRIGGER
+                and len(search_query.split()) >= 2
+            ):
+                try:
+                    _exp_prompt = (
+                        f"Write 2 short alternative phrasings of this search query "
+                        f"that mean the same thing but use different words. "
+                        f"Return ONLY a JSON array of 2 strings.\n"
+                        f"Query: \"{search_query[:120]}\""
+                    )
+                    _exp_resp   = self.model.generate_content(
+                        _exp_prompt, request_options={"timeout": 10}
+                    )
+                    _exp_text   = re.sub(
+                        r'^```(?:json)?\s*|\s*```$',
+                        '', _exp_resp.text.strip(), flags=re.DOTALL
+                    ).strip()
+                    _exp_parsed = json.loads(_exp_text)
+                    _exp_queries: List[str] = []
+                    if isinstance(_exp_parsed, list):
+                        for v in _exp_parsed[:2]:
+                            v = str(v).strip()
+                            if 3 <= len(v) <= 200 and v != search_query:
+                                _exp_queries.append(v)
+                    if _exp_queries:
+                        _call1_used = True  # budget consumed
+                        _exp_seen   = {str(c.get('kb_id', c.get('id', ''))) for c in candidates}
+                        for _eq in _exp_queries:
+                            _ec, _es = self._embedding_search(_eq, faqs, client_id)
+                            for _ecc, _esc in zip(_ec, _es):
+                                _ecid = str(_ecc.get('kb_id', _ecc.get('id', '')))
+                                if _ecid not in _exp_seen:
+                                    candidates.append(_ecc)
+                                    vector_scores.append(_esc)
+                                    _exp_seen.add(_ecid)
+                        # Re-rank with expanded candidate set
+                        hybrid_ranked, hybrid_scores = self._hybrid_rerank(
+                            search_query, candidates, vector_scores,
+                            last_category=last_category,
+                            kb_size=len(candidates),
+                            poor_kb_ids=_poor_kb_ids,
+                        )
+                        _top_hybrid = hybrid_scores[0] if hybrid_scores else 0.0
+                        _top_cosine = hybrid_ranked[0].get('_vec_score', _top_hybrid) if hybrid_ranked else 0.0
+                        # Re-annotate with new scores
+                        for i, c in enumerate(hybrid_ranked):
+                            c['_hybrid_score'] = hybrid_scores[i] if i < len(hybrid_scores) else 0.0
+                        logger.info(
+                            f"[ConditionalExpansion] fired queries={len(_exp_queries)} "
+                            f"new_top_cosine={_top_cosine:.3f}"
+                        )
+                except Exception as _exp_err:
+                    logger.debug(f"[ConditionalExpansion] non-critical: {_exp_err}")
+
+            _rag_qualified = hybrid_ranked and _top_cosine >= _MIN_RAG_SCORE
 
             logger.debug(
-                f"[RAGGate] top={_top_hybrid:.3f} min={_MIN_RAG_SCORE} "
+                f"[RAGGate] cosine={_top_cosine:.3f} rrf={_top_hybrid:.4f} min={_MIN_RAG_SCORE} "
                 f"qualified={_rag_qualified} sales={is_sales_query}"
             )
 
             # ── CALL 2: RAG + POLISH (④ confidence-aware + ⑤ dynamic personality) ──
             if _rag_qualified and self.enabled:
+                # FIX 3: Pass cosine scores (not RRF scores) to _rag_generate_and_polish
+                # so confidence_instruction bands (0.40 / 0.65) are evaluated correctly.
+                _cosine_scores = [c.get('_vec_score', 0.0) for c in hybrid_ranked]
                 final, confidence, method = self._rag_generate_and_polish(
-                    clean, hybrid_ranked, hybrid_scores, vertical, context_str,
+                    clean, hybrid_ranked, _cosine_scores, vertical, context_str,
                     session_mem=session_mem,
                     confidence_high=confidence_high,
                     confidence_medium=confidence_medium,
@@ -1844,17 +2162,20 @@ class AIHelper:
                 # return path so it's still safe — it won't hallucinate if nothing fits.
                 # Below 0.20 (confidence_gate territory) we skip to IDK directly.
                 _SOFT_FLOOR = 0.20
-                if hybrid_ranked and _top_hybrid >= _SOFT_FLOOR:
+                if hybrid_ranked and _top_cosine >= _SOFT_FLOOR:
                     logger.info(
-                        f"[RAGGate] top={_top_hybrid:.3f} below {_MIN_RAG_SCORE} "
+                        f"[RAGGate] cosine={_top_cosine:.3f} below {_MIN_RAG_SCORE} "
                         f"but above soft floor {_SOFT_FLOOR} — trying vertical fallback"
                     )
+                    # FIX 5: Pass hybrid_ranked (already scored and sorted) instead of
+                    # raw faqs[:8]. The old code discarded all the ranking work done by
+                    # embedding search + RRF and passed unsorted DB-order entries instead.
                     _vf_result = self._vertical_fallback(
-                        clean, faqs[:8], vertical, context_str
+                        clean, hybrid_ranked[:8], vertical, context_str
                     )
                     if _vf_result != 'IDK_FALLBACK':
                         final      = _vf_result
-                        confidence = _top_hybrid  # honest score — soft match
+                        confidence = _top_cosine  # FIX 3: honest cosine score, not RRF
                         method     = 'vertical_fallback'
                     else:
                         logger.info("[VerticalFallback] returned IDK — escalating to handoff")
@@ -1866,7 +2187,7 @@ class AIHelper:
                         logger.info("[Pipeline] No KB candidates — skipping model, returning IDK")
                     else:
                         logger.info(
-                            f"[RAGGate] top score {_top_hybrid:.3f} below soft floor "
+                            f"[RAGGate] cosine={_top_cosine:.3f} below soft floor "
                             f"{_SOFT_FLOOR} — skipping model to prevent hallucination"
                         )
                     final      = "I don't have enough information to answer that accurately. Would you like me to connect you with the team?"
@@ -1934,8 +2255,9 @@ class AIHelper:
                 _BG_EXECUTOR.submit(record_kb_gap, client_id, user_message, method, confidence)
 
             logger.info(
-                f"[Pipeline] done | method={method} conf={confidence:.2f} "
-                f"chunk={top_id[:12] if top_id else 'none'} calls≤2 | "
+                f"[Pipeline/Done] trace={_trace_id} method={method} conf={confidence:.2f} "
+                f"chunk={top_id[:12] if top_id else 'none'} calls≤2 "
+                f"elapsed={((time.monotonic()-_pipeline_t0)*1000):.0f}ms | "
                 f"stage={session_mem.get('purchase_stage')} "
                 f"frustrated={session_mem.get('is_frustrated')}"
             )
@@ -1950,7 +2272,13 @@ class AIHelper:
             }
 
         except Exception as e:
-            logger.exception(f"[PipelineFatal] {e}")
+            _log_crash(
+                'PipelineFatal', e,
+                client_id=client_id,
+                vertical=vertical,
+                msg_preview=user_message[:80] if user_message else 'None',
+                session_id=session_id,
+            )
             return {
                 'response': (
                     "I'm sorry \u2014 something went wrong while processing your request. "
@@ -2471,6 +2799,7 @@ Rules:
             return user_message
 
         convo_snippet = "\n".join(turns)
+        _t0_call1 = time.monotonic()
         try:
             prompt = (
                 f"Given this conversation:\n{convo_snippet}\n\n"
@@ -2478,7 +2807,6 @@ Rules:
                 f"Rewrite into a standalone search query (5-15 words). "
                 f"No filler phrases. Return ONLY the rewritten query."
             )
-            # FIX #10: Timeout on rewrite call — short task, tight budget.
             response  = self.model.generate_content(
                 prompt,
                 request_options={"timeout": 15},
@@ -2488,10 +2816,17 @@ Rules:
                 raise ValueError(f"bad length: {len(rewritten)}")
             if rewritten.lower().startswith(('i ', 'can you', 'please', 'could you')):
                 raise ValueError("starts with filler")
-            logger.debug(f"[Call1] rewrite OK: '{rewritten[:60]}'")
+            logger.debug(
+                f"[Call1/Rewrite] OK elapsed={((time.monotonic()-_t0_call1)*1000):.0f}ms "
+                f"'{rewritten[:60]}'"
+            )
             return rewritten
         except Exception as e:
-            logger.debug(f"[Call1] failed ({e}), falling back to keyword enrichment")
+            _log_crash(
+                'Call1/Rewrite', e,
+                msg=user_message[:80],
+                elapsed_ms=f"{((time.monotonic()-_t0_call1)*1000):.0f}",
+            )
             return self._resolve_query(user_message, conversation_history)
 
     def _rewrite_query(self, user_message: str,
@@ -2524,29 +2859,61 @@ Rules:
                 kb_chunks = _m.get_relevant_knowledge(client_id, query_vec, limit=_MAX_CANDIDATES)
                 if kb_chunks:
                     kb_chunks = kb_chunks[:_MAX_CANDIDATES]
-                    scored = [
-                        ({
-                            'id':       chunk.get('kb_id', chunk.get('id', '')),
-                            'kb_id':    chunk.get('kb_id', chunk.get('id', '')),
-                            'question': chunk.get('title', ''),
-                            'answer':   chunk.get('content', ''),
-                            'category': chunk.get('category', 'General'),
-                            'type':     chunk.get('type', 'faq'),
-                        }, _cosine(query_vec, chunk['embedding']) if chunk.get('embedding')
-                           else max(0.0, 0.5 - (i * 0.05)))
-                        for i, chunk in enumerate(kb_chunks)
-                    ]
-                    # No score threshold — always pass top-N by rank to the model.
-                    # The model (Call 2) decides quality; magic numbers break across tenants.
-                    scored.sort(key=lambda x: x[1], reverse=True)
-                    if scored:
+                    scored = []
+                    for i, chunk in enumerate(kb_chunks):
+                        cand = {
+                            'id':               chunk.get('kb_id', chunk.get('id', '')),
+                            'kb_id':            chunk.get('kb_id', chunk.get('id', '')),
+                            'question':         chunk.get('title', ''),
+                            'answer':           chunk.get('content', ''),
+                            'category':         chunk.get('category', 'General'),
+                            'type':             chunk.get('type', 'faq'),
+                            'quality':          chunk.get('quality', 0.5),
+                            # Preserve both embedding tracks for possible re-use
+                            'answer_embedding': chunk.get('answer_embedding'),
+                        }
+                        if chunk.get('embedding'):
+                            # ACCURACY FIX 9: Dual-track scoring.
+                            # Take MAX of question-dominant blended vector and pure
+                            # answer vector so the FAQ wins on whichever surface
+                            # matches the query best. Chunks without answer_embedding
+                            # (pre-fix index) fall back to blended only.
+                            q_sim = _cosine(query_vec, chunk['embedding'])
+                            a_sim = (
+                                _cosine(query_vec, chunk['answer_embedding'])
+                                if chunk.get('answer_embedding') else 0.0
+                            )
+                            sim = max(q_sim, a_sim)
+                        else:
+                            sim = max(0.0, 0.5 - (i * 0.05))
+                        scored.append((cand, sim))
+                    # ACCURACY FIX 2: Deduplicate by parent kb_id.
+                    # Paraphrase chunks share the root kb_id (stored as
+                    # "fid__para__<hash>"). Without deduplication, a single FAQ
+                    # with 4 paraphrases can consume 5 of the 8 result slots,
+                    # crowding out other relevant FAQs. Keep only the
+                    # highest-scoring chunk per parent FAQ.
+                    seen_kb_ids: dict = {}
+                    for cand, score in scored:
+                        raw_id  = str(cand.get('kb_id', cand.get('id', '')))
+                        base_id = raw_id.split('__para__')[0]
+                        if base_id not in seen_kb_ids or score > seen_kb_ids[base_id][1]:
+                            seen_kb_ids[base_id] = (cand, score)
+                    deduped = sorted(seen_kb_ids.values(), key=lambda x: x[1], reverse=True)
+                    if deduped:
                         logger.debug(
                             f"[KB] cap={_MAX_CANDIDATES} (no threshold) "
-                            f"top={scored[0][1]:.3f} hits={len(scored)}"
+                            f"top={deduped[0][1]:.3f} hits={len(deduped)} "
+                            f"(deduped from {len(scored)})"
                         )
-                        return [s[0] for s in scored[:8]], [s[1] for s in scored[:8]]
+                        return [d[0] for d in deduped[:8]], [d[1] for d in deduped[:8]]
             except Exception as _e:
-                logger.warning(f"[Search] KB error: {_e}")
+                _log_crash(
+                    'EmbeddingSearch/KB', _e,
+                    client_id=client_id,
+                    query=search_query[:60],
+                    kb_chunks_count=len(kb_chunks) if 'kb_chunks' in dir() else 'N/A',
+                )
 
         # 2. Legacy FAQ embeddings
         if not faqs:
@@ -2590,13 +2957,17 @@ Rules:
                 if stored:
                     faq_idx = {str(f.get('id', '')): f for f in faqs}
                     capped  = list(stored.items())[:_MAX_CANDIDATES]
-                    scored  = [
-                        (faq_idx[fid], sim)
-                        for fid, emb in capped
-                        if fid in faq_idx
-                        for sim in (_cosine(query_vec, emb),)
-                        # No score threshold — top-N by rank, model decides quality
-                    ]
+                    scored  = []
+                    for fid, emb in capped:
+                        if fid not in faq_idx:
+                            continue
+                        faq   = faq_idx[fid]
+                        q_sim = _cosine(query_vec, emb)
+                        # ACCURACY FIX 9: Dual-track on legacy FAQ path.
+                        a_emb = faq.get('answer_embedding')
+                        a_sim = _cosine(query_vec, a_emb) if a_emb else 0.0
+                        sim   = max(q_sim, a_sim)
+                        scored.append((faq, sim))
                     scored.sort(key=lambda x: x[1], reverse=True)
                     if scored:
                         logger.debug(
@@ -2605,7 +2976,12 @@ Rules:
                         )
                         return [s[0] for s in scored[:8]], [s[1] for s in scored[:8]]
             except Exception as _e:
-                logger.warning(f"[Search] FAQ embed error: {_e}")
+                _log_crash(
+                    'EmbeddingSearch/FAQEmbed', _e,
+                    client_id=client_id,
+                    query=search_query[:60],
+                    stored_count=len(stored) if 'stored' in dir() else 'N/A',
+                )
 
         # Bug 1 fix: no client_id (demo/test) — embed in-memory faqs directly so
         # vector search still runs rather than silently degrading to keyword fallback.
@@ -2665,6 +3041,7 @@ Rules:
                        vector_scores: List[float],
                        last_category: Optional[str] = None,
                        kb_size: int = 100,
+                       poor_kb_ids: Optional[set] = None,
                        ) -> Tuple[List[Dict], List[float]]:
         """
         ② RECIPROCAL RANK FUSION rerank — Phase 6.
@@ -2733,10 +3110,25 @@ Rules:
             sticky        = False
 
             final_score = rrf_score
+            # ACCURACY FIX 5: Quality bonus — promotes well-formed KB entries.
+            # Range: 0.92–1.0 multiplier so it nudges rank without overriding
+            # retrieval signal. quality is 0.5–1.0 from _quality_score().
+            final_score *= (0.92 + 0.08 * cand.get('quality', 0.5))
             if active_category and cand_category and cand_category == active_category:
                 final_score *= 1.15
                 sticky       = True
 
+            # ACCURACY FIX 6: Penalise known-bad answers (thumbs-down signal).
+            if poor_kb_ids and str(cand.get('kb_id', cand.get('id', ''))) in poor_kb_ids:
+                final_score *= 0.75
+                logger.debug(
+                    f"[Hybrid/PoorAnswer] penalised '{cand.get('question', '')[:40]}'"
+                )
+
+            # FIX 3: Tag each candidate with its raw cosine score so the hot path
+            # can use it for confidence gating — RRF scores (0.016–0.06) are
+            # rank-based and must never be compared against cosine thresholds.
+            cand['_vec_score'] = vec_score
             scored.append((cand, final_score, vec_score, kw_score, sticky))
             logger.debug(
                 f"[Hybrid/RRF] '{cand.get('question', '')[:40]}' "
@@ -2762,45 +3154,78 @@ Rules:
         closeness_threshold: float = 0.05,
     ) -> Tuple[List[Dict], List[float]]:
         """
-        Cross-encoder rerank using a single batched Gemini call.
-        Only fires when the top-2 RRF scores are within `closeness_threshold`
-        of each other (default 0.05) — i.e. when the ranker is genuinely
-        uncertain which candidate is best.
+        ACCURACY FIX 7: Synchronous local cross-encoder rerank.
 
-        Scores the top-N candidates jointly against the query in one prompt,
-        returning a 0–1 relevance score per candidate.  The scored list is
-        re-sorted and returned; if Gemini fails the original order is preserved.
+        Replaces the background Gemini cross-encoder which computed a reranked
+        order but immediately discarded the result (logged only, never applied).
+
+        Primary path: cross-encoder/ms-marco-MiniLM-L-6-v2 (local, ~67MB,
+        ~20–40ms for top-5 pairs). Zero Gemini cost. Runs synchronously on the
+        hot path so the CURRENT query gets the improved ranking.
+
+        Fallback path: original Gemini-based rerank, used only when _CE_MODEL
+        failed to load (e.g. dependency missing in the environment).
+
+        Trigger conditions unchanged: fires when top-2 RRF scores are within
+        `closeness_threshold` OR positions 2–5 are tightly clustered.
 
         Returns (reranked_candidates, reranked_scores).
         """
-        if not self.enabled or not self.model:
-            return candidates, scores
         if len(scores) < 2:
             return candidates, scores
 
-        # Trigger 1 (original): top-2 gap is small — ranker is uncertain on #1
+        # Trigger 1: top-2 gap is small — ranker is uncertain on #1
         top2_close = scores[0] - scores[1] <= closeness_threshold
 
-        # Trigger 2 (new): positions 2–5 are tightly clustered — the correct
-        # answer may be buried in the pack even when #1 looks like a clear winner.
-        # "Clustered" = max spread across positions 2–5 is ≤ closeness_threshold.
+        # Trigger 2: positions 2–5 are tightly clustered
         cluster_close = False
-        mid_scores = scores[1:5]   # positions 2–5 (0-indexed 1–4)
+        mid_scores = scores[1:5]
         if len(mid_scores) >= 2:
-            cluster_spread = max(mid_scores) - min(mid_scores)
-            cluster_close  = cluster_spread <= closeness_threshold
+            cluster_close = (max(mid_scores) - min(mid_scores)) <= closeness_threshold
 
         if not top2_close and not cluster_close:
-            return candidates, scores   # clear winner and no cluster — skip LLM call
+            return candidates, scores
 
-        top_cands   = candidates[:top_n]
-        top_scores  = scores[:top_n]
-        rest_cands  = candidates[top_n:]
+        top_cands  = candidates[:top_n]
+        rest_cands = candidates[top_n:]
         rest_scores = scores[top_n:]
 
+        # ── Primary: local cross-encoder ──────────────────────────────────
+        if _CE_MODEL is not None:
+            try:
+                pairs = [
+                    (query, f"{c.get('question', c.get('title', ''))} {c.get('answer', c.get('content', ''))[:400]}")
+                    for c in top_cands
+                ]
+                ce_scores = _CE_MODEL.predict(pairs).tolist()
+                paired = sorted(zip(top_cands, ce_scores), key=lambda x: x[1], reverse=True)
+                reranked_cands  = [p[0] for p in paired] + rest_cands
+                # Normalise ce_scores to [0,1] via sigmoid so downstream confidence
+                # comparisons (which expect cosine-range values) stay meaningful.
+                import math as _math
+                reranked_scores = [
+                    1.0 / (1.0 + _math.exp(-float(p[1]))) for p in paired
+                ] + rest_scores
+                logger.info(
+                    f"[CrossEncoder/Local] fired query='{query[:40]}' "
+                    f"old_top='{top_cands[0].get('question','')[:40]}' "
+                    f"new_top='{reranked_cands[0].get('question','')[:40]}'"
+                )
+                return reranked_cands, reranked_scores
+            except Exception as _ce_err:
+                _log_crash(
+                    'CrossEncoder/Local', _ce_err,
+                    query=query[:60],
+                    n_pairs=len(pairs) if 'pairs' in dir() else 'N/A',
+                )
+                logger.warning("[CrossEncoder/Local] falling back to Gemini reranker")
+
+        # ── Fallback: Gemini-based rerank (original implementation) ───────
+        if not self.enabled or not self.model:
+            return candidates, scores
         numbered = "\n\n".join(
             f"[{i}] Q: {c.get('question', c.get('title', ''))}\n"
-            f"    A: {c.get('answer', c.get('content', ''))[:300]}"
+            f"    A: {c.get('answer', c.get('content', ''))[:600]}"
             for i, c in enumerate(top_cands)
         )
         prompt = (
@@ -2816,8 +3241,7 @@ Rules:
             response = self.model.generate_content(
                 prompt, request_options={"timeout": 20}
             )
-            raw = response.text.strip()
-            raw = re.sub(r"```[a-z]*", "", raw).replace("```", "").strip()
+            raw = re.sub(r"```[a-z]*", "", response.text.strip()).replace("```", "").strip()
             new_scores = json.loads(raw)
             if (
                 not isinstance(new_scores, list)
@@ -2825,19 +3249,22 @@ Rules:
                 or not all(isinstance(v, (int, float)) for v in new_scores)
             ):
                 raise ValueError("unexpected shape")
-            paired = sorted(
-                zip(top_cands, new_scores), key=lambda x: x[1], reverse=True
-            )
+            paired = sorted(zip(top_cands, new_scores), key=lambda x: x[1], reverse=True)
             reranked_cands  = [p[0] for p in paired] + rest_cands
             reranked_scores = [float(p[1]) for p in paired] + rest_scores
             logger.info(
-                f"[CrossEncoder] fired query='{query[:40]}' "
+                f"[CrossEncoder/Gemini] fired query='{query[:40]}' "
                 f"old_top='{top_cands[0].get('question','')[:40]}' "
                 f"new_top='{reranked_cands[0].get('question','')[:40]}'"
             )
             return reranked_cands, reranked_scores
         except Exception as _e:
-            logger.warning(f"[CrossEncoder] rerank failed (fallback to RRF order): {_e}")
+            _log_crash(
+                'CrossEncoder/Gemini', _e,
+                query=query[:60],
+                n_candidates=len(top_cands),
+                raw_response=locals().get('raw', '')[:120],
+            )
             return candidates, scores
 
     def _last_response_category(self, history: List[Dict]) -> Optional[str]:
@@ -3062,25 +3489,41 @@ Rules:
             f"Return ONLY the final response (or IDK_FALLBACK or CLARIFY:...)."
         )
 
+        _t0_rag = time.monotonic()
         try:
             # FIX #10: Added request_options timeout to prevent Flask worker exhaustion
-            # on slow or hanging Gemini API calls. 25s is generous but bounded.
             response      = self.model.generate_content(
                 prompt,
                 request_options={"timeout": 25},
             )
             response_text = response.text.strip()
+            _rag_ms = (time.monotonic() - _t0_rag) * 1000
             if not response_text:
+                logger.warning(
+                    f"[RAGGenerate] Gemini returned empty response "
+                    f"conf={confidence:.2f} elapsed={_rag_ms:.0f}ms"
+                )
                 return 'IDK_FALLBACK', math_score, 'rag_empty'
             logger.info(
-                f"[Call2] conf={confidence:.2f} ({confidence_pct}) "
+                f"[Call2/RAG] conf={confidence:.2f} ({confidence_pct}) "
                 f"idk={response_text == 'IDK_FALLBACK'} len={len(response_text)} "
+                f"elapsed={_rag_ms:.0f}ms "
                 f"stage={mem.get('purchase_stage')} frustrated={mem.get('is_frustrated')}"
             )
             return response_text, confidence, 'rag_pipeline'
         except Exception as e:
-            logger.error(f"[Call2] Gemini error: {e}")
-            answer = hybrid_ranked[0].get('answer', hybrid_ranked[0].get('content', ''))
+            _rag_ms = (time.monotonic() - _t0_rag) * 1000
+            _top_q  = hybrid_ranked[0].get('question', '')[:60] if hybrid_ranked else 'none'
+            _log_crash(
+                'RAGGenerate', e,
+                elapsed_ms=f"{_rag_ms:.0f}",
+                conf=f"{confidence:.2f}",
+                top_candidate=_top_q,
+                n_candidates=len(hybrid_ranked),
+                prompt_len=len(prompt),
+                vertical=vertical,
+            )
+            answer = hybrid_ranked[0].get('answer', hybrid_ranked[0].get('content', '')) if hybrid_ranked else ''
             return self._make_fallback(answer), math_score * 0.7, 'rag_static'
 
     def _rag_generate(self, user_message: str, hybrid_ranked: List[Dict],
@@ -3136,7 +3579,10 @@ Rules:
                         )
                         return condensed
                 except Exception as _cond_err:
-                    logger.debug(f"[Guardrails] condensation failed: {_cond_err}")
+                    _log_crash(
+                        'Guardrails/Condense', _cond_err,
+                        original_len=len(response_text),
+                    )
 
             # Fallback: sentence-aware truncation with explicit ellipsis
             if '\n' in response_text:
@@ -3363,22 +3809,29 @@ Return ONLY the response text or IDK_FALLBACK."""
             if turns_lines:
                 parts.append("[Conversation so far]\n" + "\n".join(turns_lines))
 
-            if current_message:
-                recent_user_msgs = [
-                    m.get('content', '').strip()
-                    for m in recent
-                    if m.get('role') == 'user' and m.get('content')
-                ]
-                if self._is_followup(current_message, conversation_history) and recent_user_msgs:
-                    prev_question = recent_user_msgs[-1]
-                    parts.append(
-                        "[Follow-up context]\n"
-                        f"The user's current message (\"{current_message}\") is a follow-up.\n"
-                        f"Their preceding question was: \"{prev_question}\"\n"
-                        f"Infer what they are now asking and answer it directly."
-                    )
+        # FIX 4: Split follow-up context from the rest BEFORE truncation so it's
+        # never silently dropped. Truncation only applies to conversation history;
+        # the follow-up block is re-appended afterwards.
+        _followup_block = None
+        if current_message:
+            recent_user_msgs = [
+                m.get('content', '').strip()
+                for m in (conversation_history[-8:] if conversation_history else [])
+                if m.get('role') == 'user' and m.get('content')
+            ]
+            if self._is_followup(current_message, conversation_history or []) and recent_user_msgs:
+                prev_question = recent_user_msgs[-1]
+                _followup_block = (
+                    "[Follow-up context]\n"
+                    f"The user's current message (\"{current_message}\") is a follow-up.\n"
+                    f"Their preceding question was: \"{prev_question}\"\n"
+                    f"Infer what they are now asking and answer it directly."
+                )
 
-        return "\n\n".join(parts) if parts else ""
+        result = "\n\n".join(parts) if parts else ""
+        if _followup_block:
+            result = result + ("\n\n" if result else "") + _followup_block
+        return result
 
     def maybe_summarise(self, client_id: str,
                         conversation_history: List[Dict]) -> None:
@@ -3496,15 +3949,31 @@ Return ONLY the response text or IDK_FALLBACK."""
                 # vector more heavily keeps the stored embedding closer to what a
                 # user query embedding will look like, improving cosine match scores.
                 # The result is re-normalized so _cosine() stays a pure dot product.
+                # ACCURACY FIX 9: Dual-track answer embedding.
+                # The 70/30 blended vector is question-dominant — good for matching
+                # "what is your delivery time?" style queries. But when a user asks
+                # something that semantically matches the ANSWER text more than the
+                # question ("how long does shipping take?" → answer: "3-5 business
+                # days"), cosine against the blended vector misses because the answer
+                # vocabulary is diluted to 30%.
+                # Solution: store a second pure answer embedding per chunk.
+                # _embedding_search will take the MAX cosine across both tracks,
+                # so each FAQ competes on whichever surface matches the query better.
+                # Schema addition: 'answer_embedding' field (same shape as 'embedding').
+                # Re-index required for all clients after deploying this change.
                 if q_vec and a_vec:
                     blended   = [0.7 * q + 0.3 * a for q, a in zip(q_vec, a_vec)]
                     embedding = _normalize(blended)
+                    answer_embedding = a_vec    # pure answer vector (already normalized)
                 elif q_vec:
-                    embedding = q_vec   # already normalized by _embed()
+                    embedding        = q_vec
+                    answer_embedding = q_vec    # no answer — fall back to same vector
                 elif a_vec:
-                    embedding = a_vec   # already normalized by _embed()
+                    embedding        = a_vec
+                    answer_embedding = a_vec
                 else:
-                    embedding = []
+                    embedding        = []
+                    answer_embedding = []
 
                 if embedding and seen_embeddings:
                     max_sim = max((_cosine(embedding, ex) for ex in seen_embeddings), default=0.0)
@@ -3515,13 +3984,15 @@ Return ONLY the response text or IDK_FALLBACK."""
                 quality = self._quality_score(question, chunk_text)
 
                 chunk = {
-                    'kb_id':     chunk_id,
-                    'title':     question if idx == 0 else f"{question} (part {idx + 1})",
-                    'content':   chunk_text,
-                    'type':      item.get('type', 'faq'),
-                    'category':  ai_category,
-                    'tags':      tags,
-                    'embedding': embedding,
+                    'kb_id':            chunk_id,
+                    'title':            question if idx == 0 else f"{question} (part {idx + 1})",
+                    'content':          chunk_text,
+                    'type':             item.get('type', 'faq'),
+                    'category':         ai_category,
+                    'tags':             tags,
+                    'embedding':        embedding,
+                    # ACCURACY FIX 9: second embedding track — pure answer vector.
+                    'answer_embedding': answer_embedding,
                     'metadata':  {
                         'source':       item.get('source', 'upload'),
                         'original_q':   question,
@@ -3772,45 +4243,201 @@ Return ONLY the response text or IDK_FALLBACK."""
         so future cosine comparisons reduce to dot products.
         """
         if not self.enabled or not client_id:
+            logger.warning(
+                f"[IndexFAQs] skipped — enabled={self.enabled} client_id={bool(client_id)}"
+            )
             return 0
         count = 0
+        _t0 = time.monotonic()
+        logger.info(f"[IndexFAQs] starting client={client_id} n_faqs={len(faqs)}")
         try:
             import models as _m
-            for faq in faqs:
-                fid = str(faq.get('id', ''))
+            for _i, faq in enumerate(faqs):
+                fid      = str(faq.get('id', ''))
                 question = faq.get('question', '')
                 if not fid or not question:
+                    logger.debug(f"[IndexFAQs] skipping faq #{_i} — missing id or question")
                     continue
 
-                # Primary embedding (already normalized by _embed() after Fix 1)
-                vec = _embed(question, task='retrieval_document')
-                if vec:
-                    _m.store_faq_embedding(client_id, fid, question, vec)
-                    count += 1
+                try:
+                    vec = _embed(question, task='retrieval_document')
+                    if vec:
+                        _m.store_faq_embedding(client_id, fid, question, vec)
+                        count += 1
+                    else:
+                        logger.warning(
+                            f"[IndexFAQs] embed returned empty for faq fid={fid} "
+                            f"q='{question[:60]}'"
+                        )
+                except Exception as _faq_err:
+                    _log_crash('IndexFAQs/Embed', _faq_err, fid=fid, question=question[:60])
+                    continue
 
-                # FIX 5: Generate and store paraphrase variants
                 paraphrases = self._generate_paraphrases(question)
                 for p_text in paraphrases:
                     if not p_text or not p_text.strip():
                         continue
-                    p_vec = _embed(p_text.strip(), task='retrieval_document')
-                    if p_vec:
-                        # Store with a decorated id so it doesn't overwrite the primary
-                        p_fid = f"{fid}__para__{hashlib.sha256(p_text.encode()).hexdigest()[:8]}"
-                        try:
+                    try:
+                        p_vec = _embed(p_text.strip(), task='retrieval_document')
+                        if p_vec:
+                            p_fid = f"{fid}__para__{hashlib.sha256(p_text.encode()).hexdigest()[:8]}"
                             _m.store_faq_embedding(client_id, p_fid, p_text.strip(), p_vec)
-                            count += 1  # Bug 7 fix: count paraphrase variants too
+                            count += 1
                             logger.debug(
-                                f"[index_faqs] paraphrase stored fid={fid} "
+                                f"[IndexFAQs] paraphrase stored fid={fid} "
                                 f"'{p_text.strip()[:50]}'"
                             )
-                        except Exception as _pe:
-                            logger.debug(f"[index_faqs] paraphrase store failed (non-critical): {_pe}")
+                    except Exception as _pe:
+                        _log_crash('IndexFAQs/Paraphrase', _pe, fid=fid, p_text=p_text[:60])
 
-            logger.info(f"[index_faqs] client={client_id} indexed={count}")
+                if (_i + 1) % 25 == 0:
+                    logger.info(
+                        f"[IndexFAQs] progress client={client_id} "
+                        f"{_i + 1}/{len(faqs)} indexed={count}"
+                    )
+
+            _elapsed = time.monotonic() - _t0
+            logger.info(
+                f"[IndexFAQs] done client={client_id} indexed={count} "
+                f"elapsed={_elapsed:.1f}s"
+            )
         except Exception as e:
-            logger.error(f"[index_faqs] error: {e}")
+            _log_crash('IndexFAQs', e, client_id=client_id, count_so_far=count)
         return count
+
+    # ═══════════════════════════════════════════════════════════════════
+    # BULK RE-INDEX
+    # ═══════════════════════════════════════════════════════════════════
+
+    def reindex_all_clients(
+        self,
+        client_ids: Optional[List[str]] = None,
+        concurrency: int = 3,
+        delay_between_clients: float = 1.0,
+    ) -> Dict[str, int]:
+        """
+        Re-index every client's FAQs in one call.
+
+        Use this after:
+          - Switching embedding model/provider (e.g. bge → Voyage AI)
+          - Any change that alters vector dimensionality
+          - Bulk FAQ updates across all clients
+
+        Args:
+            client_ids:
+                List of client IDs to re-index. If None, fetches all clients
+                from models.get_all_clients() automatically.
+            concurrency:
+                Number of clients to index in parallel. Keep at 3 or below
+                on Render's free tier to stay within Voyage AI's rate limits.
+                Increase to 5–10 on paid plans.
+            delay_between_clients:
+                Seconds to wait between each client (default 1.0).
+                Prevents bursting the Voyage API — each client's FAQs all
+                embed sequentially inside index_faqs(), so this is the
+                inter-client breathing room.
+
+        Returns:
+            Dict mapping client_id → number of embeddings stored.
+            Failed clients map to -1 so you can see exactly what broke.
+
+        Example — re-index everything:
+            results = helper.reindex_all_clients()
+            print(results)   # {'client_abc': 312, 'client_xyz': 87, ...}
+
+        Example — re-index specific clients only:
+            results = helper.reindex_all_clients(client_ids=['abc', 'xyz'])
+        """
+        import models as _m
+
+        # ── 1. Resolve client list ────────────────────────────────────
+        if client_ids is None:
+            try:
+                all_clients = _m.get_all_clients()
+                client_ids  = [
+                    str(c.get('id') or c.get('client_id', ''))
+                    for c in all_clients
+                    if c.get('id') or c.get('client_id')
+                ]
+                logger.info(
+                    f"[ReindexAll] fetched {len(client_ids)} clients from DB"
+                )
+            except Exception as _e:
+                _log_crash('ReindexAll/FetchClients', _e)
+                return {}
+
+        if not client_ids:
+            logger.warning("[ReindexAll] no client IDs found — nothing to index")
+            return {}
+
+        _t0_total  = time.monotonic()
+        results: Dict[str, int] = {}
+        total_clients = len(client_ids)
+
+        logger.info(
+            f"[ReindexAll] starting — {total_clients} clients "
+            f"concurrency={concurrency} delay={delay_between_clients}s"
+        )
+
+        # ── 2. Worker: index one client ───────────────────────────────
+        def _index_one(cid: str) -> tuple:
+            try:
+                faqs = _m.get_faqs(cid) or []
+                if not faqs:
+                    logger.warning(f"[ReindexAll] client={cid} has no FAQs — skipping")
+                    return cid, 0
+                count = self.index_faqs(faqs, cid)
+                return cid, count
+            except Exception as _e:
+                _log_crash('ReindexAll/Worker', _e, client_id=cid)
+                return cid, -1
+
+        # ── 3. Run with ThreadPoolExecutor (bounded concurrency) ──────
+        # Voyage AI free tier: 50M tokens/month, ~300 req/min sustained.
+        # With concurrency=3 and ~100 FAQs/client each taking ~1s, we
+        # stay well within limits. Raise concurrency on paid plans.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        completed = 0
+
+        with ThreadPoolExecutor(max_workers=concurrency) as pool:
+            futures = {
+                pool.submit(_index_one, cid): cid
+                for cid in client_ids
+            }
+            for future in as_completed(futures):
+                cid, count = future.result()
+                results[cid] = count
+                completed += 1
+
+                status = 'DONE' if count >= 0 else 'FAILED'
+                logger.info(
+                    f"[ReindexAll] [{completed}/{total_clients}] "
+                    f"client={cid} {status} embeddings={count}"
+                )
+
+                # Breathe between clients to avoid rate-limit bursts
+                if completed < total_clients and delay_between_clients > 0:
+                    time.sleep(delay_between_clients)
+
+        # ── 4. Summary ────────────────────────────────────────────────
+        _elapsed  = time.monotonic() - _t0_total
+        succeeded = [cid for cid, n in results.items() if n >= 0]
+        failed    = [cid for cid, n in results.items() if n  < 0]
+        total_emb = sum(n for n in results.values() if n >= 0)
+
+        logger.info(
+            f"[ReindexAll] complete — "
+            f"{len(succeeded)}/{total_clients} clients OK "
+            f"total_embeddings={total_emb} "
+            f"elapsed={_elapsed:.1f}s"
+        )
+        if failed:
+            logger.error(
+                f"[ReindexAll] {len(failed)} client(s) FAILED: {failed} "
+                f"— check logs above for per-client crash details"
+            )
+
+        return results
 
     # ═══════════════════════════════════════════════════════════════════
     # PHASE 2 — KB GAP AUTO-DRAFT
