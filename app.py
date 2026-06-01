@@ -2785,7 +2785,62 @@ def trigger_backup():
     })
 
 
-@app.route('/embed-generator')
+@app.route('/api/admin/reindex', methods=['POST'])
+def trigger_reindex():
+    """
+    One-time admin endpoint to re-index all client FAQs through Voyage AI.
+
+    Run this once after switching embedding models (e.g. bge → Voyage AI).
+    Protected by the same ADMIN_TOKEN used for /api/admin/backup.
+
+    Usage:
+        curl -X POST https://your-app.railway.app/api/admin/reindex \
+             -H "X-Admin-Token: your_admin_token"
+
+    Or from a browser via fetch in the console:
+        fetch('/api/admin/reindex', {
+            method: 'POST',
+            headers: { 'X-Admin-Token': 'your_admin_token' }
+        }).then(r => r.json()).then(console.log)
+
+    DELETE THIS ROUTE after re-indexing is complete.
+    """
+    import hmac
+    auth_token  = request.headers.get('X-Admin-Token') or ''
+    admin_token = os.environ.get('ADMIN_TOKEN', '')
+
+    if not admin_token:
+        app.logger.error('[Reindex] ADMIN_TOKEN env var not set — endpoint disabled.')
+        return jsonify({'success': False, 'error': 'Not configured'}), 503
+
+    if not hmac.compare_digest(auth_token.encode(), admin_token.encode()):
+        app.logger.warning(f'[Reindex] Unauthorized attempt from {request.remote_addr}')
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+
+    try:
+        from ai_helper import get_ai_helper
+        helper  = get_ai_helper()
+        results = helper.reindex_all_clients()
+
+        succeeded = {cid: n for cid, n in results.items() if n >= 0}
+        failed    = {cid: n for cid, n in results.items() if n  < 0}
+        total_emb = sum(succeeded.values())
+
+        app.logger.info(
+            f'[Reindex] complete — {len(succeeded)} OK, '
+            f'{len(failed)} failed, {total_emb} embeddings stored'
+        )
+        return jsonify({
+            'success':       len(failed) == 0,
+            'clients_ok':    len(succeeded),
+            'clients_failed': len(failed),
+            'failed_ids':    list(failed.keys()),
+            'total_embeddings': total_emb,
+            'results':       results,
+        })
+    except Exception as e:
+        app.logger.exception(f'[Reindex] fatal error: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
 def embed_generator():
     return render_template('embed-generator.html')
 
