@@ -150,26 +150,38 @@ from typing import List, Dict, Tuple, Optional
 
 _LOG_LEVEL = os.environ.get('LUMVI_LOG_LEVEL', 'INFO').upper()
 
-logging.basicConfig(
-    level=_LOG_LEVEL,
-    format='%(asctime)s %(levelname)-8s %(name)s | %(message)s',
-    datefmt='%Y-%m-%dT%H:%M:%S',
-)
-logger = logging.getLogger('lumvi.ai_helper')
-logger.setLevel(_LOG_LEVEL)
+# Defensive logging setup — wrapped in try/except so a misconfigured
+# log level or Python version quirk never crashes the Gunicorn worker on boot.
+try:
+    _numeric_level = getattr(logging, _LOG_LEVEL, logging.INFO)
+    logging.basicConfig(
+        level=_numeric_level,
+        format='%(asctime)s %(levelname)-8s %(name)s | %(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S',
+    )
+    logger = logging.getLogger('lumvi.ai_helper')
+    logger.setLevel(_numeric_level)
+except Exception:
+    # Absolute fallback — if basicConfig itself fails (e.g. Python 3.14 quirk),
+    # get a working logger by any means so the app can still start.
+    logging.root.setLevel(logging.INFO)
+    logger = logging.getLogger('lumvi.ai_helper')
 
 # Separate crash logger — writes ERROR+ to stderr always, regardless of
 # LUMVI_LOG_LEVEL, so crashes are never silenced in production.
-_crash_logger = logging.getLogger('lumvi.crash')
-_crash_logger.setLevel(logging.ERROR)
-if not _crash_logger.handlers:
-    _ch = logging.StreamHandler()
-    _ch.setLevel(logging.ERROR)
-    _ch.setFormatter(logging.Formatter(
-        '%(asctime)s CRASH %(name)s | %(message)s',
-        datefmt='%Y-%m-%dT%H:%M:%S',
-    ))
-    _crash_logger.addHandler(_ch)
+try:
+    _crash_logger = logging.getLogger('lumvi.crash')
+    _crash_logger.setLevel(logging.ERROR)
+    if not _crash_logger.handlers:
+        _ch = logging.StreamHandler()
+        _ch.setLevel(logging.ERROR)
+        _ch.setFormatter(logging.Formatter(
+            '%(asctime)s CRASH %(name)s | %(message)s',
+            datefmt='%Y-%m-%dT%H:%M:%S',
+        ))
+        _crash_logger.addHandler(_ch)
+except Exception:
+    _crash_logger = logging.getLogger('lumvi.crash')
 
 
 def _log_crash(tag: str, err: Exception, **context) -> None:
@@ -406,16 +418,18 @@ _INFERENCE_EXPANSION_ENABLED: bool = False
 # ══════════════════════════════════════════════════════════════════════════════
 def _startup_health_check() -> None:
     checks = {
-        'VOYAGE_API_KEY (embeddings)':  bool(_VOYAGE_API_KEY),
-        'Voyage model config':          bool(_VOYAGE_MODEL and _VOYAGE_EMBED_URL),
-        'Redis L2 embed cache':         _redis_embed_client is not None,
+        'VOYAGE_API_KEY (embeddings)': bool(_VOYAGE_API_KEY),
+        'Voyage model config':         bool(_VOYAGE_MODEL and _VOYAGE_EMBED_URL),
     }
     all_ok = all(checks.values())
     level  = logging.INFO if all_ok else logging.WARNING
     for name, ok in checks.items():
         logger.log(level, f"[Startup] {'OK    ' if ok else 'MISSING'} — {name}")
 
-    # Warn explicitly about removed dependencies so devs don't wonder
+    # Redis is optional — in-process LRU is the fallback
+    redis_status = 'connected' if _redis_embed_client is not None else 'not configured (LRU fallback active)'
+    logger.info(f"[Startup] Redis L2 cache: {redis_status}")
+
     logger.info(
         "[Startup] sentence-transformers + torch NOT required — "
         f"embeddings via Voyage AI API ({_VOYAGE_MODEL}, {_VOYAGE_DIM}-dim)"
