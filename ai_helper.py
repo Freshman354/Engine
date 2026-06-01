@@ -565,6 +565,51 @@ def _tokenize(text: str) -> List[str]:
     return [_stem(t) for t in re.findall(r'\b[a-z0-9]{2,}\b', text.lower())]
 
 
+# ── Stopwords for topic overlap (common words that add no signal) ─────────────
+_OVERLAP_STOPWORDS = frozenset([
+    'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can',
+    'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him',
+    'his', 'how', 'its', 'let', 'may', 'now', 'old', 'see', 'two',
+    'way', 'who', 'did', 'ask', 'use', 'via', 'per', 'than', 'then',
+    'they', 'this', 'that', 'with', 'have', 'from', 'will', 'your',
+    'what', 'when', 'where', 'which', 'there', 'been', 'does', 'more',
+    'also', 'into', 'some', 'than', 'very', 'just', 'about', 'like',
+])
+
+def _topic_overlap(query: str, faq_question: str, min_len: int = 4) -> float:
+    """
+    Jaccard overlap between meaningful tokens in the user query and a FAQ
+    question. Tokens shorter than min_len or in _OVERLAP_STOPWORDS are ignored
+    so common function words don't inflate the score.
+
+    Returns 0.0–1.0. A score below ~0.10 means the retrieved FAQ is on a
+    genuinely different topic from what the user asked.
+
+    Used as a post-retrieval safety gate: even when the embedding score clears
+    the _MIN_RAG_SCORE floor, near-zero topic overlap means the vector match
+    is a semantic false-positive (e.g. "earn from lumvi" → "get started with
+    lumvi"). We catch these here and return IDK_FALLBACK rather than letting
+    Gemini stretch a wrong-topic answer.
+
+    Pure Python — zero cost, zero API calls.
+    """
+    def _meaningful_tokens(text: str) -> set:
+        raw = re.findall(r'\b[a-z]{%d,}\b' % min_len, text.lower())
+        return {_stem(t) for t in raw if t not in _OVERLAP_STOPWORDS}
+
+    q_tokens = _meaningful_tokens(query)
+    f_tokens = _meaningful_tokens(faq_question)
+
+    # If either side has no meaningful tokens the check is inconclusive —
+    # return 1.0 so we don't accidentally gate on very short inputs.
+    if not q_tokens or not f_tokens:
+        return 1.0
+
+    union        = q_tokens | f_tokens
+    intersection = q_tokens & f_tokens
+    return len(intersection) / len(union)
+
+
 def _normalize(vec: list) -> list:
     """
     FIX 1: Normalize a vector to unit length (L2 norm = 1).
@@ -1082,6 +1127,7 @@ def _persist_session(client_id: str, session_id: str, session_mem: dict) -> None
             'purchase_stage':    session_mem.get('purchase_stage'),
             'frustration_score': int(session_mem.get('frustration_score') or 0),
             'turn_count':        int(session_mem.get('turn_count') or 0),
+            'handoff_offered':   bool(session_mem.get('handoff_offered', False)),
         })
     except Exception as _e:
         logger.debug(f"[_persist_session] non-critical: {_e}")
@@ -1590,6 +1636,11 @@ class AIHelper:
                 'repeated_question': _regex_mem.get('repeated_question', False),
                 'turns':             _turn_count,   # legacy key — _check_escalation reads this
                 'turn_count':        _turn_count,   # Phase 3 key — upsert_session writes this
+                # HANDOFF STATE: True when the last bot message was an IDK/handoff offer.
+                # Loaded from DB so it survives across requests. Cleared as soon as
+                # the user responds (yes → lead collection, no → graceful close,
+                # new question → fall through to normal pipeline).
+                'handoff_offered':   bool(_db_session.get('handoff_offered', False)),
             }
 
             # Persist asynchronously — never blocks the chat response.
@@ -1604,6 +1655,78 @@ class AIHelper:
                 f"score={session_mem.get('frustration_score')} "
                 f"turns={session_mem.get('turns')}"
             )
+
+            # ── ① HANDOFF RESPONSE HANDLER (zero cost) ───────────────────
+            # When handoff_offered=True in session state it means the last bot
+            # message was an IDK/handoff offer ("Would you like me to connect
+            # you with the team?"). The user's next message is a direct reply
+            # to that offer, not a new FAQ question. Handle it here — before
+            # any embedding search or Gemini calls — with three branches:
+            #
+            #   YES  → start lead collection (ask for contact details)
+            #   NO   → acknowledge gracefully and offer to help further
+            #   OTHER → user asked a new question; clear flag, continue normally
+            #
+            # The flag is cleared in all three branches so subsequent turns
+            # are never trapped in a handoff loop.
+            if session_mem.get('handoff_offered'):
+                _ACCEPT_SIGNALS = frozenset([
+                    'yes', 'yeah', 'yep', 'yup', 'sure', 'ok', 'okay',
+                    'please', 'yes please', 'go ahead', 'connect me',
+                    'do it', 'sounds good', 'why not', 'that would be great',
+                    'alright', 'absolutely', 'definitely', 'of course',
+                ])
+                _DECLINE_SIGNALS = frozenset([
+                    'no', 'nope', 'nah', 'no thanks', 'no thank you',
+                    'not really', "that's ok", "that's fine", "its fine",
+                    "it's fine", 'never mind', 'nevermind', "don't worry",
+                    'forget it', 'skip', 'skip it', 'not interested',
+                    "i'm fine", 'im fine', 'all good', 'no worries',
+                    "that's alright", 'its ok', "it's ok",
+                ])
+                _clean_for_handoff = clean.lower().rstrip('!.,?')
+
+                if _clean_for_handoff in _ACCEPT_SIGNALS:
+                    # User agreed to be connected → start lead collection
+                    logger.info("[HandoffState] user accepted handoff offer → lead collection")
+                    session_mem['handoff_offered'] = False
+                    if session_id and client_id and client_id != 'demo':
+                        _BG_EXECUTOR.submit(_persist_session, client_id, session_id, session_mem)
+                    _greeted_name = session_mem.get('name')
+                    _opener       = f"Great, {_greeted_name}! " if _greeted_name else "Great! "
+                    return {
+                        'response':                _opener + "Could I get your email address so our team can reach you?",
+                        'method':                  'handoff_accepted',
+                        'confidence':              1.0,
+                        'is_lead':                 True,
+                        'trigger_lead_collection': True,
+                        'lead_metadata':           session_mem,
+                        'action':                  None,
+                    }
+
+                elif _clean_for_handoff in _DECLINE_SIGNALS:
+                    # User declined → acknowledge and invite a new question
+                    logger.info("[HandoffState] user declined handoff offer → graceful close")
+                    session_mem['handoff_offered'] = False
+                    if session_id and client_id and client_id != 'demo':
+                        _BG_EXECUTOR.submit(_persist_session, client_id, session_id, session_mem)
+                    return {
+                        'response':      "No problem! Is there anything else I can help you with?",
+                        'method':        'declined_handoff',
+                        'confidence':    1.0,
+                        'is_lead':       False,
+                        'lead_metadata': None,
+                        'action':        None,
+                    }
+
+                else:
+                    # User asked a new question — clear flag and fall through
+                    logger.info(
+                        f"[HandoffState] new question after handoff offer → "
+                        f"clearing flag, continuing pipeline | msg='{clean[:60]}'"
+                    )
+                    session_mem['handoff_offered'] = False
+                    # No early return — pipeline continues below
 
             # ── ② ESCALATION CHECK (zero cost) ───────────────────────────
             escalation = self._check_escalation(clean, session_mem, vertical)
@@ -2062,6 +2185,60 @@ class AIHelper:
 
             _rag_qualified = hybrid_ranked and _top_cosine >= _MIN_RAG_SCORE
 
+            # ── TOPIC MISMATCH GATE (zero cost) ──────────────────────────
+            # Even when the top cosine score clears _MIN_RAG_SCORE, the vector
+            # match can be a semantic false-positive: the embedding space puts
+            # topically-adjacent FAQs close together even when they answer
+            # completely different questions (e.g. "how do I earn from Lumvi"
+            # scores against "how do I get started with Lumvi" because both
+            # mention Lumvi and describe user actions).
+            #
+            # This gate computes Jaccard overlap between the meaningful tokens
+            # in the user's query and the top-ranked FAQ question. A score below
+            # _TOPIC_OVERLAP_FLOOR means the retrieved FAQ is on a genuinely
+            # different topic — we force IDK_FALLBACK rather than letting Gemini
+            # stretch the wrong answer. The threshold is set conservatively (0.10)
+            # so it only fires on clear mismatches.
+            #
+            # Pure Python — zero API cost. Runs only when _rag_qualified is True
+            # (i.e. cosine score already passed the floor) to avoid adding latency
+            # to legitimate IDK cases that are rejected before this point.
+            _TOPIC_OVERLAP_FLOOR = 0.10
+            if _rag_qualified and hybrid_ranked:
+                _top_faq_question = (
+                    hybrid_ranked[0].get('question') or
+                    hybrid_ranked[0].get('title', '')
+                )
+                _overlap_score = _topic_overlap(clean, _top_faq_question)
+                logger.debug(
+                    f"[TopicOverlap] score={_overlap_score:.3f} "
+                    f"floor={_TOPIC_OVERLAP_FLOOR} "
+                    f"query='{clean[:50]}' "
+                    f"faq='{_top_faq_question[:50]}'"
+                )
+                if _overlap_score < _TOPIC_OVERLAP_FLOOR:
+                    logger.info(
+                        f"[TopicOverlap] MISMATCH — cosine passed but topic overlap "
+                        f"{_overlap_score:.3f} < {_TOPIC_OVERLAP_FLOOR} — forcing IDK. "
+                        f"query='{clean[:60]}' top_faq='{_top_faq_question[:60]}'"
+                    )
+                    # Record as a KB gap so the operator sees it in the FAQ Manager
+                    if client_id and client_id != 'demo':
+                        _BG_EXECUTOR.submit(
+                            record_kb_gap, client_id, user_message, 'topic_mismatch', _top_cosine
+                        )
+                    session_mem['handoff_offered'] = True
+                    if session_id and client_id and client_id != 'demo':
+                        _BG_EXECUTOR.submit(_persist_session, client_id, session_id, session_mem)
+                    return {
+                        'response':      "I don't have enough information to answer that accurately. Would you like me to connect you with the team?",
+                        'method':        'topic_mismatch_idk',
+                        'confidence':    0.0,
+                        'is_lead':       False,
+                        'lead_metadata': None,
+                        'action':        None,
+                    }
+
             logger.debug(
                 f"[RAGGate] cosine={_top_cosine:.3f} rrf={_top_hybrid:.4f} min={_MIN_RAG_SCORE} "
                 f"qualified={_rag_qualified} sales={is_sales_query}"
@@ -2267,6 +2444,16 @@ class AIHelper:
             # _BG_EXECUTOR caps concurrent background workers at 4.
             if method in ('idk_fallback', 'vertical_fallback') and client_id and client_id != 'demo':
                 _BG_EXECUTOR.submit(record_kb_gap, client_id, user_message, method, confidence)
+
+            # HANDOFF STATE: When the bot returns IDK, tag the session so the
+            # very next turn is handled as a yes/no response to the handoff
+            # offer — not as a new FAQ query. Without this, a one-word "no"
+            # runs through embedding search, finds nothing, and loops the same
+            # IDK message indefinitely.
+            if method == 'idk_fallback':
+                session_mem['handoff_offered'] = True
+                if session_id and client_id and client_id != 'demo':
+                    _BG_EXECUTOR.submit(_persist_session, client_id, session_id, session_mem)
 
             logger.info(
                 f"[Pipeline/Done] trace={_trace_id} method={method} conf={confidence:.2f} "

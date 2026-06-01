@@ -3898,6 +3898,9 @@ def load_session(client_id: str, session_id: str) -> dict:
         'name': None, 'email': None, 'phone': None,
         'purchase_stage': None, 'frustration_score': 0,
         'turn_count': 0, 'session_data': {},
+        # Unpacked from session_data JSONB — no dedicated column needed.
+        # Written by upsert_session() via the extra dict path.
+        'handoff_offered': False,
     }
     conn = cursor = None
     try:
@@ -3924,6 +3927,10 @@ def load_session(client_id: str, session_id: str) -> dict:
             try: raw_sd = _json.loads(raw_sd)
             except Exception: raw_sd = {}
         result['session_data'] = raw_sd or {}
+        # Unpack handoff_offered from JSONB so ai_helper can read it via
+        # _db_session.get('handoff_offered'). Stored there by upsert_session()
+        # through the extra-fields path — no dedicated column required.
+        result['handoff_offered'] = bool(result['session_data'].get('handoff_offered', False))
         return result
     except Exception as e:
         import logging
