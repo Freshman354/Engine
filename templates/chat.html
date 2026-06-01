@@ -102,6 +102,23 @@
   --r-xs:       8px;
   {% endif %}
 
+  {# ── Custom bubble radius override (slider value wins over preset) ── #}
+  {% if client.bubble_radius is defined and client.bubble_radius is not none and client.bubble_radius != '' %}
+  {% set br = client.bubble_radius | int %}
+  {% set tail = [2, (br * 0.18) | round | int] | max %}
+  --r-bot-tl:  {{ tail }}px;
+  --r-bot-tr:  {{ br }}px;
+  --r-bot-br:  {{ br }}px;
+  --r-bot-bl:  {{ br }}px;
+  --r-user-tl: {{ br }}px;
+  --r-user-tr: {{ tail }}px;
+  --r-user-br: {{ br }}px;
+  --r-user-bl: {{ br }}px;
+  --r-md:      {{ br }}px;
+  --r-sm:      {{ [br - 4, 4] | max }}px;
+  --r-xs:      {{ [br - 8, 2] | max }}px;
+  {% endif %}
+
   {# ══ THEME PALETTES ══
      Each theme defines the same set of semantic variables.
      The brand color is always layered on top. #}
@@ -317,6 +334,18 @@
   --t1: 120ms;
   --t2: 200ms;
   --t3: 340ms;
+
+  {# ── Per-client color overrides (set in customize page) ── #}
+  {% if client.bot_bubble_color %}
+  --bot-bubble-bg: {{ client.bot_bubble_color }};
+  {% endif %}
+  {% if client.user_bubble_color %}
+  --brand: {{ client.user_bubble_color }};
+  --brand-glow:   {{ client.user_bubble_color }}2e;
+  --brand-mid:    {{ client.user_bubble_color }}60;
+  --brand-soft:   {{ client.user_bubble_color }}0d;
+  --brand-border: {{ client.user_bubble_color }}28;
+  {% endif %}
 }
 
 @media (prefers-reduced-motion: reduce) {

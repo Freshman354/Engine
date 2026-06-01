@@ -2863,11 +2863,15 @@ def widget():
         client['custom_css']       = client.get('custom_css') or ''
         client['contact']          = contact
         client['branding_settings'] = branding_settings
-        # ── Widget style settings ──────────────────────────────
+        # ── Widget style settings ────────────────────────
         client['widget_theme']     = branding.get('widget_theme',  'lumvi')
         client['widget_font']      = branding.get('widget_font',   'dm_sans')
         client['bubble_style']     = branding.get('bubble_style',  'rounded')
         client['header_color']     = branding.get('header_color',  '')   # optional hex override
+        # ── Bubble appearance overrides (set via customize page slider/pickers) ──
+        client['bubble_radius']     = branding.get('bubble_radius')      # None → Jinja skips block
+        client['bot_bubble_color']  = branding.get('bot_bubble_color',  '')
+        client['user_bubble_color'] = branding.get('user_bubble_color', '')
         # Expose lead_triggers so the widget can short-circuit on QR taps
         client['lead_triggers']    = branding_settings.get('bot_settings', {}).get(
             'lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk', 'human', 'agent']
@@ -3107,8 +3111,25 @@ def save_customization():
         incoming_vertical = data.get('vertical', 'general')
         vertical = incoming_vertical if incoming_vertical in VALID_VERTICALS else 'general'
 
+        # ── Validate & sanitise new bubble/color fields before persisting ──────
+        _hex_re = re.compile(r'^#[0-9A-Fa-f]{6}$')
+        incoming_branding = data.get('branding', {})
+
+        # bubble_radius: int clamped 0–22; missing/None → omit so Jinja uses preset
+        _br_raw = incoming_branding.get('bubble_radius')
+        if _br_raw is not None:
+            try:
+                incoming_branding['bubble_radius'] = max(0, min(22, int(_br_raw)))
+            except (TypeError, ValueError):
+                incoming_branding.pop('bubble_radius', None)
+
+        # bot_bubble_color / user_bubble_color: valid #rrggbb hex or empty string
+        for _color_key in ('bot_bubble_color', 'user_bubble_color'):
+            _val = str(incoming_branding.get(_color_key, '')).strip()
+            incoming_branding[_color_key] = _val if _hex_re.match(_val) else ''
+
         branding_settings = {
-            'branding': data.get('branding', {}),
+            'branding': incoming_branding,
             'contact': data.get('contact', {}),
             'bot_settings': data.get('bot_settings', {}),
             'integrations': integrations,

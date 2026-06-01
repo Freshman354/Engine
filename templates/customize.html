@@ -147,6 +147,15 @@ input[type=color]::-webkit-color-swatch{border-radius:6px;border:none;}
 .upgrade-box p{font-size:12.5px;color:#92400e;flex:1;line-height:1.55;}
 .upgrade-box a{color:var(--gold-dk);font-weight:700;text-decoration:none;}
 
+/* BUBBLE RADIUS SLIDER */
+.radius-slider{-webkit-appearance:none;appearance:none;width:100%;height:5px;border-radius:3px;background:var(--border);outline:none;cursor:pointer;margin:6px 0;}
+.radius-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:20px;height:20px;border-radius:50%;background:var(--gold);cursor:pointer;border:2.5px solid var(--white);box-shadow:0 1px 5px rgba(0,0,0,0.18);transition:transform 0.1s;}
+.radius-slider::-webkit-slider-thumb:hover{transform:scale(1.15);}
+.radius-slider::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--gold);cursor:pointer;border:2.5px solid var(--white);box-shadow:0 1px 5px rgba(0,0,0,0.18);}
+.field-group{margin-bottom:18px;}
+.field-group:last-child{margin-bottom:0;}
+.field-label{display:block;font-size:11px;font-weight:700;color:var(--mid);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em;}
+
 /* WEBHOOK */
 .wh-row{display:flex;gap:8px;align-items:flex-end;}
 .wh-row .field{flex:1;margin-bottom:0;}
@@ -659,6 +668,40 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
             </div>
           </div>
 
+          <!-- Bot bubble color override -->
+          <div class="field-group">
+            <label class="field-label">Bot Bubble Color <span style="font-size:10px;font-weight:400;color:var(--sub);">(optional — AI response bubbles)</span></label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="color" id="bot_bubble_color_pick"
+                value="{{ branding.get('branding',{}).get('bot_bubble_color','') or '#ffffff' }}"
+                oninput="document.getElementById('bot_bubble_color').value=this.value; up();">
+              <input type="text" id="bot_bubble_color" placeholder="Leave empty to use theme default"
+                value="{{ branding.get('branding',{}).get('bot_bubble_color','') }}"
+                oninput="if(/^#[0-9A-Fa-f]{6}$/.test(this.value))document.getElementById('bot_bubble_color_pick').value=this.value; up();"
+                style="flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:'DM Mono',monospace;color:var(--dark);background:var(--white);outline:none;">
+              <button type="button" onclick="document.getElementById('bot_bubble_color').value='';document.getElementById('bot_bubble_color_pick').value='#ffffff';up();"
+                style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-weight:600;color:var(--sub);background:var(--white);cursor:pointer;">Clear</button>
+            </div>
+            <p class="hint">Background color of AI reply bubbles.</p>
+          </div>
+
+          <!-- User bubble color override -->
+          <div class="field-group">
+            <label class="field-label">User Bubble Color <span style="font-size:10px;font-weight:400;color:var(--sub);">(optional — overrides brand color for sent messages)</span></label>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="color" id="user_bubble_color_pick"
+                value="{{ branding.get('branding',{}).get('user_bubble_color','') or '#B8924A' }}"
+                oninput="document.getElementById('user_bubble_color').value=this.value; up();">
+              <input type="text" id="user_bubble_color" placeholder="Defaults to brand color"
+                value="{{ branding.get('branding',{}).get('user_bubble_color','') }}"
+                oninput="if(/^#[0-9A-Fa-f]{6}$/.test(this.value))document.getElementById('user_bubble_color_pick').value=this.value; up();"
+                style="flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:'DM Mono',monospace;color:var(--dark);background:var(--white);outline:none;">
+              <button type="button" onclick="document.getElementById('user_bubble_color').value='';document.getElementById('user_bubble_color_pick').value='#B8924A';up();"
+                style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-weight:600;color:var(--sub);background:var(--white);cursor:pointer;">Clear</button>
+            </div>
+            <p class="hint">Background color of visitor sent messages. Defaults to brand color if left empty.</p>
+          </div>
+
           <!-- Font -->
           <div class="field-group">
             <label class="field-label">Font</label>
@@ -710,6 +753,24 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
               </button>
             </div>
             <input type="hidden" id="bubble_style" value="{{ branding.get('branding',{}).get('bubble_style','rounded') }}">
+          </div>
+
+          <!-- Bubble Curviness (fine control) -->
+          <div class="field-group">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <label class="field-label" style="margin:0;">Bubble Curviness</label>
+              <span id="radiusValLabel" style="font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--gold-dk);background:var(--gold-lt);padding:2px 9px;border-radius:6px;">{{ branding.get('branding',{}).get('bubble_radius', 10) }}px</span>
+            </div>
+            <input type="range" id="bubble_radius" min="0" max="22" step="1"
+              value="{{ branding.get('branding',{}).get('bubble_radius', 10) }}"
+              class="radius-slider"
+              oninput="setBubbleRadius(this.value)">
+            <div style="display:flex;justify-content:space-between;margin-top:4px;">
+              <span style="font-size:11px;color:var(--sub);">Sharp</span>
+              <span style="font-size:11px;color:var(--sub);">Rounded</span>
+              <span style="font-size:11px;color:var(--sub);">Pill</span>
+            </div>
+            <p class="hint" style="margin-top:6px;">Fine-tune corner rounding independent of the style preset above.</p>
           </div>
 
         </div>
@@ -1059,6 +1120,25 @@ function setBubble(b) {
   document.querySelectorAll('.bubble-pill').forEach(el => {
     el.classList.toggle('active', el.dataset.bs === b);
   });
+  // Sync slider to preset value
+  const presetMap = { sharp: 2, rounded: 10, pill: 22 };
+  if (presetMap[b] !== undefined) {
+    const slider = document.getElementById('bubble_radius');
+    if (slider) { slider.value = presetMap[b]; setBubbleRadius(presetMap[b], true); }
+  }
+  up();
+}
+
+function setBubbleRadius(v, fromPreset) {
+  v = parseInt(v);
+  document.getElementById('radiusValLabel').textContent = v + 'px';
+  // If moved manually, deactivate preset pills (no longer an exact match)
+  if (!fromPreset) {
+    const presetMap = { sharp: 2, rounded: 10, pill: 22 };
+    document.querySelectorAll('.bubble-pill').forEach(el => {
+      el.classList.toggle('active', presetMap[el.dataset.bs] === v);
+    });
+  }
   up();
 }
 
@@ -1184,20 +1264,39 @@ function getQR() { return [...document.querySelectorAll('.qri')].map(i => i.valu
 
 // ── Live preview ──────────────────────────────────────────────────────
 function up() {
-  const color = document.getElementById('primary_color').value || '#B8924A';
-  const name  = document.getElementById('bot_name').value      || 'Assistant';
-  // Welcome message: read directly from textarea every time
-  const wmEl2 = document.getElementById('welcome_message');
-  const wm    = (wmEl2 ? wmEl2.value : '') || 'Hi! How can I help?';
-  const noFt  = HWL && document.getElementById('remove_branding')?.checked;
-  const qrs   = getQR();
+  const color          = document.getElementById('primary_color').value || '#B8924A';
+  const name           = document.getElementById('bot_name').value      || 'Assistant';
+  const wmEl2          = document.getElementById('welcome_message');
+  const wm             = (wmEl2 ? wmEl2.value : '') || 'Hi! How can I help?';
+  const noFt           = HWL && document.getElementById('remove_branding')?.checked;
+  const qrs            = getQR();
+
+  // ── Bubble radius & colors
+  const radius         = parseInt(document.getElementById('bubble_radius')?.value ?? 10);
+  const botBubbleColor = (document.getElementById('bot_bubble_color')?.value  || '').trim();
+  const usrBubbleColor = (document.getElementById('user_bubble_color')?.value || '').trim();
+  const effectiveUsrColor = (usrBubbleColor && /^#[0-9A-Fa-f]{6}$/.test(usrBubbleColor)) ? usrBubbleColor : color;
+
+  // Compute corner radii for preview bubbles
+  const tail  = Math.max(2, Math.round(radius * 0.18));
+  const rBot  = `${tail}px ${radius}px ${radius}px ${radius}px`;
+  const rUsr  = `${radius}px ${tail}px ${radius}px ${radius}px`;
+  const rChip = `${radius}px`;
 
   document.getElementById('pH').style.background    = color;
-  document.getElementById('pSend').style.background = color;
+  document.getElementById('pSend').style.background = effectiveUsrColor;
   document.getElementById('pName').textContent       = name;
-  // Bug 7 fix: always sync welcome message to preview
   document.getElementById('pWelcome').textContent    = wm;
-  document.getElementById('pUsr').style.background   = color;
+  document.getElementById('pUsr').style.background   = effectiveUsrColor;
+
+  // Apply border-radius to all bot bubbles in preview
+  document.querySelectorAll('.bbl-bot').forEach(el => {
+    el.style.borderRadius = rBot;
+    el.style.background   = (botBubbleColor && /^#[0-9A-Fa-f]{6}$/.test(botBubbleColor))
+      ? botBubbleColor : '';
+  });
+  const usrEl = document.getElementById('pUsr');
+  if (usrEl) usrEl.style.borderRadius = rUsr;
 
   // Avatar priority: uploaded image → company logo → default bot icon
   const av = document.getElementById('pAv');
@@ -1206,13 +1305,12 @@ function up() {
   } else if (_logo) {
     av.innerHTML = `<img src="${_logo}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
   } else {
-    // Default: show a simple robot icon instead of emoji
     av.innerHTML = `<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%;"><circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.2)"/><circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.5)"/><path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.5)"/></svg>`;
   }
 
   // Quick reply chips
   document.getElementById('pChips').innerHTML = qrs.map(r =>
-    `<span class="qr-chip" style="background:${color}18;color:${color};border-color:${color}44;">${esc(r)}</span>`
+    `<span class="qr-chip" style="background:${color}18;color:${color};border-color:${color}44;border-radius:${rChip};">${esc(r)}</span>`
   ).join('');
 
   document.getElementById('pFoot').style.display = noFt ? 'none' : '';
@@ -1280,13 +1378,16 @@ async function save() {
   const payload = {
     client_id: CID,
     branding: {
-      company_name:  document.getElementById('company_name').value.trim(),
-      tagline:       document.getElementById('tagline').value.trim(),
-      primary_color: document.getElementById('primary_color').value.trim() || '#B8924A',
-      widget_theme:  document.getElementById('widget_theme')?.value  || 'lumvi',
-      widget_font:   document.getElementById('widget_font')?.value   || 'dm_sans',
-      bubble_style:  document.getElementById('bubble_style')?.value  || 'rounded',
-      header_color:  document.getElementById('header_color')?.value  || '',
+      company_name:      document.getElementById('company_name').value.trim(),
+      tagline:           document.getElementById('tagline').value.trim(),
+      primary_color:     document.getElementById('primary_color').value.trim() || '#B8924A',
+      widget_theme:      document.getElementById('widget_theme')?.value  || 'lumvi',
+      widget_font:       document.getElementById('widget_font')?.value   || 'dm_sans',
+      bubble_style:      document.getElementById('bubble_style')?.value  || 'rounded',
+      bubble_radius:     parseInt(document.getElementById('bubble_radius')?.value ?? 10),
+      bot_bubble_color:  document.getElementById('bot_bubble_color')?.value.trim()  || '',
+      user_bubble_color: document.getElementById('user_bubble_color')?.value.trim() || '',
+      header_color:      document.getElementById('header_color')?.value  || '',
       ...((_logo) ? {logo: _logo} : {}),
     },
     bot_settings: {
