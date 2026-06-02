@@ -66,12 +66,12 @@
 
     /* ── Steps ──────────────────────────────────────────────── */
     const STEPS = [
-      { n:"01", tag:"Getting Started", title:"Sign up",             time:"60 seconds", copy:"No card. No commitment. Just your email and agency name.",                                                           url:"lumvi.io/signup" },
-      { n:"02", tag:"Build Your Bot",  title:"Build your bot",                         copy:"Give it a name. Set the tone. Make it sound like it belongs to your client — because it will.",                     url:"lumvi.io/onboarding" },
-      { n:"03", tag:"Knowledge Base",  title:"Feed it the business",                   copy:"Paste FAQs. Upload docs. Add URLs. The bot learns the client's world in minutes.",                                  url:"lumvi.io/onboarding" },
-      { n:"04", tag:"Customization",   title:"Make it yours",                          copy:"Your logo. Your colors. Your chat bubble. Lumvi never appears anywhere your client can see.",                       url:"lumvi.io/customize" },
-      { n:"05", tag:"Deployment",      title:"One line of code",                       copy:"Copy. Paste before </body>. That's the entire technical requirement.",                                              url:"lumvi.io/onboarding" },
-      { n:"06", tag:"Results",         title:"Get paid",                               copy:"Leads, conversations, and analytics hit your dashboard. Your client sees results. You send the invoice.",           url:"lumvi.io/analytics" },
+      { n:"01", tag:"Getting Started", title:"Sign up",             time:"60 seconds", copy:"No card. No commitment. Just your email and agency name.",                                                           url:"lumvi.net/signup" },
+      { n:"02", tag:"Build Your Bot",  title:"Build your bot",                         copy:"Give it a name. Set the tone. Make it sound like it belongs to your client — because it will.",                     url:"lumvi.net/onboarding" },
+      { n:"03", tag:"Knowledge Base",  title:"Feed it the business",                   copy:"Paste FAQs. Upload docs. Add URLs. The bot learns the client's world in minutes.",                                  url:"lumvi.net/onboarding" },
+      { n:"04", tag:"Customization",   title:"Make it yours",                          copy:"Your logo. Your colors. Your chat bubble. Lumvi never appears anywhere your client can see.",                       url:"lumvi.net/customize" },
+      { n:"05", tag:"Deployment",      title:"One line of code",                       copy:"Copy. Paste before </body>. That's the entire technical requirement.",                                              url:"lumvi.net/onboarding" },
+      { n:"06", tag:"Results",         title:"Get paid",                               copy:"Leads, conversations, and analytics hit your dashboard. Your client sees results. You send the invoice.",           url:"lumvi.net/analytics" },
     ];
 
     /* ── Wizard Shell ───────────────────────────────────────── */
@@ -282,7 +282,7 @@
 
     /* ── Screen 5: Embed Code ───────────────────────────────── */
     function Screen5() {
-      const code = `<script\n  src="https://cdn.lumvi.io/widget.js"\n  data-bot-id="pinn_abc123xyz789"\n  data-color="#2B4C9B"\n><\/script>`;
+      const code = `<script\n  src="https://cdn.lumvi.net/widget.js"\n  data-bot-id="pinn_abc123xyz789"\n  data-color="#2B4C9B"\n><\/script>`;
       return (
         <WizShell wiz={3} title="One line of code" sub="Copy. Paste before closing body tag. Done.">
           <div className="pulse" style={{background:"#1C1917",borderRadius:12,padding:"13px 15px",position:"relative",marginBottom:10,border:`1.5px solid ${C.gold}`}}>
