@@ -305,6 +305,11 @@ except Exception as _redis_init_err:
 _REDIS_EMBED_PREFIX  = "lumvi:embed:v2:"   # bumped v1→v2: voyage-3-lite 512-dim replaces bge 384/768-dim
 _REDIS_EMBED_TTL_SEC = 86400 * 7   # 7 days — embeddings are deterministic
 
+# Response-level Redis cache (promoted from local vars inside generate_response —
+# easier to tune per environment and avoids silent redefinition on every call)
+_REDIS_RESP_PREFIX = "lumvi:resp:v1:"
+_REDIS_RESP_TTL    = 86400  # 24 hours
+
 # ── Zero-cost intent keywords ─────────────────────────────────────────
 _SIMPLE_INTENTS = {
     'greeting':  ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening'],
@@ -551,7 +556,7 @@ def _stem(word: str) -> str:
     for suffix, min_root in (
         ('ellation', 3), ('ations', 3), ('ation', 3), ('iness', 3),
         ('nesses', 3), ('ness', 3), ('ments', 3), ('ment', 3),
-        ('ings', 3), ('ing', 3), ('iers', 3), ('iers', 3),
+        ('ings', 3), ('ing', 3), ('iers', 3), ('ier', 3),
         ('ers', 3), ('ies', 3), ('ion', 3), ('ed', 3),
         ('er', 3), ('ly', 3), ('es', 3), ('s', 3),
     ):
@@ -671,95 +676,113 @@ def _embed(text: str, task: str = 'retrieval_document') -> list:
     _input_type = 'query' if task == 'retrieval_query' else 'document'
 
     _t0 = time.monotonic()
-    try:
-        import urllib.request as _urllib_req
-        import urllib.error  as _urllib_err
+    _MAX_RETRIES = 3
+    _RETRY_BASE  = 1.0   # seconds; doubles each attempt (1s, 2s, 4s)
 
-        _payload = json.dumps({
-            'input':      [text.strip()[:2048]],
-            'model':      _VOYAGE_MODEL,
-            'input_type': _input_type,
-        }).encode('utf-8')
+    import urllib.request as _urllib_req
+    import urllib.error  as _urllib_err
 
-        _req = _urllib_req.Request(
-            _VOYAGE_EMBED_URL,
-            data    = _payload,
-            headers = {
-                'Authorization': f'Bearer {_VOYAGE_API_KEY}',
-                'Content-Type':  'application/json',
-            },
-            method  = 'POST',
-        )
+    _payload = json.dumps({
+        'input':      [text.strip()[:2048]],
+        'model':      _VOYAGE_MODEL,
+        'input_type': _input_type,
+    }).encode('utf-8')
 
-        with _urllib_req.urlopen(_req, timeout=10) as _resp:
-            _body = json.loads(_resp.read().decode('utf-8'))
-
-        _raw_vec = _body['data'][0]['embedding']
-        vec      = _normalize(_raw_vec)
-
-        _elapsed_ms = (time.monotonic() - _t0) * 1000
-        logger.debug(
-            f"[Embed/Voyage] task={task} input_type={_input_type} "
-            f"dim={len(vec)} elapsed={_elapsed_ms:.0f}ms "
-            f"text='{text[:40]}'"
-        )
-
-        # Write to L1
-        _EMBED_CACHE[cache_key] = vec
-
-        # Write to L2 (Redis)
-        if _redis_embed_client is not None:
-            try:
-                import struct as _struct
-                _redis_embed_client.setex(
-                    _REDIS_EMBED_PREFIX + cache_key,
-                    _REDIS_EMBED_TTL_SEC,
-                    _struct.pack(f'{len(vec)}f', *vec),
-                )
-            except Exception as _redis_set_err:
-                logger.warning(
-                    f"[EmbedCache] Redis SET failed (non-critical): {_redis_set_err}"
-                )
-
-        return vec
-
-    except _urllib_err.HTTPError as _http_err:
-        # Read the response body — Voyage returns useful error messages
-        _err_body = ''
+    for _attempt in range(1, _MAX_RETRIES + 1):
         try:
-            _err_body = _http_err.read().decode('utf-8')[:300]
-        except Exception:
-            pass
-        _log_crash(
-            'Embed/Voyage/HTTP', _http_err,
-            status=_http_err.code,
-            task=task,
-            text_preview=text[:60],
-            body=_err_body,
-        )
-        # 429 rate-limit: log clearly so it's obvious in production
-        if _http_err.code == 429:
-            logger.error(
-                "[Embed/Voyage] Rate limit hit (429). "
-                "Check free tier usage at dash.voyageai.com or add Redis caching."
+            _req = _urllib_req.Request(
+                _VOYAGE_EMBED_URL,
+                data    = _payload,
+                headers = {
+                    'Authorization': f'Bearer {_VOYAGE_API_KEY}',
+                    'Content-Type':  'application/json',
+                },
+                method  = 'POST',
             )
-        # 401 bad key: loud warning
-        elif _http_err.code == 401:
-            logger.error(
-                "[Embed/Voyage] Authentication failed (401). "
-                "Check VOYAGE_API_KEY env var."
-            )
-        return []
 
-    except Exception as _e:
-        _log_crash(
-            'Embed/Voyage', _e,
-            task=task,
-            text_len=len(text),
-            text_preview=text[:60],
-            elapsed_ms=f"{(time.monotonic()-_t0)*1000:.0f}",
-        )
-        return []
+            with _urllib_req.urlopen(_req, timeout=10) as _resp:
+                _body = json.loads(_resp.read().decode('utf-8'))
+
+            _raw_vec = _body['data'][0]['embedding']
+            vec      = _normalize(_raw_vec)
+
+            _elapsed_ms = (time.monotonic() - _t0) * 1000
+            logger.debug(
+                f"[Embed/Voyage] task={task} input_type={_input_type} "
+                f"dim={len(vec)} elapsed={_elapsed_ms:.0f}ms "
+                f"text='{text[:40]}'"
+            )
+
+            # Write to L1
+            _EMBED_CACHE[cache_key] = vec
+
+            # Write to L2 (Redis)
+            if _redis_embed_client is not None:
+                try:
+                    import struct as _struct
+                    _redis_embed_client.setex(
+                        _REDIS_EMBED_PREFIX + cache_key,
+                        _REDIS_EMBED_TTL_SEC,
+                        _struct.pack(f'{len(vec)}f', *vec),
+                    )
+                except Exception as _redis_set_err:
+                    logger.warning(
+                        f"[EmbedCache] Redis SET failed (non-critical): {_redis_set_err}"
+                    )
+
+            return vec
+
+        except _urllib_err.HTTPError as _http_err:
+            # Read the response body — Voyage returns useful error messages
+            _err_body = ''
+            try:
+                _err_body = _http_err.read().decode('utf-8')[:300]
+            except Exception:
+                pass
+
+            if _http_err.code == 429:
+                _wait = _RETRY_BASE * (2 ** (_attempt - 1))
+                if _attempt < _MAX_RETRIES:
+                    logger.warning(
+                        f"[Embed/Voyage] Rate limit (429) on attempt {_attempt}/{_MAX_RETRIES} "
+                        f"— retrying in {_wait:.1f}s. "
+                        f"Consider adding Redis caching (dash.voyageai.com)."
+                    )
+                    time.sleep(_wait)
+                    continue
+                else:
+                    logger.error(
+                        f"[Embed/Voyage] Rate limit (429) — all {_MAX_RETRIES} attempts exhausted. "
+                        f"Falling back to keyword search. "
+                        f"Check free tier usage at dash.voyageai.com."
+                    )
+            elif _http_err.code == 401:
+                logger.error(
+                    "[Embed/Voyage] Authentication failed (401). "
+                    "Check VOYAGE_API_KEY env var."
+                )
+            _log_crash(
+                'Embed/Voyage/HTTP', _http_err,
+                status=_http_err.code,
+                task=task,
+                attempt=_attempt,
+                text_preview=text[:60],
+                body=_err_body,
+            )
+            return []
+
+        except Exception as _e:
+            _log_crash(
+                'Embed/Voyage', _e,
+                task=task,
+                attempt=_attempt,
+                text_len=len(text),
+                text_preview=text[:60],
+                elapsed_ms=f"{(time.monotonic()-_t0)*1000:.0f}",
+            )
+            return []
+
+    return []  # exhausted retries
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -850,11 +873,39 @@ def extract_session_memory(
                 break
 
         # Frustration score — Fix 6: max 1 point per message, break after first match
+        # Bug 7 fix: "forget it" and "never mind" appear in both _FRUSTRATION_SIGNALS
+        # and _DECLINE_SIGNALS. When immediately following a bot IDK/handoff offer
+        # they are decline signals, not anger signals — scoring them as frustration
+        # unfairly pushes the user toward escalation for politely declining.
+        # Detect that context by checking whether the turn before the current user
+        # message is an IDK-method bot turn.
+        _IDK_METHODS_SET = frozenset({
+            'idk_fallback', 'vertical_fallback', 'vertical_fallback_idk',
+            'static_fallback', 'fatal_fallback', 'confidence_gate_handoff', 'idk_no_kb',
+            'declined_handoff', 'escalation',
+        })
+        _DECLINE_OVERLAP = frozenset({'forget it', 'never mind', 'nevermind', "don't worry"})
+        _last_bot_was_idk = False
+        if conversation_history:
+            _last_bot = next(
+                (m for m in reversed(conversation_history) if m.get('role') == 'assistant'),
+                None
+            )
+            if _last_bot and _last_bot.get('method', '') in _IDK_METHODS_SET:
+                _last_bot_was_idk = True
+
         score = 0
-        for msg in msgs_to_scan:
+        for i, msg in enumerate(msgs_to_scan):
             matched = False
             for signal in _FRUSTRATION_SIGNALS:
                 if signal in msg:
+                    # Bug 7: skip decline-overlap signals when following an IDK turn
+                    if signal in _DECLINE_OVERLAP and _last_bot_was_idk and i == len(msgs_to_scan) - 1:
+                        logger.debug(
+                            f"[SessionMem] skipping '{signal}' frustration score — "
+                            f"decline signal after IDK turn (Bug 7 fix)"
+                        )
+                        continue
                     matched = True
                     break
             if matched:
@@ -1563,8 +1614,7 @@ class AIHelper:
         # Cache key: SHA-256 of "resp:{client_id}:{vertical}:{normalised_message}".
         # Only written when confidence >= confidence_high (0.65) after a real answer.
         # Uses the existing _redis_embed_client connection — no new Redis connection.
-        _REDIS_RESP_PREFIX = "lumvi:resp:v1:"
-        _REDIS_RESP_TTL    = 86400  # 24 hours
+        # _REDIS_RESP_PREFIX and _REDIS_RESP_TTL are module-level constants.
         _resp_cache_key    = None   # populated below; used again at cache-write time
 
         if client_id and client_id != 'demo' and _redis_embed_client is not None:
@@ -1621,9 +1671,18 @@ class AIHelper:
             # Merge: DB wins for accumulated counters, regex wins for values
             # typed this turn. Both 'turns' (legacy) and 'turn_count' (Phase 3)
             # are exposed so all downstream callers work without changes.
-            _db_score     = int(_db_session.get('frustration_score') or 0)
-            _regex_score  = int(_regex_mem.get('frustration_score') or 0)
-            _merged_score = min(_db_score + max(_regex_score - _db_score, 0), 5)
+            _db_score    = int(_db_session.get('frustration_score') or 0)
+            _regex_score = int(_regex_mem.get('frustration_score') or 0)
+            # Bug 5 fix: old formula was min(_db_score + max(_regex-_db, 0), 5)
+            # which is effectively max(_db_score, _regex_score) — a permanent floor.
+            # extract_session_memory's decay logic correctly reduces _regex_score
+            # after calm turns but the merge formula silently discarded it.
+            # New formula: if regex is lower than DB, the decay has fired and we
+            # should honour it; otherwise take the higher accumulated value.
+            _merged_score = min(
+                _regex_score if _regex_score < _db_score else max(_db_score, _regex_score),
+                5
+            )
             _turn_count   = int(_db_session.get('turn_count') or 0) + 1
 
             session_mem = {
@@ -1720,7 +1779,36 @@ class AIHelper:
                     }
 
                 else:
-                    # User asked a new question — clear flag and fall through
+                    # Distinguish implicit decline from genuine new question.
+                    # Short messages with no question signal after a handoff offer
+                    # are almost always soft declines ("no I'm fine", "don't worry
+                    # about it", "it's ok") — not new FAQ questions. Feeding them
+                    # into the pipeline produces an embedding miss → IDK →
+                    # handoff_offered=True again → infinite loop (Bug 1 root cause).
+                    _has_question_signal = (
+                        '?' in clean or
+                        bool(re.search(
+                            r'^(what|how|why|when|where|who|can|does|do|is|are|will|would)',
+                            clean.lower()
+                        ))
+                    )
+                    if len(clean.split()) <= 5 and not _has_question_signal:
+                        logger.info(
+                            f"[HandoffState] implicit decline detected (short, no question signal) "
+                            f"→ graceful close | msg='{clean[:60]}'"
+                        )
+                        session_mem['handoff_offered'] = False
+                        if session_id and client_id and client_id != 'demo':
+                            _BG_EXECUTOR.submit(_persist_session, client_id, session_id, session_mem)
+                        return {
+                            'response':      "No problem! Is there anything else I can help you with?",
+                            'method':        'declined_handoff',
+                            'confidence':    1.0,
+                            'is_lead':       False,
+                            'lead_metadata': None,
+                            'action':        None,
+                        }
+                    # Genuine new question — clear flag and fall through
                     logger.info(
                         f"[HandoffState] new question after handoff offer → "
                         f"clearing flag, continuing pipeline | msg='{clean[:60]}'"
@@ -1731,6 +1819,13 @@ class AIHelper:
             # ── ② ESCALATION CHECK (zero cost) ───────────────────────────
             escalation = self._check_escalation(clean, session_mem, vertical)
             if escalation:
+                # Bug 4 fix: set handoff_offered so that if the user declines
+                # ("no I don't want to speak to anyone"), the handoff handler on
+                # the next turn catches it instead of re-running _check_escalation
+                # which would fire escalation again (score still ≥ threshold).
+                session_mem['handoff_offered'] = True
+                if session_id and client_id and client_id != 'demo':
+                    _BG_EXECUTOR.submit(_persist_session, client_id, session_id, session_mem)
                 return {
                     'response':                escalation,
                     'method':                  'escalation',
@@ -1845,6 +1940,39 @@ class AIHelper:
                     'is_lead':       True,
                     'lead_metadata': lead_meta,
                     'action':        None,  # BUG FIX I: missing key added
+                }
+
+            # ── SIMPLE INTENT HANDLER (goodbye / gratitude) ───────────────
+            # detect_intent() correctly classifies goodbye/gratitude (Tier 1,
+            # line 2777) but generate_response only checked intent.get('is_lead').
+            # Non-lead simple intents fell straight into the embedding pipeline,
+            # which can't embed "bye" meaningfully → IDK or garbled response.
+            # Fix: intercept them here before any embedding cost is incurred.
+            # Gratitude is only closed out when the message is ≤ 3 words so that
+            # "thanks, can you also explain X?" falls through normally.
+            _simple = intent.get('intent')
+            if _simple == 'goodbye':
+                logger.info("[SimpleIntent] goodbye detected → closing conversation")
+                session_mem['handoff_offered'] = False
+                if session_id and client_id and client_id != 'demo':
+                    _BG_EXECUTOR.submit(_persist_session, client_id, session_id, session_mem)
+                return {
+                    'response':      "Thanks for chatting! Feel free to come back anytime. 👋",
+                    'method':        'goodbye',
+                    'confidence':    1.0,
+                    'is_lead':       False,
+                    'lead_metadata': None,
+                    'action':        None,
+                }
+            if _simple == 'gratitude' and len(clean.split()) <= 3:
+                logger.info("[SimpleIntent] standalone gratitude → soft close")
+                return {
+                    'response':      "You're welcome! Is there anything else I can help with?",
+                    'method':        'gratitude',
+                    'confidence':    1.0,
+                    'is_lead':       False,
+                    'lead_metadata': None,
+                    'action':        None,
                 }
 
             # ── DYNAMIC THRESHOLD ─────────────────────────────────────────
@@ -2086,7 +2214,7 @@ class AIHelper:
                 # first miss and the gap score never rises above 1, undermining
                 # get_top_kb_gaps() prioritisation.
                 _idk_signals = ('i don\'t have enough', 'connect you with the team', 'idk')
-                if (method := 'cache') and any(sig in cached_response.lower() for sig in _idk_signals):
+                if any(sig in cached_response.lower() for sig in _idk_signals):
                     if client_id and client_id != 'demo':
                         _BG_EXECUTOR.submit(record_kb_gap, client_id, user_message, 'cache_idk', 0.0)
                 return {
@@ -2538,7 +2666,18 @@ class AIHelper:
             return random.choice(self._ESCALATION_RESPONSES['billing_urgency'])
 
         if session_mem.get('frustration_score', 0) >= 3:
-            logger.info(f"[Escalation] frustration triggered score={session_mem['frustration_score']}")
+            score = session_mem['frustration_score']
+            if score == 3:
+                # Soft tier: acknowledge and try once more before asking for contact.
+                # Jumping straight to "give me your email" on first frustration
+                # trigger feels pushy — the user may just want a better answer.
+                logger.info(f"[Escalation] frustration soft-tier score={score} → empathy retry")
+                return (
+                    "I'm sorry this hasn't landed right — that's on me. "
+                    "Let me try to help differently. What's the core thing you need?"
+                )
+            # Hard tier (score ≥ 4): now offer human handoff
+            logger.info(f"[Escalation] frustration hard-tier score={score} → handoff offer")
             return random.choice(self._ESCALATION_RESPONSES['frustration'])
 
         if session_mem.get('repeated_question') and session_mem.get('turns', 0) >= 3:
@@ -2775,7 +2914,14 @@ class AIHelper:
         vert_cfg = self.personalities.get(vertical, self.personalities['general'])
 
         for intent_name, keywords in _SIMPLE_INTENTS.items():
-            if any(msg == k or msg.startswith(k) for k in keywords):
+            # Bug 6 fix: startswith(k) matched "bye the way" → goodbye and
+            # "take care of my issue" → goodbye, prematurely closing conversations.
+            # Use a word-boundary end-anchor so "bye" and "goodbye then" match
+            # but "bye the way" and "take care of my billing" do not.
+            if any(
+                msg == k or bool(re.search(r'\b' + re.escape(k) + r'\b$', msg))
+                for k in keywords
+            ):
                 return {'intent': intent_name, 'is_lead': False, 'confidence': 0.97, 'score': 0}
 
         score   = 0.0
@@ -3113,7 +3259,7 @@ Rules:
                     'EmbeddingSearch/KB', _e,
                     client_id=client_id,
                     query=search_query[:60],
-                    kb_chunks_count=len(kb_chunks) if 'kb_chunks' in dir() else 'N/A',
+                    kb_chunks_count=len(kb_chunks) if 'kb_chunks' in locals() else 'N/A',
                 )
 
         # 2. Legacy FAQ embeddings
@@ -3181,7 +3327,7 @@ Rules:
                     'EmbeddingSearch/FAQEmbed', _e,
                     client_id=client_id,
                     query=search_query[:60],
-                    stored_count=len(stored) if 'stored' in dir() else 'N/A',
+                    stored_count=len(stored) if 'stored' in locals() else 'N/A',
                 )
 
         # Bug 1 fix: no client_id (demo/test) — embed in-memory faqs directly so
@@ -3417,7 +3563,7 @@ Rules:
                 _log_crash(
                     'CrossEncoder/Local', _ce_err,
                     query=query[:60],
-                    n_pairs=len(pairs) if 'pairs' in dir() else 'N/A',
+                    n_pairs=len(pairs) if 'pairs' in locals() else 'N/A',
                 )
                 logger.warning("[CrossEncoder/Local] falling back to Gemini reranker")
 
@@ -4040,15 +4186,16 @@ Return ONLY the response text or IDK_FALLBACK."""
         Summarise conversation when it exceeds ~2000 tokens (est. chars/4).
         Non-blocking — failures are logged and ignored.
 
-        Bug 8 / INFO: This method is NOT called anywhere inside ai_helper.py.
-        It MUST be called externally from app.py (or equivalent) after each
-        conversation turn, e.g.:
+        Called internally by generate_response() on the hot path (before
+        _build_context) so long conversations are summarised automatically.
+        May also be called externally from app.py if needed for explicit
+        summarisation outside of generate_response(), e.g. on session end:
 
             ai_helper.maybe_summarise(client_id, conversation_history)
 
-        If it is not wired in, long conversations will never be summarised and
-        context windows will grow unbounded, degrading response quality and
-        increasing Gemini token costs.
+        NOTE: Calling it from both generate_response() AND app.py will produce
+        duplicate summary attempts per turn. If app.py already calls this,
+        remove the call from generate_response() or add a call-site guard.
         """
         if not self.enabled or not conversation_history or not client_id:
             return
@@ -4588,6 +4735,12 @@ Return ONLY the response text or IDK_FALLBACK."""
                     logger.warning(f"[ReindexAll] client={cid} has no FAQs — skipping")
                     return cid, 0
                 count = self.index_faqs(faqs, cid)
+                # Sleep inside the worker thread so concurrent workers each
+                # pause after finishing — this is what actually paces Voyage
+                # API calls. Sleeping in the as_completed loop (on the calling
+                # thread) does not pace workers already running in the pool.
+                if delay_between_clients > 0:
+                    time.sleep(delay_between_clients)
                 return cid, count
             except Exception as _e:
                 _log_crash('ReindexAll/Worker', _e, client_id=cid)
@@ -4597,7 +4750,8 @@ Return ONLY the response text or IDK_FALLBACK."""
         # Voyage AI free tier: 50M tokens/month, ~300 req/min sustained.
         # With concurrency=3 and ~100 FAQs/client each taking ~1s, we
         # stay well within limits. Raise concurrency on paid plans.
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        # as_completed is already imported at module level via concurrent.futures.
+        from concurrent.futures import as_completed
         completed = 0
 
         with ThreadPoolExecutor(max_workers=concurrency) as pool:
@@ -4615,10 +4769,6 @@ Return ONLY the response text or IDK_FALLBACK."""
                     f"[ReindexAll] [{completed}/{total_clients}] "
                     f"client={cid} {status} embeddings={count}"
                 )
-
-                # Breathe between clients to avoid rate-limit bursts
-                if completed < total_clients and delay_between_clients > 0:
-                    time.sleep(delay_between_clients)
 
         # ── 4. Summary ────────────────────────────────────────────────
         _elapsed  = time.monotonic() - _t0_total
@@ -4818,24 +4968,31 @@ def get_ai_helper(api_key: str, model_name: str = 'gemini-2.0-flash') -> AIHelpe
     under Gunicorn threaded workers cannot create two instances simultaneously
     and race on genai.configure().
 
-    FIX BUG-14: On key rotation the old _BG_EXECUTOR is shut down before the
-    new AIHelper is created. Without this, the old ThreadPoolExecutor's 4 workers
-    keep running with the stale genai configuration (captured in their closure)
-    and silently produce auth errors for any background tasks that fire after the
-    key change. We replace the module-level executor with a fresh one so all
-    subsequent background submissions use the new configuration.
+    FIX BUG-14: On key rotation the executor and AIHelper are replaced atomically
+    inside the lock. The new executor is created first (so concurrent requests
+    landing during the swap always get a live executor), then _BG_EXECUTOR and
+    _ai_helper are assigned together before releasing the lock. The old executor
+    is drained after the lock releases so its shutdown never blocks new requests.
     """
     global _ai_helper, _BG_EXECUTOR
+    old_executor = None
     with _ai_helper_lock:
         if (
             _ai_helper is None
             or _ai_helper.api_key != api_key
             or _ai_helper.model_name != model_name
         ):
-            # Drain and replace the background executor before reconfiguring genai
-            # so no in-flight tasks can submit work under the old key.
-            old_executor = _BG_EXECUTOR
-            _BG_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix='ai_bg')
-            old_executor.shutdown(wait=False)   # non-blocking; running tasks complete naturally
-            _ai_helper = AIHelper(api_key, model_name)
+            # Build new executor and helper while holding the lock so concurrent
+            # requests can't observe a partially-replaced state. _BG_EXECUTOR is
+            # replaced atomically — there is no window where it is None.
+            new_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix='ai_bg')
+            new_helper   = AIHelper(api_key, model_name)
+            old_executor = _BG_EXECUTOR   # drain after lock releases
+            _BG_EXECUTOR = new_executor
+            _ai_helper   = new_helper
+
+    # Drain outside the lock so shutdown() never blocks incoming requests.
+    if old_executor is not None:
+        old_executor.shutdown(wait=False)   # running tasks complete naturally
+
     return _ai_helper

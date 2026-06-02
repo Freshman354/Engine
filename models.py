@@ -355,6 +355,7 @@ def init_db():
     migrate_kb_gaps()       # adds UNIQUE(client_id, question) for upsert counting
     migrate_chat_sessions() # Phase 3 — persistent session memory
     migrate_poor_answers()  # Phase 6 — poor answer feedback loop
+    migrate_clients_active() # BUG-02 fix — adds is_active, business_name, contact_email
 
 
 def migrate_clients_table():
@@ -368,6 +369,43 @@ def migrate_clients_table():
     cursor.close()
     conn.close()
     print("✅ Clients table migration complete")
+
+
+def migrate_clients_active():
+    """
+    Add is_active, business_name, and contact_email columns to clients table.
+    Several queries (weekly digest, agency overage, enriched stats) depend on
+    these columns — missing them causes silent [] returns and broken features.
+    Safe — uses IF NOT EXISTS.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        for sql in [
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS is_active      BOOLEAN   DEFAULT TRUE",
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS business_name  TEXT",
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS contact_email  TEXT",
+        ]:
+            cursor.execute(sql)
+        # Back-fill business_name from company_name for existing rows so
+        # queries using c.business_name still return results.
+        cursor.execute(
+            "UPDATE clients SET business_name = company_name WHERE business_name IS NULL"
+        )
+        conn.commit()
+        print("✅ migrate_clients_active complete")
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        print(f"⚠️  migrate_clients_active: {e}")
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 
 def migrate_white_label():
@@ -1181,7 +1219,8 @@ def get_client_owner(client_id):
 # =====================================================================
 
 def create_user(email, password, plan_type='starter'):
-    """Create a new user"""
+    """Create a new user. Returns user_id on success, None if email already exists."""
+    conn = cursor = None
     try:
         conn, cursor = get_db()
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -1191,11 +1230,26 @@ def create_user(email, password, plan_type='starter'):
         )
         user_id = cursor.fetchone()['id']
         conn.commit()
-        cursor.close()
-        conn.close()
         return user_id
     except psycopg2.IntegrityError:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
         return None  # Email already exists
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[create_user] {e}')
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        return None
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 def verify_user(email, password):
     """Verify user credentials. Returns user dict on success, None otherwise."""
@@ -1571,13 +1625,13 @@ def save_white_label_settings(client_id: str, domain: str | None,
     This lets callers clear a custom domain by passing domain='' rather than
     being trapped by the old COALESCE-always-keeps behaviour.
     """
+    _SKIP = object()   # BUG-09 fix: must be defined before _val closure references it
+
     def _val(v):
         """Convert sentinel: None→skip, ''→NULL, str→str."""
         if v is None:
             return _SKIP
         return None if v == '' else v
-
-    _SKIP = object()
 
     sets, params = [], []
     d  = _val(domain)
@@ -1692,36 +1746,70 @@ def get_agency_branding(user_id: int) -> dict:
         return {}
 
 def get_client_by_id(client_id):
-    """Get client by client_id"""
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM clients WHERE client_id = %s', (client_id,))
-    client = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    return dict(client) if client else None
+    """Get client by client_id. Returns None on missing row or DB error."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT * FROM clients WHERE client_id = %s', (client_id,))
+        client = cursor.fetchone()
+        return dict(client) if client else None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_client_by_id] {e}')
+        return None
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 def verify_client_ownership(user_id, client_id):
-    """Verify that a user owns a client"""
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM clients WHERE client_id = %s AND user_id = %s', (client_id, user_id))
-    client = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    return client is not None
+    """Verify that a user owns a client. Returns False on DB error."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            'SELECT id FROM clients WHERE client_id = %s AND user_id = %s',
+            (client_id, user_id)
+        )
+        return cursor.fetchone() is not None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[verify_client_ownership] {e}')
+        return False
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 
 def delete_client(client_id):
     """
-    Cascade-delete a client and all its associated data:
-    conversations → leads → FAQs → client row.
-    Order matters because of foreign key constraints.
+    Cascade-delete a client and all its associated data.
+    Order matters for FK constraints — client row must be last.
     """
     conn, cursor = get_db()
     try:
-        cursor.execute('DELETE FROM conversations WHERE client_id = %s', (client_id,))
-        cursor.execute('DELETE FROM leads WHERE client_id = %s', (client_id,))
-        cursor.execute('DELETE FROM faqs WHERE client_id = %s', (client_id,))
-        cursor.execute('DELETE FROM clients WHERE client_id = %s', (client_id,))
+        # FK-constrained tables first
+        cursor.execute('DELETE FROM conversations         WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM leads                 WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM faqs                  WHERE client_id = %s', (client_id,))
+        # BUG-08 fix: orphaned tables that were previously missed
+        cursor.execute('DELETE FROM knowledge_base        WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM faq_embeddings        WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM conversation_summaries WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM chat_sessions          WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM kb_gaps                WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM poor_answers           WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM webhook_configs        WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM webhook_logs           WHERE client_id = %s', (client_id,))
+        # Client row last
+        cursor.execute('DELETE FROM clients               WHERE client_id = %s', (client_id,))
         conn.commit()
     except Exception:
         conn.rollback()
@@ -2306,10 +2394,11 @@ def get_leads(client_id):
 # =====================================================================
 
 def create_affiliate(user_id, payment_email, commission_rate=0.30):
-    """Create affiliate account for a user"""
-    conn, cursor = get_db()
+    """Create affiliate account for a user. Returns dict on success, None if already exists."""
+    conn = cursor = None
     referral_code = secrets.token_hex(4).upper()
     try:
+        conn, cursor = get_db()
         cursor.execute(
             '''INSERT INTO affiliates (user_id, referral_code, commission_rate, payment_email)
                VALUES (%s, %s, %s, %s) RETURNING id''',
@@ -2317,120 +2406,205 @@ def create_affiliate(user_id, payment_email, commission_rate=0.30):
         )
         affiliate_id = cursor.fetchone()['id']
         conn.commit()
-        cursor.close()
-        conn.close()
         return {'id': affiliate_id, 'referral_code': referral_code, 'commission_rate': commission_rate}
     except psycopg2.IntegrityError:
-        cursor.close()
-        conn.close()
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
         return None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[create_affiliate] {e}')
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        return None
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 def get_affiliate_by_user_id(user_id):
-    """Get affiliate account by user ID"""
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM affiliates WHERE user_id = %s', (user_id,))
-    affiliate = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    return dict(affiliate) if affiliate else None
+    """Get affiliate account by user ID. Returns None on missing row or DB error."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT * FROM affiliates WHERE user_id = %s', (user_id,))
+        affiliate = cursor.fetchone()
+        return dict(affiliate) if affiliate else None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_affiliate_by_user_id] {e}')
+        return None
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 def get_affiliate_by_code(referral_code):
-    """Get affiliate by referral code"""
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM affiliates WHERE referral_code = %s', (referral_code,))
-    affiliate = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    return dict(affiliate) if affiliate else None
+    """Get affiliate by referral code. Returns None on missing row or DB error."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT * FROM affiliates WHERE referral_code = %s', (referral_code,))
+        affiliate = cursor.fetchone()
+        return dict(affiliate) if affiliate else None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_affiliate_by_code] {e}')
+        return None
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 def create_referral(affiliate_id, referred_user_id, referral_code):
-    """Track a new referral"""
-    conn, cursor = get_db()
-    cursor.execute(
-        '''INSERT INTO referrals (affiliate_id, referred_user_id, referral_code, status)
-           VALUES (%s, %s, %s, %s)''',
-        (affiliate_id, referred_user_id, referral_code, 'pending')
-    )
-    cursor.execute(
-        'UPDATE affiliates SET total_referrals = total_referrals + 1 WHERE id = %s',
-        (affiliate_id,)
-    )
-    conn.commit()
-    cursor.close()
-    conn.close()
+    """Track a new referral. Never raises."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''INSERT INTO referrals (affiliate_id, referred_user_id, referral_code, status)
+               VALUES (%s, %s, %s, %s)''',
+            (affiliate_id, referred_user_id, referral_code, 'pending')
+        )
+        cursor.execute(
+            'UPDATE affiliates SET total_referrals = total_referrals + 1 WHERE id = %s',
+            (affiliate_id,)
+        )
+        conn.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[create_referral] {e}')
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 def create_commission(affiliate_id, referred_user_id, subscription_amount, plan_type):
-    """Create commission record when referred user pays"""
-    conn, cursor = get_db()
-    cursor.execute('SELECT commission_rate FROM affiliates WHERE id = %s', (affiliate_id,))
-    result = cursor.fetchone()
-    commission_rate = result['commission_rate'] if result else 0.30
-    commission_amount = subscription_amount * commission_rate
-    cursor.execute(
-        '''INSERT INTO commissions (affiliate_id, referred_user_id, amount, subscription_amount, plan_type, status)
-           VALUES (%s, %s, %s, %s, %s, %s)''',
-        (affiliate_id, referred_user_id, commission_amount, subscription_amount, plan_type, 'pending')
-    )
-    cursor.execute(
-        'UPDATE affiliates SET total_earnings = total_earnings + %s WHERE id = %s',
-        (commission_amount, affiliate_id)
-    )
-    cursor.execute(
-        '''UPDATE referrals SET status = 'converted', converted_at = CURRENT_TIMESTAMP
-           WHERE affiliate_id = %s AND referred_user_id = %s''',
-        (affiliate_id, referred_user_id)
-    )
-    conn.commit()
-    cursor.close()
-    conn.close()
+    """Create commission record when referred user pays. Never raises."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT commission_rate FROM affiliates WHERE id = %s', (affiliate_id,))
+        result = cursor.fetchone()
+        commission_rate = result['commission_rate'] if result else 0.30
+        commission_amount = subscription_amount * commission_rate
+        cursor.execute(
+            '''INSERT INTO commissions (affiliate_id, referred_user_id, amount, subscription_amount, plan_type, status)
+               VALUES (%s, %s, %s, %s, %s, %s)''',
+            (affiliate_id, referred_user_id, commission_amount, subscription_amount, plan_type, 'pending')
+        )
+        cursor.execute(
+            'UPDATE affiliates SET total_earnings = total_earnings + %s WHERE id = %s',
+            (commission_amount, affiliate_id)
+        )
+        cursor.execute(
+            '''UPDATE referrals SET status = 'converted', converted_at = CURRENT_TIMESTAMP
+               WHERE affiliate_id = %s AND referred_user_id = %s''',
+            (affiliate_id, referred_user_id)
+        )
+        conn.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[create_commission] {e}')
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 def get_affiliate_stats(affiliate_id):
-    """Get affiliate's statistics"""
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM affiliates WHERE id = %s', (affiliate_id,))
-    affiliate = dict(cursor.fetchone())
-    cursor.execute(
-        'SELECT status, COUNT(*) as count FROM referrals WHERE affiliate_id = %s GROUP BY status',
-        (affiliate_id,)
-    )
-    referral_stats = {row['status']: row['count'] for row in cursor.fetchall()}
-    cursor.execute(
-        "SELECT SUM(amount) as pending FROM commissions WHERE affiliate_id = %s AND status = 'pending'",
-        (affiliate_id,)
-    )
-    pending_result = cursor.fetchone()
-    pending_earnings = (pending_result.get('pending') or 0) if pending_result else 0
-    cursor.execute(
-        "SELECT SUM(amount) as paid FROM commissions WHERE affiliate_id = %s AND status = 'paid'",
-        (affiliate_id,)
-    )
-    paid_result = cursor.fetchone()
-    paid_earnings = (paid_result.get('paid') or 0) if paid_result else 0
-    cursor.close()
-    conn.close()
-    return {
-        'affiliate': affiliate,
-        'referral_stats': referral_stats,
-        'pending_earnings': pending_earnings,
-        'paid_earnings': paid_earnings,
-        'total_earnings': affiliate['total_earnings']
-    }
+    """Get affiliate's statistics. Returns None if affiliate not found, raises on other errors."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT * FROM affiliates WHERE id = %s', (affiliate_id,))
+        row = cursor.fetchone()
+        if row is None:
+            return None   # BUG-04 fix: fetchone() can return None
+        affiliate = dict(row)
+        cursor.execute(
+            'SELECT status, COUNT(*) as count FROM referrals WHERE affiliate_id = %s GROUP BY status',
+            (affiliate_id,)
+        )
+        referral_stats = {row['status']: row['count'] for row in cursor.fetchall()}
+        cursor.execute(
+            "SELECT SUM(amount) as pending FROM commissions WHERE affiliate_id = %s AND status = 'pending'",
+            (affiliate_id,)
+        )
+        pending_result = cursor.fetchone()
+        pending_earnings = (pending_result.get('pending') or 0) if pending_result else 0
+        cursor.execute(
+            "SELECT SUM(amount) as paid FROM commissions WHERE affiliate_id = %s AND status = 'paid'",
+            (affiliate_id,)
+        )
+        paid_result = cursor.fetchone()
+        paid_earnings = (paid_result.get('paid') or 0) if paid_result else 0
+        return {
+            'affiliate': affiliate,
+            'referral_stats': referral_stats,
+            'pending_earnings': pending_earnings,
+            'paid_earnings': paid_earnings,
+            'total_earnings': affiliate['total_earnings'],
+        }
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_affiliate_stats] {e}')
+        return None
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 def get_affiliate_commissions(affiliate_id):
-    """Get all commissions for an affiliate"""
-    conn, cursor = get_db()
-    cursor.execute(
-        '''SELECT c.*, u.email as referred_email 
-           FROM commissions c
-           JOIN users u ON c.referred_user_id = u.id
-           WHERE c.affiliate_id = %s
-           ORDER BY c.created_at DESC''',
-        (affiliate_id,)
-    )
-    commissions = [dict(row) for row in cursor.fetchall()]
-    cursor.close()
-    conn.close()
-    return commissions
+    """Get all commissions for an affiliate. Returns [] on DB error."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''SELECT c.*, u.email as referred_email
+               FROM commissions c
+               JOIN users u ON c.referred_user_id = u.id
+               WHERE c.affiliate_id = %s
+               ORDER BY c.created_at DESC''',
+            (affiliate_id,)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_affiliate_commissions] {e}')
+        return []
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 
 
@@ -2937,7 +3111,7 @@ def get_unanswered_questions_for_email(client_id: str, since_days: int = 7, limi
             FROM conversations
             WHERE client_id = %s
               AND matched = FALSE
-              AND created_at >= NOW() - (%s * INTERVAL '1 day')
+              AND timestamp >= NOW() - (%s * INTERVAL '1 day')
             GROUP BY user_message
             ORDER BY cnt DESC
             LIMIT %s
@@ -3086,12 +3260,24 @@ def create_client_user(client_id, email, password, name, invited_by):
 
 def verify_client_user(email, password):
     """Verify client user credentials. Returns user dict or None."""
-    import hashlib
-    conn, cursor = get_db()
-    cursor.execute('SELECT * FROM client_users WHERE email = %s', (email.lower().strip(),))
-    row = cursor.fetchone()
-    cursor.close()
-    conn.close()
+    import hashlib, hmac
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT * FROM client_users WHERE email = %s', (email.lower().strip(),))
+        row = cursor.fetchone()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[verify_client_user] DB lookup failed: {e}')
+        return None
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
     if not row:
         return None
     stored = row['password_hash']
@@ -3099,12 +3285,22 @@ def verify_client_user(email, password):
         salt_hex, hash_hex = stored.split(':')
         salt = bytes.fromhex(salt_hex)
         pw_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
-        if pw_hash.hex() == hash_hex:
-            conn, cursor = get_db()
-            cursor.execute('UPDATE client_users SET last_login=NOW() WHERE id=%s', (row['id'],))
-            conn.commit()
-            cursor.close()
-            conn.close()
+        # BUG-07 fix: use constant-time comparison to prevent timing attacks
+        if hmac.compare_digest(pw_hash.hex(), hash_hex):
+            conn2 = cursor2 = None
+            try:
+                conn2, cursor2 = get_db()
+                cursor2.execute('UPDATE client_users SET last_login=NOW() WHERE id=%s', (row['id'],))
+                conn2.commit()
+            except Exception:
+                pass
+            finally:
+                if cursor2:
+                    try: cursor2.close()
+                    except Exception: pass
+                if conn2:
+                    try: conn2.close()
+                    except Exception: pass
             return dict(row)
     except Exception:
         pass
@@ -3900,7 +4096,9 @@ def load_session(client_id: str, session_id: str) -> dict:
         'turn_count': 0, 'session_data': {},
         # Unpacked from session_data JSONB — no dedicated column needed.
         # Written by upsert_session() via the extra dict path.
-        'handoff_offered': False,
+        'handoff_offered':        False,
+        # Unpacked from session_data JSONB — no dedicated column needed.
+        'graceful_close_offered': False,
     }
     conn = cursor = None
     try:
@@ -3930,7 +4128,8 @@ def load_session(client_id: str, session_id: str) -> dict:
         # Unpack handoff_offered from JSONB so ai_helper can read it via
         # _db_session.get('handoff_offered'). Stored there by upsert_session()
         # through the extra-fields path — no dedicated column required.
-        result['handoff_offered'] = bool(result['session_data'].get('handoff_offered', False))
+        result['handoff_offered']        = bool(result['session_data'].get('handoff_offered', False))
+        result['graceful_close_offered'] = bool(result['session_data'].get('graceful_close_offered', False))
         return result
     except Exception as e:
         import logging

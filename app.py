@@ -2083,8 +2083,11 @@ def list_leads(client_id):
 
     stage  = request.args.get('stage', '').strip()
     search = request.args.get('q', '').lower().strip()
-    page   = max(1, int(request.args.get('page', 1)))
-    per_page = min(100, int(request.args.get('per_page', 50)))
+    try:
+        page     = max(1, int(request.args.get('page', 1)))
+        per_page = min(100, max(1, int(request.args.get('per_page', 50))))
+    except (ValueError, TypeError):
+        return jsonify({'success': False, 'error': 'page and per_page must be integers'}), 400
 
     leads = models.get_leads(client_id)
 
@@ -2210,7 +2213,10 @@ def inbound_lead_webhook(client_id):
     expected_secret = config.get('integrations', {}).get('inbound_webhook_secret', '')
     provided_secret = request.headers.get('X-Lumvi-Secret', '')
 
-    if not expected_secret or provided_secret != expected_secret:
+    # APP-BUG-07 fix: constant-time comparison prevents timing oracle attacks
+    # on the inbound webhook secret.
+    import hmac as _hmac
+    if not expected_secret or not _hmac.compare_digest(provided_secret, expected_secret):
         return jsonify({'error': 'Unauthorized — invalid or missing X-Lumvi-Secret header'}), 401
 
     data    = request.json or {}
@@ -4096,9 +4102,9 @@ def get_agency_analytics():
             return jsonify({'success': True, 'clients': [], 'totals': {}, 'timeline': []})
 
         conn, cursor = models.get_db()
-
-        # ── Per-client stats in bulk ──────────────────────────────────
-        cursor.execute(
+        try:
+            # ── Per-client stats in bulk ──────────────────────────────────
+            cursor.execute(
             """SELECT client_id,
                       COUNT(*) AS total,
                       SUM(CASE WHEN matched = TRUE THEN 1 ELSE 0 END) AS matched
@@ -4106,52 +4112,55 @@ def get_agency_analytics():
                WHERE client_id = ANY(%s) AND timestamp >= %s
                GROUP BY client_id""",
             (client_ids, start_date)
-        )
-        conv_stats = {r['client_id']: dict(r) for r in cursor.fetchall()}
+            )
+            conv_stats = {r['client_id']: dict(r) for r in cursor.fetchall()}
 
-        cursor.execute(
+            cursor.execute(
             "SELECT client_id, COUNT(*) AS cnt FROM leads WHERE client_id = ANY(%s) AND created_at >= %s GROUP BY client_id",
             (client_ids, start_date)
-        )
-        lead_stats = {r['client_id']: int(r['cnt']) for r in cursor.fetchall()}
+            )
+            lead_stats = {r['client_id']: int(r['cnt']) for r in cursor.fetchall()}
 
-        cursor.execute(
+            cursor.execute(
             "SELECT client_id, COUNT(*) AS cnt FROM conversations WHERE client_id = ANY(%s) AND matched = FALSE AND timestamp >= %s GROUP BY client_id",
             (client_ids, start_date)
-        )
-        unanswered_stats = {r['client_id']: int(r['cnt']) for r in cursor.fetchall()}
+            )
+            unanswered_stats = {r['client_id']: int(r['cnt']) for r in cursor.fetchall()}
 
-        today_str = now.strftime('%Y-%m-%d')
-        cursor.execute(
+            today_str = now.strftime('%Y-%m-%d')
+            cursor.execute(
             "SELECT client_id, COUNT(*) AS cnt FROM conversations WHERE client_id = ANY(%s) AND DATE(timestamp) = %s GROUP BY client_id",
             (client_ids, today_str)
-        )
-        daily_stats = {r['client_id']: int(r['cnt']) for r in cursor.fetchall()}
+            )
+            daily_stats = {r['client_id']: int(r['cnt']) for r in cursor.fetchall()}
 
-        cursor.execute(
+            cursor.execute(
             "SELECT client_id, MAX(timestamp) AS last_ts FROM conversations WHERE client_id = ANY(%s) GROUP BY client_id",
             (client_ids,)
-        )
-        last_active = {r['client_id']: r['last_ts'] for r in cursor.fetchall()}
+            )
+            last_active = {r['client_id']: r['last_ts'] for r in cursor.fetchall()}
 
-        # ── 7-day combined timeline ───────────────────────────────────
-        timeline = []
-        for i in range(7):
-            d     = (now - timedelta(days=6 - i)).strftime('%Y-%m-%d')
-            cursor.execute(
+            # ── 7-day combined timeline ───────────────────────────────────
+            timeline = []
+            for i in range(7):
+                d     = (now - timedelta(days=6 - i)).strftime('%Y-%m-%d')
+                cursor.execute(
                 "SELECT COUNT(*) AS cnt FROM conversations WHERE client_id = ANY(%s) AND DATE(timestamp) = %s",
                 (client_ids, d)
-            )
-            c_row = cursor.fetchone() or {}
-            cursor.execute(
+                )
+                c_row = cursor.fetchone() or {}
+                cursor.execute(
                 "SELECT COUNT(*) AS cnt FROM leads WHERE client_id = ANY(%s) AND DATE(created_at) = %s",
                 (client_ids, d)
-            )
-            l_row = cursor.fetchone() or {}
-            timeline.append({'date': d, 'conversations': int(c_row.get('cnt', 0)), 'leads': int(l_row.get('cnt', 0))})
+                )
+                l_row = cursor.fetchone() or {}
+                timeline.append({'date': d, 'conversations': int(c_row.get('cnt', 0)), 'leads': int(l_row.get('cnt', 0))})
 
-        cursor.close()
-        conn.close()
+        finally:
+            try: cursor.close()
+            except Exception: pass
+            try: conn.close()
+            except Exception: pass
 
         # ── Build per-client result list ──────────────────────────────
         client_map   = {c['client_id']: c for c in clients}
@@ -5460,11 +5469,17 @@ def cancel_subscription():
 @app.route('/api/webhook/lead', methods=['POST'])
 def webhook_new_lead():
     try:
-        secret = request.headers.get('X-Webhook-Secret')
-        if secret != os.environ.get('WEBHOOK_SECRET', 'lumvi-secret'):
+        # APP-BUG-04 fix: fail closed if WEBHOOK_SECRET not configured;
+        # use constant-time comparison to prevent timing oracle attacks.
+        import hmac as _hmac
+        _wh_secret = os.environ.get('WEBHOOK_SECRET', '').strip()
+        if not _wh_secret:
+            return jsonify({'error': 'Webhook not configured'}), 503
+        _provided = request.headers.get('X-Webhook-Secret', '')
+        if not _hmac.compare_digest(_provided, _wh_secret):
             return jsonify({'error': 'Unauthorized'}), 401
 
-        data = request.json
+        data = request.json or {}
         client_id = data.get('client_id')
         leads = models.get_leads(client_id)
         leads = leads[:10]
@@ -5477,47 +5492,62 @@ def webhook_new_lead():
 @app.route('/api/webhook/faq-import', methods=['POST'])
 def webhook_faq_import():
     try:
-        secret = request.headers.get('X-Webhook-Secret')
-        if secret != os.environ.get('WEBHOOK_SECRET', 'lumvi-secret'):
+        # APP-BUG-04 fix: fail closed if WEBHOOK_SECRET not configured
+        import hmac as _hmac
+        _wh_secret = os.environ.get('WEBHOOK_SECRET', '').strip()
+        if not _wh_secret:
+            return jsonify({'error': 'Webhook not configured'}), 503
+        _provided = request.headers.get('X-Webhook-Secret', '')
+        if not _hmac.compare_digest(_provided, _wh_secret):
             return jsonify({'error': 'Unauthorized'}), 401
 
-        data = request.json
+        data = request.json or {}
         client_id = data.get('client_id')
         incoming_faqs = data.get('faqs', [])
 
         if not client_id or not incoming_faqs:
             return jsonify({'error': 'client_id and faqs required'}), 400
 
-        conn, cursor = models.get_db()
+        # APP-BUG-02 fix: wrap DB work in try/except/finally so connection
+        # is always returned to the pool even if an insert throws.
+        conn = cursor = None
         saved = 0
-
-        for faq in incoming_faqs:
-            question = faq.get('question', '').strip()
-            answer = faq.get('answer', '').strip()
-
-            if not question or not answer:
-                continue
-
-            triggers = extract_keywords(question)
-            cursor.execute(
-                '''
-                INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ''',
-                (
-                    client_id,
-                    str(uuid.uuid4()),
-                    question,
-                    answer,
-                    faq.get('category', 'General') if isinstance(faq, dict) else 'General',
-                    json.dumps(triggers)
+        try:
+            conn, cursor = models.get_db()
+            for faq in incoming_faqs:
+                question = faq.get('question', '').strip()
+                answer = faq.get('answer', '').strip()
+                if not question or not answer:
+                    continue
+                triggers = extract_keywords(question)
+                cursor.execute(
+                    '''
+                    INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    ''',
+                    (
+                        client_id,
+                        str(uuid.uuid4()),
+                        question,
+                        answer,
+                        faq.get('category', 'General') if isinstance(faq, dict) else 'General',
+                        json.dumps(triggers)
+                    )
                 )
-            )
-            saved += 1
-
-        conn.commit()
-        cursor.close()
-        conn.close()
+                saved += 1
+            conn.commit()
+        except Exception as _db_err:
+            if conn:
+                try: conn.rollback()
+                except Exception: pass
+            raise _db_err
+        finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass
 
         cache_utils.bump_kb_version(client_id)
         app.logger.info(f"[Cache] KB invalidated after webhook FAQ import: client={client_id}")
@@ -6476,21 +6506,27 @@ def reset_client_user_password():
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not password or len(password) < 6:
         return jsonify({'success': False, 'error': 'Password must be at least 6 characters'}), 400
+    from werkzeug.security import generate_password_hash
+    conn = cursor = None
     try:
-        from werkzeug.security import generate_password_hash
         conn, cursor = models.get_db()
         cursor.execute(
             'UPDATE client_users SET password_hash = %s WHERE id = %s AND client_id = %s',
             (generate_password_hash(password), user_id, client_id)
         )
         conn.commit()
-        cursor.close()
-        conn.close()
         app.logger.info(f"[ClientUsers] password reset for user {user_id} on client {client_id}")
         return jsonify({'success': True})
     except Exception as e:
         app.logger.error(f"[ClientUsers] reset_password error: {e}")
         return jsonify({'success': False, 'error': 'Failed to reset password'}), 500
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 
 @app.route('/manage-client-users')
@@ -6839,7 +6875,7 @@ def bill_agency_overages():
             skipped += 1
 
     import time as _time
-    duration_ms = int((_time.time() - _t0) * 1000) if '_t0' in dir() else 0
+    duration_ms = int((_time.time() - _t0) * 1000) if '_t0' in locals() else 0
     result = {'billed': billed, 'skipped': skipped, 'total_revenue': round(total_revenue, 2)}
     app.logger.info(
         f'[AgencyOverage] complete — billed={billed} skipped={skipped} '
