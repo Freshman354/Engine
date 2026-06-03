@@ -288,13 +288,13 @@
   --toast-text:     rgba(255,255,255,0.92);
 
   {% else %}
-  {# ── Lumvi (default) — dark header, warm cream body ── #}
-  --header-bg:      {% if hcolor %}{{ hcolor }}{% else %}#111111{% endif %};
+  {# ── Lumvi (default) — brand-coloured header, warm cream body ── #}
+  --header-bg:      {% if hcolor %}{{ hcolor }}{% else %}var(--brand){% endif %};
   --header-text:    #FFFFFF;
-  --header-sub:     rgba(255,255,255,0.4);
-  --header-border:  rgba(255,255,255,0.08);
-  --header-btn-bg:  rgba(255,255,255,0.07);
-  --header-ring:    rgba(255,255,255,0.1);
+  --header-sub:     rgba(255,255,255,0.78);
+  --header-border:  rgba(255,255,255,0.18);
+  --header-btn-bg:  rgba(255,255,255,0.15);
+  --header-ring:    rgba(255,255,255,0.22);
   --chat-bg:        #FAF9F6;
   --surface:        #FFFFFF;
   --surface-2:      #F4F2ED;
@@ -340,11 +340,11 @@
   --bot-bubble-bg: {{ client.bot_bubble_color }};
   {% endif %}
   {% if client.user_bubble_color %}
-  --brand: {{ client.user_bubble_color }};
-  --brand-glow:   {{ client.user_bubble_color }}2e;
-  --brand-mid:    {{ client.user_bubble_color }}60;
-  --brand-soft:   {{ client.user_bubble_color }}0d;
-  --brand-border: {{ client.user_bubble_color }}28;
+  --brand:         {{ client.user_bubble_color }};
+  --brand-glow:    {{ client.user_bubble_color }}2e;
+  --brand-mid:     {{ client.user_bubble_color }}60;
+  --brand-soft:    {{ client.user_bubble_color }}0d;
+  --brand-border:  {{ client.user_bubble_color }}28;
   {% endif %}
 }
 

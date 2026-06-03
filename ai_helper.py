@@ -467,19 +467,33 @@ def _cosine(a: list, b: list) -> float:
     """
     if not a or not b:
         return 0.0
+    # FIX BUG-1: mismatched dimensions make zip() silently truncate the dot
+    # product to min(len(a), len(b)) while mag_a_sq and mag_b_sq are computed
+    # over the full (different-length) vectors. With the unit-vector fast path
+    # this returned 1.0 for e.g. _cosine([1,0,0], [1,0]) — a completely wrong
+    # similarity. Return 0.0 immediately and log a warning so dimension
+    # mismatches (e.g. after a model migration) are visible in production logs.
+    if len(a) != len(b):
+        logger.warning(
+            f"[Cosine] dimension mismatch len(a)={len(a)} len(b)={len(b)} — "
+            f"returning 0.0. Re-run index_faqs() to rebuild vectors."
+        )
+        return 0.0
     dot = sum(x * y for x, y in zip(a, b))
     # Fast path: if both are unit vectors the denominator is 1.0
     mag_a_sq = sum(x * x for x in a)
     mag_b_sq = sum(x * x for x in b)
     if abs(mag_a_sq - 1.0) < 1e-6 and abs(mag_b_sq - 1.0) < 1e-6:
-        # FIX BUG-10: clamp both ends — dot can be a small negative float for
-        # near-orthogonal unit vectors due to floating-point rounding. A negative
-        # cosine score propagates into hybrid_scores and can be stored as a
-        # negative cache confidence value, which is semantically wrong.
+        # Clamp both ends — dot can be a small negative float for near-orthogonal
+        # unit vectors due to floating-point rounding (BUG-10, pre-existing fix).
         return max(min(dot, 1.0), 0.0)
     mag_a = math.sqrt(mag_a_sq)
     mag_b = math.sqrt(mag_b_sq)
-    return dot / (mag_a * mag_b) if mag_a and mag_b else 0.0
+    # FIX BUG-10 (slow path): clamp here too — non-unit vectors with float drift
+    # can produce tiny negatives that corrupt confidence scores downstream.
+    if not (mag_a and mag_b):
+        return 0.0
+    return max(min(dot / (mag_a * mag_b), 1.0), 0.0)
 
 
 def _bm25_score(query_tokens: List[str], doc_tokens: List[str],
@@ -496,6 +510,11 @@ def _bm25_score(query_tokens: List[str], doc_tokens: List[str],
     """
     if not query_tokens or not doc_tokens:
         return 0.0
+    # FIX BUG-2: corpus_size ≤ 0 drives the IDF argument to ≤ 0, causing
+    # math.log(0) → ValueError. Clamp to 1 so the formula always receives
+    # a valid positive value. corpus_size=0 is possible when called on an
+    # empty KB; negative values should never occur but are guarded anyway.
+    corpus_size = max(corpus_size, 1)
     doc_len = len(doc_tokens)
     tf_map  = dict(collections.Counter(doc_tokens))  # O(n) — replaces O(n²) .count() loop
     score   = 0.0
@@ -537,9 +556,14 @@ def _reciprocal_rank_fusion(
     Pure Python — zero cost.
     """
     scores: Dict[int, float] = {}
-    for rank, idx in enumerate(vector_ranked, start=1):
+    # FIX BUG-3: a duplicate index in either input list (e.g. [0, 0, 1])
+    # accumulates two RRF contributions from the *same* ranked list, inflating
+    # its score relative to items that appear only once. dict.fromkeys()
+    # deduplicates while preserving original rank order, so the first occurrence
+    # (highest rank) is kept and the duplicates are silently discarded.
+    for rank, idx in enumerate(dict.fromkeys(vector_ranked), start=1):
         scores[idx] = scores.get(idx, 0.0) + 1.0 / (k + rank)
-    for rank, idx in enumerate(bm25_ranked, start=1):
+    for rank, idx in enumerate(dict.fromkeys(bm25_ranked), start=1):
         scores[idx] = scores.get(idx, 0.0) + 1.0 / (k + rank)
     return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
@@ -547,21 +571,53 @@ def _reciprocal_rank_fusion(
 def _stem(word: str) -> str:
     """
     ACCURACY FIX 3: Lightweight suffix stemmer for BM25 token matching.
-    Strips common English suffixes so vocabulary variants match the same root:
-    "cancellation" → "cancel", "pricing" → "price", "refunds" → "refund".
-    No external dependency — pure Python, applied at both index and query time.
-    NOTE: Requires re-running index_faqs() for all clients after deploying so
-    stored BM25 token sets are re-built with stemmed tokens.
+    Strips common English suffixes so vocabulary variants collapse to the
+    same root at both index-time and query-time:
+
+        'pricing'      → 'pric'   (same root as 'price'   → 'pric')
+        'cancellation' → 'cancel' (same root as 'cancel'  → 'cancel')
+        'refunds'      → 'refund' (same root as 'refund'  → 'refund')
+
+    The goal is *consistent* stemming, not English-perfect roots. Both sides
+    of every BM25 comparison go through this function, so what matters is that
+    inflected forms and their base forms land on the same token.
+
+    No external dependency — pure Python, O(k) where k = number of rules.
+    NOTE: Re-run index_faqs() for all clients after deploying so stored BM25
+    token sets are rebuilt with the corrected stems.
+
+    FIX BUG-4 (two changes):
+    ① Raised min_root 3 → 4 for all suffixes, preventing over-stripping of
+      short words (e.g. 'ties' would lose 's' leaving 'tie', min_root=4 stops
+      that because 4-1=3 < 4).
+    ② Added ('lation', 6): 'cancellation'[-6:]='lation', root='cancel' (6≥6)
+      → 'cancel'. The old 'ellation' rule left 'canc' (4 chars < 6), which
+      never matched 'cancel' → 'cancel' in BM25.
+    ③ Added ('e', 4): 'price'[-1]='e', root='pric' (4≥4) → 'pric', matching
+      'pricing' → strip 'ing' → 'pric'. Both now produce 'pric'.
+    ④ Secondary strip inside the loop: after stripping a suffix, apply one
+      extra pass for trailing 'e' or 's' so double-suffix words like
+      'management' → strip 'ment' → 'manage' → strip 'e' → 'manag', which
+      then matches 'manage' → 'manag' in a single primary call.
     """
     for suffix, min_root in (
-        ('ellation', 3), ('ations', 3), ('ation', 3), ('iness', 3),
-        ('nesses', 3), ('ness', 3), ('ments', 3), ('ment', 3),
-        ('ings', 3), ('ing', 3), ('iers', 3), ('ier', 3),
-        ('ers', 3), ('ies', 3), ('ion', 3), ('ed', 3),
-        ('er', 3), ('ly', 3), ('es', 3), ('s', 3),
+        ('ellation', 6), ('lation', 6),
+        ('ations', 4), ('ation', 4), ('iness', 4),
+        ('nesses', 4), ('ness', 4), ('ments', 4), ('ment', 4),
+        ('ings', 4),  ('ing', 4),  ('iers', 4), ('ier', 4),
+        ('ers', 4),   ('ies', 4),  ('ion', 4),  ('ed', 4),
+        ('er', 4),    ('ly', 4),   ('es', 4),   ('e', 4),   ('s', 4),
     ):
         if word.endswith(suffix) and len(word) - len(suffix) >= min_root:
-            return word[:-len(suffix)]
+            root = word[:-len(suffix)]
+            # Secondary strip: collapses double-suffix words so both
+            # 'management' (→'manage'→'manag') and 'manage' (→'manag')
+            # produce the same BM25 token. Restricted to trailing 'e'/'s'
+            # to avoid over-stemming.
+            for s2, mr2 in (('e', 4), ('s', 4)):
+                if root.endswith(s2) and len(root) - len(s2) >= mr2:
+                    return root[:-len(s2)]
+            return root
     return word
 
 
@@ -879,10 +935,15 @@ def extract_session_memory(
         # unfairly pushes the user toward escalation for politely declining.
         # Detect that context by checking whether the turn before the current user
         # message is an IDK-method bot turn.
-        _IDK_METHODS_SET = frozenset({
+        # FIX BUG-11: Two frozensets (_IDK_METHODS_SET and _IDK_METHODS below)
+        # existed with different members. _IDK_METHODS_SET included
+        # 'declined_handoff' and 'escalation'; _IDK_METHODS did not, so a user
+        # whose last bot turn was 'declined_handoff' would never benefit from
+        # frustration decay. Merged into one authoritative constant used by both.
+        _IDK_METHODS_ALL = frozenset({
             'idk_fallback', 'vertical_fallback', 'vertical_fallback_idk',
-            'static_fallback', 'fatal_fallback', 'confidence_gate_handoff', 'idk_no_kb',
-            'declined_handoff', 'escalation',
+            'static_fallback', 'fatal_fallback', 'confidence_gate_handoff',
+            'idk_no_kb', 'declined_handoff', 'escalation',
         })
         _DECLINE_OVERLAP = frozenset({'forget it', 'never mind', 'nevermind', "don't worry"})
         _last_bot_was_idk = False
@@ -891,7 +952,7 @@ def extract_session_memory(
                 (m for m in reversed(conversation_history) if m.get('role') == 'assistant'),
                 None
             )
-            if _last_bot and _last_bot.get('method', '') in _IDK_METHODS_SET:
+            if _last_bot and _last_bot.get('method', '') in _IDK_METHODS_ALL:
                 _last_bot_was_idk = True
 
         score = 0
@@ -912,9 +973,14 @@ def extract_session_memory(
                 score += 1
 
         # Repeated question — fuzzy word overlap
-        if len(user_messages) >= 2:
+        # FIX BUG-5: the old guard `len(user_messages) >= 2` excluded the case
+        # where a user repeats their very first question. user_messages is built
+        # from history only; current_message is the new incoming turn and is
+        # never in user_messages. Comparing against the full list (no slice)
+        # correctly detects a repeat even when history has exactly one entry.
+        if user_messages:
             cur_words = set(current_message.lower().split())
-            for past in user_messages[:-1]:
+            for past in user_messages:
                 past_words = set(past.split())
                 if not cur_words or not past_words:
                     continue
@@ -933,14 +999,7 @@ def extract_session_memory(
         # a user who was frustrated early in a session but subsequently got their
         # questions answered from being indefinitely flagged as frustrated and
         # incorrectly escalated on a routine follow-up.
-        # FIX 7: Check the stored `method` field instead of scanning response text
-        # for IDK phrases. Text scanning breaks silently whenever IDK phrasing changes
-        # (there are two IDK paths: idk_fallback and vertical_fallback_idk). Checking
-        # method is authoritative and immune to wording changes.
-        _IDK_METHODS = frozenset({
-            'idk_fallback', 'vertical_fallback', 'vertical_fallback_idk',
-            'static_fallback', 'fatal_fallback', 'confidence_gate_handoff', 'idk_no_kb',
-        })
+        # Uses the merged _IDK_METHODS_ALL frozenset (BUG-11 fix).
         if score > 0 and len(conversation_history) >= 4:
             # Count the last 2 assistant turns
             recent_bot = [
@@ -949,7 +1008,7 @@ def extract_session_memory(
             ][-2:]
             calm_answers = sum(
                 1 for m in recent_bot
-                if m.get('method', '') not in _IDK_METHODS
+                if m.get('method', '') not in _IDK_METHODS_ALL
                 and m.get('method', '') != ''   # exclude turns with no method tag
             )
             if calm_answers >= 2:
@@ -2665,8 +2724,14 @@ class AIHelper:
             logger.info("[Escalation] billing_urgency triggered")
             return random.choice(self._ESCALATION_RESPONSES['billing_urgency'])
 
-        if session_mem.get('frustration_score', 0) >= 3:
-            score = session_mem['frustration_score']
+        # FIX BUG-7: session_mem values can be explicitly None (stored as NULL
+        # in the DB and loaded back) rather than simply absent. `.get(key, 0)`
+        # returns None when the key *exists* with a None value, so `None >= 3`
+        # raises TypeError. Coerce to int with `int(... or 0)` to handle both
+        # missing keys and explicit None values safely.
+        _fscore = int(session_mem.get('frustration_score') or 0)
+        if _fscore >= 3:
+            score = _fscore
             if score == 3:
                 # Soft tier: acknowledge and try once more before asking for contact.
                 # Jumping straight to "give me your email" on first frustration
@@ -2680,7 +2745,7 @@ class AIHelper:
             logger.info(f"[Escalation] frustration hard-tier score={score} → handoff offer")
             return random.choice(self._ESCALATION_RESPONSES['frustration'])
 
-        if session_mem.get('repeated_question') and session_mem.get('turns', 0) >= 3:
+        if session_mem.get('repeated_question') and int(session_mem.get('turns') or 0) >= 3:
             logger.info("[Escalation] repeated_question triggered")
             return random.choice(self._ESCALATION_RESPONSES['repeated_failure'])
 
@@ -4386,6 +4451,9 @@ Return ONLY the response text or IDK_FALLBACK."""
         return chunks
 
     def _split_content(self, text: str, max_len: int = 400) -> List[str]:
+        # FIX BUG-9: max_len ≤ 0 causes sent[:max_len] == '' for every sentence,
+        # returning a list of empty strings. Clamp to a minimum of 1.
+        max_len = max(max_len, 1)
         if len(text) <= max_len:
             return [text]
         sentences = re.split(r'(?<=[.!?])\s+', text)
@@ -4431,8 +4499,20 @@ Return ONLY the response text or IDK_FALLBACK."""
         return self._extract_tags(question), 'General'
 
     def _extract_tags(self, text: str) -> List[str]:
-        stop  = {'a', 'an', 'the', 'is', 'are', 'do', 'does', 'can', 'i', 'you',
-                 'we', 'my', 'your', 'what', 'how', 'when', 'where', 'why', 'to', 'of'}
+        # FIX BUG-8: The original stop set was missing common 3-letter function
+        # words. Since the regex matches r'\b[a-z]{3,}\b', words like 'and',
+        # 'but', 'not', 'for', 'via', 'per', 'get', 'let', 'put', 'see', 'may',
+        # 'was', 'has', 'had', 'its', 'our', 'all', 'any', 'now' were leaking
+        # into tags, producing noise like ['pricing', 'and', 'refund', 'policy'].
+        stop = {
+            'a', 'an', 'the', 'is', 'are', 'do', 'does', 'can', 'i', 'you',
+            'we', 'my', 'your', 'what', 'how', 'when', 'where', 'why', 'to', 'of',
+            'and', 'but', 'not', 'for', 'nor', 'yet', 'via', 'per', 'its',
+            'was', 'has', 'had', 'get', 'let', 'put', 'see', 'may', 'use',
+            'our', 'all', 'any', 'new', 'now', 'own', 'out', 'off', 'too',
+            'also', 'from', 'with', 'this', 'that', 'they', 'them', 'then',
+            'than', 'more', 'just', 'been', 'into', 'over', 'will', 'have',
+        }
         words = re.findall(r'\b[a-z]{3,}\b', text.lower())
         return list(dict.fromkeys(w for w in words if w not in stop))[:5]
 
@@ -4931,7 +5011,12 @@ Return ONLY the response text or IDK_FALLBACK."""
 
         # Primary attempt — clean JSON string
         try:
-            return json.loads(text)
+            result = json.loads(text)
+            # FIX BUG-6: json.loads succeeds on arrays ('[1,2,3]') and primitives,
+            # but callers expect Optional[Dict]. Returning a list or int causes
+            # downstream 'result["key"]' TypeErrors. Only return when it's a dict.
+            if isinstance(result, dict):
+                return result
         except Exception:
             pass
 
