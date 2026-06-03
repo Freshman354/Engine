@@ -1751,7 +1751,7 @@ def chat():
                                 user_message = message,
                                 reason       = _reason,
                                 bot_response = response_text,
-                                ticket_id    = str(_ticket_id) if '_ticket_id' in dir() else '',
+                                ticket_id    = str(_ticket_id) if '_ticket_id' in locals() else '',
                                 urgency      = _urgency,
                                 vertical     = vertical,
                             )
