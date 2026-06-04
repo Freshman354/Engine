@@ -5043,7 +5043,23 @@ def parse_structured_faq_text(text):
 @app.route('/upgrade')
 @login_required
 def upgrade_page():
-    return render_template('upgrade.html', user=current_user, flw_public_key=os.environ.get('FLW_PUBLIC_KEY', ''))
+    def _parse_plan_ids(raw):
+        """Parse 'solo:111,starter:222,pro:333' → {'solo': '111', ...}"""
+        result = {}
+        for part in (raw or '').split(','):
+            part = part.strip()
+            if ':' in part:
+                key, val = part.split(':', 1)
+                result[key.strip()] = val.strip()
+        return result
+
+    return render_template(
+        'upgrade.html',
+        user=current_user,
+        flw_public_key=os.environ.get('FLW_PUBLIC_KEY', ''),
+        FLW_PLAN_IDS_MONTHLY=_parse_plan_ids(os.environ.get('FLW_PLAN_IDS_MONTHLY', '')),
+        FLW_PLAN_IDS_ANNUAL=_parse_plan_ids(os.environ.get('FLW_PLAN_IDS_ANNUAL', ''))
+    )
 
 # =====================================================================
 # PAYMENT ROUTES - PAYPAL (DISABLED - Only Flutterwave enabled)
