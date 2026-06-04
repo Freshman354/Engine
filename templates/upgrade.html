@@ -528,6 +528,14 @@ const CURRENT_USER_ID     = {{ user.id }};
 const CURRENT_USER_EMAIL  = '{{ user.email }}';
 const CURRENT_USER_NAME   = '{{ (user.name or user.email) | e }}';
 
+// Flutterwave Payment Plan IDs — created in your FLW dashboard.
+// Set env vars FLW_PLAN_IDS_MONTHLY and FLW_PLAN_IDS_ANNUAL as
+//   solo:<id>,starter:<id>,pro:<id>,growth:<id>,agency:<id>
+const FLW_PLAN_IDS = {
+  monthly: {{ flw_plan_ids_monthly | tojson }},
+  annual:  {{ flw_plan_ids_annual  | tojson }}
+};
+
 let selectedPlan = '';
 let isAnnual     = false;
 
@@ -586,19 +594,28 @@ function initiateFlutterwavePayment() {
   const p         = prices[selectedPlan];
   const isAnnNow  = document.getElementById('billingToggle').checked;
   const amount    = isAnnNow ? p.monthly * 10 : p.monthly;
-  const txRef     = 'lumvi_' + selectedPlan + '_' + CURRENT_USER_ID + '_' + Date.now();
+  const txRef     = 'lumvi_' + selectedPlan + '_' + cycleKey + '_' + CURRENT_USER_ID + '_' + Date.now();
   if (!FLW_PUBLIC_KEY) {
     alert('Payment not configured. Please contact support@lumvi.net.');
     return;
   }
+
+  const cycleKey = isAnnNow ? 'annual' : 'monthly';
   closePaymentModal();
-  FlutterwaveCheckout({
-    public_key:   FLW_PUBLIC_KEY,
-    tx_ref:       txRef,
-    amount:       amount,
-    currency:     'USD',
-    redirect_url: window.location.origin + '/payment/flutterwave/callback',
-    customer:     { email: CURRENT_USER_EMAIL, name: CURRENT_USER_NAME },
+
+  // Look up the recurring Payment Plan ID for this plan + cycle.
+  // If no plan ID is configured, the charge still goes through as a
+  // one-time payment — no subscriptions will be created.
+  const planId   = (FLW_PLAN_IDS[cycleKey] || {})[selectedPlan] || null;
+
+  const checkoutConfig = {
+    public_key:      FLW_PUBLIC_KEY,
+    tx_ref:          txRef,
+    amount:          amount,
+    currency:        'USD',
+    payment_options: 'card',          // card required for recurring plans
+    redirect_url:    window.location.origin + '/payment/flutterwave/callback',
+    customer:        { email: CURRENT_USER_EMAIL, name: CURRENT_USER_NAME },
     customizations: {
       title:       'Lumvi ' + p.label + ' Plan',
       description: (isAnnNow ? 'Annual' : 'Monthly') + ' subscription',
@@ -606,7 +623,15 @@ function initiateFlutterwavePayment() {
     },
     callback:  function(data) { console.log('FLW payment data:', data); },
     onclose:   function()     { console.log('FLW modal closed'); }
-  });
+  };
+
+  // Attach the Payment Plan ID when available — this is what turns the
+  // charge into an auto-renewing subscription on Flutterwave's side.
+  if (planId) {
+    checkoutConfig.payment_plan = planId;
+  }
+
+  FlutterwaveCheckout(checkoutConfig);
 }
 
 function contactForBankTransfer() {

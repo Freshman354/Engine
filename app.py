@@ -2273,8 +2273,9 @@ def signup():
             'free'
         ).lower().strip()
 
-        # Validate plan value
-        valid_plans = ('free', 'solo', 'starter', 'pro', 'agency', 'enterprise')
+        # Validate plan value — includes all billable plans
+        PAID_PLANS  = ('solo', 'starter', 'pro', 'growth', 'agency', 'enterprise')
+        valid_plans = ('free',) + PAID_PLANS
         if plan_from_form not in valid_plans:
             plan_from_form = 'free'
 
@@ -2286,19 +2287,15 @@ def signup():
             return render_template('signup.html', error='Password must be at least 6 characters',
                                    referral_code=referral_code, plan_param=plan_from_form)
 
-        # All new paid accounts start on a 14-day free trial (stored as the chosen plan)
-        # Free plan stays free — no trial needed
-        initial_plan = plan_from_form if plan_from_form != 'free' else 'free'
-
-        user_id = models.create_user(email, password, initial_plan)
+        # Always create the account as 'free' first — the plan activates after
+        # payment is confirmed via /payment/flutterwave/callback.
+        # This ensures a valid user_id exists before the payment callback fires.
+        intended_plan = plan_from_form  # remember what the user wanted
+        user_id = models.create_user(email, password, 'free')
 
         if user_id is None:
             return render_template('signup.html', error='An account with that email already exists',
                                    referral_code=referral_code, plan_param=plan_from_form)
-
-        # Set 7-day free trial expiry for paid plans
-        if initial_plan != 'free':
-            models.set_trial_expiry(user_id, days=7)
 
         if referral_code:
             affiliate = models.get_affiliate_by_code(referral_code)
@@ -2310,14 +2307,14 @@ def signup():
         user = User(user_data)
         session.permanent = True
         login_user(user, remember=True)
-        models.track_event('signup', user_id=user_id, metadata={'email': email, 'plan': initial_plan})
+        models.track_event('signup', user_id=user_id, metadata={'email': email, 'plan': intended_plan})
         send_welcome_email(email)
 
-        app.logger.info(f'New signup: {email} | plan: {initial_plan}')
+        app.logger.info(f'New signup: {email} | intended plan: {intended_plan}')
 
-        # Paid plan signups go straight to upgrade/payment page
-        if initial_plan in ('solo', 'starter', 'pro', 'agency', 'enterprise'):
-            return redirect(url_for('upgrade_page') + f'?plan={initial_plan}')
+        # Paid plan signups → upgrade/payment page with plan pre-selected
+        if intended_plan in PAID_PLANS:
+            return redirect(url_for('upgrade_page') + f'?plan={intended_plan}')
         return redirect(url_for('dashboard'))
 
     return render_template('signup.html', referral_code=referral_code, plan_param=plan_param)
@@ -5680,7 +5677,7 @@ def admin_set_plan():
         email = request.form.get('email', '').strip().lower()
         plan = request.form.get('plan', '').strip().lower()
 
-        valid_plans = ['free', 'solo', 'starter', 'pro', 'agency', 'enterprise']
+        valid_plans = ['free', 'solo', 'starter', 'pro', 'growth', 'agency', 'enterprise']
 
         if secret != ADMIN_SECRET:
             error = 'Invalid admin secret.'

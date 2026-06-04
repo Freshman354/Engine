@@ -36,7 +36,7 @@ def _get_pool():
         with _pool_lock:
             if _db_pool is None:
                 _db_pool = _pool.ThreadedConnectionPool(
-                    minconn=2,
+                    minconn=0,  # 0 so the pool holds no connections during idle periods (e.g. overnight)
                     maxconn=int(os.environ.get('DB_POOL_MAX', 10)),
                     dsn=DATABASE_URL,
                 )
@@ -140,10 +140,11 @@ def get_db():
 
 
 def get_db_connection():
-    """Legacy alias — returns a _PooledConn with RealDictCursor factory set."""
-    raw = _get_pool().getconn()
-    raw.cursor_factory = psycopg2.extras.RealDictCursor
-    return _PooledConn(raw)
+    """Legacy alias — returns a _PooledConn with RealDictCursor factory set.
+    Routes through get_db() so it inherits the same retry/SSL-recovery logic."""
+    conn, cursor = get_db()
+    cursor.close()
+    return conn
 
 def init_db():
     """Initialize database with tables"""
@@ -1046,20 +1047,6 @@ def cancel_user_subscription(user_id):
         conn.close()
         return False
 
-
-def set_trial_expiry(user_id, days=7):
-    """Set a free trial expiry. Called on signup for paid plans. Default: 7 days."""
-    conn, cursor = get_db()
-    cursor.execute(
-        '''UPDATE users
-           SET subscription_expires_at = NOW() + INTERVAL %s,
-               grace_period_ends_at    = NOW() + INTERVAL %s
-           WHERE id = %s''',
-        (f'{days} days', f'{days + 3} days', user_id)
-    )
-    conn.commit()
-    cursor.close()
-    conn.close()
 
 
 def set_subscription_expiry(user_id):
@@ -2997,7 +2984,7 @@ def get_agency_users_with_overage(included_clients: int = 20):
             FROM users u
             JOIN clients c ON c.user_id = u.id AND c.is_active = TRUE
             WHERE u.plan_type IN ('agency', 'growth')
-              AND u.subscription_status IN ('active', 'trialing')
+              AND u.subscription_status = 'active'
               AND u.subscription_id IS NOT NULL
             GROUP BY u.id, u.email
             HAVING COUNT(c.client_id) > %s
@@ -5084,7 +5071,7 @@ def get_past_due_count():
 def get_active_subscription_count():
     try:
         conn, cursor = get_db()
-        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE subscription_status IN ('active','trialing') AND plan_type!='free'")
+        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE subscription_status = 'active' AND plan_type!='free'")
         row = cursor.fetchone()
         cursor.close()
         conn.close()
@@ -5162,7 +5149,7 @@ def get_event_counts():
 
 def get_conversion_funnel(days=30):
     """
-    Daily landing views → signup page views → trial signups → conversion rate.
+    Daily landing views → signup page views → paid signups → conversion rate.
     Used by /admin/conversion-funnel dashboard page.
     Returns list of dicts (newest first) + summary totals.
     """
@@ -5183,7 +5170,7 @@ def get_conversion_funnel(days=30):
                     WHERE event_name = 'signup'
                     AND   metadata IS NOT NULL
                     AND   metadata::json->>'plan' != 'free'
-                )                                                        AS trial_signups
+                )                                                        AS paid_signups
             FROM analytics_events
             WHERE created_at >= CURRENT_DATE - (%s * INTERVAL '1 day')
             GROUP BY DATE(created_at)
@@ -5199,18 +5186,18 @@ def get_conversion_funnel(days=30):
         for r in rows:
             views    = int(r['landing_views']    or 0)
             sp_views = int(r['signup_page_views'] or 0)
-            signups  = int(r['trial_signups']     or 0)
+            signups  = int(r['paid_signups']     or 0)
             rate     = round(signups / views * 100, 2) if views > 0 else 0.0
             daily.append({
                 'day':               str(r['day']),
                 'landing_views':     views,
                 'signup_page_views': sp_views,
-                'trial_signups':     signups,
+                'paid_signups':     signups,
                 'conversion_rate':   rate,
             })
 
         total_views   = sum(d['landing_views']  for d in daily)
-        total_signups = sum(d['trial_signups']  for d in daily)
+        total_signups = sum(d['paid_signups']  for d in daily)
         overall_rate  = round(total_signups / total_views * 100, 2) if total_views > 0 else 0.0
 
         return {
