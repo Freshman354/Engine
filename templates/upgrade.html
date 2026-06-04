@@ -503,6 +503,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
       </button>
     </div>
 
+    <!-- COMMENTED OUT: Other payment methods (only Flutterwave enabled) -->
+    <!-- 
     <div class="pay-option">
       <h4>🏦 Bank Transfer</h4>
       <p>Prefer to pay manually? We'll send bank details within 1 hour.</p>
@@ -510,6 +512,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         Request Bank Details
       </button>
     </div>
+    -->
 
     <div class="terms-row">
       <input type="checkbox" id="agreeTerms">
@@ -609,13 +612,14 @@ function initiateFlutterwavePayment() {
   });
 }
 
-function contactForBankTransfer() {
-  const p      = prices[selectedPlan];
-  const amount = isAnnual ? p.monthly * 10 : p.monthly;
-  const subj   = 'Bank Transfer Request — ' + p.label + ' Plan ($' + amount + ')';
-  const body   = 'Hi Lumvi Team,\n\nI would like to pay for the ' + p.label + ' plan via bank transfer.\n\nAmount: $' + amount + (isAnnual ? '/year' : '/month') + '\n\nPlease send me the bank details.\n\nThank you.';
-  window.location.href = 'mailto:support@lumvi.net?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(body);
-}
+// DISABLED: Bank transfer option (only Flutterwave enabled)
+// function contactForBankTransfer() {
+//   const p      = prices[selectedPlan];
+//   const amount = isAnnual ? p.monthly * 10 : p.monthly;
+//   const subj   = 'Bank Transfer Request — ' + p.label + ' Plan ($' + amount + ')';
+//   const body   = 'Hi Lumvi Team,\n\nI would like to pay for the ' + p.label + ' plan via bank transfer.\n\nAmount: $' + amount + (isAnnual ? '/year' : '/month') + '\n\nPlease send me the bank details.\n\nThank you.';
+//   window.location.href = 'mailto:support@lumvi.net?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(body);
+// }
 
 // Auto-open if ?plan= param is in URL
 (function() {

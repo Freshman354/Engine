@@ -5049,123 +5049,123 @@ def upgrade_page():
     return render_template('upgrade.html', user=current_user, flw_public_key=os.environ.get('FLW_PUBLIC_KEY', ''))
 
 # =====================================================================
-# PAYMENT ROUTES - PAYPAL
+# PAYMENT ROUTES - PAYPAL (DISABLED - Only Flutterwave enabled)
 # =====================================================================
 
-@app.route('/payment/paypal/create', methods=['POST'])
-@login_required
-def create_paypal_payment():
-    try:
-        data = request.json
-        plan = data.get('plan')
+# @app.route('/payment/paypal/create', methods=['POST'])
+# @login_required
+# def create_paypal_payment():
+#     try:
+#         data = request.json
+#         plan = data.get('plan')
+# 
+#         PLAN_PRICES = {
+#             'starter': 49.00,
+#             'pro': 99.00,
+#             'agency': 299.00
+#         }
+# 
+#         amount = PLAN_PRICES.get(plan)
+#         if not amount:
+#             return jsonify({'success': False, 'error': 'Invalid plan'}), 400
+# 
+#         payment = Payment({
+#             "intent": "sale",
+#             "payer": {"payment_method": "paypal"},
+#             "redirect_urls": {
+#                 "return_url": f"{request.host_url}payment/paypal/success",
+#                 "cancel_url": f"{request.host_url}payment/paypal/cancel"
+#             },
+#             "transactions": [{
+#                 "item_list": {
+#                     "items": [{
+#                         "name": f"{plan.capitalize()} Plan - Monthly Subscription",
+#                         "sku": f"plan_{plan}",
+#                         "price": f"{amount:.2f}",
+#                         "currency": "USD",
+#                         "quantity": 1
+#                     }]
+#                 },
+#                 "amount": {"total": f"{amount:.2f}", "currency": "USD"},
+#                 "description": f"Upgrade to {plan.capitalize()} Plan"
+#             }]
+#         })
+# 
+#         if payment.create():
+#             session['pending_payment'] = {
+#                 'user_id': current_user.id,
+#                 'plan': plan,
+#                 'amount': amount,
+#                 'payment_id': payment.id
+#             }
+# 
+#             approval_url = next(
+#                 (link.href for link in payment.links if link.rel == 'approval_url'),
+#                 None
+#             )
+# 
+#             return jsonify({
+#                 'success': True,
+#                 'approval_url': approval_url,
+#                 'payment_id': payment.id
+#             })
+#         else:
+#             app.logger.error(f"PayPal payment creation failed: {payment.error}")
+#             return jsonify({'success': False, 'error': 'Payment creation failed'}), 500
+# 
+#     except Exception as e:
+#         app.logger.error(f"PayPal error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({'success': False, 'error': str(e)}), 500
 
-        PLAN_PRICES = {
-            'starter': 49.00,
-            'pro': 99.00,
-            'agency': 299.00
-        }
 
-        amount = PLAN_PRICES.get(plan)
-        if not amount:
-            return jsonify({'success': False, 'error': 'Invalid plan'}), 400
-
-        payment = Payment({
-            "intent": "sale",
-            "payer": {"payment_method": "paypal"},
-            "redirect_urls": {
-                "return_url": f"{request.host_url}payment/paypal/success",
-                "cancel_url": f"{request.host_url}payment/paypal/cancel"
-            },
-            "transactions": [{
-                "item_list": {
-                    "items": [{
-                        "name": f"{plan.capitalize()} Plan - Monthly Subscription",
-                        "sku": f"plan_{plan}",
-                        "price": f"{amount:.2f}",
-                        "currency": "USD",
-                        "quantity": 1
-                    }]
-                },
-                "amount": {"total": f"{amount:.2f}", "currency": "USD"},
-                "description": f"Upgrade to {plan.capitalize()} Plan"
-            }]
-        })
-
-        if payment.create():
-            session['pending_payment'] = {
-                'user_id': current_user.id,
-                'plan': plan,
-                'amount': amount,
-                'payment_id': payment.id
-            }
-
-            approval_url = next(
-                (link.href for link in payment.links if link.rel == 'approval_url'),
-                None
-            )
-
-            return jsonify({
-                'success': True,
-                'approval_url': approval_url,
-                'payment_id': payment.id
-            })
-        else:
-            app.logger.error(f"PayPal payment creation failed: {payment.error}")
-            return jsonify({'success': False, 'error': 'Payment creation failed'}), 500
-
-    except Exception as e:
-        app.logger.error(f"PayPal error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/payment/paypal/success')
-@login_required
-def paypal_success():
-    try:
-        payment_id = request.args.get('paymentId')
-        payer_id = request.args.get('PayerID')
-        pending_payment = session.get('pending_payment', {})
-
-        if not pending_payment or pending_payment.get('payment_id') != payment_id:
-            flash("⚠️ Payment session expired. Please try again.", 'warning')
-            return redirect(url_for('upgrade_page'))
-
-        payment = Payment.find(payment_id)
-
-        if payment.execute({"payer_id": payer_id}):
-            plan   = pending_payment['plan']
-            amount = pending_payment.get('amount', 0)
-
-            # Set plan_type + subscription_expires_at + grace_period_ends_at
-            # so the scheduler can downgrade this user when their period ends.
-            models.update_user_subscription(
-                user_id=current_user.id,
-                plan_type=plan,
-                billing_provider='paypal',
-                subscription_id=payment_id,
-                is_annual=False   # PayPal flow is monthly-only for now
-            )
-
-            session.pop('pending_payment', None)
-            models.record_payment(current_user.id, float(amount), plan,
-                                  provider='paypal', reference=payment_id)
-            models.track_event('plan_upgrade', user_id=current_user.id,
-                               metadata={'plan': plan, 'provider': 'paypal', 'amount': amount})
-            flash(f"✅ Payment successful! You've been upgraded to the {plan.capitalize()} plan.", 'success')
-            return redirect(url_for('dashboard'))
-        else:
-            app.logger.error(f"PayPal execution failed: {payment.error}")
-            flash("❌ Payment execution failed. Please try again.", 'error')
-            return redirect(url_for('upgrade_page'))
-
-    except Exception as e:
-        app.logger.error(f"PayPal success handler error: {e}")
-        import traceback
-        traceback.print_exc()
-        flash("❌ Payment processing error. Contact support@lumvi.net.", 'error')
-        return redirect(url_for('dashboard'))
+# @app.route('/payment/paypal/success')
+# @login_required
+# def paypal_success():
+#     try:
+#         payment_id = request.args.get('paymentId')
+#         payer_id = request.args.get('PayerID')
+#         pending_payment = session.get('pending_payment', {})
+# 
+#         if not pending_payment or pending_payment.get('payment_id') != payment_id:
+#             flash("⚠️ Payment session expired. Please try again.", 'warning')
+#             return redirect(url_for('upgrade_page'))
+# 
+#         payment = Payment.find(payment_id)
+# 
+#         if payment.execute({"payer_id": payer_id}):
+#             plan   = pending_payment['plan']
+#             amount = pending_payment.get('amount', 0)
+# 
+#             # Set plan_type + subscription_expires_at + grace_period_ends_at
+#             # so the scheduler can downgrade this user when their period ends.
+#             models.update_user_subscription(
+#                 user_id=current_user.id,
+#                 plan_type=plan,
+#                 billing_provider='paypal',
+#                 subscription_id=payment_id,
+#                 is_annual=False   # PayPal flow is monthly-only for now
+#             )
+# 
+#             session.pop('pending_payment', None)
+#             models.record_payment(current_user.id, float(amount), plan,
+#                                   provider='paypal', reference=payment_id)
+#             models.track_event('plan_upgrade', user_id=current_user.id,
+#                                metadata={'plan': plan, 'provider': 'paypal', 'amount': amount})
+#             flash(f"✅ Payment successful! You've been upgraded to the {plan.capitalize()} plan.", 'success')
+#             return redirect(url_for('dashboard'))
+#         else:
+#             app.logger.error(f"PayPal execution failed: {payment.error}")
+#             flash("❌ Payment execution failed. Please try again.", 'error')
+#             return redirect(url_for('upgrade_page'))
+# 
+#     except Exception as e:
+#         app.logger.error(f"PayPal success handler error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         flash("❌ Payment processing error. Contact support@lumvi.net.", 'error')
+#         return redirect(url_for('dashboard'))
 
 
 # =====================================================================
@@ -5641,74 +5641,76 @@ def webhook_faq_import():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/payment/paypal/cancel')
-@login_required
-def paypal_cancel():
-    session.pop('pending_payment', None)
-    flash("💳 Payment cancelled. You can try again anytime.", 'info')
-    return redirect(url_for('upgrade_page'))
+# DISABLED: PayPal cancel route (only Flutterwave enabled)
+# @app.route('/payment/paypal/cancel')
+# @login_required
+# def paypal_cancel():
+#     session.pop('pending_payment', None)
+#     flash("💳 Payment cancelled. You can try again anytime.", 'info')
+#     return redirect(url_for('upgrade_page'))
 
 
-@app.route('/payment/paypal/webhook', methods=['POST'])
-def paypal_webhook():
-    try:
-        event      = request.json or {}
-        event_type = event.get('event_type', '')
-        resource   = event.get('resource', {})
-        app.logger.info(f"PayPal webhook received: {event_type}")
-
-        if event_type == 'BILLING.SUBSCRIPTION.CANCELLED':
-            # Find user by PayPal subscription_id and mark cancel_at_period_end
-            subscription_id = resource.get('id')
-            if subscription_id:
-                conn, cursor = models.get_db()
-                cursor.execute(
-                    'SELECT id FROM users WHERE subscription_id = %s LIMIT 1',
-                    (subscription_id,)
-                )
-                row = cursor.fetchone()
-                cursor.close()
-                conn.close()
-                if row:
-                    models.cancel_user_subscription(row['id'])
-                    models.track_event('subscription_cancelled', user_id=row['id'],
-                                       metadata={'provider': 'paypal', 'source': 'webhook'})
-                    app.logger.info(f"[PayPal webhook] Cancelled subscription for user {row['id']}")
-                else:
-                    app.logger.warning(f"[PayPal webhook] No user found for subscription_id={subscription_id}")
-
-        elif event_type in ('PAYMENT.SALE.COMPLETED', 'BILLING.SUBSCRIPTION.RENEWED'):
-            # Renewal — extend the subscription period by 30 days
-            subscription_id = resource.get('billing_agreement_id') or resource.get('id')
-            amount_obj      = resource.get('amount', {})
-            amount          = float(amount_obj.get('total', 0))
-            if subscription_id:
-                conn, cursor = models.get_db()
-                cursor.execute(
-                    'SELECT id, plan_type FROM users WHERE subscription_id = %s LIMIT 1',
-                    (subscription_id,)
-                )
-                row = cursor.fetchone()
-                cursor.close()
-                conn.close()
-                if row:
-                    models.update_user_subscription(
-                        user_id=row['id'],
-                        plan_type=row['plan_type'],
-                        billing_provider='paypal',
-                        subscription_id=subscription_id,
-                        is_annual=False
-                    )
-                    models.record_payment(row['id'], amount, row['plan_type'],
-                                          provider='paypal', reference=subscription_id,
-                                          notes='Webhook renewal')
-                    app.logger.info(f"[PayPal webhook] Renewed subscription for user {row['id']}")
-
-        return jsonify({'success': True}), 200
-
-    except Exception as e:
-        app.logger.error(f"PayPal webhook error: {e}")
-        return jsonify({'success': False}), 500
+# DISABLED: PayPal webhook (only Flutterwave enabled)
+# @app.route('/payment/paypal/webhook', methods=['POST'])
+# def paypal_webhook():
+#     try:
+#         event      = request.json or {}
+#         event_type = event.get('event_type', '')
+#         resource   = event.get('resource', {})
+#         app.logger.info(f"PayPal webhook received: {event_type}")
+# 
+#         if event_type == 'BILLING.SUBSCRIPTION.CANCELLED':
+#             # Find user by PayPal subscription_id and mark cancel_at_period_end
+#             subscription_id = resource.get('id')
+#             if subscription_id:
+#                 conn, cursor = models.get_db()
+#                 cursor.execute(
+#                     'SELECT id FROM users WHERE subscription_id = %s LIMIT 1',
+#                     (subscription_id,)
+#                 )
+#                 row = cursor.fetchone()
+#                 cursor.close()
+#                 conn.close()
+#                 if row:
+#                     models.cancel_user_subscription(row['id'])
+#                     models.track_event('subscription_cancelled', user_id=row['id'],
+#                                        metadata={'provider': 'paypal', 'source': 'webhook'})
+#                     app.logger.info(f"[PayPal webhook] Cancelled subscription for user {row['id']}")
+#                 else:
+#                     app.logger.warning(f"[PayPal webhook] No user found for subscription_id={subscription_id}")
+# 
+#         elif event_type in ('PAYMENT.SALE.COMPLETED', 'BILLING.SUBSCRIPTION.RENEWED'):
+#             # Renewal — extend the subscription period by 30 days
+#             subscription_id = resource.get('billing_agreement_id') or resource.get('id')
+#             amount_obj      = resource.get('amount', {})
+#             amount          = float(amount_obj.get('total', 0))
+#             if subscription_id:
+#                 conn, cursor = models.get_db()
+#                 cursor.execute(
+#                     'SELECT id, plan_type FROM users WHERE subscription_id = %s LIMIT 1',
+#                     (subscription_id,)
+#                 )
+#                 row = cursor.fetchone()
+#                 cursor.close()
+#                 conn.close()
+#                 if row:
+#                     models.update_user_subscription(
+#                         user_id=row['id'],
+#                         plan_type=row['plan_type'],
+#                         billing_provider='paypal',
+#                         subscription_id=subscription_id,
+#                         is_annual=False
+#                     )
+#                     models.record_payment(row['id'], amount, row['plan_type'],
+#                                           provider='paypal', reference=subscription_id,
+#                                           notes='Webhook renewal')
+#                     app.logger.info(f"[PayPal webhook] Renewed subscription for user {row['id']}")
+# 
+#         return jsonify({'success': True}), 200
+# 
+#     except Exception as e:
+#         app.logger.error(f"PayPal webhook error: {e}")
+#         return jsonify({'success': False}), 500
 
 # =====================================================================
 # AFFILIATE ROUTES
