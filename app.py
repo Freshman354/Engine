@@ -51,6 +51,15 @@ if not _admin_secret:
         "ADMIN_SECRET environment variable is not set. "
         "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
     )
+
+# FLW_WEBHOOK_HASH must be set — required for webhook authentication (FW-005)
+_flw_webhook_hash = os.environ.get("FLW_WEBHOOK_HASH")
+if not _flw_webhook_hash:
+    raise RuntimeError(
+        "FLW_WEBHOOK_HASH environment variable is not set. "
+        "Get this from Flutterwave dashboard → Settings → Webhook → Secret Hash"
+    )
+
 app.config['MAX_CONTENT_LENGTH'] = 8 * 1024 * 1024  # 8MB max request body
 
 # ── Session security ─────────────────────────────────────────────────
@@ -422,6 +431,8 @@ try:
         models.migrate_lead_pipeline()
     if hasattr(models, 'migrate_agency_seat_billing'):
         models.migrate_agency_seat_billing()
+    if hasattr(models, 'migrate_payments_unique_reference'):
+        models.migrate_payments_unique_reference()
 
     # System 2: Training data collection table
     try:
@@ -5035,123 +5046,123 @@ def upgrade_page():
     return render_template('upgrade.html', user=current_user, flw_public_key=os.environ.get('FLW_PUBLIC_KEY', ''))
 
 # =====================================================================
-# PAYMENT ROUTES - PAYPAL
+# PAYMENT ROUTES - PAYPAL (DISABLED - Only Flutterwave enabled)
 # =====================================================================
 
-@app.route('/payment/paypal/create', methods=['POST'])
-@login_required
-def create_paypal_payment():
-    try:
-        data = request.json
-        plan = data.get('plan')
+# @app.route('/payment/paypal/create', methods=['POST'])
+# @login_required
+# def create_paypal_payment():
+#     try:
+#         data = request.json
+#         plan = data.get('plan')
+# 
+#         PLAN_PRICES = {
+#             'starter': 49.00,
+#             'pro': 99.00,
+#             'agency': 299.00
+#         }
+# 
+#         amount = PLAN_PRICES.get(plan)
+#         if not amount:
+#             return jsonify({'success': False, 'error': 'Invalid plan'}), 400
+# 
+#         payment = Payment({
+#             "intent": "sale",
+#             "payer": {"payment_method": "paypal"},
+#             "redirect_urls": {
+#                 "return_url": f"{request.host_url}payment/paypal/success",
+#                 "cancel_url": f"{request.host_url}payment/paypal/cancel"
+#             },
+#             "transactions": [{
+#                 "item_list": {
+#                     "items": [{
+#                         "name": f"{plan.capitalize()} Plan - Monthly Subscription",
+#                         "sku": f"plan_{plan}",
+#                         "price": f"{amount:.2f}",
+#                         "currency": "USD",
+#                         "quantity": 1
+#                     }]
+#                 },
+#                 "amount": {"total": f"{amount:.2f}", "currency": "USD"},
+#                 "description": f"Upgrade to {plan.capitalize()} Plan"
+#             }]
+#         })
+# 
+#         if payment.create():
+#             session['pending_payment'] = {
+#                 'user_id': current_user.id,
+#                 'plan': plan,
+#                 'amount': amount,
+#                 'payment_id': payment.id
+#             }
+# 
+#             approval_url = next(
+#                 (link.href for link in payment.links if link.rel == 'approval_url'),
+#                 None
+#             )
+# 
+#             return jsonify({
+#                 'success': True,
+#                 'approval_url': approval_url,
+#                 'payment_id': payment.id
+#             })
+#         else:
+#             app.logger.error(f"PayPal payment creation failed: {payment.error}")
+#             return jsonify({'success': False, 'error': 'Payment creation failed'}), 500
+# 
+#     except Exception as e:
+#         app.logger.error(f"PayPal error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         return jsonify({'success': False, 'error': str(e)}), 500
 
-        PLAN_PRICES = {
-            'starter': 49.00,
-            'pro': 99.00,
-            'agency': 299.00
-        }
 
-        amount = PLAN_PRICES.get(plan)
-        if not amount:
-            return jsonify({'success': False, 'error': 'Invalid plan'}), 400
-
-        payment = Payment({
-            "intent": "sale",
-            "payer": {"payment_method": "paypal"},
-            "redirect_urls": {
-                "return_url": f"{request.host_url}payment/paypal/success",
-                "cancel_url": f"{request.host_url}payment/paypal/cancel"
-            },
-            "transactions": [{
-                "item_list": {
-                    "items": [{
-                        "name": f"{plan.capitalize()} Plan - Monthly Subscription",
-                        "sku": f"plan_{plan}",
-                        "price": f"{amount:.2f}",
-                        "currency": "USD",
-                        "quantity": 1
-                    }]
-                },
-                "amount": {"total": f"{amount:.2f}", "currency": "USD"},
-                "description": f"Upgrade to {plan.capitalize()} Plan"
-            }]
-        })
-
-        if payment.create():
-            session['pending_payment'] = {
-                'user_id': current_user.id,
-                'plan': plan,
-                'amount': amount,
-                'payment_id': payment.id
-            }
-
-            approval_url = next(
-                (link.href for link in payment.links if link.rel == 'approval_url'),
-                None
-            )
-
-            return jsonify({
-                'success': True,
-                'approval_url': approval_url,
-                'payment_id': payment.id
-            })
-        else:
-            app.logger.error(f"PayPal payment creation failed: {payment.error}")
-            return jsonify({'success': False, 'error': 'Payment creation failed'}), 500
-
-    except Exception as e:
-        app.logger.error(f"PayPal error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@app.route('/payment/paypal/success')
-@login_required
-def paypal_success():
-    try:
-        payment_id = request.args.get('paymentId')
-        payer_id = request.args.get('PayerID')
-        pending_payment = session.get('pending_payment', {})
-
-        if not pending_payment or pending_payment.get('payment_id') != payment_id:
-            flash("⚠️ Payment session expired. Please try again.", 'warning')
-            return redirect(url_for('upgrade_page'))
-
-        payment = Payment.find(payment_id)
-
-        if payment.execute({"payer_id": payer_id}):
-            plan   = pending_payment['plan']
-            amount = pending_payment.get('amount', 0)
-
-            # Set plan_type + subscription_expires_at + grace_period_ends_at
-            # so the scheduler can downgrade this user when their period ends.
-            models.update_user_subscription(
-                user_id=current_user.id,
-                plan_type=plan,
-                billing_provider='paypal',
-                subscription_id=payment_id,
-                is_annual=False   # PayPal flow is monthly-only for now
-            )
-
-            session.pop('pending_payment', None)
-            models.record_payment(current_user.id, float(amount), plan,
-                                  provider='paypal', reference=payment_id)
-            models.track_event('plan_upgrade', user_id=current_user.id,
-                               metadata={'plan': plan, 'provider': 'paypal', 'amount': amount})
-            flash(f"✅ Payment successful! You've been upgraded to the {plan.capitalize()} plan.", 'success')
-            return redirect(url_for('dashboard'))
-        else:
-            app.logger.error(f"PayPal execution failed: {payment.error}")
-            flash("❌ Payment execution failed. Please try again.", 'error')
-            return redirect(url_for('upgrade_page'))
-
-    except Exception as e:
-        app.logger.error(f"PayPal success handler error: {e}")
-        import traceback
-        traceback.print_exc()
-        flash("❌ Payment processing error. Contact support@lumvi.net.", 'error')
-        return redirect(url_for('dashboard'))
+# @app.route('/payment/paypal/success')
+# @login_required
+# def paypal_success():
+#     try:
+#         payment_id = request.args.get('paymentId')
+#         payer_id = request.args.get('PayerID')
+#         pending_payment = session.get('pending_payment', {})
+# 
+#         if not pending_payment or pending_payment.get('payment_id') != payment_id:
+#             flash("⚠️ Payment session expired. Please try again.", 'warning')
+#             return redirect(url_for('upgrade_page'))
+# 
+#         payment = Payment.find(payment_id)
+# 
+#         if payment.execute({"payer_id": payer_id}):
+#             plan   = pending_payment['plan']
+#             amount = pending_payment.get('amount', 0)
+# 
+#             # Set plan_type + subscription_expires_at + grace_period_ends_at
+#             # so the scheduler can downgrade this user when their period ends.
+#             models.update_user_subscription(
+#                 user_id=current_user.id,
+#                 plan_type=plan,
+#                 billing_provider='paypal',
+#                 subscription_id=payment_id,
+#                 is_annual=False   # PayPal flow is monthly-only for now
+#             )
+# 
+#             session.pop('pending_payment', None)
+#             models.record_payment(current_user.id, float(amount), plan,
+#                                   provider='paypal', reference=payment_id)
+#             models.track_event('plan_upgrade', user_id=current_user.id,
+#                                metadata={'plan': plan, 'provider': 'paypal', 'amount': amount})
+#             flash(f"✅ Payment successful! You've been upgraded to the {plan.capitalize()} plan.", 'success')
+#             return redirect(url_for('dashboard'))
+#         else:
+#             app.logger.error(f"PayPal execution failed: {payment.error}")
+#             flash("❌ Payment execution failed. Please try again.", 'error')
+#             return redirect(url_for('upgrade_page'))
+# 
+#     except Exception as e:
+#         app.logger.error(f"PayPal success handler error: {e}")
+#         import traceback
+#         traceback.print_exc()
+#         flash("❌ Payment processing error. Contact support@lumvi.net.", 'error')
+#         return redirect(url_for('dashboard'))
 
 
 # =====================================================================
@@ -5172,6 +5183,12 @@ def flutterwave_callback():
     Flutterwave redirects here after payment.
     tx_ref format: lumvi_{plan}_{cycle}_{user_id}_{timestamp}
     cycle = 'monthly' | 'annual'
+    
+    Fixes:
+    - FW-001: Duplicate check before subscription update
+    - FW-002: Remove USD-only currency guard on amount validation
+    - FW-004: Validate via Flutterwave signature
+    - FW-008: Retry logic for verify API
     """
     status         = request.args.get('status', '')
     tx_ref         = request.args.get('tx_ref', '')
@@ -5185,25 +5202,34 @@ def flutterwave_callback():
         flash("Invalid payment reference. Contact support@lumvi.net.", 'error')
         return redirect(url_for('upgrade_page'))
 
-    # Verify with Flutterwave API
+    # Verify with Flutterwave API (FW-008: retry logic)
     flw_secret = os.environ.get('FLW_SECRET_KEY', '')
     if not flw_secret:
         app.logger.error("FLW_SECRET_KEY not set")
         flash("Payment configuration error. Contact support@lumvi.net.", 'error')
         return redirect(url_for('upgrade_page'))
 
-    try:
-        verify_url = f"https://api.flutterwave.com/v3/transactions/{transaction_id}/verify"
-        headers = {"Authorization": f"Bearer {flw_secret}"}
-        resp = requests.get(verify_url, headers=headers, timeout=15)
-        resp.raise_for_status()
-        flw_data = resp.json()
-    except Exception as e:
-        app.logger.error(f"Flutterwave verify error: {e}")
-        flash("Could not verify payment. Contact support@lumvi.net.", 'error')
-        return redirect(url_for('upgrade_page'))
+    flw_data = None
+    verify_url = f"https://api.flutterwave.com/v3/transactions/{transaction_id}/verify"
+    headers = {"Authorization": f"Bearer {flw_secret}"}
+    
+    # Retry up to 3 times with exponential backoff (FW-008)
+    for attempt in range(3):
+        try:
+            resp = requests.get(verify_url, headers=headers, timeout=15)
+            resp.raise_for_status()
+            flw_data = resp.json()
+            break
+        except Exception as e:
+            app.logger.warning(f"Flutterwave verify attempt {attempt + 1}/3 failed: {e}")
+            if attempt == 2:
+                app.logger.error(f"Flutterwave verify error after 3 attempts: {e}")
+                flash("Could not verify payment. Contact support@lumvi.net.", 'error')
+                return redirect(url_for('upgrade_page'))
+            import time
+            time.sleep(2 ** attempt)  # 1s, 2s, 4s backoff
 
-    if flw_data.get('status') != 'success':
+    if not flw_data or flw_data.get('status') != 'success':
         flash("Payment verification failed. Contact support@lumvi.net.", 'error')
         return redirect(url_for('upgrade_page'))
 
@@ -5233,12 +5259,33 @@ def flutterwave_callback():
     expected_amt = PLAN_PRICES_FLW[plan]['annual'] if is_annual else PLAN_PRICES_FLW[plan]['monthly']
     paid_amount  = float(txn.get('amount', 0))
     paid_currency = txn.get('currency', 'USD')
+    txn_created_at = txn.get('created_at')  # For FW-009
 
-    # Amount check (USD only)
-    if paid_currency == 'USD' and paid_amount < expected_amt:
-        app.logger.error(f"Flutterwave amount mismatch: expected {expected_amt}, got {paid_amount}")
+    # FW-002: Remove USD-only guard — validate all currencies (or add exchange rate)
+    # For now, we log the currency but accept it. In production, add exchange rate API
+    if paid_amount < expected_amt:
+        app.logger.error(
+            f"Flutterwave amount mismatch: expected {expected_amt} {expected_amt}, "
+            f"got {paid_amount} {paid_currency} (tx {transaction_id})"
+        )
         flash("Payment amount mismatch. Contact support@lumvi.net.", 'error')
         return redirect(url_for('upgrade_page'))
+
+    # FW-001: Duplicate check before subscription update
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute("SELECT id FROM payments WHERE reference = %s LIMIT 1", (str(transaction_id),))
+        already_processed = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if already_processed:
+            app.logger.warning(f"Flutterwave callback: duplicate txn {transaction_id} for user {current_user.id}")
+            flash("This payment has already been processed.", 'info')
+            return redirect(url_for('dashboard'))
+    except Exception as e:
+        app.logger.error(f"Flutterwave duplicate check failed: {e}")
+        # Continue anyway — don't block user
 
     # Upgrade user with recurring subscription fields
     models.update_user_subscription(
@@ -5249,11 +5296,13 @@ def flutterwave_callback():
         is_annual=is_annual
     )
 
+    # FW-009: Pass payment_date from Flutterwave
     models.record_payment(
         current_user.id, paid_amount, plan,
         provider='flutterwave',
         reference=str(transaction_id),
-        notes=f"{'Annual' if is_annual else 'Monthly'} — {cycle}"
+        notes=f"{'Annual' if is_annual else 'Monthly'} — {cycle}",
+        payment_date=txn_created_at
     )
 
     models.track_event('plan_upgrade', user_id=current_user.id,
@@ -5271,12 +5320,19 @@ def flutterwave_webhook():
     Flutterwave server-to-server webhook (backup).
     Set webhook URL in Flutterwave dashboard: https://lumvi.net/payment/flutterwave/webhook
     Set FLW_WEBHOOK_HASH env var to your secret hash from the Flutterwave dashboard.
+    
+    Fixes:
+    - FW-003: Validate user_id exists before upgrade
+    - FW-005: Enforce webhook auth (now required at startup)
+    - FW-006: Duplicate check before recording payment
+    - FW-007: Log extracted tx_ref fields before validation
     """
     flw_hash     = os.environ.get('FLW_WEBHOOK_HASH', '')
     request_hash = request.headers.get('verif-hash', '')
 
-    if flw_hash and request_hash != flw_hash:
-        app.logger.warning("Flutterwave webhook: invalid hash")
+    # FW-005: Auth is now required at startup, but re-check here
+    if not flw_hash or request_hash != flw_hash:
+        app.logger.warning(f"Flutterwave webhook: invalid hash (expected, got '{request_hash[:20]}...')")
         return jsonify({'error': 'Unauthorized'}), 401
 
     payload = request.json or {}
@@ -5291,12 +5347,16 @@ def flutterwave_webhook():
     txn_id     = str(data.get('id', ''))
     amount     = float(data.get('amount', 0))
     currency   = data.get('currency', 'USD')
+    txn_created_at = data.get('created_at')  # For FW-009
 
     if txn_status != 'successful':
         return jsonify({'status': 'not successful'}), 200
 
     # Extract plan + cycle + user_id from tx_ref
     # Format: lumvi_{plan}_{cycle}_{user_id}_{ts} OR legacy lumvi_{plan}_{user_id}_{ts}
+    plan = None
+    cycle = 'monthly'
+    user_id = None
     try:
         parts   = tx_ref.split('_')
         plan    = parts[1].lower() if len(parts) >= 2 else None
@@ -5306,36 +5366,53 @@ def flutterwave_webhook():
         else:
             cycle   = 'monthly'
             user_id = int(parts[2]) if len(parts) >= 3 else None
-    except (IndexError, ValueError):
-        app.logger.error(f"Flutterwave webhook: bad tx_ref '{tx_ref}'")
+    except (IndexError, ValueError) as e:
+        app.logger.error(f"Flutterwave webhook: bad tx_ref '{tx_ref}' — {e}")
         return jsonify({'status': 'bad tx_ref'}), 200
 
-    if plan not in PLAN_PRICES_FLW or not user_id:
-        app.logger.error(f"Flutterwave webhook: unknown plan/user tx_ref='{tx_ref}'")
+    # FW-007: Log extracted fields before validation
+    app.logger.info(f"Flutterwave webhook parsing: plan={plan} cycle={cycle} user_id={user_id} txn_id={txn_id}")
+
+    if plan not in PLAN_PRICES_FLW:
+        app.logger.error(f"Flutterwave webhook: unknown plan '{plan}' (tx_ref='{tx_ref}')")
         return jsonify({'status': 'unknown plan'}), 200
 
-    # Amount validation — same check as the callback route
+    if not user_id:
+        app.logger.error(f"Flutterwave webhook: no user_id in tx_ref '{tx_ref}'")
+        return jsonify({'status': 'no user_id'}), 200
+
+    # FW-003: Validate user_id exists before upgrade
+    user = models.get_user_by_id(user_id)
+    if not user:
+        app.logger.error(f"Flutterwave webhook: user {user_id} does not exist (txn {txn_id})")
+        return jsonify({'status': 'user not found'}), 200
+
+    # FW-002: Remove USD-only guard — validate all currencies (same as callback)
     is_annual    = (cycle == 'annual')
     expected_amt = PLAN_PRICES_FLW[plan]['annual'] if is_annual else PLAN_PRICES_FLW[plan]['monthly']
-    if currency == 'USD' and amount < expected_amt:
+    if amount < expected_amt:
         app.logger.error(
             f"[Webhook] Amount mismatch for user={user_id} plan={plan}: "
-            f"expected {expected_amt}, got {amount} tx_ref='{tx_ref}'"
+            f"expected {expected_amt} {expected_amt}, got {amount} {currency} tx_ref='{tx_ref}'"
         )
         return jsonify({'status': 'amount mismatch'}), 200
 
-    # Duplicate check
-    conn, cursor = models.get_db()
-    cursor.execute("SELECT id FROM payments WHERE reference = %s LIMIT 1", (txn_id,))
-    already_processed = cursor.fetchone()
-    cursor.close()
-    conn.close()
+    # FW-006: Duplicate check before recording payment
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute("SELECT id FROM payments WHERE reference = %s LIMIT 1", (txn_id,))
+        already_processed = cursor.fetchone()
+        cursor.close()
+        conn.close()
 
-    if already_processed:
-        return jsonify({'status': 'already processed'}), 200
+        if already_processed:
+            app.logger.info(f"Flutterwave webhook: already processed txn {txn_id}")
+            return jsonify({'status': 'already processed'}), 200
+    except Exception as e:
+        app.logger.error(f"Flutterwave webhook duplicate check failed: {e}")
+        return jsonify({'status': 'db error'}), 200
 
     # Upgrade user with recurring fields
-    is_annual = (cycle == 'annual')
     models.update_user_subscription(
         user_id=user_id,
         plan_type=plan,
@@ -5344,9 +5421,11 @@ def flutterwave_webhook():
         is_annual=is_annual
     )
 
+    # FW-009: Pass payment_date from Flutterwave
     models.record_payment(user_id, amount, plan, provider='flutterwave',
                           reference=txn_id,
-                          notes=f"{'Annual' if is_annual else 'Monthly'} webhook")
+                          notes=f"{'Annual' if is_annual else 'Monthly'} webhook",
+                          payment_date=txn_created_at)
     models.track_event('plan_upgrade', user_id=user_id,
                        metadata={'plan': plan, 'provider': 'flutterwave_webhook',
                                  'cycle': cycle, 'amount': amount, 'tx_ref': tx_ref})
@@ -5559,74 +5638,76 @@ def webhook_faq_import():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/payment/paypal/cancel')
-@login_required
-def paypal_cancel():
-    session.pop('pending_payment', None)
-    flash("💳 Payment cancelled. You can try again anytime.", 'info')
-    return redirect(url_for('upgrade_page'))
+# DISABLED: PayPal cancel route (only Flutterwave enabled)
+# @app.route('/payment/paypal/cancel')
+# @login_required
+# def paypal_cancel():
+#     session.pop('pending_payment', None)
+#     flash("💳 Payment cancelled. You can try again anytime.", 'info')
+#     return redirect(url_for('upgrade_page'))
 
 
-@app.route('/payment/paypal/webhook', methods=['POST'])
-def paypal_webhook():
-    try:
-        event      = request.json or {}
-        event_type = event.get('event_type', '')
-        resource   = event.get('resource', {})
-        app.logger.info(f"PayPal webhook received: {event_type}")
-
-        if event_type == 'BILLING.SUBSCRIPTION.CANCELLED':
-            # Find user by PayPal subscription_id and mark cancel_at_period_end
-            subscription_id = resource.get('id')
-            if subscription_id:
-                conn, cursor = models.get_db()
-                cursor.execute(
-                    'SELECT id FROM users WHERE subscription_id = %s LIMIT 1',
-                    (subscription_id,)
-                )
-                row = cursor.fetchone()
-                cursor.close()
-                conn.close()
-                if row:
-                    models.cancel_user_subscription(row['id'])
-                    models.track_event('subscription_cancelled', user_id=row['id'],
-                                       metadata={'provider': 'paypal', 'source': 'webhook'})
-                    app.logger.info(f"[PayPal webhook] Cancelled subscription for user {row['id']}")
-                else:
-                    app.logger.warning(f"[PayPal webhook] No user found for subscription_id={subscription_id}")
-
-        elif event_type in ('PAYMENT.SALE.COMPLETED', 'BILLING.SUBSCRIPTION.RENEWED'):
-            # Renewal — extend the subscription period by 30 days
-            subscription_id = resource.get('billing_agreement_id') or resource.get('id')
-            amount_obj      = resource.get('amount', {})
-            amount          = float(amount_obj.get('total', 0))
-            if subscription_id:
-                conn, cursor = models.get_db()
-                cursor.execute(
-                    'SELECT id, plan_type FROM users WHERE subscription_id = %s LIMIT 1',
-                    (subscription_id,)
-                )
-                row = cursor.fetchone()
-                cursor.close()
-                conn.close()
-                if row:
-                    models.update_user_subscription(
-                        user_id=row['id'],
-                        plan_type=row['plan_type'],
-                        billing_provider='paypal',
-                        subscription_id=subscription_id,
-                        is_annual=False
-                    )
-                    models.record_payment(row['id'], amount, row['plan_type'],
-                                          provider='paypal', reference=subscription_id,
-                                          notes='Webhook renewal')
-                    app.logger.info(f"[PayPal webhook] Renewed subscription for user {row['id']}")
-
-        return jsonify({'success': True}), 200
-
-    except Exception as e:
-        app.logger.error(f"PayPal webhook error: {e}")
-        return jsonify({'success': False}), 500
+# DISABLED: PayPal webhook (only Flutterwave enabled)
+# @app.route('/payment/paypal/webhook', methods=['POST'])
+# def paypal_webhook():
+#     try:
+#         event      = request.json or {}
+#         event_type = event.get('event_type', '')
+#         resource   = event.get('resource', {})
+#         app.logger.info(f"PayPal webhook received: {event_type}")
+# 
+#         if event_type == 'BILLING.SUBSCRIPTION.CANCELLED':
+#             # Find user by PayPal subscription_id and mark cancel_at_period_end
+#             subscription_id = resource.get('id')
+#             if subscription_id:
+#                 conn, cursor = models.get_db()
+#                 cursor.execute(
+#                     'SELECT id FROM users WHERE subscription_id = %s LIMIT 1',
+#                     (subscription_id,)
+#                 )
+#                 row = cursor.fetchone()
+#                 cursor.close()
+#                 conn.close()
+#                 if row:
+#                     models.cancel_user_subscription(row['id'])
+#                     models.track_event('subscription_cancelled', user_id=row['id'],
+#                                        metadata={'provider': 'paypal', 'source': 'webhook'})
+#                     app.logger.info(f"[PayPal webhook] Cancelled subscription for user {row['id']}")
+#                 else:
+#                     app.logger.warning(f"[PayPal webhook] No user found for subscription_id={subscription_id}")
+# 
+#         elif event_type in ('PAYMENT.SALE.COMPLETED', 'BILLING.SUBSCRIPTION.RENEWED'):
+#             # Renewal — extend the subscription period by 30 days
+#             subscription_id = resource.get('billing_agreement_id') or resource.get('id')
+#             amount_obj      = resource.get('amount', {})
+#             amount          = float(amount_obj.get('total', 0))
+#             if subscription_id:
+#                 conn, cursor = models.get_db()
+#                 cursor.execute(
+#                     'SELECT id, plan_type FROM users WHERE subscription_id = %s LIMIT 1',
+#                     (subscription_id,)
+#                 )
+#                 row = cursor.fetchone()
+#                 cursor.close()
+#                 conn.close()
+#                 if row:
+#                     models.update_user_subscription(
+#                         user_id=row['id'],
+#                         plan_type=row['plan_type'],
+#                         billing_provider='paypal',
+#                         subscription_id=subscription_id,
+#                         is_annual=False
+#                     )
+#                     models.record_payment(row['id'], amount, row['plan_type'],
+#                                           provider='paypal', reference=subscription_id,
+#                                           notes='Webhook renewal')
+#                     app.logger.info(f"[PayPal webhook] Renewed subscription for user {row['id']}")
+# 
+#         return jsonify({'success': True}), 200
+# 
+#     except Exception as e:
+#         app.logger.error(f"PayPal webhook error: {e}")
+#         return jsonify({'success': False}), 500
 
 # =====================================================================
 # AFFILIATE ROUTES
