@@ -2686,21 +2686,87 @@ def track_event(event_name, user_id=None, metadata=None):
 # PAYMENT FUNCTIONS
 # =====================================================================
 
-def record_payment(user_id, amount, plan_type, provider='manual', currency='USD',
-                   status='completed', reference=None, notes=None):
-    """Insert a payment record and return its id."""
+def migrate_payments_unique_reference():
+    """
+    Add UNIQUE constraint to payments.reference for idempotency (FW-006).
+    Safe to call multiple times — checks if constraint exists first.
+    """
     conn, cursor = get_db()
-    cursor.execute(
-        '''INSERT INTO payments
-           (user_id, amount, currency, status, provider, plan_type, reference, notes)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
-        (user_id, amount, currency, status, provider, plan_type, reference, notes)
-    )
-    payment_id = cursor.fetchone()['id']
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return payment_id
+    try:
+        # Check if constraint already exists
+        cursor.execute("""
+            SELECT constraint_name FROM information_schema.table_constraints
+            WHERE table_name = 'payments' AND constraint_type = 'UNIQUE'
+            AND constraint_name = 'payments_reference_unique'
+        """)
+        if cursor.fetchone():
+            cursor.close()
+            conn.close()
+            return  # Already exists
+        
+        # Add the constraint
+        cursor.execute("""
+            ALTER TABLE payments
+            ADD CONSTRAINT payments_reference_unique UNIQUE (reference)
+        """)
+        conn.commit()
+        import logging
+        logging.getLogger(__name__).info("Added UNIQUE constraint to payments(reference)")
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).warning(f"Could not add UNIQUE constraint to payments: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def record_payment(user_id, amount, plan_type, provider='manual', currency='USD',
+                   status='completed', reference=None, notes=None, payment_date=None):
+    """Insert a payment record and return its id.
+    
+    FW-006: Handle duplicate inserts gracefully
+    FW-009: Accept payment_date from payment provider (defaults to now if not provided)
+    """
+    conn, cursor = get_db()
+    try:
+        # Use COALESCE to default payment_date to CURRENT_TIMESTAMP if not provided
+        cursor.execute(
+            '''INSERT INTO payments
+               (user_id, amount, currency, status, provider, plan_type, reference, notes, payment_date)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP))
+               ON CONFLICT (reference) DO NOTHING
+               RETURNING id''',
+            (user_id, amount, currency, status, provider, plan_type, reference, notes, payment_date)
+        )
+        result = cursor.fetchone()
+        
+        # If duplicate (ON CONFLICT), return existing payment_id
+        if result is None:
+            cursor.execute("SELECT id FROM payments WHERE reference = %s LIMIT 1", (reference,))
+            result = cursor.fetchone()
+            if result:
+                payment_id = result['id']
+                import logging
+                logging.getLogger(__name__).info(f"Payment {reference} already recorded (id={payment_id})")
+            else:
+                payment_id = None
+                import logging
+                logging.getLogger(__name__).warning(f"Payment {reference} duplicate but not found — skipping")
+        else:
+            payment_id = result['id']
+        
+        conn.commit()
+        return payment_id
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"record_payment error for {reference}: {e}")
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
 
 
 def get_all_payments(limit=200):
