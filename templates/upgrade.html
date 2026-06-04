@@ -535,8 +535,8 @@ const CURRENT_USER_NAME   = '{{ (user.name or user.email) | e }}';
 // Set env vars FLW_PLAN_IDS_MONTHLY and FLW_PLAN_IDS_ANNUAL as
 //   solo:<id>,starter:<id>,pro:<id>,growth:<id>,agency:<id>
 const FLW_PLAN_IDS = {
-  monthly: {{ flw_plan_ids_monthly | tojson }},
-  annual:  {{ flw_plan_ids_annual  | tojson }}
+  monthly: {{ FLW_PLAN_IDS_MONTHLY | tojson }},
+  annual:  {{ FLW_PLAN_IDS_ANNUAL  | tojson }}
 };
 
 let selectedPlan = '';

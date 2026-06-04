@@ -5173,6 +5173,7 @@ PLAN_PRICES_FLW = {
     'solo':    {'monthly': 19.00,  'annual': 190.00},
     'starter': {'monthly': 49.00,  'annual': 490.00},
     'pro':     {'monthly': 99.00,  'annual': 990.00},
+    'growth': {'monthly': 149.00, 'annual': 1490.00},
     'agency':  {'monthly': 299.00, 'annual': 2990.00}
 }
 
