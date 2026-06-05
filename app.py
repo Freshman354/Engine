@@ -91,6 +91,17 @@ app.config['MAIL_MAX_EMAILS'] = None
 app.config['MAIL_ASCII_ATTACHMENTS'] = False
 mail = Mail(app)
 
+# ── Google OAuth ─────────────────────────────────────────────────────
+from authlib.integrations.flask_client import OAuth as _OAuth
+_oauth = _OAuth(app)
+google_oauth = _oauth.register(
+    name='google',
+    client_id=os.environ.get('GOOGLE_CLIENT_ID'),
+    client_secret=os.environ.get('GOOGLE_CLIENT_SECRET'),
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'}
+)
+
 
 def send_welcome_email(email):
     """Send a branded welcome email to a new Lumvi user."""
@@ -433,6 +444,8 @@ try:
         models.migrate_agency_seat_billing()
     if hasattr(models, 'migrate_payments_unique_reference'):
         models.migrate_payments_unique_reference()
+    if hasattr(models, 'migrate_google_oauth'):
+        models.migrate_google_oauth()
 
     # System 2: Training data collection table
     try:
@@ -2425,6 +2438,47 @@ def reset_password(token):
         return render_template('reset_password.html', success="Password updated! You can now log in.")
 
     return render_template('reset_password.html', token=token)
+
+
+@app.route('/auth/google')
+def google_login():
+    redirect_uri = url_for('google_callback', _external=True)
+    return google_oauth.authorize_redirect(redirect_uri)
+
+
+@app.route('/auth/google/callback')
+def google_callback():
+    try:
+        token     = google_oauth.authorize_access_token()
+        userinfo  = token.get('userinfo') or google_oauth.userinfo()
+        google_id = userinfo['sub']
+        email     = userinfo.get('email', '').lower().strip()
+
+        if not email:
+            flash('Google sign-in failed: no email returned.', 'error')
+            return redirect(url_for('login'))
+
+        user_data = models.create_or_link_google_user(google_id, email)
+        if not user_data:
+            flash('Google sign-in failed. Please try again.', 'error')
+            return redirect(url_for('login'))
+
+        is_new = user_data.get('plan_type') == 'free'
+        user = User(user_data)
+        login_user(user, remember=True)
+        session.permanent = True
+        session['_user_cache'] = dict(user_data)
+
+        if is_new:
+            try: send_welcome_email(email)
+            except Exception: pass
+
+        return redirect(url_for('dashboard'))
+
+    except Exception as e:
+        app.logger.error(f'[Google OAuth] {e}')
+        flash('Google sign-in failed. Please try again.', 'error')
+        return redirect(url_for('login'))
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -5043,23 +5097,7 @@ def parse_structured_faq_text(text):
 @app.route('/upgrade')
 @login_required
 def upgrade_page():
-    def _parse_plan_ids(raw):
-        """Parse 'solo:111,starter:222,pro:333' → {'solo': '111', ...}"""
-        result = {}
-        for part in (raw or '').split(','):
-            part = part.strip()
-            if ':' in part:
-                key, val = part.split(':', 1)
-                result[key.strip()] = val.strip()
-        return result
-
-    return render_template(
-        'upgrade.html',
-        user=current_user,
-        flw_public_key=os.environ.get('FLW_PUBLIC_KEY', ''),
-        FLW_PLAN_IDS_MONTHLY=_parse_plan_ids(os.environ.get('FLW_PLAN_IDS_MONTHLY', '')),
-        FLW_PLAN_IDS_ANNUAL=_parse_plan_ids(os.environ.get('FLW_PLAN_IDS_ANNUAL', ''))
-    )
+    return render_template('upgrade.html', user=current_user, flw_public_key=os.environ.get('FLW_PUBLIC_KEY', ''))
 
 # =====================================================================
 # PAYMENT ROUTES - PAYPAL (DISABLED - Only Flutterwave enabled)

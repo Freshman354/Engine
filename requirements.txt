@@ -18,3 +18,4 @@ redis
 gevent
 dnspython
 flask-session
+authlib

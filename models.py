@@ -1288,6 +1288,120 @@ def get_user_by_email(email):
 # =====================================================================
 # PASSWORD RESET FUNCTIONS
 # =====================================================================
+# GOOGLE OAUTH
+# =====================================================================
+
+def migrate_google_oauth():
+    """Add google_id column to users table for Google OAuth sign-in."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT UNIQUE"
+        )
+        conn.commit()
+        print("✅ migrate_google_oauth: google_id column ready")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[migrate_google_oauth] {e}')
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+
+def get_user_by_google_id(google_id):
+    """Get user by Google ID. Returns None if not found."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT * FROM users WHERE google_id = %s', (google_id,))
+        user = cursor.fetchone()
+        return dict(user) if user else None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_user_by_google_id] {e}')
+        return None
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+
+def create_or_link_google_user(google_id, email):
+    """
+    Find an existing user by email and link their Google ID,
+    or create a brand-new free account if no match is found.
+    Returns the user dict on success, None on failure.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+
+        # 1. Existing account with this google_id — just return it
+        cursor.execute('SELECT * FROM users WHERE google_id = %s', (google_id,))
+        user = cursor.fetchone()
+        if user:
+            return dict(user)
+
+        # 2. Existing account matched by email — link the Google ID
+        cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
+        user = cursor.fetchone()
+        if user:
+            if not user.get('google_id'):
+                cursor.execute(
+                    'UPDATE users SET google_id = %s WHERE email = %s',
+                    (google_id, email)
+                )
+                conn.commit()
+            return dict(user)
+
+        # 3. Brand-new user — store a random bcrypt hash so password_hash
+        #    NOT NULL is satisfied, but this account can never be accessed
+        #    via password login (the hash is unguessable).
+        import secrets as _secrets
+        random_hash = bcrypt.hashpw(
+            _secrets.token_bytes(32), bcrypt.gensalt()
+        ).decode('utf-8')
+
+        cursor.execute(
+            """
+            INSERT INTO users (email, google_id, password_hash, plan_type)
+            VALUES (%s, %s, %s, 'free')
+            RETURNING *
+            """,
+            (email, google_id, random_hash)
+        )
+        user = cursor.fetchone()
+        conn.commit()
+        return dict(user) if user else None
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[create_or_link_google_user] {e}')
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        return None
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+
+# =====================================================================
 
 def migrate_password_reset_tokens():
     """Create password_reset_tokens table if it doesn't exist."""
@@ -2673,87 +2787,21 @@ def track_event(event_name, user_id=None, metadata=None):
 # PAYMENT FUNCTIONS
 # =====================================================================
 
-def migrate_payments_unique_reference():
-    """
-    Add UNIQUE constraint to payments.reference for idempotency (FW-006).
-    Safe to call multiple times — checks if constraint exists first.
-    """
-    conn, cursor = get_db()
-    try:
-        # Check if constraint already exists
-        cursor.execute("""
-            SELECT constraint_name FROM information_schema.table_constraints
-            WHERE table_name = 'payments' AND constraint_type = 'UNIQUE'
-            AND constraint_name = 'payments_reference_unique'
-        """)
-        if cursor.fetchone():
-            cursor.close()
-            conn.close()
-            return  # Already exists
-        
-        # Add the constraint
-        cursor.execute("""
-            ALTER TABLE payments
-            ADD CONSTRAINT payments_reference_unique UNIQUE (reference)
-        """)
-        conn.commit()
-        import logging
-        logging.getLogger(__name__).info("Added UNIQUE constraint to payments(reference)")
-    except Exception as e:
-        conn.rollback()
-        import logging
-        logging.getLogger(__name__).warning(f"Could not add UNIQUE constraint to payments: {e}")
-    finally:
-        cursor.close()
-        conn.close()
-
-
 def record_payment(user_id, amount, plan_type, provider='manual', currency='USD',
-                   status='completed', reference=None, notes=None, payment_date=None):
-    """Insert a payment record and return its id.
-    
-    FW-006: Handle duplicate inserts gracefully
-    FW-009: Accept payment_date from payment provider (defaults to now if not provided)
-    """
+                   status='completed', reference=None, notes=None):
+    """Insert a payment record and return its id."""
     conn, cursor = get_db()
-    try:
-        # Use COALESCE to default payment_date to CURRENT_TIMESTAMP if not provided
-        cursor.execute(
-            '''INSERT INTO payments
-               (user_id, amount, currency, status, provider, plan_type, reference, notes, payment_date)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, COALESCE(%s, CURRENT_TIMESTAMP))
-               ON CONFLICT (reference) DO NOTHING
-               RETURNING id''',
-            (user_id, amount, currency, status, provider, plan_type, reference, notes, payment_date)
-        )
-        result = cursor.fetchone()
-        
-        # If duplicate (ON CONFLICT), return existing payment_id
-        if result is None:
-            cursor.execute("SELECT id FROM payments WHERE reference = %s LIMIT 1", (reference,))
-            result = cursor.fetchone()
-            if result:
-                payment_id = result['id']
-                import logging
-                logging.getLogger(__name__).info(f"Payment {reference} already recorded (id={payment_id})")
-            else:
-                payment_id = None
-                import logging
-                logging.getLogger(__name__).warning(f"Payment {reference} duplicate but not found — skipping")
-        else:
-            payment_id = result['id']
-        
-        conn.commit()
-        return payment_id
-    except Exception as e:
-        conn.rollback()
-        import logging
-        logging.getLogger(__name__).error(f"record_payment error for {reference}: {e}")
-        raise
-    finally:
-        cursor.close()
-        conn.close()
-
+    cursor.execute(
+        '''INSERT INTO payments
+           (user_id, amount, currency, status, provider, plan_type, reference, notes)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+        (user_id, amount, currency, status, provider, plan_type, reference, notes)
+    )
+    payment_id = cursor.fetchone()['id']
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return payment_id
 
 
 def get_all_payments(limit=200):
