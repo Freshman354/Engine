@@ -597,13 +597,12 @@ function initiateFlutterwavePayment() {
   const p         = prices[selectedPlan];
   const isAnnNow  = document.getElementById('billingToggle').checked;
   const amount    = isAnnNow ? p.monthly * 10 : p.monthly;
+  const cycleKey  = isAnnNow ? 'annual' : 'monthly';
   const txRef     = 'lumvi_' + selectedPlan + '_' + cycleKey + '_' + CURRENT_USER_ID + '_' + Date.now();
   if (!FLW_PUBLIC_KEY) {
     alert('Payment not configured. Please contact support@lumvi.net.');
     return;
   }
-
-  const cycleKey = isAnnNow ? 'annual' : 'monthly';
   closePaymentModal();
 
   // Look up the recurring Payment Plan ID for this plan + cycle.

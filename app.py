@@ -5097,7 +5097,23 @@ def parse_structured_faq_text(text):
 @app.route('/upgrade')
 @login_required
 def upgrade_page():
-    return render_template('upgrade.html', user=current_user, flw_public_key=os.environ.get('FLW_PUBLIC_KEY', ''))
+    def _parse_plan_ids(env_val):
+        """Parse 'solo:123,starter:456,...' env var into a dict."""
+        result = {}
+        if env_val:
+            for pair in env_val.split(','):
+                parts = pair.strip().split(':')
+                if len(parts) == 2:
+                    result[parts[0].strip()] = parts[1].strip()
+        return result
+
+    return render_template(
+        'upgrade.html',
+        user=current_user,
+        flw_public_key=os.environ.get('FLW_PUBLIC_KEY', ''),
+        FLW_PLAN_IDS_MONTHLY=_parse_plan_ids(os.environ.get('FLW_PLAN_IDS_MONTHLY', '')),
+        FLW_PLAN_IDS_ANNUAL=_parse_plan_ids(os.environ.get('FLW_PLAN_IDS_ANNUAL', '')),
+    )
 
 # =====================================================================
 # PAYMENT ROUTES - PAYPAL (DISABLED - Only Flutterwave enabled)
@@ -5294,16 +5310,29 @@ def flutterwave_callback():
         return redirect(url_for('upgrade_page'))
 
     # Parse tx_ref: lumvi_{plan}_{cycle}_{user_id}_{timestamp}
-    plan  = None
-    cycle = 'monthly'
+    plan       = None
+    cycle      = 'monthly'
+    tx_user_id = None
     try:
         parts = tx_ref.split('_')
         plan  = parts[1].lower() if len(parts) > 1 else None
         # cycle is optional — old format was lumvi_{plan}_{user_id}_{ts}
         if len(parts) > 2 and parts[2] in ('monthly', 'annual'):
-            cycle = parts[2].lower()
+            cycle      = parts[2].lower()
+            tx_user_id = int(parts[3]) if len(parts) >= 4 else None
+        else:
+            tx_user_id = int(parts[2]) if len(parts) >= 3 else None
     except Exception:
         pass
+
+    # Validate the user_id embedded in tx_ref matches the logged-in user
+    if tx_user_id and tx_user_id != current_user.id:
+        app.logger.error(
+            f"Flutterwave callback: tx_ref user mismatch — "
+            f"tx_ref says {tx_user_id}, logged-in user is {current_user.id} (tx {transaction_id})"
+        )
+        flash("Payment session mismatch. Contact support@lumvi.net.", 'error')
+        return redirect(url_for('upgrade_page'))
 
     if plan not in PLAN_PRICES_FLW:
         app.logger.error(f"Flutterwave: unknown plan in tx_ref '{tx_ref}'")
@@ -5320,7 +5349,7 @@ def flutterwave_callback():
     # For now, we log the currency but accept it. In production, add exchange rate API
     if paid_amount < expected_amt:
         app.logger.error(
-            f"Flutterwave amount mismatch: expected {expected_amt} {expected_amt}, "
+            f"Flutterwave amount mismatch: expected {expected_amt} USD, "
             f"got {paid_amount} {paid_currency} (tx {transaction_id})"
         )
         flash("Payment amount mismatch. Contact support@lumvi.net.", 'error')
@@ -5448,7 +5477,7 @@ def flutterwave_webhook():
     if amount < expected_amt:
         app.logger.error(
             f"[Webhook] Amount mismatch for user={user_id} plan={plan}: "
-            f"expected {expected_amt} {expected_amt}, got {amount} {currency} tx_ref='{tx_ref}'"
+            f"expected {expected_amt} USD, got {amount} {currency} tx_ref='{tx_ref}'"
         )
         return jsonify({'status': 'amount mismatch'}), 200
 
