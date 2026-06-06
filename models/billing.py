@@ -276,6 +276,28 @@ def get_revenue_by_month(months=6):
 # =====================================================================
 
 def get_all_users(limit=500):
+    """All users for admin panel, newest first."""
+    conn, cursor = get_db()
+    cursor.execute(
+        '''SELECT id, email, plan_type, subscription_status, is_admin,
+                  billing_provider, billing_cycle, is_annual,
+                  subscription_id, cancel_at_period_end,
+                  subscription_expires_at, grace_period_ends_at,
+                  created_at, upgraded_at, cancelled_at
+           FROM users
+           ORDER BY created_at DESC
+           LIMIT %s''',
+        (limit,)
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    for r in rows:
+        for col in ('created_at', 'upgraded_at', 'cancelled_at',
+                    'subscription_expires_at', 'grace_period_ends_at'):
+            if r.get(col):
+                r[col] = r[col].isoformat()
+    return rows
 def record_agency_overage_seat(user_id: int, client_id: str, seat_num: int):
     """
     Record that a newly created client is an overage seat for an agency user.
