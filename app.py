@@ -1078,6 +1078,54 @@ def refund_policy():
     return render_template('refund-policy.html')
 
 
+@app.route('/')
+def index():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('landing_page'))
+
+
+@app.route('/landing')
+def landing_page():
+    return render_template('landing-professional.html')
+
+
+@app.route('/static/widget.js')
+def serve_widget_js_custom_domain():
+    """
+    Serve widget.js when requested via a white-label custom domain.
+
+    When an agency sets chat.theiragency.com as their custom domain, the embed
+    code points widget.js at https://chat.theiragency.com/static/widget.js.
+    Flask's normal static file handler doesn't check the Host header, so this
+    route explicitly serves the file regardless of which domain the request
+    arrived on — as long as that domain is registered as a custom_widget_domain.
+    """
+    import os
+    from flask import send_from_directory
+
+    host = request.host.split(':')[0].lower()
+
+    # Allow the real lumvi.net origin through without extra checks
+    if host in ('lumvi.net', 'www.lumvi.net', 'localhost', '127.0.0.1'):
+        return send_from_directory(app.static_folder, 'widget.js',
+                                   mimetype='application/javascript')
+
+    # Verify the requesting host is a registered custom domain
+    client = models.get_client_by_custom_domain(host)
+    if not client:
+        app.logger.warning(f"[WidgetJS] Unregistered custom domain blocked: {host}")
+        return jsonify({'error': 'Unknown domain'}), 403
+
+    app.logger.info(f"[WidgetJS] Serving widget.js for custom domain: {host} client={client['client_id']}")
+    response = send_from_directory(app.static_folder, 'widget.js',
+                                   mimetype='application/javascript')
+    # Allow cross-origin from any domain (widget embeds always cross-origin)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Cache-Control'] = 'public, max-age=300'  # 5 min cache
+    return response
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ERROR HANDLERS
 # ═══════════════════════════════════════════════════════════════════════════════
