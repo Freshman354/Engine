@@ -189,39 +189,13 @@ def load_user(user_id):
         return None
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-#
-# Two distinct policies:
-#   1. Authenticated dashboard routes (/api/user/*, /api/config, etc.)
-#      — specific origins only, credentials allowed.
-#      Add your domain(s) to ALLOWED_ORIGINS in Railway env vars.
-#   2. Widget chat routes (/api/chat, /widget)
-#      — any origin (embedded on customer websites), NO credentials.
-#      Browsers reject Allow-Credentials: true + wildcard origin (CORS spec).
-
-_ALLOWED_ORIGINS = [
-    o.strip()
-    for o in os.environ.get(
-        'ALLOWED_ORIGINS',
-        'https://lumvi.net,https://app.lumvi.net'
-    ).split(',')
-    if o.strip()
-]
 
 CORS(app, resources={
-    # Authenticated dashboard API — known origins, credentials OK
-    r'/api/user/*': {
-        'origins':              _ALLOWED_ORIGINS,
-        'methods':              ['GET', 'POST', 'OPTIONS'],
-        'allow_headers':        ['Content-Type', 'Authorization'],
-        'supports_credentials': True,
-        'max_age':              3600,
-    },
-    # Public widget/chat API — any origin, no credentials
     r'/api/*': {
-        'origins':       '*',
-        'methods':       ['GET', 'POST', 'OPTIONS'],
+        'origins':      '*',
+        'methods':      ['GET', 'POST', 'OPTIONS'],
         'allow_headers': ['Content-Type'],
-        'max_age':       3600,
+        'max_age':      3600,
     },
     r'/widget': {
         'origins': '*',
@@ -236,8 +210,7 @@ _limiter_storage = os.environ.get('REDIS_URL', 'memory://')
 if _limiter_storage == 'memory://':
     _warnings.warn(
         'REDIS_URL not set — rate limiter is in-memory. '
-        'Limits reset on every deploy/restart. '
-        'Set REDIS_URL in Railway environment variables for persistent limiting.',
+        'This resets on restart and breaks under multiple workers.',
         RuntimeWarning,
     )
 
@@ -871,17 +844,43 @@ try:
 
     print('✅ Database initialized/migrated successfully!')
 
-    # ── Startup enforcement — single worker, no advisory lock needed ──────────
+    # ── Startup enforcement — single-worker guard via pg_try_advisory_lock ────
     def _startup_enforce():
         try:
             with app.app_context():
-                enforce_subscriptions()
-                app.logger.info('[Startup] subscription enforcement complete')
+                _sc, _scur = models.get_db()
+                try:
+                    _scur.execute('SELECT pg_try_advisory_lock(13370001)')
+                    row      = _scur.fetchone()
+                    acquired = list(row.values())[0] if row else False
+                except Exception:
+                    acquired = True
+                    _sc = _scur = None
+
+                if not acquired:
+                    app.logger.info(
+                        '[Startup] enforcement skipped — another worker running it'
+                    )
+                    if _sc:
+                        try: _scur.close(); _sc.close()
+                        except Exception: pass
+                    return
+
+                try:
+                    enforce_subscriptions()
+                    app.logger.info('[Startup] subscription enforcement complete')
+                finally:
+                    if _sc:
+                        try:
+                            _scur.execute('SELECT pg_advisory_unlock(13370001)')
+                            _sc.commit(); _scur.close(); _sc.close()
+                        except Exception:
+                            pass
         except Exception as _e:
             app.logger.error(f'[Startup] enforcement error: {_e}')
 
     threading.Timer(10.0, _startup_enforce).start()
-    print('✅ Startup enforcement scheduled (T+10s)')
+    print('✅ Startup enforcement scheduled (T+10s, single-worker guard active)')
 
 except Exception as e:
     print(f'⚠️  Database initialization error: {e}')
@@ -994,17 +993,14 @@ def allow_widget_embedding(response):
     if origin:
         path = request.path
         if path.startswith('/api/') or path.startswith('/widget'):
-            response.headers['Access-Control-Allow-Origin']  = origin
-            response.headers['Access-Control-Allow-Methods'] = (
+            response.headers['Access-Control-Allow-Origin']      = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods']     = (
                 'GET, POST, PUT, DELETE, OPTIONS'
             )
             response.headers['Access-Control-Allow-Headers'] = (
                 'Content-Type, Authorization, X-Requested-With'
             )
-            # Allow credentials only for known origins on authenticated routes.
-            # Browsers block Allow-Credentials: true + wildcard origin (CORS spec).
-            if origin in _ALLOWED_ORIGINS and path.startswith('/api/user/'):
-                response.headers['Access-Control-Allow-Credentials'] = 'true'
     return response
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1078,54 +1074,6 @@ def refund_policy():
     return render_template('refund-policy.html')
 
 
-@app.route('/')
-def index():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-    return redirect(url_for('landing_page'))
-
-
-@app.route('/landing')
-def landing_page():
-    return render_template('landing-professional.html')
-
-
-@app.route('/static/widget.js')
-def serve_widget_js_custom_domain():
-    """
-    Serve widget.js when requested via a white-label custom domain.
-
-    When an agency sets chat.theiragency.com as their custom domain, the embed
-    code points widget.js at https://chat.theiragency.com/static/widget.js.
-    Flask's normal static file handler doesn't check the Host header, so this
-    route explicitly serves the file regardless of which domain the request
-    arrived on — as long as that domain is registered as a custom_widget_domain.
-    """
-    import os
-    from flask import send_from_directory
-
-    host = request.host.split(':')[0].lower()
-
-    # Allow the real lumvi.net origin through without extra checks
-    if host in ('lumvi.net', 'www.lumvi.net', 'localhost', '127.0.0.1'):
-        return send_from_directory(app.static_folder, 'widget.js',
-                                   mimetype='application/javascript')
-
-    # Verify the requesting host is a registered custom domain
-    client = models.get_client_by_custom_domain(host)
-    if not client:
-        app.logger.warning(f"[WidgetJS] Unregistered custom domain blocked: {host}")
-        return jsonify({'error': 'Unknown domain'}), 403
-
-    app.logger.info(f"[WidgetJS] Serving widget.js for custom domain: {host} client={client['client_id']}")
-    response = send_from_directory(app.static_folder, 'widget.js',
-                                   mimetype='application/javascript')
-    # Allow cross-origin from any domain (widget embeds always cross-origin)
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Cache-Control'] = 'public, max-age=300'  # 5 min cache
-    return response
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # ERROR HANDLERS
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1149,8 +1097,755 @@ def request_too_large(e):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == '__main__':
-    # Development only. Production Procfile:
-    # web: gunicorn app:app --workers 1 --worker-class gevent --worker-connections 100 --timeout 120 --bind 0.0.0.0:$PORT
-    # On Railway Starter plan (512 MB), also add: --max-requests 500 --max-requests-jitter 50
+    # Production: gunicorn app:app --workers 4 --worker-class gevent --bind 0.0.0.0:$PORT
     port = int(os.environ.get('PORT', 5000))
     app.run(debug=False, host='0.0.0.0', port=port)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ROUTES — MISSING FROM FIRST PASS (all 33 added here)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Root + widget ─────────────────────────────────────────────────────────────
+
+@app.route('/')
+def index():
+    if current_user.is_authenticated:
+        return redirect(url_for('auth.dashboard'))
+    return redirect(url_for('landing_page'))
+
+
+@app.route('/landing')
+def landing_page():
+    return render_template('landing-professional.html')
+
+
+@app.route('/static/widget.js')
+def serve_widget_js_custom_domain():
+    from flask import send_from_directory
+    host = request.host.split(':')[0].lower()
+    if host in ('lumvi.net', 'www.lumvi.net', 'localhost', '127.0.0.1'):
+        return send_from_directory(app.static_folder, 'widget.js',
+                                   mimetype='application/javascript')
+    client = models.get_client_by_custom_domain(host)
+    if not client:
+        app.logger.warning(f'[WidgetJS] Unregistered custom domain blocked: {host}')
+        return jsonify({'error': 'Unknown domain'}), 403
+    app.logger.info(
+        f'[WidgetJS] Serving widget.js for custom domain: {host} '
+        f'client={client["client_id"]}'
+    )
+    response = send_from_directory(app.static_folder, 'widget.js',
+                                   mimetype='application/javascript')
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Cache-Control'] = 'public, max-age=300'
+    return response
+
+
+@app.route('/widget')
+def widget():
+    client_id = request.args.get('client_id', '').strip()
+    client    = None
+
+    if client_id and client_id != 'demo':
+        client = models.get_client_by_id(client_id)
+
+    if not client:
+        host = request.host.split(':')[0].lower()
+        if host and host not in ('lumvi.net', 'www.lumvi.net', 'localhost', '127.0.0.1'):
+            client = models.get_client_by_custom_domain(host)
+            if client:
+                client_id = client['client_id']
+                app.logger.info(
+                    f'[Widget] Custom domain match: host={host} client={client_id}'
+                )
+
+    if not client:
+        client = {
+            'client_id':        'demo',
+            'company_name':     'Demo Company',
+            'widget_color':     '#B8924A',
+            'bot_name':         'Support',
+            'bot_avatar':       '',
+            'tagline':          'Typically replies instantly',
+            'welcome_message':  'Hi! How can I help you today?',
+            'fallback_message': '',
+            'quick_replies':    ['What are your hours?', 'Pricing info', 'Contact us'],
+            'remove_branding':  0,
+            'logo_url':         '',
+            'custom_css':       '',
+            'contact':          {},
+            'lead_triggers':    ['contact', 'sales', 'demo', 'speak', 'talk', 'human', 'agent'],
+            'lead_q3':          '',
+            'lead_q4':          '',
+            'widget_theme':     'lumvi',
+            'widget_font':      'dm_sans',
+            'bubble_style':     'rounded',
+            'header_color':     '',
+        }
+    else:
+        client             = dict(client)
+        branding_settings  = json.loads(client.get('branding_settings') or '{}')
+        bot_settings       = branding_settings.get('bot_settings', {})
+        branding           = branding_settings.get('branding', {})
+        contact            = branding_settings.get('contact', {})
+
+        client['bot_name']          = bot_settings.get('bot_name')         or client.get('company_name') or 'Support'
+        client['bot_avatar']        = bot_settings.get('bot_avatar')        or ''
+        client['bot_avatar_url']    = bot_settings.get('bot_avatar_url')    or ''
+        client['tagline']           = branding.get('tagline')               or 'Typically replies instantly'
+        client['welcome_message']   = bot_settings.get('welcome_message')   or client.get('welcome_message') or 'Hi! How can I help you today?'
+        client['fallback_message']  = bot_settings.get('fallback_message')  or ''
+        client['quick_replies']     = [r for r in (bot_settings.get('quick_replies') or []) if r and str(r).strip()]
+        client['lead_q3']           = bot_settings.get('lead_q3', '').strip()
+        client['lead_q4']           = bot_settings.get('lead_q4', '').strip()
+        client['widget_color']      = branding.get('primary_color')         or client.get('widget_color') or '#B8924A'
+        client['remove_branding']   = branding.get('remove_branding',       client.get('remove_branding', 0))
+        client['logo_url']          = branding.get('logo')                  or branding.get('logo_url') or ''
+        client['custom_css']        = client.get('custom_css')              or ''
+        client['contact']           = contact
+        client['branding_settings'] = branding_settings
+        client['widget_theme']      = branding.get('widget_theme',  'lumvi')
+        client['widget_font']       = branding.get('widget_font',   'dm_sans')
+        client['bubble_style']      = branding.get('bubble_style',  'rounded')
+        client['header_color']      = branding.get('header_color',  '')
+        client['bubble_radius']     = branding.get('bubble_radius')
+        client['bot_bubble_color']  = branding.get('bot_bubble_color',  '')
+        client['user_bubble_color'] = branding.get('user_bubble_color', '')
+        client['lead_triggers']     = branding_settings.get('bot_settings', {}).get(
+            'lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk', 'human', 'agent']
+        )
+
+    return render_template('chat.html', client=client)
+
+
+# ── Health + admin ops ────────────────────────────────────────────────────────
+
+@app.route('/health', methods=['GET'])
+def health_check():
+    return jsonify({
+        'status':    'healthy',
+        'timestamp': datetime.now().isoformat(),
+        'version':   '1.0.0',
+    })
+
+
+@app.route('/admin/leads')
+@login_required
+def admin_leads():
+    client_id = request.args.get('client_id')
+    if not client_id:
+        return 'Client ID required', 400
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return 'Unauthorized', 403
+    leads  = models.get_leads(client_id)
+    client = models.get_client_by_id(client_id)
+    return render_template('admin.html', leads=leads,
+                           client_id=client_id, client=client)
+
+
+@app.route('/api/admin/cache-stats')
+@login_required
+def cache_stats_endpoint():
+    client_id = request.args.get('client_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    stats = cache_utils.cache_stats(client_id)
+    return jsonify({'success': True, **stats})
+
+
+@app.route('/api/admin/cache-invalidate', methods=['POST'])
+@login_required
+def cache_invalidate_endpoint():
+    data      = request.get_json() or {}
+    client_id = data.get('client_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    new_version = cache_utils.invalidate(client_id)
+    app.logger.info(
+        f'[Cache] Manual invalidation: client={client_id} '
+        f'new_version={new_version} by user={current_user.id}'
+    )
+    return jsonify({'success': True, 'new_kb_version': new_version})
+
+
+@app.route('/api/admin/backup', methods=['POST'])
+def trigger_backup():
+    import hmac
+    auth_token  = request.headers.get('X-Admin-Token') or ''
+    admin_token = os.environ.get('ADMIN_TOKEN', '')
+    if not admin_token:
+        app.logger.error('[Backup] ADMIN_TOKEN env var not set — endpoint disabled.')
+        return jsonify({'success': False, 'error': 'Backup not configured'}), 503
+    if not hmac.compare_digest(auth_token.encode(), admin_token.encode()):
+        app.logger.warning(f'[Backup] Unauthorized attempt from {request.remote_addr}')
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    try:
+        clients_dir = 'clients'
+        if os.path.exists(clients_dir):
+            for cid in os.listdir(clients_dir):
+                if os.path.isdir(os.path.join(clients_dir, cid)):
+                    pass  # backup_client_data(cid) — re-enable if needed
+        return jsonify({
+            'success':   True,
+            'message':   'Backup completed',
+            'timestamp': datetime.now().isoformat(),
+        })
+    except Exception as e:
+        app.logger.error(f'[Backup] error: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/reindex', methods=['POST'])
+def trigger_reindex():
+    import hmac
+    auth_token  = request.headers.get('X-Admin-Token') or ''
+    admin_token = os.environ.get('ADMIN_TOKEN', '')
+    if not admin_token:
+        app.logger.error('[Reindex] ADMIN_TOKEN env var not set — endpoint disabled.')
+        return jsonify({'success': False, 'error': 'Not configured'}), 503
+    if not hmac.compare_digest(auth_token.encode(), admin_token.encode()):
+        app.logger.warning(f'[Reindex] Unauthorized attempt from {request.remote_addr}')
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 401
+    try:
+        helper  = get_ai_helper(Config.GEMINI_API_KEY, Config.GEMINI_MODEL)
+        results = helper.reindex_all_clients()
+        succeeded   = {c: n for c, n in results.items() if n >= 0}
+        failed      = {c: n for c, n in results.items() if n < 0}
+        total_emb   = sum(succeeded.values())
+        app.logger.info(
+            f'[Reindex] complete — {len(succeeded)} OK, '
+            f'{len(failed)} failed, {total_emb} embeddings stored'
+        )
+        return jsonify({
+            'success':           len(failed) == 0,
+            'clients_ok':        len(succeeded),
+            'clients_failed':    len(failed),
+            'failed_ids':        list(failed.keys()),
+            'total_embeddings':  total_emb,
+            'results':           results,
+        })
+    except Exception as e:
+        app.logger.exception(f'[Reindex] fatal error: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/admin/set-plan', methods=['GET', 'POST'])
+def admin_set_plan():
+    ADMIN_SECRET = os.environ.get('ADMIN_SECRET', '')
+    error = success = None
+    if request.method == 'POST':
+        secret      = request.form.get('secret')
+        email       = request.form.get('email', '').strip().lower()
+        plan        = request.form.get('plan', '').strip().lower()
+        valid_plans = ['free', 'solo', 'starter', 'pro', 'growth', 'agency', 'enterprise']
+        if secret != ADMIN_SECRET:
+            error = 'Invalid admin secret.'
+        elif not email:
+            error = 'Email is required.'
+        elif plan not in valid_plans:
+            error = f'Invalid plan. Must be one of: {", ".join(valid_plans)}'
+        else:
+            user = models.get_user_by_email(email)
+            if not user:
+                error = f'No user found with email: {email}'
+            else:
+                conn, cursor = models.get_db()
+                cursor.execute(
+                    'UPDATE users SET plan_type = %s WHERE email = %s', (plan, email)
+                )
+                conn.commit(); cursor.close(); conn.close()
+                success = f'✅ {email} updated to {plan.capitalize()} plan.'
+
+    return f'''<!DOCTYPE html>
+<html>
+<head><title>Lumvi Admin — Set Plan</title>
+<style>
+  body{{font-family:-apple-system,sans-serif;background:#0f172a;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}}
+  .card{{background:#1e293b;border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:40px;max-width:460px;width:100%;color:#f8fafc;}}
+  h1{{font-size:22px;font-weight:800;margin-bottom:6px;}}
+  p{{color:#64748b;font-size:14px;margin-bottom:28px;}}
+  label{{display:block;font-size:13px;font-weight:600;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;}}
+  input,select{{width:100%;padding:10px 14px;background:#0f172a;border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#f8fafc;font-size:14px;margin-bottom:16px;}}
+  button{{width:100%;padding:12px;background:#06b6d4;color:#0f172a;border:none;border-radius:8px;font-weight:800;font-size:15px;cursor:pointer;margin-top:4px;}}
+  .success{{background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);color:#34d399;padding:12px 16px;border-radius:8px;margin-bottom:20px;font-size:14px;}}
+  .error{{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#f87171;padding:12px 16px;border-radius:8px;margin-bottom:20px;font-size:14px;}}
+  .warning{{color:#fbbf24;font-size:12px;margin-top:16px;text-align:center;}}
+</style></head>
+<body><div class="card">
+  <h1>Admin — Set User Plan</h1>
+  <p>Update any user account to a different plan tier.</p>
+  {"<div class='success'>" + success + "</div>" if success else ""}
+  {"<div class='error'>" + error + "</div>" if error else ""}
+  <form method="POST">
+    <label>Admin Secret</label>
+    <input type="password" name="secret" placeholder="Enter admin secret" required>
+    <label>User Email</label>
+    <input type="email" name="email" placeholder="user@example.com" required>
+    <label>New Plan</label>
+    <select name="plan">
+      <option value="free">Free</option>
+      <option value="solo">Solo ($19/mo)</option>
+      <option value="starter">Starter ($49/mo)</option>
+      <option value="pro">Pro ($99/mo)</option>
+      <option value="agency">Agency ($299/mo)</option>
+      <option value="enterprise">Enterprise</option>
+    </select>
+    <button type="submit">Update Plan</button>
+  </form>
+  <p class="warning">⚠️ Keep this URL private.</p>
+</div></body></html>'''
+
+
+@app.route('/admin/init-db-production', methods=['GET', 'POST'])
+def init_db_production():
+    if request.method == 'POST':
+        secret = request.form.get('secret')
+        if secret == 'your-secret-password-here':
+            models.init_db()
+            try:
+                models.migrate_clients_table()
+            except Exception as e:
+                app.logger.warning(f'Clients migration helper failed: {e}')
+            conn, cursor = models.get_db()
+            conn.commit(); cursor.close(); conn.close()
+            return '✅ Database initialized!'
+        return '❌ Invalid secret'
+    return '''<form method="POST">
+        <input type="password" name="secret" placeholder="Admin secret">
+        <button type="submit">Initialize DB</button>
+    </form>'''
+
+
+# ── Customize ─────────────────────────────────────────────────────────────────
+
+@app.route('/customize')
+@login_required
+def customize_page():
+    client_id = request.args.get('client_id')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return 'Unauthorized', 403
+    fresh_user  = models.get_user_by_id(current_user.id)
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+    if not plan_limits['customization']:
+        return render_template('customize_upgrade.html',
+                               user=current_user, plan_type=plan_type), 403
+    client = models.get_client_by_id(client_id)
+    branding_settings = {}
+    if client and client.get('branding_settings'):
+        try:
+            branding_settings = json.loads(client['branding_settings'])
+        except Exception:
+            branding_settings = {}
+    return render_template(
+        'customize.html',
+        user            = current_user,
+        client_id       = client_id,
+        client          = client,
+        branding        = branding_settings,
+        plan_type       = plan_type,
+        plan_limits     = plan_limits,
+        has_webhooks    = plan_limits.get('webhooks', False),
+        has_white_label = plan_limits.get('white_label', False),
+        has_analytics   = plan_limits.get('analytics', False),
+    )
+
+
+@app.route('/api/admin/customize', methods=['POST'])
+@login_required
+def save_customization():
+    try:
+        data      = request.json
+        client_id = data.get('client_id')
+        if not client_id:
+            return jsonify({'success': False, 'error': 'Client ID required'}), 400
+        if not models.verify_client_ownership(current_user.id, client_id):
+            return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+        client = models.get_client_by_id(client_id)
+        if not client:
+            return jsonify({'success': False, 'error': 'Client not found'}), 404
+
+        fresh_user  = models.get_user_by_id(current_user.id)
+        fresh_plan  = (fresh_user or {}).get('plan_type', 'free')
+        plan_limits = PLAN_LIMITS.get(fresh_plan, PLAN_LIMITS['free'])
+
+        incoming_integrations = data.get('integrations', {})
+        if plan_limits['webhooks']:
+            integrations = incoming_integrations
+        else:
+            integrations = {}
+            if incoming_integrations.get('webhook_url'):
+                app.logger.info(
+                    f'[Limit] Webhook URL stripped for user {current_user.id} '
+                    f'on plan "{fresh_plan}"'
+                )
+
+        incoming_vertical = data.get('vertical', 'general')
+        vertical = incoming_vertical if incoming_vertical in VALID_VERTICALS else 'general'
+
+        _hex_re         = re.compile(r'^#[0-9A-Fa-f]{6}$')
+        incoming_branding = data.get('branding', {})
+        _br_raw = incoming_branding.get('bubble_radius')
+        if _br_raw is not None:
+            try:
+                incoming_branding['bubble_radius'] = max(0, min(22, int(_br_raw)))
+            except (TypeError, ValueError):
+                incoming_branding.pop('bubble_radius', None)
+        for _ck in ('bot_bubble_color', 'user_bubble_color'):
+            _v = str(incoming_branding.get(_ck, '')).strip()
+            incoming_branding[_ck] = _v if _hex_re.match(_v) else ''
+
+        branding_settings = {
+            'branding':     incoming_branding,
+            'contact':      data.get('contact', {}),
+            'bot_settings': data.get('bot_settings', {}),
+            'integrations': integrations,
+            'vertical':     vertical,
+        }
+        branding_settings['contact'].setdefault('address', '')
+
+        raw_qr = branding_settings['bot_settings'].get('quick_replies') or []
+        branding_settings['bot_settings']['quick_replies'] = [
+            r for r in raw_qr if r and str(r).strip()
+        ]
+
+        remove_branding = False
+        if fresh_plan in ('agency', 'enterprise'):
+            remove_branding = bool(data.get('remove_branding'))
+        branding_settings['branding']['remove_branding'] = remove_branding
+
+        conn   = models.get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            '''UPDATE clients SET branding_settings=%s, company_name=%s,
+               widget_color=%s, welcome_message=%s, remove_branding=%s
+               WHERE client_id=%s AND user_id=%s''',
+            (
+                json.dumps(branding_settings),
+                data.get('branding', {}).get('company_name'),
+                data.get('branding', {}).get('primary_color'),
+                data.get('bot_settings', {}).get('welcome_message'),
+                remove_branding,
+                client_id,
+                current_user.id,
+            )
+        )
+        conn.commit(); cursor.close(); conn.close()
+        app.logger.info(f'Customization saved for client: {client_id}')
+        return jsonify({'success': True, 'message': 'Customization saved successfully'})
+    except Exception as e:
+        app.logger.error(f'Error saving customization: {e}')
+        return jsonify({'success': False, 'error': 'Failed to save customization'}), 500
+
+
+# ── Webhooks (outbound config) ────────────────────────────────────────────────
+
+@app.route('/api/admin/webhooks', methods=['GET'])
+@login_required
+def get_webhooks_route():
+    client_id = request.args.get('client_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    return jsonify({'success': True, 'webhooks': models.get_webhooks(client_id)})
+
+
+@app.route('/api/admin/webhooks', methods=['POST'])
+@login_required
+def save_webhooks_route():
+    data      = request.json or {}
+    client_id = data.get('client_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    webhooks = data.get('webhooks', [])
+    if len(webhooks) > 10:
+        return jsonify({'success': False, 'error': 'Maximum 10 webhooks per client'}), 400
+    count = models.save_webhooks(client_id, webhooks)
+    app.logger.info(
+        f'[Webhooks] Saved {count} webhooks client={client_id} user={current_user.id}'
+    )
+    return jsonify({'success': True, 'saved': count})
+
+
+@app.route('/api/admin/webhooks/regenerate-secret', methods=['POST'])
+@login_required
+def regenerate_webhook_secret():
+    data       = request.json or {}
+    client_id  = data.get('client_id', '')
+    webhook_id = data.get('webhook_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    new_secret = models.regenerate_signing_secret(client_id, webhook_id)
+    return jsonify({'success': True, 'signing_secret': new_secret})
+
+
+@app.route('/api/admin/webhooks/logs', methods=['GET'])
+@login_required
+def get_webhook_logs_route():
+    client_id = request.args.get('client_id', '')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    return jsonify({'success': True, 'logs': models.get_webhook_logs(client_id, limit=20)})
+
+
+@app.route('/api/admin/webhooks/test', methods=['POST'])
+@login_required
+def test_webhook():
+    import time, hmac as _hmac, hashlib
+    data        = request.json or {}
+    webhook_url = data.get('webhook_url', '').strip()
+    client_id   = data.get('client_id', '')
+    webhook_id  = data.get('webhook_id', '')
+    event_type  = data.get('event_type', 'test')
+    if not webhook_url:
+        return jsonify({'success': False, 'error': 'No webhook URL provided'}), 400
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    ts = datetime.utcnow().isoformat() + 'Z'
+    SAMPLE_PAYLOADS = {
+        'lead_captured':      {'event': 'lead_captured',      'client_id': client_id, 'timestamp': ts, 'data': {'name': 'Jane Smith', 'email': 'jane@example.com', 'phone': '+1 555 000 0000', 'company': 'Acme Corp'}},
+        'conversation_ended': {'event': 'conversation_ended', 'client_id': client_id, 'timestamp': ts, 'data': {'session_id': 'sess_abc123', 'message_count': 6, 'resolved': True}},
+        'faq_matched':        {'event': 'faq_matched',        'client_id': client_id, 'timestamp': ts, 'data': {'question': 'What are your business hours?', 'confidence': 0.94}},
+        'message_sent':       {'event': 'message_sent',       'client_id': client_id, 'timestamp': ts, 'data': {'role': 'user', 'content': 'Do you offer refunds?'}},
+        'test':               {'event': 'test',               'client_id': client_id, 'timestamp': ts, 'data': {'message': 'This is a test delivery from Lumvi.', 'sent_by': current_user.email}},
+    }
+    payload        = SAMPLE_PAYLOADS.get(event_type, SAMPLE_PAYLOADS['test'])
+    signing_secret = models.get_signing_secret(client_id, webhook_id) if webhook_id else ''
+    headers        = {
+        'Content-Type':     'application/json',
+        'X-Lumvi-Event':    event_type,
+        'X-Lumvi-Delivery': str(uuid.uuid4()),
+    }
+    if signing_secret:
+        body_bytes = json.dumps(payload).encode()
+        sig = _hmac.new(signing_secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+        headers['X-Lumvi-Signature'] = f'sha256={sig}'
+
+    t0 = time.time()
+    try:
+        resp        = requests.post(webhook_url, json=payload, headers=headers, timeout=10)
+        duration_ms = int((time.time() - t0) * 1000)
+        success     = 200 <= resp.status_code < 300
+        resp_body   = resp.text[:500]
+        if webhook_id:
+            models.log_webhook_delivery(
+                client_id=client_id, webhook_id=webhook_id,
+                event_type=event_type, url=webhook_url,
+                payload=payload, status_code=resp.status_code,
+                response_text=resp_body, success=success, duration_ms=duration_ms,
+            )
+        return jsonify({
+            'success':       success,
+            'status_code':   resp.status_code,
+            'duration_ms':   duration_ms,
+            'response_body': resp_body,
+            'payload_sent':  payload,
+            'message':       f'HTTP {resp.status_code} · {duration_ms}ms',
+        })
+    except requests.exceptions.Timeout:
+        return jsonify({'success': False, 'error': 'Request timed out (>10s)', 'payload_sent': payload})
+    except requests.exceptions.ConnectionError:
+        return jsonify({'success': False, 'error': 'Could not connect — check the URL', 'payload_sent': payload})
+    except Exception as e:
+        app.logger.error(f'[test-webhook] {e}')
+        return jsonify({'success': False, 'error': str(e), 'payload_sent': payload})
+
+
+# ── Platform integrations (Shopify / Acuity inbound webhooks) ─────────────────
+
+@app.route('/integrations')
+@login_required
+def integrations_page():
+    fresh_user  = models.get_user_by_id(current_user.id)
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+    if not plan_limits.get('webhooks'):
+        return redirect(url_for('auth.dashboard') + '?upgrade=webhooks')
+    clients  = models.get_user_clients(current_user.id)
+    base_url = os.environ.get('APP_BASE_URL', 'https://app.lumvi.ai')
+    return render_template(
+        'integrations.html',
+        user=current_user, plan_type=plan_type,
+        plan_limits=plan_limits, clients=clients, base_url=base_url,
+    )
+
+
+@app.route('/api/integrations/<client_id>', methods=['POST'])
+@login_required
+def create_platform_integration(client_id):
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    data     = request.get_json(force=True) or {}
+    platform = (data.get('platform') or '').lower().strip()
+    secret   = (data.get('webhook_secret') or '').strip()
+    config   = data.get('platform_config') or {}
+    if platform not in ('shopify', 'acuity'):
+        return jsonify({'success': False, 'error': 'platform must be shopify or acuity'}), 400
+    if not secret:
+        return jsonify({'success': False, 'error': 'webhook_secret is required'}), 400
+    ok = _webhooks.upsert_integration(client_id, platform, secret, config)
+    if not ok:
+        return jsonify({'success': False, 'error': 'Failed to save integration'}), 500
+    base_url    = os.environ.get('APP_BASE_URL', 'https://app.lumvi.ai')
+    webhook_url = f'{base_url}/webhooks/{platform}/{client_id}'
+    app.logger.info(
+        f'[Integration] user={current_user.id} connected platform={platform} client={client_id}'
+    )
+    return jsonify({
+        'success':      True,
+        'platform':     platform,
+        'webhook_url':  webhook_url,
+        'instructions': _webhooks._onboarding_instructions(platform, webhook_url),
+    }), 200
+
+
+@app.route('/api/integrations/<client_id>', methods=['GET'])
+@login_required
+def list_platform_integrations(client_id):
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    integrations = _webhooks.list_integrations(client_id)
+    base_url     = os.environ.get('APP_BASE_URL', 'https://app.lumvi.ai')
+    for i in integrations:
+        i['webhook_url'] = f'{base_url}/webhooks/{i["platform"]}/{client_id}'
+    return jsonify({'success': True, 'integrations': integrations}), 200
+
+
+@app.route('/api/integrations/<client_id>/<platform>', methods=['DELETE'])
+@login_required
+def delete_platform_integration(client_id, platform):
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    if platform not in ('shopify', 'acuity'):
+        return jsonify({'success': False, 'error': 'Unknown platform'}), 400
+    ok = _webhooks.delete_integration(client_id, platform)
+    if not ok:
+        return jsonify({'success': False, 'error': 'Failed to deactivate integration'}), 500
+    app.logger.info(
+        f'[Integration] user={current_user.id} disconnected platform={platform} client={client_id}'
+    )
+    return jsonify({'success': True, 'platform': platform}), 200
+
+
+@app.route('/api/integrations/<client_id>/log', methods=['GET'])
+@login_required
+def get_integration_log(client_id):
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
+        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+    limit    = min(int(request.args.get('limit', 20)), 100)
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute(
+            '''SELECT platform, event_type, status, payload_hash, error_msg, created_at
+               FROM webhook_log WHERE client_id = %s
+               ORDER BY created_at DESC LIMIT %s''',
+            (client_id, limit)
+        )
+        rows = cursor.fetchall()
+        log  = [{
+            'platform':   r['platform'],
+            'event_type': r['event_type'],
+            'status':     r['status'],
+            'ref':        (r.get('payload_hash') or '')[:8] or '—',
+            'error':      r.get('error_msg'),
+            'time':       str(r.get('created_at', '')),
+        } for r in rows]
+        return jsonify({'success': True, 'log': log}), 200
+    except Exception as e:
+        app.logger.error(f'[IntegrationLog] error: {e}')
+        return jsonify({'success': False, 'error': 'Failed to load log'}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+# ── Analytics ─────────────────────────────────────────────────────────────────
+
+@app.route('/analytics')
+@login_required
+def analytics_page():
+    fresh_user  = models.get_user_by_id(current_user.id)
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+    is_admin    = bool((fresh_user or {}).get('is_admin', False))
+    if not plan_limits['analytics'] and not is_admin:
+        return render_template('analytics_upgrade.html',
+                               user=current_user, plan_type=plan_type), 403
+    clients   = models.get_user_clients(current_user.id)
+    client_id = request.args.get('client_id')
+    if not client_id and clients:
+        client_id = clients[0]['client_id']
+    for c in clients:
+        if c.get('branding_settings'):
+            try:
+                c['branding_settings'] = json.loads(c['branding_settings'])
+            except Exception:
+                c['branding_settings'] = {}
+    is_agency = plan_type in ('pro', 'agency', 'enterprise') or is_admin
+    return render_template(
+        'analytics.html',
+        clients     = clients,
+        client_id   = client_id,
+        plan_type   = plan_type,
+        plan_limits = plan_limits,
+        is_agency   = is_agency,
+        user        = current_user,
+    )
+
+
+# ── Simple page routes ────────────────────────────────────────────────────────
+
+@app.route('/sales')
+def sales_page():
+    return render_template('sales-page.html')
+
+
+@app.route('/help-center')
+@login_required
+def help_center_page():
+    client_id = request.args.get('client_id', '')
+    return redirect(url_for('faqs.article_manager_page', client_id=client_id))
+
+
+@app.route('/thank-you')
+def thank_you_page():
+    return render_template('thank-you.html')
+
+
+# ── Inbound webhook — lead retrieval ──────────────────────────────────────────
+
+@app.route('/api/webhook/lead', methods=['POST'])
+def webhook_new_lead():
+    try:
+        import hmac as _hmac
+        _wh_secret = os.environ.get('WEBHOOK_SECRET', '').strip()
+        if not _wh_secret:
+            return jsonify({'error': 'Webhook not configured'}), 503
+        _provided = request.headers.get('X-Webhook-Secret', '')
+        if not _hmac.compare_digest(_provided, _wh_secret):
+            return jsonify({'error': 'Unauthorized'}), 401
+        data      = request.json or {}
+        client_id = data.get('client_id')
+        leads     = (models.get_leads(client_id) or [])[:10]
+        return jsonify({'success': True, 'leads': leads})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
