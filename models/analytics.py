@@ -1,0 +1,503 @@
+"""
+models/analytics.py
+-------------------
+Platform analytics — revenue, user growth, conversion funnel,
+API cost tracking, DB stats, and admin-level reporting queries.
+"""
+import json
+from datetime import datetime
+from .db import get_db
+
+    """All users for admin panel, newest first."""
+    conn, cursor = get_db()
+    cursor.execute(
+        '''SELECT id, email, plan_type, subscription_status, is_admin,
+                  created_at, upgraded_at, cancelled_at
+           FROM users
+           ORDER BY created_at DESC
+           LIMIT %s''',
+        (limit,)
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    for r in rows:
+        for col in ['created_at', 'upgraded_at', 'cancelled_at']:
+            if r.get(col):
+                r[col] = r[col].isoformat()
+    return rows
+
+
+def get_user_count_by_plan():
+    """Users grouped by plan_type."""
+    conn, cursor = get_db()
+    cursor.execute(
+        'SELECT plan_type, COUNT(*) AS cnt FROM users GROUP BY plan_type ORDER BY cnt DESC'
+    )
+    rows = {r['plan_type']: int(r['cnt']) for r in cursor.fetchall()}
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def get_new_users_this_month():
+    """Count signups in the current calendar month."""
+    conn, cursor = get_db()
+    cursor.execute(
+        """SELECT COUNT(*) AS cnt FROM users
+           WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)"""
+    )
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return int(row['cnt']) if row else 0
+
+
+def get_user_growth_by_month(months=6):
+    """New signups per month for the last N months."""
+    conn, cursor = get_db()
+    cursor.execute(
+        """SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'Mon YYYY') AS month,
+                  DATE_TRUNC('month', created_at) AS month_date,
+                  COUNT(*) AS count
+           FROM users
+           WHERE created_at >= CURRENT_DATE - (INTERVAL '1 month' * %s)
+           GROUP BY DATE_TRUNC('month', created_at)
+           ORDER BY month_date ASC""",
+        (months,)
+    )
+    rows = [{'month': r['month'], 'count': int(r['count'])} for r in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def admin_update_user(user_id, plan_type=None, subscription_status=None, is_admin=None):
+    """Update user plan, subscription_status, or admin flag."""
+    conn, cursor = get_db()
+    updates = []
+    params = []
+    if plan_type is not None:
+        updates.append('plan_type = %s')
+        params.append(plan_type)
+        updates.append('upgraded_at = CURRENT_TIMESTAMP')
+    if subscription_status is not None:
+        updates.append('subscription_status = %s')
+        params.append(subscription_status)
+        if subscription_status == 'cancelled':
+            updates.append('cancelled_at = CURRENT_TIMESTAMP')
+    if is_admin is not None:
+        updates.append('is_admin = %s')
+        params.append(bool(is_admin))
+    if not updates:
+        cursor.close()
+        conn.close()
+        return False
+    params.append(user_id)
+    cursor.execute('UPDATE users SET ' + ', '.join(updates) + ' WHERE id = %s', params)
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return True
+
+
+def admin_delete_user(user_id):
+    """Hard-delete a user and cascade all their data."""
+    conn, cursor = get_db()
+    try:
+        cursor.execute('SELECT client_id FROM clients WHERE user_id = %s', (user_id,))
+        client_ids = [r['client_id'] for r in cursor.fetchall()]
+        for cid in client_ids:
+            cursor.execute('DELETE FROM conversations WHERE client_id = %s', (cid,))
+            cursor.execute('DELETE FROM leads WHERE client_id = %s', (cid,))
+            cursor.execute('DELETE FROM faqs WHERE client_id = %s', (cid,))
+        cursor.execute('DELETE FROM clients WHERE user_id = %s', (user_id,))
+        cursor.execute('DELETE FROM commissions WHERE referred_user_id = %s', (user_id,))
+        cursor.execute('DELETE FROM referrals WHERE referred_user_id = %s', (user_id,))
+        cursor.execute('DELETE FROM affiliates WHERE user_id = %s', (user_id,))
+        cursor.execute('DELETE FROM payments WHERE user_id = %s', (user_id,))
+        cursor.execute('DELETE FROM analytics_events WHERE user_id = %s', (user_id,))
+        cursor.execute('DELETE FROM users WHERE id = %s', (user_id,))
+        conn.commit()
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_all_leads_admin(limit=500, client_id_filter=None, search=None):
+def log_api_usage(user_id, client_id, input_tokens, output_tokens,
+                  model='gemini-1.5-flash', endpoint=None):
+    """Log one Gemini API call. Never raises."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """INSERT INTO api_usage_log
+                   (user_id, client_id, model, input_tokens, output_tokens, endpoint)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (user_id, client_id, model,
+             int(input_tokens or 0), int(output_tokens or 0), endpoint)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f"[log_api_usage] {e}")
+
+
+def get_api_cost_summary():
+    _zero = {'cost_today': 0.0, 'cost_this_month': 0.0, 'cost_all_time': 0.0,
+             'tokens_today': 0, 'tokens_this_month': 0}
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('day',   created_at)=DATE_TRUNC('day',   NOW()) THEN input_tokens  END),0) AS in_today,
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('day',   created_at)=DATE_TRUNC('day',   NOW()) THEN output_tokens END),0) AS out_today,
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at)=DATE_TRUNC('month', NOW()) THEN input_tokens  END),0) AS in_month,
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at)=DATE_TRUNC('month', NOW()) THEN output_tokens END),0) AS out_month,
+                COALESCE(SUM(input_tokens),0)  AS in_all,
+                COALESCE(SUM(output_tokens),0) AS out_all
+            FROM api_usage_log
+        """)
+        r = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not r:
+            return _zero
+        return {
+            'cost_today':        _calc_cost(r['in_today'],  r['out_today']),
+            'cost_this_month':   _calc_cost(r['in_month'],  r['out_month']),
+            'cost_all_time':     _calc_cost(r['in_all'],    r['out_all']),
+            'tokens_today':      int(r['in_today'])  + int(r['out_today']),
+            'tokens_this_month': int(r['in_month'])  + int(r['out_month']),
+        }
+    except Exception:
+        return _zero
+
+
+def get_top_chatbots_by_cost(months=1, limit=10):
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT a.client_id, c.company_name, u.email AS owner_email,
+                   COALESCE(SUM(a.input_tokens),0)  AS input_tokens,
+                   COALESCE(SUM(a.output_tokens),0) AS output_tokens
+            FROM api_usage_log a
+            LEFT JOIN clients c ON a.client_id = c.client_id
+            LEFT JOIN users  u ON c.user_id    = u.id
+            WHERE DATE_TRUNC('month', a.created_at) = DATE_TRUNC('month', NOW())
+            GROUP BY a.client_id, c.company_name, u.email
+            ORDER BY (SUM(a.input_tokens)+SUM(a.output_tokens)) DESC
+            LIMIT %s
+        """, (limit,))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for r in rows:
+            it, ot = int(r['input_tokens']), int(r['output_tokens'])
+            result.append({'client_id': r['client_id'], 'company_name': r['company_name'] or r['client_id'],
+                           'owner_email': r['owner_email'] or '—', 'input_tokens': it,
+                           'output_tokens': ot, 'est_cost': _calc_cost(it, ot)})
+        return result
+    except Exception:
+        return []
+
+
+def get_user_cost_breakdown():
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT u.id AS user_id, u.email, u.plan_type,
+                   COALESCE(SUM(a.input_tokens),0)  AS input_tokens,
+                   COALESCE(SUM(a.output_tokens),0) AS output_tokens
+            FROM api_usage_log a
+            JOIN users u ON a.user_id = u.id
+            WHERE DATE_TRUNC('month', a.created_at) = DATE_TRUNC('month', NOW())
+            GROUP BY u.id, u.email, u.plan_type
+            ORDER BY (SUM(a.input_tokens)+SUM(a.output_tokens)) DESC
+        """)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [{'user_id': r['user_id'], 'email': r['email'], 'plan_type': r['plan_type'],
+                 'ai_cost': _calc_cost(int(r['input_tokens']), int(r['output_tokens']))} for r in rows]
+    except Exception:
+        return []
+
+
+def get_user_ai_costs_dict():
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT user_id, COALESCE(SUM(input_tokens),0) AS it, COALESCE(SUM(output_tokens),0) AS ot
+            FROM api_usage_log
+            WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND user_id IS NOT NULL
+            GROUP BY user_id
+        """)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return {int(r['user_id']): _calc_cost(int(r['it']), int(r['ot'])) for r in rows}
+    except Exception:
+        return {}
+
+
+def get_cost_revenue_by_month(months=6):
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT TO_CHAR(DATE_TRUNC('month', payment_date),'Mon YYYY') AS month,
+                   DATE_TRUNC('month', payment_date) AS month_dt,
+                   COALESCE(SUM(amount),0) AS revenue
+            FROM payments WHERE status='completed' AND payment_date >= NOW()-(INTERVAL '1 month'*%s)
+            GROUP BY DATE_TRUNC('month', payment_date) ORDER BY month_dt
+        """, (months,))
+        rev = {r['month_dt']: {'month': r['month'], 'revenue': float(r['revenue']), 'cost': 0.0}
+               for r in cursor.fetchall()}
+        cursor.execute("""
+            SELECT TO_CHAR(DATE_TRUNC('month', created_at),'Mon YYYY') AS month,
+                   DATE_TRUNC('month', created_at) AS month_dt,
+                   COALESCE(SUM(input_tokens),0) AS it, COALESCE(SUM(output_tokens),0) AS ot
+            FROM api_usage_log WHERE created_at >= NOW()-(INTERVAL '1 month'*%s)
+            GROUP BY DATE_TRUNC('month', created_at) ORDER BY month_dt
+        """, (months,))
+        for r in cursor.fetchall():
+            cost = _calc_cost(int(r['it']), int(r['ot']))
+            if r['month_dt'] in rev:
+                rev[r['month_dt']]['cost'] = cost
+            else:
+                rev[r['month_dt']] = {'month': r['month'], 'revenue': 0.0, 'cost': cost}
+        cursor.close()
+        conn.close()
+        return sorted(rev.values(), key=lambda x: x['month'])
+    except Exception:
+        return []
+
+
+def get_daily_burn_last_30():
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT TO_CHAR(DATE_TRUNC('day', created_at),'DD Mon') AS date,
+                   DATE_TRUNC('day', created_at) AS day_dt,
+                   COALESCE(SUM(input_tokens),0) AS it, COALESCE(SUM(output_tokens),0) AS ot
+            FROM api_usage_log WHERE created_at >= NOW()-INTERVAL '30 days'
+            GROUP BY DATE_TRUNC('day', created_at) ORDER BY day_dt
+        """)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [{'date': r['date'], 'cost': _calc_cost(int(r['it']), int(r['ot']))} for r in rows]
+    except Exception:
+        return []
+
+
+def purge_old_api_logs(days=90):
+    try:
+        conn, cursor = get_db()
+        cursor.execute("DELETE FROM api_usage_log WHERE created_at < NOW()-(INTERVAL '1 day'*%s)", (days,))
+        deleted = cursor.rowcount
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return deleted
+    except Exception:
+        return 0
+
+
+def get_db_stats():
+    tables = ['users','clients','leads','payments','analytics_events',
+              'conversations','api_usage_log','faqs','knowledge_base']
+    results = []
+    try:
+        conn, cursor = get_db()
+        for t in tables:
+            try:
+                cursor.execute(f"SELECT COUNT(*) AS cnt FROM {t}")
+                row = cursor.fetchone()
+                results.append({'table': t, 'count': int(row['cnt']) if row else 0})
+            except Exception:
+                pass
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+    return results
+
+
+def get_churn_this_week():
+    try:
+        conn, cursor = get_db()
+        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE subscription_status='cancelled' AND cancelled_at >= NOW()-INTERVAL '7 days'")
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def get_past_due_count():
+    try:
+        conn, cursor = get_db()
+        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE subscription_status='past_due'")
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def get_active_subscription_count():
+    try:
+        conn, cursor = get_db()
+        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE subscription_status = 'active' AND plan_type!='free'")
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def get_paid_user_count():
+    try:
+        conn, cursor = get_db()
+        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE plan_type!='free'")
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def get_free_user_count():
+    try:
+        conn, cursor = get_db()
+        cursor.execute("SELECT COUNT(*) AS cnt FROM users WHERE plan_type='free'")
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def get_total_client_count():
+    try:
+        conn, cursor = get_db()
+        cursor.execute("SELECT COUNT(*) AS cnt FROM clients")
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return int(row['cnt']) if row else 0
+    except Exception:
+        return 0
+
+
+def get_analytics_events(limit=300):
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT e.event_name, e.user_id, e.metadata, e.created_at, u.email
+            FROM analytics_events e LEFT JOIN users u ON e.user_id=u.id
+            ORDER BY e.created_at DESC LIMIT %s
+        """, (limit,))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [{'event_name': r['event_name'], 'user_id': r['user_id'], 'email': r['email'],
+                 'metadata': r['metadata'],
+                 'created_at': r['created_at'].isoformat() if r['created_at'] else None}
+                for r in rows]
+    except Exception:
+        return []
+
+
+def get_event_counts():
+    try:
+        conn, cursor = get_db()
+        cursor.execute("SELECT event_name, COUNT(*) AS cnt FROM analytics_events GROUP BY event_name ORDER BY cnt DESC")
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return {r['event_name']: int(r['cnt']) for r in rows}
+    except Exception:
+        return {}
+
+
+def get_conversion_funnel(days=30):
+    """
+    Daily landing views → signup page views → paid signups → conversion rate.
+    Used by /admin/conversion-funnel dashboard page.
+    Returns list of dicts (newest first) + summary totals.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """
+            SELECT
+                DATE(created_at) AS day,
+                COUNT(*) FILTER (
+                    WHERE event_name = 'page_view'
+                    AND   metadata::json->>'page' = 'landing'
+                )                                                        AS landing_views,
+                COUNT(*) FILTER (
+                    WHERE event_name = 'signup_page_view'
+                )                                                        AS signup_page_views,
+                COUNT(*) FILTER (
+                    WHERE event_name = 'signup'
+                    AND   metadata IS NOT NULL
+                    AND   metadata::json->>'plan' != 'free'
+                )                                                        AS paid_signups
+            FROM analytics_events
+            WHERE created_at >= CURRENT_DATE - (%s * INTERVAL '1 day')
+            GROUP BY DATE(created_at)
+            ORDER BY day DESC
+            """,
+            (days,)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        daily = []
+        for r in rows:
+            views    = int(r['landing_views']    or 0)
+            sp_views = int(r['signup_page_views'] or 0)
+            signups  = int(r['paid_signups']     or 0)
+            rate     = round(signups / views * 100, 2) if views > 0 else 0.0
+            daily.append({
+                'day':               str(r['day']),
+                'landing_views':     views,
+                'signup_page_views': sp_views,
+                'paid_signups':     signups,
+                'conversion_rate':   rate,
+            })
+
+        total_views   = sum(d['landing_views']  for d in daily)
+        total_signups = sum(d['paid_signups']  for d in daily)
+        overall_rate  = round(total_signups / total_views * 100, 2) if total_views > 0 else 0.0
+
+        return {
+            'daily':         daily,
+            'total_views':   total_views,
+            'total_signups': total_signups,
+            'overall_rate':  overall_rate,
+            'days':          days,
+        }
+    except Exception:
+        return {
+            'daily': [], 'total_views': 0,
+            'total_signups': 0, 'overall_rate': 0.0, 'days': days,
+        }
+
+
