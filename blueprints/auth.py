@@ -77,9 +77,9 @@ def init_auth(mail, google_oauth, plan_limits, valid_verticals,
     Called once in app.py after all shared objects are ready.
     Must be called before the first request reaches this blueprint.
     """
-    global (_mail, _google_oauth, _plan_limits, _valid_verticals,
-            _get_subscription_status, _send_welcome_email,
-            _agency_included_clients, _agency_seat_price, _User)
+    global _mail, _google_oauth, _plan_limits, _valid_verticals, \
+            _get_subscription_status, _send_welcome_email, \
+            _agency_included_clients, _agency_seat_price, _User
     _mail                    = mail
     _google_oauth            = google_oauth
     _plan_limits             = plan_limits
