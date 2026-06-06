@@ -16,32 +16,140 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from constants import PERSONALITIES
-from utils import get_logger, log_crash
+from utils import get_logger, log_crash, generate as _gemini_generate
 
 logger = get_logger('lumvi.generation')
 
 
-# ── Static fallbacks ──────────────────────────────────────────────────────────
+# ── Fallback pool ─────────────────────────────────────────────────────────────
+# 20 varied options across different registers and styles.
+# Used when Gemini is unavailable or as a fast baseline.
+# Rotated randomly so repeat IDK responses don't feel identical.
 
-_STATIC_FALLBACKS = [
-    "I don't have the exact answer for that right now, but our team would be happy to help. "
-    "Would you like me to connect you with someone?",
-    "That's a great question — let me get the right person to answer it properly for you. "
+_FALLBACK_POOL = [
+    # Honest + offer
+    "That one's a bit outside what I have right now — want me to get someone who can help properly?",
+    "Hmm, I want to make sure you get an accurate answer rather than me guessing. "
+    "Shall I connect you with the team?",
+    "Not something I can answer confidently from what I have — the team would be much better placed. "
+    "Can I connect you?",
+    "I've looked through what I know and I'm not confident I have the right answer for that. "
+    "Rather than guess, want me to put you in touch with someone?",
+    "That's pushed to the edge of what I know! Let me get someone with the full picture to help. "
+    "Sound good?",
+    # Short + direct
+    "I'm not sure I have the full picture on that one. "
+    "Our team would know better — shall I connect you?",
+    "Good question — I just want to make sure you get the right information rather than something approximate. "
+    "Want me to reach out to the team for you?",
+    "That's not something I can answer well from my knowledge base right now. "
+    "Want me to get the right person on it?",
+    # Warm + empathetic
+    "I want to be upfront — I don't have a confident answer for that. "
+    "Let me make sure you get the right help instead.",
+    "Rather than give you a half-answer, let me find someone who can give you the full picture. "
+    "Does that work?",
+    "I'd rather be honest and get you proper help than guess on this one. "
+    "Shall I connect you?",
+    # Context-acknowledging
+    "That's a bit beyond what I can answer accurately here. "
+    "Our team would have the right information — want me to arrange a chat?",
+    "I don't have enough detail on that to give you a confident answer. "
+    "Would it help if I connected you with someone who does?",
+    "I can see why you're asking — I just don't have enough in my knowledge base to answer it well. "
+    "Let me get someone better placed to help.",
+    # Minimal / punchy
+    "That one needs a human — want me to make the connection?",
+    "I'm missing some details to answer that well. Team chat?",
+    "Not quite something I can cover — can I put you in touch with the right person?",
+    "I'd rather get you the right answer than a rough one. Can I connect you?",
+    "That's outside what I can answer accurately. Want me to get someone involved?",
+    "Good question for the team — shall I arrange that for you?",
+]
+
+_FRUSTRATED_FALLBACKS = [
+    "I can hear this hasn't been easy — let me get a person involved who can help directly. "
+    "Can I connect you now?",
+    "You deserve a proper answer on this. Let me get someone from the team to help you directly — OK?",
+    "I don't want to keep going in circles. Let me connect you with someone who can sort this out properly.",
+    "I'm sorry this hasn't been resolved — the right move is getting a real person on it. "
     "Shall I arrange that?",
-    "I want to make sure you get an accurate answer on that. "
-    "Can I connect you with a specialist?",
+    "Let me stop guessing and get you someone who can actually fix this. One moment?",
 ]
 
 
-def make_fallback(vertical: str = 'general', is_frustrated: bool = False) -> str:
-    """Return a static fallback string when the model is disabled or erroring."""
+def make_fallback(
+    vertical: str = 'general',
+    is_frustrated: bool = False,
+    query: str = '',
+) -> str:
+    """
+    Return a varied fallback string from the pool.
+    Uses the frustrated pool when session frustration is detected.
+    If query is provided, appends a brief topic reference so it doesn't
+    sound completely generic.
+    """
     import random
-    if is_frustrated:
-        return (
-            "I can hear this hasn't been easy — let me get a person involved who "
-            "can help you directly. Can I connect you now?"
-        )
-    return random.choice(_STATIC_FALLBACKS)
+    pool = _FRUSTRATED_FALLBACKS if is_frustrated else _FALLBACK_POOL
+    text = random.choice(pool)
+
+    # If we have the query topic, prepend a brief acknowledgement so it
+    # feels connected to what was asked rather than a canned non-answer.
+    if query and not is_frustrated and len(query.split()) >= 3:
+        topic = ' '.join(query.split()[:6]).rstrip('?.!')
+        # Lowercase the first char then re-capitalise leading 'I' pronoun
+        rest  = text[0].lower() + text[1:]
+        rest  = re.sub(r'^i(?=[ \'])', 'I', rest)
+        text  = f'On "{topic}" — {rest}'
+
+    return text
+
+
+def dynamic_fallback(
+    query: str,
+    vertical: str,
+    session_mem: Dict,
+    model: Any,
+    model_name: str = '',
+) -> str:
+    """
+    Generate a natural, contextual IDK response using Gemini.
+    References the user's actual query so it never sounds like a canned message.
+
+    Falls back to make_fallback() if the model is unavailable or errors.
+    This is a lightweight call — short prompt, short output, fast.
+    """
+    is_frustrated = session_mem.get('is_frustrated', False)
+
+    if model is None:
+        return make_fallback(vertical, is_frustrated, query)
+
+    personality = get_dynamic_personality(vertical, session_mem)
+
+    prompt = (
+        f"You are a {vertical} support assistant. Tone: {personality['tone']}.\n\n"
+        f"A customer asked: \"{query.strip()[:200]}\"\n\n"
+        "You don't have an accurate answer in your knowledge base. "
+        "Write a single natural response (1–2 sentences) that:\n"
+        "- Honestly acknowledges you can't fully answer this\n"
+        "- Warmly offers to connect them with the team\n"
+        "- References the topic they asked about (don't be generic)\n"
+        "- Feels conversational, not robotic or formulaic\n"
+        "- Does NOT start with 'I'\n"
+        "- Does NOT use 'Great question', 'Certainly', 'Of course'\n"
+        "- Does NOT use markdown or formatting\n\n"
+        "Write the response only. No quotes, no explanation."
+    )
+    try:
+        resp = _gemini_generate(model, prompt, model_name)
+        text = (resp.text or '').strip()
+        # Sanity check: must be a real sentence, not an empty or very short response
+        if text and len(text) > 25 and len(text) < 400:
+            return text
+    except Exception as e:
+        log_crash(logger, 'Generation/DynamicFallback', e, query_preview=query[:60])
+
+    return make_fallback(vertical, is_frustrated, query)
 
 
 # ── Personality / tone helpers ────────────────────────────────────────────────
@@ -161,7 +269,7 @@ def rag_generate_and_polish(
     )
 
     try:
-        resp  = model.generate_content(prompt)
+        resp  = _gemini_generate(model, prompt)
         text  = (resp.text or '').strip()
         if not text:
             return make_fallback(vertical, session_mem.get('is_frustrated', False)), 0.0, 'empty_generation'
@@ -213,7 +321,7 @@ def vertical_fallback(
         "Respond with ONLY the answer text."
     )
     try:
-        resp = model.generate_content(prompt)
+        resp = _gemini_generate(model, prompt)
         text = (resp.text or '').strip()
         if not text:
             return make_fallback(vertical, session_mem.get('is_frustrated', False)), 0.0, 'vertical_fallback_empty'
@@ -305,7 +413,7 @@ def maybe_summarise(
             f"Conversation:\n{history_txt}\n\n"
             "Summary:"
         )
-        resp    = model.generate_content(prompt)
+        resp    = _gemini_generate(model, prompt)
         summary = (resp.text or '').strip()
         if not summary:
             return

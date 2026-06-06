@@ -123,6 +123,7 @@ IDK_METHODS_ALL = frozenset({
     'idk_fallback', 'vertical_fallback', 'vertical_fallback_idk',
     'static_fallback', 'fatal_fallback', 'confidence_gate_handoff',
     'idk_no_kb', 'declined_handoff', 'escalation',
+    'dynamic_fallback_idk',   # replaces the vertical_fallback → dynamic_fallback chain
 })
 
 # ── Multi-intent decomposition ────────────────────────────────────────────────

@@ -31,7 +31,7 @@ from pipeline.stages.math_helpers import (
     topic_overlap,
 )
 from services.embedding import embed
-from utils import get_logger, log_crash
+from utils import get_logger, log_crash, generate as _gemini_generate
 
 logger = get_logger('lumvi.retrieval')
 
@@ -137,22 +137,22 @@ def rewrite_query(
     vertical: str,
     conversation_history: List[Dict],
     model: Any,
-) -> Tuple[str, bool]:
+) -> str:
     """
     Use Gemini to rewrite a user query into a clean retrieval query.
-    Also returns is_sales_query classification as a side-effect.
+    Returns only the rewritten query string.
 
-    Returns (rewritten_query, is_sales_query).
-    Falls back to (clean_message, False) on any error.
+    is_sales classification is handled entirely by the GLOBAL_PRICING_KW keyword
+    check in detect_intent — no Gemini needed for that.
 
-    This is "Call 1" in the 2-call budget.
-    Only invoke when:
-      - The message is longer than 3 words, AND
-      - The previous call1_used flag is False
+    This is "Call 1" in the 2-call budget. Only invoked when:
+      - The message is ≥ 4 words, AND
+      - Preflight cosine score is below confidence_high (ambiguous retrieval)
+    Falls back to clean_message on any error.
     """
     history_snippet = ''
     if conversation_history:
-        last_turns = conversation_history[-4:]
+        last_turns = conversation_history[-2:]   # 2 turns is enough for context
         history_snippet = '\n'.join(
             f"{t.get('role','?').upper()}: {str(t.get('content',''))[:120]}"
             for t in last_turns
@@ -162,25 +162,19 @@ def rewrite_query(
         f"You are a retrieval query optimizer for a {vertical} business chatbot.\n\n"
         f"Recent conversation:\n{history_snippet}\n\n"
         f"User message: \"{clean_message}\"\n\n"
-        "Task: Rewrite the user message as a clean, self-contained search query "
-        "that will retrieve the best FAQ match. "
-        "Also classify whether this is a pricing/sales query.\n\n"
-        "Respond ONLY with valid JSON:\n"
-        '{"query": "<rewritten query>", "is_sales": true|false}'
+        "Rewrite the user message as a clean, self-contained search query "
+        "that will retrieve the best FAQ match. Keep it under 15 words.\n\n"
+        "Respond ONLY with the rewritten query text. No explanation, no quotes, no JSON."
     )
     try:
-        resp   = model.generate_content(prompt)
-        text   = (resp.text or '').strip().strip('`')
-        if text.startswith('json'):
-            text = text[4:].strip()
-        parsed = __import__('json').loads(text)
-        query  = str(parsed.get('query', clean_message)).strip() or clean_message
-        is_sales = bool(parsed.get('is_sales', False))
-        logger.debug(f"[Retrieval/Rewrite] '{clean_message[:50]}' → '{query[:50]}' sales={is_sales}")
-        return query, is_sales
+        resp  = _gemini_generate(model, prompt)
+        query = (resp.text or '').strip().strip('"').strip("'").strip()
+        query = query or clean_message
+        logger.debug(f"[Retrieval/Rewrite] '{clean_message[:50]}' → '{query[:50]}'")
+        return query
     except Exception as e:
         log_crash(logger, 'Retrieval/Rewrite', e, msg_preview=clean_message[:60])
-        return clean_message, False
+        return clean_message
 
 
 # ── Embedding search ──────────────────────────────────────────────────────────
@@ -231,7 +225,7 @@ def embedding_search(
     logger.debug(
         f"[Retrieval/Search] query='{query[:40]}' "
         f"candidates={len(candidates)} "
-        f"top_score={scores[0]:.3f if scores else 0:.3f}"
+        f"top_score={scores[0] if scores else 0:.3f}"
     )
     return candidates, scores
 
@@ -341,7 +335,7 @@ def cross_encoder_rerank(
         f"relevance order, e.g. [2,1,3]. No explanation."
     )
     try:
-        resp  = model.generate_content(prompt)
+        resp  = _gemini_generate(model, prompt)
         text  = (resp.text or '').strip()
         match = re.search(r'\[[\d,\s]+\]', text)
         if not match:

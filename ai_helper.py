@@ -29,12 +29,11 @@ import json
 import logging
 import os
 import re
-import struct
 import threading
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
-import google.generativeai as genai
+import google.genai as genai
 
 # ── New module imports ────────────────────────────────────────────────────────
 from constants import (
@@ -48,12 +47,12 @@ from pipeline.context import PipelineRequest, PipelineResult
 from pipeline.stages.escalation  import check_escalation
 from pipeline.stages.generation  import (
     build_context,
+    dynamic_fallback,
     guardrails,
     make_fallback,
     maybe_summarise,
     parse_clarify_response,
     rag_generate_and_polish,
-    vertical_fallback,
 )
 from pipeline.stages.intent import (
     detect_intent,
@@ -86,7 +85,7 @@ from services.session_store import (
     load_chat_session,
     persist_session,
 )
-from utils import get_logger, log_crash
+from utils import get_logger, log_crash, generate as _gemini_call
 
 logger = get_logger('lumvi.ai_helper')
 
@@ -119,6 +118,18 @@ except Exception as _rc_err:
 # ── Singleton ─────────────────────────────────────────────────────────────────
 _ai_helper_instance: Optional['AIHelper'] = None
 _ai_helper_lock     = threading.Lock()
+
+# ── Lead extraction — regex (no Gemini call) ──────────────────────────────────
+_EMAIL_RE   = re.compile(r'\b[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}\b')
+_PHONE_RE   = re.compile(r'\b(?:\+?\d[\d\s\-().]{7,14}\d)\b')
+_NAME_RE    = re.compile(
+    r"(?:i'?m|my name is|this is|call me)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
+    re.IGNORECASE,
+)
+_URGENT_KW  = frozenset({'urgent', 'asap', 'immediately', 'today', 'right now', 'right away'})
+
+# ── IDK response cache TTL (shorter than normal — refresh as KB grows) ────────
+_REDIS_IDK_TTL_SEC = 900   # 15 minutes
 
 
 def get_ai_helper(
@@ -158,18 +169,14 @@ class AIHelper:
 
         if self.enabled:
             try:
-                genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel(
-                    model_name,
-                    generation_config=genai.GenerationConfig(
-                        temperature=0.3,
-                        max_output_tokens=512,
-                    ),
-                )
-                logger.info(f"[AIHelper] Gemini ready model={model_name}")
+                self._genai_client = genai.Client(api_key=api_key)
+                self.model = self._genai_client.models
+                self._model_name = model_name
+                logger.info(f"[AIHelper] google.genai ready model={model_name}")
             except Exception as e:
                 log_crash(logger, 'AIHelper/init', e, model=model_name)
                 self.enabled = False
+                self.model = None
         else:
             logger.warning(
                 "[AIHelper] GEMINI_API_KEY not set — running in static fallback mode. "
@@ -212,6 +219,19 @@ class AIHelper:
         except Exception:
             pass
 
+    def _write_resp_cache_ttl(self, cache_key: str, result: Dict, ttl: int) -> None:
+        """Write to response cache with a custom TTL (e.g. shorter for IDK responses)."""
+        if not _redis_resp_client:
+            return
+        try:
+            _redis_resp_client.setex(
+                _REDIS_RESP_PREFIX + cache_key,
+                ttl,
+                json.dumps(result),
+            )
+        except Exception:
+            pass
+
     def _build_handoff_payload(
         self,
         history: List[Dict],
@@ -239,26 +259,33 @@ class AIHelper:
         vertical: str,
         lead_triggers: List[str],
     ) -> Dict:
-        """Extract structured lead info using Gemini."""
-        if not self.enabled or not self.model:
-            return {}
-        personality = PERSONALITIES.get(vertical, PERSONALITIES['general'])
-        lead_kws    = personality.get('lead_keywords', []) + (lead_triggers or [])
-        prompt = (
-            f"Extract lead information from this customer message.\n"
-            f"Message: \"{message}\"\n"
-            f"Existing session data: {json.dumps({k: v for k, v in session_mem.items() if k in ('name','email','phone')})}\n\n"
-            "Respond ONLY with JSON: "
-            '{"name": null|"string", "email": null|"string", "phone": null|"string", '
-            '"interest": null|"string", "urgency": "low|medium|high"}'
-        )
-        try:
-            resp   = self.model.generate_content(prompt)
-            parsed = self._parse_json(resp.text or '')
-            return parsed or {}
-        except Exception as e:
-            log_crash(logger, 'LeadExtract', e)
-            return {}
+        """
+        Extract structured lead info using regex — no Gemini call.
+
+        Handles email, phone, and name patterns. Falls back to session_mem
+        for fields already captured in earlier turns. The `interest` field
+        from the old Gemini version is omitted (it was unused downstream).
+        """
+        result: Dict = {}
+
+        # Email — structured pattern, regex is exact
+        m = _EMAIL_RE.search(message)
+        result['email'] = m.group(0) if m else session_mem.get('email')
+
+        # Phone — liberal pattern covers international formats
+        m = _PHONE_RE.search(message)
+        result['phone'] = m.group(0).strip() if m else session_mem.get('phone')
+
+        # Name — common self-introduction patterns
+        m = _NAME_RE.search(message)
+        result['name'] = m.group(1).strip() if m else session_mem.get('name')
+
+        # Urgency — keyword heuristic
+        msg_lower = message.lower()
+        result['urgency'] = 'high' if any(kw in msg_lower for kw in _URGENT_KW) else 'medium'
+
+        # Strip None values so callers get a clean dict
+        return {k: v for k, v in result.items() if v}
 
     def _build_lead_nudge(self, lead_info: Dict, vertical: str) -> str:
         """Build a lead capture follow-up message."""
@@ -468,44 +495,53 @@ class AIHelper:
                     confidence=1.0,
                 ).to_dict()
 
-            # ── Query rewriting (Call 1) ──────────────────────────────
+            # ── Query resolution ──────────────────────────────────────
             ctx.search_query = resolve_query(ctx.clean_message, conversation_history)
-
-            if self.enabled and self.model and len(ctx.search_query.split()) >= 4:
-                rewritten, is_sales = rewrite_query(
-                    ctx.search_query, vertical, conversation_history, self.model
-                )
-                ctx.search_query   = rewritten
-                ctx.is_sales_query = ctx.is_sales_query or is_sales
-                ctx.call1_used     = True
 
             # ── Multi-intent decomposition ────────────────────────────
             sub_queries = decompose_intents(ctx.search_query)
 
-            # ── Embedding search + hybrid rerank ──────────────────────
-            if len(sub_queries) > 1:
-                # Run retrieval for each sub-query, merge results
-                merged_candidates: List[Dict] = []
-                merged_scores: List[float]    = []
-                seen_ids: set = set()
-                for sq in sub_queries[:3]:  # max 3 sub-queries
-                    cands, scores = embedding_search(
-                        sq, faqs, client_id, ctx.poor_kb_ids
-                    )
-                    for c, s in zip(cands, scores):
-                        cid = str(c.get('kb_id', c.get('id', id(c))))
-                        if cid not in seen_ids:
-                            merged_candidates.append(c)
-                            merged_scores.append(s)
-                            seen_ids.add(cid)
-                ctx.candidates    = merged_candidates
-                ctx.vector_scores = merged_scores
-            else:
-                ctx.candidates, ctx.vector_scores = embedding_search(
-                    ctx.search_query, faqs, client_id, ctx.poor_kb_ids
-                )
+            # ── Helper: run embedding search across sub-queries ───────
+            def _do_embedding_search(query: str, sq_list: List[str]) -> tuple:
+                if len(sq_list) > 1:
+                    merged_c: List[Dict] = []
+                    merged_s: List[float] = []
+                    seen: set = set()
+                    for sq in sq_list[:3]:
+                        cands, scores = embedding_search(sq, faqs, client_id, ctx.poor_kb_ids)
+                        for c, s in zip(cands, scores):
+                            cid = str(c.get('kb_id', c.get('id', id(c))))
+                            if cid not in seen:
+                                merged_c.append(c)
+                                merged_s.append(s)
+                                seen.add(cid)
+                    return merged_c, merged_s
+                return embedding_search(query, faqs, client_id, ctx.poor_kb_ids)
 
+            # ── Preflight embedding search (free — local model) ───────
+            # Search on the raw resolved query first. If top cosine is
+            # already ≥ confidence_high, the phrasing is unambiguous —
+            # skip rewrite_query entirely (saves Call 1 for ~60% of msgs).
+            ctx.candidates, ctx.vector_scores = _do_embedding_search(
+                ctx.search_query, sub_queries
+            )
             ctx.top_cosine = ctx.vector_scores[0] if ctx.vector_scores else 0.0
+
+            # ── Query rewriting — only when retrieval is ambiguous (Call 1)
+            if (self.enabled and self.model
+                    and len(ctx.search_query.split()) >= 4
+                    and ctx.top_cosine < ctx.confidence_high):
+                rewritten = rewrite_query(
+                    ctx.search_query, vertical, conversation_history, self.model
+                )
+                if rewritten != ctx.search_query:
+                    ctx.search_query = rewritten
+                    ctx.call1_used   = True
+                    sub_queries      = decompose_intents(rewritten)
+                    ctx.candidates, ctx.vector_scores = _do_embedding_search(
+                        ctx.search_query, sub_queries
+                    )
+                    ctx.top_cosine = ctx.vector_scores[0] if ctx.vector_scores else 0.0
 
             # ── Hybrid rerank (RRF) ───────────────────────────────────
             ctx.hybrid_ranked, ctx.hybrid_scores = hybrid_rerank(
@@ -514,10 +550,12 @@ class AIHelper:
             ctx.top_hybrid = ctx.hybrid_scores[0] if ctx.hybrid_scores else 0.0
 
             # ── Cross-encoder rerank ──────────────────────────────────
-            # Only when: budget free, ambiguous top score, 2+ candidates
+            # Only fires for genuinely uncertain short-message retrievals.
+            # Gate tightened from confidence_high (0.65) → 0.35: between
+            # 0.35–0.65 the hybrid RRF is already reliable enough.
             if (self.enabled and self.model
                     and not ctx.call1_used
-                    and ctx.top_cosine < ctx.confidence_high
+                    and ctx.top_cosine < 0.35
                     and len(ctx.hybrid_ranked) >= 2):
                 ctx.hybrid_ranked = cross_encoder_rerank(
                     ctx.search_query, ctx.hybrid_ranked, self.model
@@ -545,6 +583,28 @@ class AIHelper:
                         f"[Pipeline] topic mismatch gate fired trace={ctx.trace_id}"
                     )
 
+            # ── FAQ-keyed semantic cache (Fix 7) ──────────────────────
+            # If this client has already answered a question that retrieved
+            # the same top FAQ, return the cached response. This catches
+            # rephrasings ("what's the price?" vs "how much does it cost?")
+            # without any vector scanning — just a second Redis lookup.
+            _faq_cache_key: Optional[str] = None
+            if ctx.rag_qualified and ctx.hybrid_ranked:
+                _top_faq_id = str(
+                    ctx.hybrid_ranked[0].get('kb_id',
+                    ctx.hybrid_ranked[0].get('id', ''))
+                )
+                if _top_faq_id:
+                    _faq_cache_key = self._cache_key(
+                        _top_faq_id, client_id or '', vertical
+                    )
+                    _faq_cached = self._read_resp_cache(_faq_cache_key)
+                    if _faq_cached:
+                        logger.debug(
+                            f"[Pipeline] FAQ-keyed cache hit trace={ctx.trace_id}"
+                        )
+                        return _faq_cached
+
             # ── Generation ────────────────────────────────────────────
             if ctx.rag_qualified and self.enabled and self.model:
                 final, confidence, method = rag_generate_and_polish(
@@ -557,11 +617,19 @@ class AIHelper:
                     self.model,
                 )
             elif self.enabled and self.model:
-                final, confidence, method = vertical_fallback(
-                    ctx.search_query, vertical, ctx.session_mem, self.model
+                # Go straight to dynamic_fallback — it references the actual
+                # query topic and is strictly better than vertical_fallback for
+                # IDK paths. Eliminates the 2-call vertical→dynamic chain.
+                final = dynamic_fallback(
+                    ctx.search_query, vertical, ctx.session_mem,
+                    self.model, self._model_name,
                 )
+                confidence = 0.0
+                method     = 'dynamic_fallback_idk'
             else:
-                final      = make_fallback(vertical, ctx.session_mem.get('is_frustrated', False))
+                final      = dynamic_fallback(
+                    ctx.search_query, vertical, ctx.session_mem, None
+                )
                 confidence = 0.0
                 method     = 'static_fallback'
 
@@ -577,16 +645,30 @@ class AIHelper:
             # ── Guardrails ────────────────────────────────────────────
             final = guardrails(final, ctx.hybrid_ranked)
 
-            # ── Cache write (high-confidence only) ────────────────────
+            # ── Cache write ────────────────────────────────────────────
+            _result_to_cache = PipelineResult(
+                response=final,
+                method=method,
+                confidence=confidence,
+                is_lead=is_lead,
+                lead_metadata=lead_metadata,
+            ).to_dict()
+
             if confidence >= ctx.confidence_high and ctx.resp_cache_key:
-                result_dict = PipelineResult(
-                    response=final,
-                    method=method,
-                    confidence=confidence,
-                    is_lead=is_lead,
-                    lead_metadata=lead_metadata,
-                ).to_dict()
-                _BG_EXECUTOR.submit(self._write_resp_cache, ctx.resp_cache_key, result_dict)
+                # High-confidence RAG hit — write to both exact and FAQ-keyed cache
+                _BG_EXECUTOR.submit(self._write_resp_cache, ctx.resp_cache_key, _result_to_cache)
+                if _faq_cache_key:   # same answer for all rephrasings of this FAQ
+                    _BG_EXECUTOR.submit(self._write_resp_cache, _faq_cache_key, _result_to_cache)
+            elif method == 'dynamic_fallback_idk' and ctx.resp_cache_key:
+                # IDK responses cached briefly — avoids re-running Gemini for the same
+                # unanswered question from different users. Short TTL so new KB entries
+                # surface quickly.
+                _BG_EXECUTOR.submit(
+                    self._write_resp_cache_ttl,
+                    ctx.resp_cache_key,
+                    _result_to_cache,
+                    _REDIS_IDK_TTL_SEC,
+                )
 
             # ── KB gap recording ──────────────────────────────────────
             if method in IDK_METHODS_ALL:
@@ -678,12 +760,48 @@ class AIHelper:
             '"summary": "one sentence summary", "topic": "topic category"}'
         )
         try:
-            resp   = self.model.generate_content(prompt)
+            resp   = _gemini_call(self.model, prompt, self._model_name)
             parsed = self._parse_json(resp.text or '')
             return parsed or {'tags': [], 'paraphrases': []}
         except Exception as e:
             log_crash(logger, 'AIEnrich', e)
             return {'tags': [], 'paraphrases': []}
+
+    def _ai_enrich_batch(
+        self,
+        faq_pairs: List[tuple],
+        vertical: str,
+    ) -> List[Dict]:
+        """
+        Enrich up to 5 FAQ pairs in a single Gemini call.
+        Returns a list of enrichment dicts in the same order as faq_pairs.
+        Falls back to tag-only enrichment if the model is unavailable or parsing fails.
+        """
+        if not self.enabled or not self.model:
+            return [
+                {'tags': self._extract_tags(f"{q} {a}"), 'paraphrases': []}
+                for q, a in faq_pairs
+            ]
+        entries = '\n\n'.join(
+            f"FAQ {i + 1}:\nQ: {q}\nA: {a[:400]}"
+            for i, (q, a) in enumerate(faq_pairs)
+        )
+        prompt = (
+            f"Enrich these {len(faq_pairs)} FAQ entries for a {vertical} chatbot.\n\n"
+            f"{entries}\n\n"
+            "Respond ONLY with a JSON array — one object per FAQ, same order:\n"
+            '[{"tags": ["t1","t2"], "paraphrases": ["alt q1","alt q2"], '
+            '"summary": "one sentence", "topic": "category"}, ...]'
+        )
+        try:
+            resp   = _gemini_call(self.model, prompt, self._model_name)
+            parsed = self._parse_json(resp.text or '')
+            if isinstance(parsed, list) and len(parsed) == len(faq_pairs):
+                return parsed
+            logger.warning(f"[AIEnrichBatch] unexpected response length, falling back")
+        except Exception as e:
+            log_crash(logger, 'AIEnrichBatch', e)
+        return [{'tags': [], 'paraphrases': []} for _ in faq_pairs]
 
     def _quality_score(self, question: str, answer: str) -> float:
         """Heuristic quality score for an FAQ entry (0.0–1.0)."""
@@ -712,7 +830,17 @@ class AIHelper:
         results  = []
 
         for i, chunk in enumerate(chunks):
-            embed_text = f"{question} {enriched.get('summary', '')} {chunk}"
+            # Include paraphrases in the embed text so alternative phrasings
+            # of the question are captured in the vector space. This improves
+            # retrieval on natural language variations and reduces how often
+            # rewrite_query needs to fire.
+            paraphrase_str = ' '.join(enriched.get('paraphrases', [])[:3])
+            embed_text = (
+                f"{question} "
+                f"{paraphrase_str} "
+                f"{enriched.get('summary', '')} "
+                f"{chunk}"
+            ).strip()
             embedding  = _embed(embed_text, task='retrieval_document')
             results.append({
                 'question':    question,
@@ -736,35 +864,70 @@ class AIHelper:
     ) -> int:
         """
         Embed and upsert a list of FAQ dicts into the database.
+        Enrichment is batched (5 FAQs per Gemini call) to minimise API cost.
         Returns the count of successfully indexed entries.
         """
         import models as _m
         from cache_utils import bump_kb_version
+        from itertools import islice
+
+        def _batched(iterable: list, n: int):
+            it = iter(iterable)
+            while batch := list(islice(it, n)):
+                yield batch
+
+        # Filter valid FAQs upfront
+        valid_faqs = [
+            f for f in faqs
+            if str(f.get('question', '')).strip() and str(f.get('answer', '')).strip()
+        ]
+
         indexed = 0
-        for faq in faqs:
-            try:
-                question = str(faq.get('question', '')).strip()
-                answer   = str(faq.get('answer', '')).strip()
-                if not question or not answer:
-                    continue
-                chunks = self.enrich_and_chunk(question, answer, vertical, client_id)
-                for chunk in chunks:
-                    kb_id = faq.get('kb_id') or faq.get('id')
+        for batch in _batched(valid_faqs, 5):
+            # Enrich entire batch in one Gemini call
+            pairs       = [(str(f['question']).strip(), str(f['answer']).strip()) for f in batch]
+            enrichments = self._ai_enrich_batch(pairs, vertical)
+
+            for faq, enriched in zip(batch, enrichments):
+                try:
+                    question = str(faq.get('question', '')).strip()
+                    answer   = str(faq.get('answer', '')).strip()
+                    kb_id    = faq.get('kb_id') or faq.get('id')
                     if not kb_id:
                         continue
-                    existing = _m.KbEntry.query.filter_by(
-                        client_id=client_id, kb_id=kb_id,
-                        chunk_index=chunk['chunk_index']
-                    ).first()
-                    if existing:
-                        for k, v in chunk.items():
-                            setattr(existing, k, v)
-                    else:
-                        entry = _m.KbEntry(kb_id=kb_id, **chunk)
-                        _m.db.session.add(entry)
-                indexed += 1
-            except Exception as e:
-                log_crash(logger, 'IndexFAQ', e, faq_id=faq.get('kb_id'))
+
+                    chunks = self._split_content(answer)
+                    for i, chunk in enumerate(chunks):
+                        paraphrase_str = ' '.join(enriched.get('paraphrases', [])[:3])
+                        embed_text = (
+                            f"{question} {paraphrase_str} "
+                            f"{enriched.get('summary', '')} {chunk}"
+                        ).strip()
+                        embedding = _embed(embed_text, task='retrieval_document')
+                        chunk_data = {
+                            'question':    question,
+                            'answer':      chunk,
+                            'chunk_index': i,
+                            'tags':        ' '.join(enriched.get('tags', [])),
+                            'paraphrases': enriched.get('paraphrases', []),
+                            'topic':       enriched.get('topic', ''),
+                            'quality':     self._quality_score(question, chunk),
+                            'embedding':   embedding,
+                            'vertical':    vertical,
+                            'client_id':   client_id,
+                        }
+                        existing = _m.KbEntry.query.filter_by(
+                            client_id=client_id, kb_id=kb_id,
+                            chunk_index=i
+                        ).first()
+                        if existing:
+                            for k, v in chunk_data.items():
+                                setattr(existing, k, v)
+                        else:
+                            _m.db.session.add(_m.KbEntry(kb_id=kb_id, **chunk_data))
+                    indexed += 1
+                except Exception as e:
+                    log_crash(logger, 'IndexFAQ', e, faq_id=faq.get('kb_id'))
 
         if indexed:
             try:
@@ -823,7 +986,7 @@ class AIHelper:
             "Acknowledge any uncertainty. Do not make up specific numbers or policies."
         )
         try:
-            resp = self.model.generate_content(prompt)
+            resp = _gemini_call(self.model, prompt, self._model_name)
             return (resp.text or '').strip() or None
         except Exception as e:
             log_crash(logger, 'DraftGap', e, client_id=client_id)

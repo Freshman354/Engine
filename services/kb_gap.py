@@ -130,10 +130,15 @@ def get_poor_answers(client_id: str, limit: int = 20) -> List[Dict]:
         return []
     try:
         import models as _m
+        PoorAnswer = getattr(_m, 'PoorAnswer', None)
+        if PoorAnswer is None:
+            # Model not yet defined in models.py — return empty silently.
+            # Create a PoorAnswer model in models.py to enable thumbs-down tracking.
+            return []
         rows = (
-            _m.PoorAnswer.query
+            PoorAnswer.query
             .filter_by(client_id=client_id)
-            .order_by(_m.PoorAnswer.created_at.desc())
+            .order_by(PoorAnswer.created_at.desc())
             .limit(limit)
             .all()
         )

@@ -22,7 +22,7 @@ from constants import (
     SIMPLE_INTENTS,
     TOOL_KEYWORDS,
 )
-from utils import get_logger, log_crash
+from utils import get_logger, log_crash, generate as _gemini_generate
 
 logger = get_logger('lumvi.intent')
 
@@ -208,7 +208,7 @@ def classify_intent_gemini(
         '"confidence": 0.0-1.0}'
     )
     try:
-        resp = model.generate_content(prompt)
+        resp = _gemini_generate(model, prompt)
         text = (resp.text or '').strip().strip('`')
         if text.startswith('json'):
             text = text[4:].strip()
