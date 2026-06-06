@@ -167,6 +167,22 @@ def get_conversations(client_id: str, limit: int = 200) -> list:
         return []
 
 
+def get_latest_conversation_summary(client_id: str) -> str:
+    """Return the most recent summary string, or empty string if none."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''SELECT summary FROM conversation_summaries
+               WHERE client_id = %s
+               ORDER BY created_at DESC LIMIT 1''',
+            (client_id,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return row['summary'] if row else ''
+    except Exception:
+        return ''
 # =====================================================================
 # KNOWLEDGE BASE — Phase 2 RAG
 # =====================================================================

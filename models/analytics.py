@@ -8,24 +8,16 @@ import json
 from datetime import datetime
 from .db import get_db
 
-    """All users for admin panel, newest first."""
-    conn, cursor = get_db()
-    cursor.execute(
-        '''SELECT id, email, plan_type, subscription_status, is_admin,
-                  created_at, upgraded_at, cancelled_at
-           FROM users
-           ORDER BY created_at DESC
-           LIMIT %s''',
-        (limit,)
+# ── Gemini pricing (per-token) ─────────────────────────────────────────────
+_GEMINI_INPUT_PRICE_PER_TOKEN  = 0.075 / 1_000_000
+_GEMINI_OUTPUT_PRICE_PER_TOKEN = 0.300 / 1_000_000
+
+
+def _calc_cost(input_tokens, output_tokens):
+    return (
+        (input_tokens  or 0) * _GEMINI_INPUT_PRICE_PER_TOKEN +
+        (output_tokens or 0) * _GEMINI_OUTPUT_PRICE_PER_TOKEN
     )
-    rows = [dict(r) for r in cursor.fetchall()]
-    cursor.close()
-    conn.close()
-    for r in rows:
-        for col in ['created_at', 'upgraded_at', 'cancelled_at']:
-            if r.get(col):
-                r[col] = r[col].isoformat()
-    return rows
 
 
 def get_user_count_by_plan():
@@ -129,6 +121,32 @@ def admin_delete_user(user_id):
 
 
 def get_all_leads_admin(limit=500, client_id_filter=None, search=None):
+    """Leads across all clients for admin view."""
+    conn, cursor = get_db()
+    query = '''SELECT l.*, c.company_name, u.email as owner_email
+               FROM leads l
+               LEFT JOIN clients c ON l.client_id = c.client_id
+               LEFT JOIN users u ON c.user_id = u.id
+               WHERE 1=1'''
+    params = []
+    if client_id_filter:
+        query += ' AND l.client_id = %s'
+        params.append(client_id_filter)
+    if search:
+        query += ' AND (l.name ILIKE %s OR l.email ILIKE %s)'
+        params.extend(['%' + search + '%', '%' + search + '%'])
+    query += ' ORDER BY l.created_at DESC LIMIT %s'
+    params.append(limit)
+    cursor.execute(query, params)
+    rows = [dict(r) for r in cursor.fetchall()]
+    cursor.close()
+    conn.close()
+    for r in rows:
+        if r.get('created_at'):
+            r['created_at'] = r['created_at'].isoformat()
+    return rows
+
+
 def log_api_usage(user_id, client_id, input_tokens, output_tokens,
                   model='gemini-1.5-flash', endpoint=None):
     """Log one Gemini API call. Never raises."""
@@ -312,8 +330,8 @@ def purge_old_api_logs(days=90):
 
 
 def get_db_stats():
-    tables = ['users','clients','leads','payments','analytics_events',
-              'conversations','api_usage_log','faqs','knowledge_base']
+    tables = ['users', 'clients', 'leads', 'payments', 'analytics_events',
+              'conversations', 'api_usage_log', 'faqs', 'knowledge_base']
     results = []
     try:
         conn, cursor = get_db()
@@ -479,11 +497,11 @@ def get_conversion_funnel(days=30):
                 'day':               str(r['day']),
                 'landing_views':     views,
                 'signup_page_views': sp_views,
-                'paid_signups':     signups,
+                'paid_signups':      signups,
                 'conversion_rate':   rate,
             })
 
-        total_views   = sum(d['landing_views']  for d in daily)
+        total_views   = sum(d['landing_views'] for d in daily)
         total_signups = sum(d['paid_signups']  for d in daily)
         overall_rate  = round(total_signups / total_views * 100, 2) if total_views > 0 else 0.0
 
@@ -499,5 +517,3 @@ def get_conversion_funnel(days=30):
             'daily': [], 'total_views': 0,
             'total_signups': 0, 'overall_rate': 0.0, 'days': days,
         }
-
-
