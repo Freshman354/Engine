@@ -146,7 +146,7 @@ def get_ai_helper(
             if _ai_helper_instance is None:
                 _ai_helper_instance = AIHelper(
                     api_key    = api_key    or os.environ.get('GEMINI_API_KEY', ''),
-                    model_name = model_name or os.environ.get('GEMINI_MODEL', 'gemini-1.5-flash'),
+                    model_name = model_name or os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash'),
                 )
     return _ai_helper_instance
 
@@ -160,7 +160,7 @@ class AIHelper:
     def __init__(
         self,
         api_key:    str = '',
-        model_name: str = 'gemini-1.5-flash',
+        model_name: str = 'gemini-2.0-flash',
     ) -> None:
         self.api_key    = api_key
         self.model_name = model_name

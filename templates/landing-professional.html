@@ -282,12 +282,12 @@ h1,h2,h3,h4{font-family:'Playfair Display',serif;letter-spacing:-0.02em;line-hei
 /* ─── ROI CALCULATOR ──────────────────────────────────────── */
 .roi-section{background:var(--cream2);padding:100px 5vw;border-top:1px solid var(--border);}
 .roi-inner{max-width:800px;margin:0 auto;}
-.roi-sliders{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin:32px 0;}
+.roi-sliders{display:grid;grid-template-columns:1fr 1fr 1fr;gap:28px;margin:32px 0;}
 .roi-label{display:block;font-size:10.5px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:12px;}
 .roi-row{display:flex;align-items:center;gap:14px;}
 .roi-row input[type=range]{flex:1;accent-color:var(--gold);cursor:pointer;}
 .roi-val{font-family:'Playfair Display',serif;font-size:24px;font-weight:800;color:var(--gold);min-width:56px;text-align:right;}
-.roi-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;}
+.roi-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;}
 .roi-card{border-radius:16px;padding:24px;text-align:center;background:var(--white);border:1px solid var(--border);}
 .roi-card.highlight{background:var(--dark);border-color:transparent;}
 .roi-card .rc-label{font-size:10px;color:var(--sub);text-transform:uppercase;font-weight:700;letter-spacing:0.07em;margin-bottom:8px;}
@@ -458,7 +458,7 @@ footer p{color:var(--sub);font-size:12px;}
         <li><a href="#faq">FAQ</a></li>
         <li><a href="/login">Login</a></li>
     </ul>
-    <a href="/signup" class="btn-nav">Start Free Trial</a>
+    <a href="/signup" class="btn-nav">Get Started</a>
 </nav>
 
 <!-- HERO -->
@@ -523,13 +523,22 @@ footer p{color:var(--sub);font-size:12px;}
     <div class="hero-inner">
         <div>
             <!-- [1] CONTRAST LINE -->
-            <div class="hero-contrast">Most chatbot platforms take 20–30% of what you charge your clients. Lumvi doesn't.</div>
+            <div class="hero-contrast">Most chatbots script every answer. Lumvi's AI reads your client's documents and understands them.</div>
 
             <!-- [2] HEADLINE -->
-            <h1 style="animation:fadeUp 0.85s 0.05s ease both;">Add AI chatbots<br>to your agency.<br><span class="grad-text">Keep every dollar you charge.</span></h1>
+            <h1 style="animation:fadeUp 0.85s 0.05s ease both;">Give any business<br>an AI that knows<br><span class="grad-text">everything about them.</span></h1>
 
             <!-- [3] SUBHEADING -->
-            <p style="animation:fadeUp 1s 0.12s ease both;">Lumvi is a flat-fee white-label platform. Your brand. Your price. Zero revenue sharing. Your clients never see our name.</p>
+            <p style="animation:fadeUp 1s 0.12s ease both;">Upload a client's PDFs, pricing sheets, and FAQs. Lumvi's AI reads the whole thing and answers their customers' questions instantly — accurately, in context, 24/7. No scripting. No dead ends. Live in 20 minutes.</p>
+
+            <!-- [3b] WHAT YOU CAN UPLOAD PILLS -->
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:28px;animation:fadeUp 1s 0.18s ease both;">
+                <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--mid);background:var(--white);border:1px solid var(--border);border-radius:999px;padding:5px 13px;">📄 PDF guides</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--mid);background:var(--white);border:1px solid var(--border);border-radius:999px;padding:5px 13px;">📊 Pricing sheets</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--mid);background:var(--white);border:1px solid var(--border);border-radius:999px;padding:5px 13px;">📋 Policy docs</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--mid);background:var(--white);border:1px solid var(--border);border-radius:999px;padding:5px 13px;">💬 FAQ pages</span>
+                <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;color:var(--mid);background:var(--white);border:1px solid var(--border);border-radius:999px;padding:5px 13px;">🛍️ Product catalogues</span>
+            </div>
 
             <!-- [4] STATIC PROFIT CARD -->
             <div class="profit-card">
@@ -561,12 +570,12 @@ footer p{color:var(--sub);font-size:12px;}
 
             <!-- [5] CTA ROW -->
             <div class="cta-group" style="animation:fadeUp 1s 0.28s ease both;">
-                <a href="/signup" class="btn-primary">Start Free — 7 days, no card required</a>
-                <a href="#demo" class="btn-outline">Watch how it works ↓</a>
+                <a href="/signup" class="btn-primary">Start Building →</a>
+                <a href="#how-it-works" class="btn-outline">See how it works ↓</a>
             </div>
 
             <!-- [6] TRUST BADGE -->
-            <div class="trust-line" style="animation:fadeUp 1s 0.36s ease both;">Powered by Anthropic Claude &nbsp;·&nbsp; No setup fees &nbsp;·&nbsp; Cancel anytime</div>
+            <div class="trust-line" style="animation:fadeUp 1s 0.36s ease both;">Powered by Anthropic AI &nbsp;·&nbsp; No scripting &nbsp;·&nbsp; Live in 20 minutes</div>
         </div>
         <div class="hero-visual">
             <iframe src="/static/lumvi-mockup.html" scrolling="no" frameborder="0" title="Lumvi platform preview"></iframe>
@@ -577,7 +586,7 @@ footer p{color:var(--sub);font-size:12px;}
 <!-- MARQUEE -->
 <div class="marquee-wrap">
     <div class="marquee-track">
-        <span class="marquee-item">White-Label Ready</span><span class="marquee-item">AI-Powered Matching</span><span class="marquee-item">Custom Branding</span><span class="marquee-item">Lead Capture</span><span class="marquee-item">FAQ Training</span><span class="marquee-item">Embed Anywhere</span><span class="marquee-item">100% Your Margin</span><span class="marquee-item">Agency Dashboard</span><span class="marquee-item">7-Day Free Trial</span><span class="marquee-item">White-Label Ready</span><span class="marquee-item">AI-Powered Matching</span><span class="marquee-item">Custom Branding</span><span class="marquee-item">Lead Capture</span><span class="marquee-item">FAQ Training</span><span class="marquee-item">Embed Anywhere</span><span class="marquee-item">100% Your Margin</span><span class="marquee-item">Agency Dashboard</span><span class="marquee-item">7-Day Free Trial</span>
+        <span class="marquee-item">AI Support Agent</span><span class="marquee-item">Powered by Your Knowledge</span><span class="marquee-item">Anthropic AI</span><span class="marquee-item">Live in 20 Minutes</span><span class="marquee-item">No Scripting Required</span><span class="marquee-item">White-Label Ready</span><span class="marquee-item">100% Your Margin</span><span class="marquee-item">Weekly Gap Reports</span><span class="marquee-item">Zero Revenue Sharing</span><span class="marquee-item">AI Support Agent</span><span class="marquee-item">Powered by Your Knowledge</span><span class="marquee-item">Anthropic AI</span><span class="marquee-item">Live in 20 Minutes</span><span class="marquee-item">No Scripting Required</span><span class="marquee-item">White-Label Ready</span><span class="marquee-item">100% Your Margin</span><span class="marquee-item">Weekly Gap Reports</span><span class="marquee-item">Zero Revenue Sharing</span>
     </div>
 </div>
 
@@ -604,59 +613,113 @@ footer p{color:var(--sub);font-size:12px;}
                 If you've ever pasted a Facebook Pixel, you already know how to deploy Lumvi.
             </p>
             <a href="/signup" class="btn-primary" style="background:var(--gold);border:none;box-shadow:0 4px 24px rgba(184,146,74,0.4);">
-                Start Free Trial →
+                Get Started →
             </a>
         </div>
     </div>
 </section>
 
 <!-- HOW IT WORKS -->
-<section id="features" class="section-pad">
+<section id="how-it-works" class="section-pad">
     <div class="container">
         <div class="text-center fade-up">
             <span class="section-tag">How It Works</span>
-            <h2 class="section-title">Turn AI Into Recurring Revenue</h2>
-            <p class="section-sub" style="margin:0 auto;">Stop referring clients. Start billing them monthly.</p>
+            <h2 class="section-title">From documents to deployed.<br>In 20 minutes.</h2>
+            <p class="section-sub" style="margin:0 auto;">No scripting. No keyword lists. Just give the AI your client's knowledge and watch it become their best support agent.</p>
         </div>
         <div class="how-steps">
             <div class="how-step fade-up">
                 <div class="step-num-wrap">
                     <div class="step-num">1</div>
                 </div>
-                <h3>Create</h3>
-                <p>Build smart AI chatbots in minutes. Train with FAQs, PDFs, or CSV files. Deploy with one line of code.</p>
+                <h3>Upload their knowledge</h3>
+                <p>Get the client's documents — PDFs, pricing sheets, service guides, FAQ pages. Anything they'd hand a new employee on their first day.</p>
             </div>
             <div class="how-step active fade-up">
                 <div class="step-num-wrap">
                     <div class="step-num">2</div>
                 </div>
-                <h3>Brand</h3>
-                <p>Your logo, colors, domain. Zero mention of Lumvi anywhere. Your clients think you built it.</p>
+                <h3>The AI understands everything</h3>
+                <p>Lumvi reads the entire knowledge base and understands context — not just keywords. It can answer questions that were never written as FAQs, because it read the whole document.</p>
             </div>
             <div class="how-step fade-up">
                 <div class="step-num-wrap">
                     <div class="step-num">3</div>
                 </div>
-                <h3>Resell</h3>
-                <p>Charge monthly retainers. Keep 100% of the profit. Manage all clients from one dashboard.</p>
+                <h3>Customers get answers. You get a retainer.</h3>
+                <p>The AI handles support 24/7 with the accuracy of a trained agent. Your client gets results. You white-label it, bill monthly, and keep every dollar.</p>
+            </div>
+        </div>
+
+        <!-- What you can upload — expanded grid -->
+        <div class="fade-up" style="margin-top:64px;background:var(--panel);border:1px solid var(--border);border-radius:24px;padding:48px 40px;">
+            <div class="text-center" style="margin-bottom:36px;">
+                <span class="section-tag">What you can upload</span>
+                <h3 style="font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:800;color:var(--dark);margin-bottom:8px;">If it answers a customer question, Lumvi can learn from it.</h3>
+                <p style="font-size:14px;color:var(--mid);font-weight:300;">Your clients already have everything the AI needs. You just collect it and upload it.</p>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;">
+                <div style="background:var(--white);border:1px solid var(--border);border-radius:16px;padding:24px 20px;display:flex;align-items:flex-start;gap:14px;">
+                    <span style="font-size:28px;line-height:1;flex-shrink:0;">📄</span>
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:var(--dark);margin-bottom:4px;">PDF Guides</div>
+                        <div style="font-size:13px;color:var(--mid);font-weight:300;line-height:1.6;">Service menus, product brochures, onboarding packets — anything in PDF form.</div>
+                    </div>
+                </div>
+                <div style="background:var(--white);border:1px solid var(--border);border-radius:16px;padding:24px 20px;display:flex;align-items:flex-start;gap:14px;">
+                    <span style="font-size:28px;line-height:1;flex-shrink:0;">📊</span>
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:var(--dark);margin-bottom:4px;">Pricing Sheets</div>
+                        <div style="font-size:13px;color:var(--mid);font-weight:300;line-height:1.6;">CSV or PDF pricing tables. The AI answers pricing questions exactly as written.</div>
+                    </div>
+                </div>
+                <div style="background:var(--white);border:1px solid var(--border);border-radius:16px;padding:24px 20px;display:flex;align-items:flex-start;gap:14px;">
+                    <span style="font-size:28px;line-height:1;flex-shrink:0;">📋</span>
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:var(--dark);margin-bottom:4px;">Policy Documents</div>
+                        <div style="font-size:13px;color:var(--mid);font-weight:300;line-height:1.6;">Return policies, terms, cancellation rules — the AI handles these questions so staff don't have to.</div>
+                    </div>
+                </div>
+                <div style="background:var(--white);border:1px solid var(--border);border-radius:16px;padding:24px 20px;display:flex;align-items:flex-start;gap:14px;">
+                    <span style="font-size:28px;line-height:1;flex-shrink:0;">💬</span>
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:var(--dark);margin-bottom:4px;">Existing FAQs</div>
+                        <div style="font-size:13px;color:var(--mid);font-weight:300;line-height:1.6;">Copy-paste from their website's FAQ page or upload as a CSV. Done in minutes.</div>
+                    </div>
+                </div>
+                <div style="background:var(--white);border:1px solid var(--border);border-radius:16px;padding:24px 20px;display:flex;align-items:flex-start;gap:14px;">
+                    <span style="font-size:28px;line-height:1;flex-shrink:0;">🛍️</span>
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:var(--dark);margin-bottom:4px;">Product Catalogues</div>
+                        <div style="font-size:13px;color:var(--mid);font-weight:300;line-height:1.6;">Every product, variant, and detail — the AI answers "do you have X in Y size?" instantly.</div>
+                    </div>
+                </div>
+                <div style="background:var(--dark);border:1px solid transparent;border-radius:16px;padding:24px 20px;display:flex;align-items:flex-start;gap:14px;">
+                    <span style="font-size:28px;line-height:1;flex-shrink:0;">⚡</span>
+                    <div>
+                        <div style="font-size:14px;font-weight:700;color:var(--cream);margin-bottom:4px;">Ready in 20 minutes</div>
+                        <div style="font-size:13px;color:rgba(247,244,239,0.45);font-weight:300;line-height:1.6;">From first upload to live chatbot on the client's site. No dev work. No scripting. Just upload and embed.</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </section>
 
 <!-- FEATURE ROWS -->
-<section class="section-pad features-section" style="background:var(--panel);">
+<section id="features" class="section-pad features-section" style="background:var(--panel);">
     <div class="container">
         <div class="text-center fade-up" style="margin-bottom:48px;">
             <span class="section-tag">AI Capabilities</span>
-            <h2 class="section-title">Built Different</h2>
+            <h2 class="section-title">Built to actually know the business.</h2>
+            <p class="section-sub" style="margin:0 auto;">Not keyword matching. Not scripted flows. Real understanding — trained on your client's own knowledge.</p>
         </div>
         <!-- Row 1 -->
         <div class="feat-row fade-up">
             <div class="feat-content">
                 <span class="section-tag">Intelligence</span>
                 <h2>Smarter Than a Basic FAQ Bot</h2>
-                <p>Most chatbots are just keyword matchers. Lumvi uses Anthropic Claude AI to understand intent, context, and nuance — so visitors get real answers, not dead ends.</p>
+                <p>Most chatbots are just keyword matchers. Lumvi uses Anthropic AI to understand intent, context, and nuance — so visitors get real answers, not dead ends.</p>
                 <ul class="feature-list">
                     <li><div class="feat-check">✓</div><span><strong>Natural Language Understanding</strong> — Speaks like a human, not a robot.</span></li>
                     <li><div class="feat-check">✓</div><span><strong>Custom Data Training</strong> — Upload PDFs, CSV files, or add FAQs manually.</span></li>
@@ -668,6 +731,52 @@ footer p{color:var(--sub);font-size:12px;}
                 <iframe src="/static/ai_capabilities.html" style="width: 100%;height: 100%;border: none;" scrolling="no"></iframe>
             </div>
         </div>
+        <!-- Row 1b — Client Retention / AI Quality -->
+        <div class="feat-row reverse fade-up" style="margin-top:20px;">
+            <div class="feat-img" style="background:var(--dark);flex-direction:column;gap:0;padding:0;overflow:hidden;">
+                <!-- Visual: gap detection mock UI -->
+                <div style="width:100%;padding:28px 32px;display:flex;flex-direction:column;gap:12px;">
+                    <div style="font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:var(--gold);margin-bottom:4px;">Weekly AI Gap Report</div>
+                    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                        <div>
+                            <div style="font-size:13px;color:rgba(247,244,239,0.85);font-weight:500;margin-bottom:3px;">"Do you offer payment plans?"</div>
+                            <div style="font-size:11px;color:rgba(247,244,239,0.3);">Asked 23 times this week · 0% answered</div>
+                        </div>
+                        <span style="font-size:10px;font-weight:700;background:rgba(239,68,68,0.15);color:#f87171;border-radius:6px;padding:4px 10px;white-space:nowrap;">High impact</span>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                        <div>
+                            <div style="font-size:13px;color:rgba(247,244,239,0.85);font-weight:500;margin-bottom:3px;">"Can I cancel my subscription?"</div>
+                            <div style="font-size:11px;color:rgba(247,244,239,0.3);">Asked 17 times this week · 0% answered</div>
+                        </div>
+                        <span style="font-size:10px;font-weight:700;background:rgba(251,146,60,0.15);color:#fb923c;border-radius:6px;padding:4px 10px;white-space:nowrap;">Medium</span>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                        <div>
+                            <div style="font-size:13px;color:rgba(247,244,239,0.85);font-weight:500;margin-bottom:3px;">"What's included in the Pro plan?"</div>
+                            <div style="font-size:11px;color:rgba(247,244,239,0.3);">Asked 11 times this week · 12% answered</div>
+                        </div>
+                        <span style="font-size:10px;font-weight:700;background:rgba(251,146,60,0.15);color:#fb923c;border-radius:6px;padding:4px 10px;white-space:nowrap;">Medium</span>
+                    </div>
+                    <div style="margin-top:4px;padding:12px 16px;background:rgba(184,146,74,0.08);border:1px solid rgba(184,146,74,0.2);border-radius:10px;display:flex;align-items:center;justify-content:space-between;">
+                        <span style="font-size:12px;color:rgba(247,244,239,0.5);">3 gaps detected this week</span>
+                        <span style="font-size:12px;font-weight:600;color:var(--gold);cursor:pointer;">Fix all → Add to KB</span>
+                    </div>
+                </div>
+            </div>
+            <div class="feat-content">
+                <span class="section-tag">Client Retention</span>
+                <h2>The Bot That Keeps Clients Renewing</h2>
+                <p>A chatbot that fails loses you clients in 90 days. Lumvi's AI knows what it doesn't know — and tells you exactly what to fix so the bot keeps getting better, and clients keep paying.</p>
+                <ul class="feature-list">
+                    <li><div class="feat-check">✓</div><span><strong>Weekly Gap Report</strong> — See every question the bot couldn't answer, ranked by frequency.</span></li>
+                    <li><div class="feat-check">✓</div><span><strong>One-Click Fix</strong> — Add missing answers directly from the gap report. No digging required.</span></li>
+                    <li><div class="feat-check">✓</div><span><strong>Your Monthly Agenda</strong> — Use the report as a standing review call with every client. You look proactive. They stay longer.</span></li>
+                    <li><div class="feat-check">✓</div><span><strong>Improves Over Time</strong> — Every fix makes the bot smarter. Clients notice. Churn drops.</span></li>
+                </ul>
+            </div>
+        </div>
+
         <!-- Row 2 -->
         <div class="feat-row reverse fade-up" style="margin-top:20px;">
             <div class="feat-img">
@@ -712,7 +821,7 @@ footer p{color:var(--sub);font-size:12px;}
         <div class="text-center fade-up">
             <span class="section-tag">Pricing</span>
             <h2 class="section-title">Simple, Transparent Pricing</h2>
-            <p class="section-sub" style="margin:0 auto;color:rgba(247,244,239,0.5);">Start free. Upgrade when you're ready.</p>
+            <p class="section-sub" style="margin:0 auto;color:rgba(247,244,239,0.5);">Simple plans for every stage of growth.</p>
         </div>
         <div class="pricing-table fade-up">
             <!-- Header -->
@@ -804,18 +913,17 @@ footer p{color:var(--sub);font-size:12px;}
             <!-- CTA Row -->
             <div class="pt-cta-row">
                 <div class="pt-cta-cell"></div>
-                <div class="pt-cta-cell"><a href="/signup?plan=solo" class="pt-btn ghost">Try Free →</a></div>
-                <div class="pt-cta-cell"><a href="/signup?plan=starter" class="pt-btn ghost">Try Free →</a></div>
-                <div class="pt-cta-cell featured-col"><a href="/signup?plan=pro" class="pt-btn solid">Try Free →</a></div>
-                <div class="pt-cta-cell"><a href="/signup?plan=growth" class="pt-btn indigo">Try Free →</a></div>
-                <div class="pt-cta-cell"><a href="/signup?plan=agency" class="pt-btn ghost">Try Free →</a></div>
+                <div class="pt-cta-cell"><a href="/signup?plan=solo" class="pt-btn ghost">Get Started →</a></div>
+                <div class="pt-cta-cell"><a href="/signup?plan=starter" class="pt-btn ghost">Get Started →</a></div>
+                <div class="pt-cta-cell featured-col"><a href="/signup?plan=pro" class="pt-btn solid">Get Started →</a></div>
+                <div class="pt-cta-cell"><a href="/signup?plan=growth" class="pt-btn indigo">Get Started →</a></div>
+                <div class="pt-cta-cell"><a href="/signup?plan=agency" class="pt-btn ghost">Get Started →</a></div>
             </div>
         </div>
         <div class="pricing-pills fade-up">
-            <span class="pricing-pill">7-day free trial on all plans</span>
-            <span class="pricing-pill">No credit card required</span>
             <span class="pricing-pill">Cancel anytime</span>
             <span class="pricing-pill">Card &amp; bank transfer accepted</span>
+            <span class="pricing-pill">No setup fees</span>
         </div>
     </div>
 </section>
@@ -843,8 +951,15 @@ footer p{color:var(--sub);font-size:12px;}
                     <span class="roi-val">$<span id="roi-price-val">249</span></span>
                 </div>
             </div>
+            <div>
+                <label class="roi-label">Avg client retention (months)</label>
+                <div class="roi-row">
+                    <input type="range" id="roi-retention" min="3" max="36" step="1" value="18" oninput="updateRoi()" onchange="updateRoi()">
+                    <span class="roi-val" id="roi-retention-val">18</span>
+                </div>
+            </div>
         </div>
-        <div class="roi-cards fade-up">
+        <div class="roi-cards fade-up" style="grid-template-columns:repeat(4,1fr);">
             <div class="roi-card">
                 <div class="rc-label">Your Revenue</div>
                 <div class="rc-val" id="roi-revenue">$2,490</div>
@@ -859,6 +974,11 @@ footer p{color:var(--sub);font-size:12px;}
                 <div class="rc-label">Your Profit</div>
                 <div class="rc-val" id="roi-profit">$2,341</div>
                 <div class="rc-sub">/month</div>
+            </div>
+            <div class="roi-card" style="border-color:rgba(184,146,74,0.3);background:var(--gold-lt);">
+                <div class="rc-label" style="color:var(--gold-dk);">Client Lifetime Value</div>
+                <div class="rc-val" id="roi-ltv" style="color:var(--gold-dk);">$4,482</div>
+                <div class="rc-sub">per client retained</div>
             </div>
         </div>
         <div class="text-center fade-up">
@@ -878,7 +998,7 @@ footer p{color:var(--sub);font-size:12px;}
             <div>🔒 SSL Encrypted</div>
             <div>🛡️ GDPR Compliant</div>
             <div>⚡ 99.9% Uptime</div>
-            <div>🧠 Anthropic Claude AI</div>
+            <div>🧠 Anthropic AI</div>
             <div>💳 Secure Payments</div>
         </div>
     </div>
@@ -937,8 +1057,8 @@ footer p{color:var(--sub);font-size:12px;}
                 <div class="faq-item"><h4>Is this truly white-label?</h4><p>Yes. On Growth and Agency plans you can use your own branding. Your clients will never see Lumvi's name anywhere in the product.</p></div>
                 <div class="faq-item"><h4>Do you take a commission on my clients?</h4><p>Zero. You pay us a flat monthly fee. Charge your clients whatever you want and keep 100% of the margin.</p></div>
                 <div class="faq-item"><h4>What's the difference between Growth and Agency?</h4><p>Growth ($149) gives you 20 client chatbots with full white-label. Agency ($299) is truly unlimited — add as many clients as you want at $15/seat beyond 20.</p></div>
-                <div class="faq-item"><h4>How does the AI work?</h4><p>Lumvi uses Anthropic Claude AI to understand visitor intent and match it to your FAQ knowledge base — not just keywords.</p></div>
-                <div class="faq-item"><h4>Is there a free trial?</h4><p>Yes — 7 days free on all plans. Build a demo chatbot and see real results before your card is ever charged.</p></div>
+                <div class="faq-item"><h4>How does the AI work?</h4><p>Lumvi uses Anthropic AI to understand what visitors are actually asking — not just match their words to a list. It reads intent and context, so your clients get real answers instead of "I didn't understand that."</p></div>
+                <div class="faq-item"><h4>Can I test it before committing?</h4><p>Yes — you can build and preview a chatbot in your dashboard before going live with any clients. Pick a plan and you're set up in minutes.</p></div>
                 <div class="faq-item"><h4>What payment methods do you accept?</h4><p>We accept all major credit and debit cards via Flutterwave, plus bank transfers on request.</p></div>
             </div>
         </div>
@@ -948,9 +1068,9 @@ footer p{color:var(--sub);font-size:12px;}
 <!-- FINAL CTA -->
 <div class="final-cta">
     <div class="final-cta-left">
-        <h2 class="fade-up">Start Building Your AI Business Today</h2>
-        <p class="fade-up">Join agencies already using Lumvi to build recurring income.</p>
-        <a href="/signup" class="btn-cream fade-up">Create Free Account →</a>
+        <h2 class="fade-up">Give your clients an AI that actually knows their business.</h2>
+        <p class="fade-up">Upload their documents. Deploy in 20 minutes. Bill monthly. Keep every dollar.</p>
+        <a href="/signup" class="btn-cream fade-up">Start Building →</a>
     </div>
     <div class="final-cta-right">
         <h3>Typical agency earnings</h3>
@@ -981,25 +1101,29 @@ footer p{color:var(--sub);font-size:12px;}
 
 <script>
     function updateRoi() {
-        var clients  = parseInt(document.getElementById('roi-clients').value, 10) || 10;
-        var price    = parseInt(document.getElementById('roi-price').value, 10) || 249;
-        var revenue  = clients * price;
+        var clients   = parseInt(document.getElementById('roi-clients').value, 10) || 10;
+        var price     = parseInt(document.getElementById('roi-price').value, 10) || 249;
+        var retention = parseInt(document.getElementById('roi-retention').value, 10) || 18;
+        var revenue   = clients * price;
         var lumviCost, costNote;
         if (clients <= 10) { lumviCost = 99; costNote = '/mo (Pro plan)'; }
         else if (clients <= 20) { lumviCost = 149; costNote = '/mo (Growth plan)'; }
         else { lumviCost = 299 + Math.max(0, clients - 20) * 15; costNote = '/mo (Agency + ' + Math.max(0, clients - 20) + ' extra seats)'; }
-        var profit = revenue - lumviCost;
-        var margin = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : '0.0';
+        var profit    = revenue - lumviCost;
+        var margin    = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : '0.0';
         var perClient = clients > 0 ? Math.round(profit / clients) : 0;
-        document.getElementById('roi-clients-val').textContent = clients;
-        document.getElementById('roi-price-val').textContent   = price;
-        document.getElementById('roi-revenue').textContent     = '$' + revenue.toLocaleString();
-        document.getElementById('roi-cost').textContent        = '$' + lumviCost.toLocaleString();
-        document.getElementById('roi-cost-note').textContent   = costNote;
+        var ltv       = price * retention;
+        document.getElementById('roi-clients-val').textContent   = clients;
+        document.getElementById('roi-price-val').textContent     = price;
+        document.getElementById('roi-retention-val').textContent = retention;
+        document.getElementById('roi-revenue').textContent       = '$' + revenue.toLocaleString();
+        document.getElementById('roi-cost').textContent          = '$' + lumviCost.toLocaleString();
+        document.getElementById('roi-cost-note').textContent     = costNote;
         var profitEl = document.getElementById('roi-profit');
         profitEl.textContent = profit >= 0 ? '$' + profit.toLocaleString() : '-$' + Math.abs(profit).toLocaleString();
+        document.getElementById('roi-ltv').textContent = '$' + ltv.toLocaleString();
         document.getElementById('roi-margin-line').innerHTML =
-            "That's a <strong style='color:var(--gold)'>" + margin + "% margin</strong> — you keep <strong style='color:var(--gold)'>$" + perClient + "</strong> of every $" + price + " you charge.";
+            "That's a <strong style='color:var(--gold)'>" + margin + "% margin</strong> — you keep <strong style='color:var(--gold)'>$" + perClient + "</strong> of every $" + price + " you charge. Each client retained for " + retention + " months is worth <strong style='color:var(--gold-dk)'>$" + ltv.toLocaleString() + "</strong> to your agency.";
     }
     updateRoi();
 

@@ -858,7 +858,7 @@ def get_tool_schemas_for_gemini() -> list:
     Pass the result directly to the `tools` parameter of the Gemini API call.
 
     Example:
-        import google.generativeai as genai
+        import google.genai as genai
         tools = get_tool_schemas_for_gemini()
         model.generate_content(prompt, tools=tools)
     """

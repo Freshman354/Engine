@@ -191,7 +191,7 @@ def classify_intent_gemini(
     Use Gemini to classify intent when Tier 1 and Tier 2 return nothing.
     Returns a dict with keys: intent, is_sales, is_lead, confidence.
 
-    model: a google.generativeai.GenerativeModel instance.
+    model: a google.genai Client().models object (from AIHelper).
     Only called when BOTH Tier 1 and Tier 2 fail — keep expensive.
     """
     personality = PERSONALITIES.get(vertical, PERSONALITIES['general'])
