@@ -70,6 +70,29 @@
             button.style.background  = color;
             button.style.boxShadow   = '0 4px 16px ' + color + '66';
             button._brandColor       = color;
+
+            // T1: offline badge — grey dot on the button when outside hours
+            if (data.success && data.config && data.config.is_online === false) {
+                var badge = document.createElement('span');
+                Object.assign(badge.style, {
+                    position: 'absolute', top: '-2px', right: '-2px',
+                    width: '12px', height: '12px',
+                    borderRadius: '50%',
+                    background: '#9ca3af',
+                    border: '2px solid white',
+                    display: 'block',
+                });
+                button.style.position = 'relative';
+                button.style.overflow = 'visible';
+                button.appendChild(badge);
+            }
+
+            // T1: proactive triggers — evaluate rules, fire into iframe on match
+            var triggers = (data.config && data.config.triggers) ? data.config.triggers : [];
+            if (triggers.length > 0) {
+                _setupProactiveTriggers(triggers, iframe, button, function() { isOpen; });
+            }
+
             // Now reveal — user sees the button exactly once, already in the right color
             button.style.opacity       = '1';
             button.style.pointerEvents = 'auto';
@@ -79,6 +102,55 @@
             button.style.opacity       = '1';
             button.style.pointerEvents = 'auto';
         });
+
+    function _setupProactiveTriggers(triggers, targetIframe, toggleBtn, getIsOpen) {
+        var _firedKey = 'lumvi_fired_' + clientId;
+        var _fired    = {};
+        try { _fired = JSON.parse(sessionStorage.getItem(_firedKey) || '{}'); } catch(_) {}
+
+        triggers.forEach(function(t) {
+            if (_fired[t.id]) return;  // already fired this browser session
+
+            if (t.trigger_type === 'time_on_page') {
+                var delaySecs = parseInt(t.trigger_value, 10) || 10;
+                setTimeout(function() {
+                    if (_fired[t.id]) return;
+                    _fireTrigger(t, targetIframe, toggleBtn);
+                    _fired[t.id] = true;
+                    try { sessionStorage.setItem(_firedKey, JSON.stringify(_fired)); } catch(_) {}
+                }, delaySecs * 1000);
+
+            } else if (t.trigger_type === 'url_match') {
+                // Match against the current page URL
+                var currentUrl = '';
+                try { currentUrl = window.location.href; } catch(_) {}
+                if (currentUrl.indexOf(t.trigger_value) !== -1) {
+                    setTimeout(function() {
+                        if (_fired[t.id]) return;
+                        _fireTrigger(t, targetIframe, toggleBtn);
+                        _fired[t.id] = true;
+                        try { sessionStorage.setItem(_firedKey, JSON.stringify(_fired)); } catch(_) {}
+                    }, 1500);
+                }
+            }
+        });
+    }
+
+    function _fireTrigger(trigger, targetIframe, toggleBtn) {
+        // Open widget if closed
+        if (!isOpen) {
+            toggleBtn.click();
+        }
+        // Give iframe a moment to render, then postMessage the trigger
+        setTimeout(function() {
+            try {
+                targetIframe.contentWindow.postMessage(
+                    { type: 'lumvi:proactive', message: trigger.message },
+                    '*'
+                );
+            } catch(_) {}
+        }, isOpen ? 200 : 600);
+    }
 
     
     // Create chat container

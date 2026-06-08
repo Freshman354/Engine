@@ -246,3 +246,39 @@ from .analytics import (
     get_event_counts,
     get_conversion_funnel,
 )
+
+# ── Tags (conversation tagging) ───────────────────────────────────────────────
+from .tags import (
+    get_client_tags,
+    create_tag,
+    delete_tag,
+    apply_tag,
+    remove_tag,
+    get_session_tags,
+)
+
+# ── Tier 1 — session extensions ───────────────────────────────────────────────
+from .sessions import (
+    submit_csat,
+    set_session_status,
+    get_session_status,
+    set_agent_typing,
+    get_agent_typing,
+)
+
+# ── Tier 1 — client extensions ────────────────────────────────────────────────
+from .clients import (
+    check_business_hours,
+    get_proactive_triggers,
+    save_proactive_trigger,
+    delete_proactive_trigger,
+)
+
+# ── Tier 1 — migrations ───────────────────────────────────────────────────────
+from .migrations import (
+    migrate_page_context,
+    migrate_csat,
+    migrate_conversation_status,
+    migrate_conversation_tags,
+    migrate_proactive_triggers,
+)

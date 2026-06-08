@@ -706,12 +706,17 @@ def notify_webhook(client_id: str, lead_data: dict) -> None:
 
 def log_conversation(client_id, user_message, bot_response,
                      matched=False, method='unknown',
-                     session_id=None, daily_limit=None) -> bool:
+                     session_id=None, daily_limit=None,
+                     page_url=None, referrer=None,
+                     utm_source=None, utm_medium=None,
+                     utm_campaign=None) -> bool:
     """
     Insert a conversation row.
     When daily_limit is supplied, the INSERT is wrapped in a CTE that
     re-counts today's rows atomically — prevents races at the cap boundary.
     Returns True if the row was inserted, False if the cap was already reached.
+    Page-context fields (page_url, referrer, utm_*) are written on the first
+    message of a session; subsequent messages carry the same values.
     """
     try:
         conn, cursor = models.get_db()
@@ -723,14 +728,17 @@ def log_conversation(client_id, user_message, bot_response,
                     WHERE  client_id = %s AND DATE(timestamp) = CURRENT_DATE
                 )
                 INSERT INTO conversations
-                    (client_id, user_message, bot_response, matched, method, session_id)
-                SELECT %s, %s, %s, %s, %s, %s
+                    (client_id, user_message, bot_response, matched, method,
+                     session_id, page_url, referrer,
+                     utm_source, utm_medium, utm_campaign)
+                SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 FROM   today_count
                 WHERE  cnt < %s
                 ''',
                 (client_id,
                  client_id, user_message, bot_response,
                  matched, method, session_id or None,
+                 page_url, referrer, utm_source, utm_medium, utm_campaign,
                  daily_limit)
             )
             inserted = cursor.rowcount > 0
@@ -738,11 +746,14 @@ def log_conversation(client_id, user_message, bot_response,
             cursor.execute(
                 '''
                 INSERT INTO conversations
-                    (client_id, user_message, bot_response, matched, method, session_id)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                    (client_id, user_message, bot_response, matched, method,
+                     session_id, page_url, referrer,
+                     utm_source, utm_medium, utm_campaign)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ''',
                 (client_id, user_message, bot_response,
-                 matched, method, session_id or None)
+                 matched, method, session_id or None,
+                 page_url, referrer, utm_source, utm_medium, utm_campaign)
             )
             inserted = True
 
@@ -786,6 +797,10 @@ try:
         'migrate_api_usage_log', 'migrate_kb_gaps', 'migrate_lead_pipeline',
         'migrate_agency_seat_billing', 'migrate_payments_unique_reference',
         'migrate_google_oauth',
+        # Tier 1 features
+        'migrate_page_context', 'migrate_csat',
+        'migrate_conversation_status', 'migrate_conversation_tags',
+        'migrate_proactive_triggers',
     ]
     for _fn in _optional_migrations:
         if hasattr(models, _fn):
@@ -978,6 +993,10 @@ app.register_blueprint(chat_bp)
 limiter.limit('30 per minute')(_chat_view)
 limiter.limit('20 per minute')(_chat_rate_view)
 
+# ── Tier 1 feature routes (CSAT, status, typing, tags, triggers) ──────────────
+from blueprints.inbox_additions import inbox_additions_bp
+app.register_blueprint(inbox_additions_bp)
+
 # Platform webhook routes (Shopify, Acuity)
 _webhooks.register_webhook_routes(app)
 
@@ -1017,11 +1036,20 @@ def get_config():
             return jsonify({'success': False, 'error': 'Client not found'}), 404
         branding = (json.loads(client['branding_settings'])
                     if client['branding_settings'] else {})
+
+        # Business hours — server-side tz check, widget receives a simple bool
+        bh_status = models.check_business_hours(client_id)
+        # Proactive triggers — widget evaluates time/URL rules client-side
+        triggers  = models.get_proactive_triggers(client_id)
+
         return jsonify({'success': True, 'config': {
-            'client_id':   client_id,
-            'branding':    branding.get('branding', {}),
-            'contact':     branding.get('contact', {}),
+            'client_id':    client_id,
+            'branding':     branding.get('branding', {}),
+            'contact':      branding.get('contact', {}),
             'bot_settings': branding.get('bot_settings', {}),
+            'is_online':    bh_status['is_open'],
+            'offline_msg':  bh_status['offline_message'],
+            'triggers':     triggers,
         }})
     except Exception as e:
         app.logger.error(f'Error getting config: {e}')
@@ -1214,6 +1242,11 @@ def widget():
         client['lead_triggers']     = branding_settings.get('bot_settings', {}).get(
             'lead_triggers', ['contact', 'sales', 'demo', 'speak', 'talk', 'human', 'agent']
         )
+
+        # Business hours — check server-side so the widget gets a simple bool
+        _bh = models.check_business_hours(client_id)
+        client['is_online']   = _bh['is_open']
+        client['offline_msg'] = _bh['offline_message']
 
     return render_template('chat.html', client=client)
 
@@ -1503,6 +1536,18 @@ def save_customization():
             'vertical':     vertical,
         }
         branding_settings['contact'].setdefault('address', '')
+
+        # Availability schedule — null means "always online" (enforcement disabled)
+        incoming_bh = data.get('business_hours')
+        if incoming_bh and isinstance(incoming_bh, dict) and incoming_bh.get('timezone'):
+            branding_settings['business_hours'] = {
+                'timezone':       str(incoming_bh.get('timezone', 'UTC'))[:64],
+                'offline_message':str(incoming_bh.get('offline_message', ''))[:300],
+                'schedule':       incoming_bh.get('schedule', {}),
+            }
+        else:
+            # Explicitly remove — user turned it off
+            branding_settings.pop('business_hours', None)
 
         raw_qr = branding_settings['bot_settings'].get('quick_replies') or []
         branding_settings['bot_settings']['quick_replies'] = [

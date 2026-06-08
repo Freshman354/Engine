@@ -1394,3 +1394,192 @@ def migrate_to_recurring_subscriptions():
         conn.close()
 
 
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TIER 1 FEATURE MIGRATIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def migrate_page_context():
+    """
+    Add page-context columns to conversations table.
+    Captures page_url, referrer, and UTM params from every widget session.
+    Idempotent — safe on every startup.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        for col_sql in [
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS page_url      TEXT",
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS referrer      TEXT",
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS utm_source    TEXT",
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS utm_medium    TEXT",
+            "ALTER TABLE conversations ADD COLUMN IF NOT EXISTS utm_campaign  TEXT",
+        ]:
+            cursor.execute(col_sql)
+        conn.commit()
+        print("✅ migrate_page_context complete")
+    except Exception as e:
+        print(f"⚠️  migrate_page_context: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def migrate_csat():
+    """
+    Add CSAT rating columns to chat_sessions.
+    csat_rating: 1 = positive, -1 = negative, NULL = not yet rated.
+    Idempotent — safe on every startup.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS "
+            "csat_rating SMALLINT CHECK (csat_rating IN (-1, 1))"
+        )
+        cursor.execute(
+            "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS "
+            "csat_submitted_at TIMESTAMP"
+        )
+        conn.commit()
+        print("✅ migrate_csat complete")
+    except Exception as e:
+        print(f"⚠️  migrate_csat: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def migrate_conversation_status():
+    """
+    Add status + per-status timestamp columns to chat_sessions.
+    Status values: open | in_progress | pending_customer | resolved
+    Also creates index for inbox queries ordered by status + recency.
+    Idempotent — safe on every startup.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        for stmt in [
+            "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS "
+            "status VARCHAR(20) NOT NULL DEFAULT 'open'",
+
+            "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS "
+            "opened_at TIMESTAMP DEFAULT NOW()",
+
+            "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS "
+            "in_progress_at TIMESTAMP",
+
+            "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS "
+            "pending_customer_at TIMESTAMP",
+
+            "ALTER TABLE chat_sessions ADD COLUMN IF NOT EXISTS "
+            "resolved_at TIMESTAMP",
+        ]:
+            cursor.execute(stmt)
+
+        # Savepoint guard in case index already exists
+        cursor.execute("SAVEPOINT sp_status_idx")
+        try:
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_chat_sessions_status "
+                "ON chat_sessions (client_id, status, updated_at DESC)"
+            )
+            cursor.execute("RELEASE SAVEPOINT sp_status_idx")
+        except Exception:
+            cursor.execute("ROLLBACK TO SAVEPOINT sp_status_idx")
+
+        conn.commit()
+        print("✅ migrate_conversation_status complete")
+    except Exception as e:
+        print(f"⚠️  migrate_conversation_status: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def migrate_conversation_tags():
+    """
+    Create tags + session_tags tables for conversation tagging.
+    tags:         per-client label library (name + hex colour)
+    session_tags: junction — which sessions carry which tags
+    Idempotent — safe on every startup.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS tags (
+                id         SERIAL      PRIMARY KEY,
+                client_id  TEXT        NOT NULL,
+                name       VARCHAR(50) NOT NULL,
+                color      VARCHAR(7)  NOT NULL DEFAULT '#6366f1',
+                created_at TIMESTAMP   DEFAULT NOW(),
+                UNIQUE (client_id, name)
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_tags_client ON tags (client_id)"
+        )
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS session_tags (
+                session_id TEXT    NOT NULL,
+                tag_id     INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+                client_id  TEXT    NOT NULL,
+                applied_at TIMESTAMP DEFAULT NOW(),
+                PRIMARY KEY (session_id, tag_id)
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_stags_session "
+            "ON session_tags (session_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_stags_client "
+            "ON session_tags (client_id, tag_id)"
+        )
+        conn.commit()
+        print("✅ migrate_conversation_tags complete")
+    except Exception as e:
+        print(f"⚠️  migrate_conversation_tags: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def migrate_proactive_triggers():
+    """
+    Create proactive_triggers table.
+    trigger_type: 'time_on_page' | 'url_match'
+    trigger_value: seconds (time) or URL substring (url_match)
+    Idempotent — safe on every startup.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS proactive_triggers (
+                id            SERIAL      PRIMARY KEY,
+                client_id     TEXT        NOT NULL,
+                name          VARCHAR(100) NOT NULL,
+                trigger_type  VARCHAR(20)  NOT NULL
+                              CHECK (trigger_type IN ('time_on_page', 'url_match')),
+                trigger_value TEXT        NOT NULL,
+                message       TEXT        NOT NULL,
+                is_active     BOOLEAN     DEFAULT TRUE,
+                created_at    TIMESTAMP   DEFAULT NOW()
+            )
+        """)
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_triggers_client "
+            "ON proactive_triggers (client_id) WHERE is_active = TRUE"
+        )
+        conn.commit()
+        print("✅ migrate_proactive_triggers complete")
+    except Exception as e:
+        print(f"⚠️  migrate_proactive_triggers: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()

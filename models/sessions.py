@@ -138,3 +138,133 @@ def delete_session(client_id: str, session_id: str) -> bool:
         if conn:   conn.close()
 
 
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TIER 1 — CSAT, STATUS FLOW, TYPING INDICATORS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def submit_csat(client_id: str, session_id: str, rating: int) -> bool:
+    """
+    Record a CSAT rating (1 = positive, -1 = negative) for a session.
+    Overwrites any previous rating — idempotent, user can change their mind.
+    Returns True on success, False on invalid rating or DB error.
+    """
+    if rating not in (1, -1):
+        return False
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """
+            UPDATE chat_sessions
+               SET csat_rating = %s, csat_submitted_at = NOW()
+             WHERE client_id = %s AND session_id = %s
+            """,
+            (rating, client_id, session_id)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f'[submit_csat] {e}')
+        return False
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+_VALID_STATUSES = {'open', 'in_progress', 'pending_customer', 'resolved'}
+_STATUS_TS_COL  = {
+    'in_progress':      'in_progress_at',
+    'pending_customer': 'pending_customer_at',
+    'resolved':         'resolved_at',
+}
+
+
+def set_session_status(client_id: str, session_id: str, status: str) -> bool:
+    """
+    Transition a session to a new status and stamp the matching *_at column.
+    Returns True on success, False if status invalid or row not found.
+    """
+    if status not in _VALID_STATUSES:
+        return False
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        ts_col = _STATUS_TS_COL.get(status)
+        if ts_col:
+            cursor.execute(
+                f"""
+                UPDATE chat_sessions
+                   SET status = %s, {ts_col} = NOW(), updated_at = NOW()
+                 WHERE client_id = %s AND session_id = %s
+                """,
+                (status, client_id, session_id)
+            )
+        else:
+            cursor.execute(
+                """
+                UPDATE chat_sessions
+                   SET status = %s, updated_at = NOW()
+                 WHERE client_id = %s AND session_id = %s
+                """,
+                (status, client_id, session_id)
+            )
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f'[set_session_status] {e}')
+        return False
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def get_session_status(client_id: str, session_id: str) -> str:
+    """Return the current status string for a session, defaulting to 'open'."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "SELECT status FROM chat_sessions WHERE client_id = %s AND session_id = %s",
+            (client_id, session_id)
+        )
+        row = cursor.fetchone()
+        return (row or {}).get('status') or 'open'
+    except Exception:
+        return 'open'
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def set_agent_typing(client_id: str, session_id: str) -> bool:
+    """
+    Record that an agent is currently typing.
+    Stores an ISO timestamp in session_data JSONB — no migration needed.
+    The widget polls get_agent_typing() and shows the dots if within 4s.
+    Returns True on success.
+    """
+    from datetime import datetime
+    return upsert_session(client_id, session_id, {
+        'agent_typing_at': datetime.utcnow().isoformat()
+    })
+
+
+def get_agent_typing(client_id: str, session_id: str) -> bool:
+    """
+    Return True if an agent typing event was stored within the last 4 seconds.
+    Used by the widget polling endpoint — fails closed (returns False) on error.
+    """
+    from datetime import datetime, timedelta
+    sess = load_session(client_id, session_id)
+    raw  = sess.get('session_data', {}).get('agent_typing_at')
+    if not raw:
+        return False
+    try:
+        ts = datetime.fromisoformat(raw)
+        return (datetime.utcnow() - ts) < timedelta(seconds=4)
+    except Exception:
+        return False

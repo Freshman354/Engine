@@ -643,3 +643,162 @@ def get_all_clients() -> list:
 
 if __name__ == '__main__':
     init_db()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TIER 1 — BUSINESS HOURS & PROACTIVE TRIGGERS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def check_business_hours(client_id: str) -> dict:
+    """
+    Check whether a client is currently within their configured business hours.
+
+    Business hours live in branding_settings.business_hours JSONB — no
+    migration required. If the key is absent (client hasn't configured hours),
+    returns is_open=True so the widget shows no change.
+
+    Schedule format (stored in branding_settings):
+        {
+          "timezone": "America/New_York",
+          "offline_message": "We'll reply next business day.",
+          "schedule": {
+            "mon": {"open": "09:00", "close": "17:00", "enabled": true},
+            ...
+          }
+        }
+
+    Returns: {"is_open": bool, "offline_message": str}
+    """
+    _default = {'is_open': True, 'offline_message': ''}
+    conn = cursor = None
+    try:
+        import pytz
+        from datetime import datetime
+
+        conn, cursor = get_db()
+        cursor.execute(
+            "SELECT branding_settings FROM clients WHERE client_id = %s",
+            (client_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return _default
+
+        bs = row.get('branding_settings')
+        if isinstance(bs, str):
+            bs = json.loads(bs) if bs else {}
+        bh = (bs or {}).get('business_hours')
+        if not bh:
+            return _default  # not configured — always online
+
+        tz_name     = bh.get('timezone', 'UTC')
+        schedule    = bh.get('schedule', {})
+        offline_msg = bh.get('offline_message', '')
+
+        try:
+            tz = pytz.timezone(tz_name)
+        except Exception:
+            tz = pytz.UTC
+
+        now      = datetime.now(tz)
+        day_key  = now.strftime('%a').lower()   # 'mon', 'tue', ...
+        day_cfg  = schedule.get(day_key, {})
+
+        if not day_cfg.get('enabled', False):
+            return {'is_open': False, 'offline_message': offline_msg}
+
+        def _hhmm_to_mins(t):
+            h, m = str(t).split(':')
+            return int(h) * 60 + int(m)
+
+        current_mins = now.hour * 60 + now.minute
+        is_open = (
+            _hhmm_to_mins(day_cfg.get('open',  '00:00'))
+            <= current_mins <
+            _hhmm_to_mins(day_cfg.get('close', '23:59'))
+        )
+        return {'is_open': is_open, 'offline_message': offline_msg}
+
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f'[check_business_hours] {e}')
+        return _default
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def get_proactive_triggers(client_id: str) -> list:
+    """
+    Return all active proactive trigger rules for a client.
+    Each row: {id, trigger_type, trigger_value, message}
+    Returns [] on error or when no triggers are configured.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """
+            SELECT id, trigger_type, trigger_value, message
+              FROM proactive_triggers
+             WHERE client_id = %s AND is_active = TRUE
+             ORDER BY id
+            """,
+            (client_id,)
+        )
+        return [dict(r) for r in cursor.fetchall()]
+    except Exception:
+        return []
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def save_proactive_trigger(client_id: str, name: str, trigger_type: str,
+                           trigger_value: str, message: str) -> int | None:
+    """
+    Insert a new proactive trigger. Returns the new row id or None on error.
+    trigger_type must be 'time_on_page' or 'url_match'.
+    """
+    if trigger_type not in ('time_on_page', 'url_match'):
+        return None
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """
+            INSERT INTO proactive_triggers
+                (client_id, name, trigger_type, trigger_value, message)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (client_id, name[:100], trigger_type, trigger_value, message)
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        return row['id'] if row else None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).debug(f'[save_proactive_trigger] {e}')
+        return None
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def delete_proactive_trigger(client_id: str, trigger_id: int) -> bool:
+    """Delete a trigger owned by client_id. Returns True if row deleted."""
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "DELETE FROM proactive_triggers WHERE id = %s AND client_id = %s",
+            (trigger_id, client_id)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    except Exception:
+        return False
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()

@@ -282,6 +282,26 @@ input[type=color]::-webkit-color-swatch{border-radius:6px;border:none;}
 .log-dur{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;white-space:nowrap;}
 .log-time{font-size:11px;color:var(--sub);white-space:nowrap;}
 hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
+/* ── AVAILABILITY / BUSINESS HOURS ───────────────────── */
+.bh-day-grid { display:flex; flex-direction:column; gap:6px; }
+.bh-day-row {
+  display:grid; grid-template-columns:32px 1fr 1fr 1fr; gap:8px;
+  align-items:center; padding:8px 11px;
+  background:var(--cream); border-radius:8px;
+  transition:opacity .15s;
+}
+.bh-day-row.off { opacity:.45; }
+.bh-day-label { font-size:12.5px; font-weight:600; color:var(--mid); }
+.bh-day-row input[type="checkbox"] { accent-color:var(--gold); width:15px; height:15px; cursor:pointer; }
+.bh-time { width:100%; padding:7px 10px; border:1.5px solid var(--border); border-radius:7px;
+  font-size:13px; font-family:'DM Sans',sans-serif; background:var(--white); color:var(--dark);
+  transition:border-color .15s; }
+.bh-time:focus { outline:none; border-color:var(--gold); }
+.bh-time:disabled { background:var(--cream); color:var(--sub); cursor:not-allowed; }
+.bh-tz-select { width:100%; padding:9px 10px; border:1.5px solid var(--border); border-radius:8px;
+  font-size:13px; font-family:'DM Sans',sans-serif; background:var(--white); color:var(--dark);
+  cursor:pointer; transition:border-color .15s; }
+.bh-tz-select:focus { outline:none; border-color:var(--gold); }
 </style>
 </head>
 <body>
@@ -962,6 +982,113 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
     </div>
   </div>
 
+  <!-- AVAILABILITY & OFFLINE MODE card -->
+  <div class="card">
+    <div class="card-header" onclick="tc(this)">
+      <div class="card-icon" style="background:var(--cream2);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--mid)" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+      </div>
+      <div class="card-text">
+        <h2>Availability &amp; Offline Mode</h2>
+        <p>Widget shows as offline and swaps tagline outside these hours</p>
+      </div>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    </div>
+    <div class="card-body">
+
+      <div style="padding:10px 13px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);border-radius:9px;margin-bottom:16px;font-size:12.5px;color:var(--gold-dk);line-height:1.6;">
+        <strong>💡 How this works:</strong> When a visitor opens the widget outside your set hours, the send button is soft-disabled and your offline message appears. Messages can still be submitted — the bot still replies, but the widget signals that live support isn't available.
+      </div>
+
+      <!-- Enable toggle -->
+      <div class="toggle-row" style="margin-bottom:16px;">
+        <div>
+          <div class="toggle-lbl">Enable availability schedule</div>
+          <div class="toggle-desc">Turn off to always show as online</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="bh_enabled" onchange="bhToggleEnabled(this.checked)">
+          <span class="tslider"></span>
+        </label>
+      </div>
+
+      <div id="bhConfig" style="display:none;">
+
+        <!-- Timezone -->
+        <div class="field" style="margin-bottom:16px;">
+          <label>Timezone</label>
+          <select class="bh-tz-select" id="bh_timezone">
+            <option value="UTC">UTC</option>
+            <optgroup label="Americas">
+              <option value="America/New_York">Eastern (New York)</option>
+              <option value="America/Chicago">Central (Chicago)</option>
+              <option value="America/Denver">Mountain (Denver)</option>
+              <option value="America/Los_Angeles">Pacific (Los Angeles)</option>
+              <option value="America/Toronto">Toronto</option>
+              <option value="America/Vancouver">Vancouver</option>
+              <option value="America/Sao_Paulo">São Paulo</option>
+              <option value="America/Mexico_City">Mexico City</option>
+            </optgroup>
+            <optgroup label="Europe">
+              <option value="Europe/London">London</option>
+              <option value="Europe/Paris">Paris / Berlin / Madrid</option>
+              <option value="Europe/Amsterdam">Amsterdam</option>
+              <option value="Europe/Rome">Rome</option>
+              <option value="Europe/Kyiv">Kyiv</option>
+              <option value="Europe/Moscow">Moscow</option>
+            </optgroup>
+            <optgroup label="Africa">
+              <option value="Africa/Lagos">Lagos / Accra (WAT)</option>
+              <option value="Africa/Nairobi">Nairobi (EAT)</option>
+              <option value="Africa/Johannesburg">Johannesburg (SAST)</option>
+              <option value="Africa/Cairo">Cairo (EET)</option>
+              <option value="Africa/Casablanca">Casablanca</option>
+            </optgroup>
+            <optgroup label="Middle East / Asia">
+              <option value="Asia/Dubai">Dubai (GST)</option>
+              <option value="Asia/Riyadh">Riyadh (AST)</option>
+              <option value="Asia/Kolkata">India (IST)</option>
+              <option value="Asia/Dhaka">Dhaka (BST)</option>
+              <option value="Asia/Singapore">Singapore (SGT)</option>
+              <option value="Asia/Shanghai">China (CST)</option>
+              <option value="Asia/Tokyo">Tokyo (JST)</option>
+              <option value="Asia/Seoul">Seoul (KST)</option>
+            </optgroup>
+            <optgroup label="Pacific">
+              <option value="Australia/Sydney">Sydney (AEDT/AEST)</option>
+              <option value="Pacific/Auckland">Auckland (NZST)</option>
+            </optgroup>
+          </select>
+          <p class="hint">All open/close times are interpreted in this timezone.</p>
+        </div>
+
+        <!-- Day schedule -->
+        <div class="field" style="margin-bottom:16px;">
+          <label>Schedule</label>
+          <div class="bh-day-grid" id="bhDayGrid">
+            <!-- rendered by bhRenderDays() -->
+          </div>
+          <p class="hint" style="margin-top:6px;">Untick a day to mark it as closed.</p>
+        </div>
+
+        <!-- Offline message -->
+        <div class="field">
+          <label>Offline message</label>
+          <textarea id="bh_offline_msg" rows="3"
+            placeholder="We're offline right now. Leave a message and we'll reply next business day."
+            style="width:100%;padding:9px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;resize:vertical;background:var(--white);color:var(--dark);transition:border-color .15s;"
+            onfocus="this.style.borderColor='var(--gold)'"
+            onblur="this.style.borderColor='var(--border)'"></textarea>
+          <p class="hint">Shown in the widget when you're offline. Keep it short and reassuring.</p>
+        </div>
+
+      </div><!-- /bhConfig -->
+    </div>
+  </div>
+  <!-- end Availability card -->
+
   <!-- 8. AGENCY DEFAULTS (Agency only) -->
   {% if plan_type in ('agency', 'enterprise') %}
   <div class="card">
@@ -1079,6 +1206,8 @@ const HWH  = {{ 'true' if has_webhooks else 'false' }};
 const HWL  = {{ 'true' if has_white_label else 'false' }};
 const SQR  = {{ (branding.get('bot_settings', {}).get('quick_replies') or []) | tojson }};
 const PLAN_TYPE = {{ plan_type | tojson }};
+// Availability schedule — stored under branding_settings.business_hours (separate from contact.hours)
+const BH_DATA = {{ (branding.get('business_hours') or {}) | tojson }};
 
 let _logo = null, _avatarImg = null, _sim = false;
 
@@ -1409,6 +1538,7 @@ async function save() {
     },
     integrations: {},
     remove_branding: HWL && (document.getElementById('remove_branding')?.checked || false),
+    business_hours: bhGetPayload(),
   };
 
   console.log('[Customize] main payload:', {
@@ -1823,7 +1953,120 @@ up();
 initWebhooks();
 initWhiteLabel();
 initAgencyDefaults();
+initBusinessHours();
 console.log('[Customize] boot complete');
+
+// ── AVAILABILITY / BUSINESS HOURS ─────────────────────────────────────────────
+
+const _BH_DAYS = [
+  { key: 'mon', label: 'Mon' },
+  { key: 'tue', label: 'Tue' },
+  { key: 'wed', label: 'Wed' },
+  { key: 'thu', label: 'Thu' },
+  { key: 'fri', label: 'Fri' },
+  { key: 'sat', label: 'Sat' },
+  { key: 'sun', label: 'Sun' },
+];
+
+// Default schedule — Mon–Fri 9–17, weekends off
+const _BH_DEFAULTS = {
+  mon: { open: '09:00', close: '17:00', enabled: true  },
+  tue: { open: '09:00', close: '17:00', enabled: true  },
+  wed: { open: '09:00', close: '17:00', enabled: true  },
+  thu: { open: '09:00', close: '17:00', enabled: true  },
+  fri: { open: '09:00', close: '17:00', enabled: true  },
+  sat: { open: '10:00', close: '14:00', enabled: false },
+  sun: { open: '10:00', close: '14:00', enabled: false },
+};
+
+function initBusinessHours() {
+  const enabled  = !!(BH_DATA && BH_DATA.timezone);   // configured = enabled
+  const tzEl     = document.getElementById('bh_timezone');
+  const msgEl    = document.getElementById('bh_offline_msg');
+  const toggleEl = document.getElementById('bh_enabled');
+
+  if (!tzEl) return;
+
+  // Pre-populate timezone
+  if (BH_DATA.timezone) {
+    tzEl.value = BH_DATA.timezone;
+  }
+
+  // Pre-populate offline message
+  if (msgEl && BH_DATA.offline_message) {
+    msgEl.value = BH_DATA.offline_message;
+  }
+
+  // Show/hide config panel
+  toggleEl.checked = enabled;
+  document.getElementById('bhConfig').style.display = enabled ? 'block' : 'none';
+
+  // Render day grid
+  bhRenderDays(BH_DATA.schedule || _BH_DEFAULTS);
+}
+
+function bhRenderDays(schedule) {
+  const grid = document.getElementById('bhDayGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  _BH_DAYS.forEach(({ key, label }) => {
+    const cfg     = (schedule && schedule[key]) || _BH_DEFAULTS[key];
+    const enabled = cfg.enabled !== false;
+    const row     = document.createElement('div');
+    row.className = `bh-day-row${enabled ? '' : ' off'}`;
+    row.id        = `bh_row_${key}`;
+    row.innerHTML = `
+      <input type="checkbox" ${enabled ? 'checked' : ''}
+             onchange="bhToggleDay('${key}', this.checked)"
+             aria-label="${label} enabled">
+      <span class="bh-day-label">${label}</span>
+      <input type="time" class="bh-time" id="bh_open_${key}"
+             value="${cfg.open || '09:00'}" ${enabled ? '' : 'disabled'}
+             aria-label="${label} open time">
+      <input type="time" class="bh-time" id="bh_close_${key}"
+             value="${cfg.close || '17:00'}" ${enabled ? '' : 'disabled'}
+             aria-label="${label} close time">
+    `;
+    grid.appendChild(row);
+  });
+}
+
+function bhToggleEnabled(on) {
+  document.getElementById('bhConfig').style.display = on ? 'block' : 'none';
+}
+
+function bhToggleDay(key, on) {
+  const row    = document.getElementById(`bh_row_${key}`);
+  const openEl = document.getElementById(`bh_open_${key}`);
+  const clsEl  = document.getElementById(`bh_close_${key}`);
+  if (!row) return;
+  row.classList.toggle('off', !on);
+  if (openEl) openEl.disabled = !on;
+  if (clsEl)  clsEl.disabled  = !on;
+}
+
+function bhGetPayload() {
+  // If the enable toggle is off, return null so the server removes enforcement
+  const enabled = document.getElementById('bh_enabled')?.checked;
+  if (!enabled) return null;
+
+  const tz  = document.getElementById('bh_timezone')?.value || 'UTC';
+  const msg = document.getElementById('bh_offline_msg')?.value.trim() || '';
+  const schedule = {};
+
+  _BH_DAYS.forEach(({ key }) => {
+    const cb    = document.querySelector(`#bh_row_${key} input[type="checkbox"]`);
+    const openV = document.getElementById(`bh_open_${key}`)?.value || '09:00';
+    const clsV  = document.getElementById(`bh_close_${key}`)?.value || '17:00';
+    schedule[key] = {
+      enabled: cb ? cb.checked : false,
+      open:    openV,
+      close:   clsV,
+    };
+  });
+
+  return { timezone: tz, offline_message: msg, schedule };
+}
 </script>
 </body>
 </html>
