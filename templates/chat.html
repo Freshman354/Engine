@@ -1118,6 +1118,16 @@ let articlesLoading  = false;
 // FIX [ABORT-CONTROLLER]: active AbortController for in-flight fetch
 let activeFetchCtrl  = null;
 
+// ── Session ID ─────────────────────────────────────────────────
+// Generated once per browser, persisted in localStorage so every
+// message in the same conversation carries the same session token.
+// Ties conversation history, inbox tickets, and session memory together.
+let SESSION_ID = localStorage.getItem(`lumvi_sid_${CID}`);
+if (!SESSION_ID) {
+  SESSION_ID = crypto.randomUUID();
+  localStorage.setItem(`lumvi_sid_${CID}`, SESSION_ID);
+}
+
 /*
   IMPROVEMENT [PERSISTENT-HISTORY]: Load conversation from localStorage
   so chat survives page refresh (useful in iframe embeds).
@@ -1486,9 +1496,10 @@ async function _sendToAPI(text) {
       headers: { 'Content-Type': 'application/json' },
       signal:  activeFetchCtrl.signal,
       body:    JSON.stringify({
-        message:   text,
-        client_id: CID,
-        history:   apiHistory,
+        message:    text,
+        client_id:  CID,
+        session_id: SESSION_ID,
+        history:    apiHistory,
       }),
     });
 
@@ -1727,6 +1738,7 @@ async function submitLead() {
       signal:  ctrl.signal,
       body:    JSON.stringify({
         client_id: CID,
+        session_id: SESSION_ID,
         name:      leadData.name,
         email:     leadData.email,
         phone:     leadData.phone,
