@@ -22,6 +22,7 @@ from constants import (
     SIMPLE_INTENTS,
     TOOL_KEYWORDS,
 )
+
 from utils import get_logger, log_crash, generate as _gemini_generate
 
 logger = get_logger('lumvi.intent')
@@ -44,9 +45,13 @@ def detect_simple_intent(clean_message: str) -> Optional[str]:
 
 # ── Tier 2A — Action detection ────────────────────────────────────────────────
 
-def detect_action_intent(clean_message: str) -> Optional[str]:
+def detect_action_intent(
+    clean_message: str,
+    lead_triggers: Optional[List[str]] = None,
+) -> Optional[str]:
     """
     Keyword scan for explicit user actions (demo, meeting, pricing, contact).
+    Also checks agency-defined lead_triggers — matched as contact_request.
     Returns an action key from ACTION_KEYWORDS, or None.
     Pure — no model calls.
     """
@@ -54,6 +59,10 @@ def detect_action_intent(clean_message: str) -> Optional[str]:
     for action_key, keywords in ACTION_KEYWORDS.items():
         if any(kw in msg for kw in keywords):
             return action_key
+    # Agency-defined lead triggers — treat as contact_request
+    if lead_triggers:
+        if any(t.lower() in msg for t in lead_triggers):
+            return 'contact_request'
     return None
 
 
@@ -261,8 +270,8 @@ def detect_intent(
         result['confidence'] = 1.0
         return result
 
-    # Tier 2A — action
-    action = detect_action_intent(clean_message)
+    # Tier 2A — action (now receives lead_triggers so agency keywords work in fast path)
+    action = detect_action_intent(clean_message, lead_triggers)
     if action:
         result['intent']     = 'action'
         result['action']     = action
@@ -282,6 +291,17 @@ def detect_intent(
     msg_lower = clean_message.lower()
     if any(kw in msg_lower for kw in GLOBAL_PRICING_KW):
         result['is_sales'] = True
+        result['is_lead']  = True   # pricing enquiry = confirmed lead signal
+
+    # Vertical lead keyword check (free — no model call)
+    # Catches vertical-specific signals (e.g. 'viewing', 'consultation', 'trial')
+    # that aren't in the generic ACTION_KEYWORDS list.
+    if not result['is_lead']:
+        personality   = PERSONALITIES.get(vertical, PERSONALITIES['general'])
+        vert_lead_kws = personality.get('lead_keywords', [])
+        if any(kw.lower() in msg_lower for kw in vert_lead_kws):
+            result['is_lead']  = True
+            result['is_sales'] = True
 
     # Tier 3 — Gemini
     if not skip_gemini and model is not None:

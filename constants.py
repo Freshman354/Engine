@@ -101,6 +101,9 @@ STAGE_SIGNALS: Dict[str, List[str]] = {
                    'help me fix', 'cant access', "doesn't work", 'bug'],
 }
 
+# Ordered list used as a one-way ratchet — stage can only advance, never regress.
+STAGE_ORDER: List[str] = ['browsing', 'evaluating', 'buying', 'onboarding', 'support']
+
 # ── Frustration and urgency signals ──────────────────────────────────────────
 FRUSTRATION_SIGNALS: List[str] = [
     "that's wrong", "that's not right", "that doesn't help",

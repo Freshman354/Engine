@@ -42,6 +42,8 @@ from constants import (
     IDK_METHODS_ALL,
     INFERENCE_EXPANSION_ENABLED,
     PERSONALITIES,
+    STAGE_SIGNALS,
+    STAGE_ORDER,
 )
 from pipeline.context import PipelineRequest, PipelineResult
 from pipeline.stages.escalation  import check_escalation
@@ -130,6 +132,63 @@ _URGENT_KW  = frozenset({'urgent', 'asap', 'immediately', 'today', 'right now', 
 
 # ── IDK response cache TTL (shorter than normal — refresh as KB grows) ────────
 _REDIS_IDK_TTL_SEC = 900   # 15 minutes
+
+# ── Lead nudge — vertical-specific capture prompts ────────────────────────────
+_VERTICAL_NUDGES: Dict[str, str] = {
+    'real_estate': (
+        "Would you like one of our agents to reach out? "
+        "Drop your email and we'll be in touch."
+    ),
+    'law_firm': (
+        "If you'd like to arrange a consultation, share your email "
+        "and a member of the team will reach out to discuss your situation."
+    ),
+    'healthcare': (
+        "If you'd like to discuss this further, share your email "
+        "and someone from the team will be in touch."
+    ),
+    'dental': (
+        "Happy to arrange a consultation — what email should we use "
+        "to get in touch with you?"
+    ),
+    'saas': (
+        "Would you like someone from the team to walk you through it? "
+        "Share your email and we'll set something up."
+    ),
+    'gym': (
+        "Want us to reach out about membership options? "
+        "Drop your email and we'll be in touch."
+    ),
+}
+
+# ── Purchase stage detection (module-level — called per turn in pipeline) ────
+def _detect_purchase_stage(msg: str) -> Optional[str]:
+    """
+    Scan a single message for purchase stage signals.
+    Returns the detected stage name or None.
+    """
+    msg_l = msg.lower()
+    for stage, signals in STAGE_SIGNALS.items():
+        if any(s in msg_l for s in signals):
+            return stage
+    return None
+
+
+def _advance_stage(current: Optional[str], detected: Optional[str]) -> Optional[str]:
+    """
+    One-way ratchet: only advance purchase_stage, never regress.
+    Returns the winning stage, or the existing one if detected is lower/None.
+    """
+    if not detected:
+        return current
+    if not current:
+        return detected
+    try:
+        if STAGE_ORDER.index(detected) >= STAGE_ORDER.index(current):
+            return detected
+    except ValueError:
+        pass
+    return current
 
 
 def get_ai_helper(
@@ -262,9 +321,8 @@ class AIHelper:
         """
         Extract structured lead info using regex — no Gemini call.
 
-        Handles email, phone, and name patterns. Falls back to session_mem
-        for fields already captured in earlier turns. The `interest` field
-        from the old Gemini version is omitted (it was unused downstream).
+        Handles email, phone, name, urgency, and purchase_stage.
+        Falls back to session_mem for fields already captured in earlier turns.
         """
         result: Dict = {}
 
@@ -284,20 +342,54 @@ class AIHelper:
         msg_lower = message.lower()
         result['urgency'] = 'high' if any(kw in msg_lower for kw in _URGENT_KW) else 'medium'
 
+        # Purchase stage — carry through to CRM/webhook record
+        result['purchase_stage'] = session_mem.get('purchase_stage')
+
         # Strip None values so callers get a clean dict
         return {k: v for k, v in result.items() if v}
 
-    def _build_lead_nudge(self, lead_info: Dict, vertical: str) -> str:
-        """Build a lead capture follow-up message."""
-        personality = PERSONALITIES.get(vertical, PERSONALITIES['general'])
-        if not lead_info.get('email'):
+    def _build_lead_nudge(
+        self,
+        lead_info: Dict,
+        vertical: str,
+        purchase_stage: Optional[str] = None,
+        is_sales: bool = False,
+        lead_q3: str = '',
+    ) -> str:
+        """
+        Build a contextual lead capture prompt.
+
+        Priority:
+          1. Already have email — soft confirmation + optional lead_q3 follow-up
+          2. Buying/evaluating stage or sales query — direct ask
+          3. Vertical-specific soft ask
+          4. Generic fallback
+        """
+        # Already have email
+        if lead_info.get('email'):
+            if lead_q3:
+                return lead_q3
             return (
-                "It sounds like you'd like to take this further! "
-                "Could I grab your email so the team can follow up with you?"
+                "I've noted your details — someone from the team will be in "
+                "touch shortly. Is there anything else I can help with in the "
+                "meantime?"
             )
+
+        # High-intent stages — direct email ask
+        if purchase_stage in ('buying', 'evaluating') or is_sales:
+            return (
+                "To make sure the right person follows up with you — "
+                "what's the best email address for you?"
+            )
+
+        # Vertical-specific phrasing
+        if vertical in _VERTICAL_NUDGES:
+            return _VERTICAL_NUDGES[vertical]
+
+        # Generic fallback
         return (
-            f"Great, I've noted your details. "
-            f"Someone from our {vertical} team will be in touch shortly!"
+            "If you'd like someone to follow up, I can pass your details to "
+            "the team — what's the best email to reach you on?"
         )
 
     # ── generate_response ─────────────────────────────────────────────────────
@@ -312,6 +404,7 @@ class AIHelper:
         lead_triggers:         Optional[List[str]] = None,
         kb_version:            Optional[int] = None,
         session_id:            Optional[str] = None,
+        lead_q3:               str = '',
     ) -> Dict:
 
         conversation_history = conversation_history or []
@@ -356,6 +449,14 @@ class AIHelper:
 
             regex_session = extract_session_memory(conversation_history, ctx.clean_message)
             ctx.session_mem = {**db_session, **regex_session}
+
+            # ── Purchase stage detection (one-way ratchet) ────────────
+            _detected_stage = _detect_purchase_stage(ctx.clean_message)
+            _new_stage = _advance_stage(
+                ctx.session_mem.get('purchase_stage'), _detected_stage
+            )
+            if _new_stage:
+                ctx.session_mem['purchase_stage'] = _new_stage
 
             # ── Handoff state machine ─────────────────────────────────
             # If the user is responding to a handoff offer
@@ -679,9 +780,22 @@ class AIHelper:
                 ctx.session_mem['handoff_offered'] = True
 
             # ── Lead nudge (append to response if lead detected) ──────
+            # Fires whenever is_lead=True and we don't yet have an email —
+            # regardless of confidence. A high-confidence answer is the best
+            # moment to ask; removing the confidence gate captures far more leads.
             trigger_lead_collection = False
-            if is_lead and not lead_metadata and confidence < ctx.confidence_medium:
-                final += '\n\n' + self._build_lead_nudge({}, vertical)
+            _have_email = bool(
+                (lead_metadata or {}).get('email') or ctx.session_mem.get('email')
+            )
+            if is_lead and not _have_email:
+                nudge = self._build_lead_nudge(
+                    lead_info=ctx.session_mem,
+                    vertical=vertical,
+                    purchase_stage=ctx.session_mem.get('purchase_stage'),
+                    is_sales=ctx.is_sales_query,
+                    lead_q3=lead_q3,
+                )
+                final += '\n\n' + nudge
                 trigger_lead_collection = True
 
             # ── Session persistence ───────────────────────────────────
