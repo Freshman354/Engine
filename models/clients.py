@@ -6,9 +6,12 @@ settings, agency branding, custom domain DNS, and enriched stats.
 """
 import json
 import re
-import uuid
+import secrets
 from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .db import get_db
+from .users import get_user_by_id
+from .migrations import init_db
 
 def create_client(user_id, company_name, branding_settings=None, vertical=None):
     """
@@ -19,8 +22,7 @@ def create_client(user_id, company_name, branding_settings=None, vertical=None):
     conn = cursor = None
     try:
         conn, cursor = get_db()
-        import re as _re
-        slug      = _re.sub(r'[^a-z0-9-]', '', company_name.lower().replace(' ', '-'))
+        slug      = re.sub(r'[^a-z0-9-]', '', company_name.lower().replace(' ', '-'))
         client_id = f"{slug}-{secrets.token_hex(4)}"
 
         # Auto-inherit agency defaults when nothing is passed
@@ -459,7 +461,6 @@ def clone_client(source_client_id: str, user_id: int, new_name: str) -> str | No
     Clone a client: copies branding_settings and all FAQs to a new client.
     Returns the new client_id or None on failure.
     """
-    import re as _re
     try:
         conn, cursor = get_db()
 
@@ -471,7 +472,7 @@ def clone_client(source_client_id: str, user_id: int, new_name: str) -> str | No
             return None
 
         # Create new client_id
-        slug       = _re.sub(r'[^a-z0-9-]', '', new_name.lower().replace(' ', '-'))
+        slug       = re.sub(r'[^a-z0-9-]', '', new_name.lower().replace(' ', '-'))
         new_cid    = f"{slug}-{secrets.token_hex(4)}"
         bs         = source.get('branding_settings') or '{}'
 
@@ -672,9 +673,6 @@ def check_business_hours(client_id: str) -> dict:
     _default = {'is_open': True, 'offline_message': ''}
     conn = cursor = None
     try:
-        import pytz
-        from datetime import datetime
-
         conn, cursor = get_db()
         cursor.execute(
             "SELECT branding_settings FROM clients WHERE client_id = %s",
@@ -696,9 +694,9 @@ def check_business_hours(client_id: str) -> dict:
         offline_msg = bh.get('offline_message', '')
 
         try:
-            tz = pytz.timezone(tz_name)
-        except Exception:
-            tz = pytz.UTC
+            tz = ZoneInfo(tz_name)
+        except (ZoneInfoNotFoundError, Exception):
+            tz = ZoneInfo('UTC')
 
         now      = datetime.now(tz)
         day_key  = now.strftime('%a').lower()   # 'mon', 'tue', ...
