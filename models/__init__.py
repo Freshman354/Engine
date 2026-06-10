@@ -137,7 +137,7 @@ from .faqs import (
 )
 
 # ── Leads ─────────────────────────────────────────────────────────────────────
-from ..blueprints.leads import (
+from blueprints.leads import (
     save_lead,
     get_lead_by_id,
     update_lead,
