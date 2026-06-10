@@ -1583,3 +1583,26 @@ def migrate_proactive_triggers():
     finally:
         if cursor: cursor.close()
         if conn:   conn.close()
+
+
+def migrate_lead_extra_fields():
+    """
+    Add lost_reason and follow_up_at columns to the leads table.
+      lost_reason  : TEXT      — captured when a lead is moved to the 'lost' stage
+      follow_up_at : TIMESTAMP — optional date/time the agent wants a reminder
+    Idempotent — safe on every startup (ADD COLUMN IF NOT EXISTS).
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS lost_reason  TEXT")
+        cursor.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS follow_up_at TIMESTAMP")
+        conn.commit()
+        print("✅ migrate_lead_extra_fields complete")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"⚠️  migrate_lead_extra_fields: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()

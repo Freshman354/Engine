@@ -801,6 +801,7 @@ try:
         'migrate_page_context', 'migrate_csat',
         'migrate_conversation_status', 'migrate_conversation_tags',
         'migrate_proactive_triggers',
+        'migrate_lead_extra_fields',
     ]
     for _fn in _optional_migrations:
         if hasattr(models, _fn):

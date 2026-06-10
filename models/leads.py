@@ -64,6 +64,8 @@ def get_lead_by_id(client_id, lead_id):
             result['created_at'] = result['created_at'].isoformat()
         if result.get('updated_at'):
             result['updated_at'] = result['updated_at'].isoformat()
+        if result.get('follow_up_at'):
+            result['follow_up_at'] = result['follow_up_at'].isoformat()
         if result.get('custom_fields') and isinstance(result['custom_fields'], str):
             try:
                 result['custom_fields'] = json.loads(result['custom_fields'])
@@ -90,7 +92,8 @@ def update_lead(client_id, lead_id, updates: dict):
     updates keys: stage, notes, assigned_to, priority, name, email, phone, company
     Returns the updated lead dict, or None on failure.
     """
-    allowed = {'stage', 'notes', 'assigned_to', 'priority', 'name', 'email', 'phone', 'company'}
+    allowed = {'stage', 'notes', 'assigned_to', 'priority', 'name', 'email', 'phone', 'company',
+               'lost_reason', 'follow_up_at'}
     clean   = {k: v for k, v in updates.items() if k in allowed}
     if not clean:
         return get_lead_by_id(client_id, lead_id)
@@ -216,25 +219,39 @@ def bulk_update_leads(client_id, lead_ids: list, updates: dict, actor: str = 'sy
         conn.close()
 
 
-def get_leads(client_id):
-    """Get all leads for a client, newest first. Returns [] on failure."""
+def get_leads(client_id, stage=None, search=None):
+    """
+    Get leads for a client, newest first.
+    stage  — filter to a single pipeline stage (SQL-side, COALESCE handles legacy NULLs)
+    search — case-insensitive substring match on name, email, or company (SQL ILIKE)
+    Returns [] on failure.
+    """
     try:
         conn, cursor = get_db()
-        cursor.execute(
-            'SELECT * FROM leads WHERE client_id = %s ORDER BY created_at DESC',
-            (client_id,)
-        )
+        query  = "SELECT * FROM leads WHERE client_id = %s"
+        params = [client_id]
+        if stage:
+            query += " AND COALESCE(stage, 'new') = %s"
+            params.append(stage)
+        if search:
+            term   = '%' + search + '%'
+            query += " AND (name ILIKE %s OR email ILIKE %s OR company ILIKE %s)"
+            params.extend([term, term, term])
+        query += " ORDER BY created_at DESC"
+        cursor.execute(query, params)
         leads = cursor.fetchall()
         cursor.close()
         conn.close()
         result = []
         for lead in leads:
             row = dict(lead)
-            # Serialize datetime so JSON / analytics.html fmtDate() works
+            # Serialize datetime fields so JSON / frontend fmtDate() works
             if row.get('created_at'):
                 row['created_at'] = row['created_at'].isoformat()
             if row.get('updated_at'):
                 row['updated_at'] = row['updated_at'].isoformat()
+            if row.get('follow_up_at'):
+                row['follow_up_at'] = row['follow_up_at'].isoformat()
             # Deserialize custom_fields back to dict if stored as JSON string
             if row.get('custom_fields') and isinstance(row['custom_fields'], str):
                 try:

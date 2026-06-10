@@ -28,10 +28,12 @@ Registration in app.py:
   app.register_blueprint(leads_bp)
 """
 
+import csv
 import hmac
+import io
 import json
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, jsonify, make_response, request, current_app
 from flask_login import current_user, login_required
 from flask_mail import Message
 
@@ -168,15 +170,18 @@ def submit_lead():
         config       = json.loads(client['branding_settings']) if client['branding_settings'] else {}
         contact_info = config.get('contact', {})
 
-        # Send branded lead notification to the client's contact email if set
-        notify_email = contact_info.get('email')
-        if notify_email and _mail:
+        # Send branded lead notification — supports comma-separated recipients
+        notify_recipients = [
+            e.strip() for e in (contact_info.get('email') or '').split(',')
+            if e.strip()
+        ]
+        if notify_recipients and _mail:
             try:
                 sender_info = models.get_email_from_for_client(client_id)
                 msg = Message(
                     subject=f"New Lead: {name}",
                     sender=f"{sender_info['name']} <{sender_info['address']}>",
-                    recipients=[notify_email],
+                    recipients=notify_recipients,
                     html=f"""
                     <div style="font-family:'DM Sans',sans-serif;max-width:520px;margin:0 auto;
                                 background:#F7F4EF;padding:36px;border-radius:16px;">
@@ -193,9 +198,11 @@ def submit_lead():
                                        font-size:13px;color:#57534E;">Email</td>
                             <td style="padding:10px 0;border-bottom:1px solid #E7E2DA;
                                        font-size:13px;font-weight:600;color:#1C1917;">{email}</td></tr>
-                        {'<tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;color:#57534E;">Phone</td><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;font-weight:600;color:#1C1917;">'+phone+'</td></tr>' if phone else ''}
+                        {'<tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;color:#57534E;">Phone</td><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;font-weight:600;color:#1C1917;"><a href="tel:'+phone+'" style="color:#B8924A;text-decoration:none;font-weight:600;">'+phone+'</a></td></tr>' if phone else ''}
                         {'<tr><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;color:#57534E;">Company</td><td style="padding:10px 0;border-bottom:1px solid #E7E2DA;font-size:13px;font-weight:600;color:#1C1917;">'+company+'</td></tr>' if company else ''}
+                        {'<tr><td style="padding:10px 0;font-size:13px;color:#57534E;vertical-align:top;">Message</td><td style="padding:10px 0;font-size:13px;color:#1C1917;line-height:1.6;">'+message+'</td></tr>' if message else ''}
                       </table>
+                      {'<div style="margin-top:20px;background:#F7F4EF;border:1px solid #E7E2DA;border-radius:10px;padding:16px 18px;"><p style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#A8A29E;margin:0 0 8px;">Conversation Context</p><p style="font-size:13px;color:#57534E;line-height:1.7;margin:0;white-space:pre-wrap;">'+lead_data["conversation_snippet"]+'</p></div>' if lead_data.get('conversation_snippet') else ''}
                       <a href="https://lumvi.net/admin/leads?client_id={client_id}"
                          style="display:inline-block;margin-top:24px;padding:11px 22px;
                                 background:#B8924A;color:#fff;text-decoration:none;
@@ -235,15 +242,8 @@ def list_leads(client_id):
     except (ValueError, TypeError):
         return jsonify({'success': False, 'error': 'page and per_page must be integers'}), 400
 
-    leads = models.get_leads(client_id)
-
-    if stage:
-        leads = [l for l in leads if (l.get('stage') or 'new') == stage]
-    if search:
-        leads = [l for l in leads if
-                 search in (l.get('name') or '').lower() or
-                 search in (l.get('email') or '').lower() or
-                 search in (l.get('company') or '').lower()]
+    # Filtering and search pushed into SQL — no Python-side loops needed
+    leads = models.get_leads(client_id, stage=stage, search=search)
 
     total = len(leads)
     leads = leads[(page - 1) * per_page: page * per_page]
@@ -275,6 +275,12 @@ def update_lead(client_id, lead_id):
 
     old_stage     = existing.get('stage') or 'new'
     stage_changed = 'stage' in data and data['stage'] != old_stage
+
+    # Require a reason when transitioning TO lost (not on subsequent edits of lost leads)
+    if data.get('stage') == 'lost' and old_stage != 'lost':
+        if not data.get('lost_reason', '').strip():
+            return jsonify({'success': False,
+                            'error': 'lost_reason is required when moving a lead to lost'}), 400
 
     if stage_changed:
         action = f"Moved from {old_stage} → {data['stage']}"
@@ -335,16 +341,63 @@ def bulk_update_leads(client_id):
     if not lead_ids:
         return jsonify({'success': False, 'error': 'No lead_ids provided'}), 400
 
+    # Snapshot old stages BEFORE the bulk write so webhooks carry accurate data.
+    old_stages: dict = {}
+    if 'stage' in updates:
+        for lid in lead_ids:
+            existing = models.get_lead_by_id(client_id, lid)
+            if existing:
+                old_stages[lid] = existing.get('stage') or 'new'
+
     count = models.bulk_update_leads(client_id, lead_ids, updates, actor=current_user.email)
 
     if 'stage' in updates:
         for lid in lead_ids:
             lead = models.get_lead_by_id(client_id, lid)
             if lead:
-                _fire_lead_stage_webhook(client_id, lead, old_stage='unknown')
+                old = old_stages.get(lid, 'new')
+                if old != updates['stage']:          # only fire on a real change
+                    _fire_lead_stage_webhook(client_id, lead, old_stage=old)
 
     return jsonify({'success': True, 'updated': count})
 
+
+
+
+# ── CSV EXPORT ────────────────────────────────────────────────────────────────
+
+@leads_bp.route('/api/leads/<client_id>/export', methods=['GET'])
+@login_required
+def export_leads(client_id):
+    """
+    Return all leads for a client as a downloadable CSV file.
+    Respects the same stage / search filters as list_leads.
+    GET /api/leads/<client_id>/export?stage=new&q=smith
+    """
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    stage  = request.args.get('stage', '').strip()
+    search = request.args.get('q', '').lower().strip()
+    leads  = models.get_leads(client_id, stage=stage, search=search)
+
+    columns = [
+        'id', 'name', 'email', 'phone', 'company', 'message',
+        'stage', 'priority', 'assigned_to', 'notes',
+        'lost_reason', 'follow_up_at',
+        'source_url', 'created_at', 'updated_at',
+    ]
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(columns)
+    for lead in leads:
+        writer.writerow([lead.get(col) or '' for col in columns])
+
+    response = make_response(buf.getvalue())
+    response.headers['Content-Type']        = 'text/csv; charset=utf-8'
+    response.headers['Content-Disposition'] = f'attachment; filename="leads_{client_id}.csv"'
+    return response
 
 @leads_bp.route('/api/leads/<client_id>/webhook-inbound', methods=['POST'])
 def inbound_lead_webhook(client_id):
