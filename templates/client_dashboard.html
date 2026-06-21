@@ -1880,7 +1880,8 @@
 
             // Show a subtle toast
             if (typeof showToast === 'function') {
-              showToast('Lead moved to ' + (STAGE_LABELS[newStage] || newStage), 'success');
+              var _customLabel = (window.CUSTOM_STAGE_LABELS && window.CUSTOM_STAGE_LABELS[newStage]);
+              showToast('Lead moved to ' + (_customLabel || STAGE_LABELS[newStage] || newStage), 'success');
             }
           });
         }
@@ -3368,6 +3369,51 @@
     const apiRange = rangeMap[range] || 'week';
     showToast('Chart updated for: ' + range, 'info');
     loadAnalytics(apiRange);
+  }
+</script>
+
+<script>
+  // ── Custom pipeline stage labels ──────────────────────────────────────────
+  // Agency can rename the 6 fixed stage keys (set via /api/admin/customize,
+  // stored in branding_settings.stage_labels). The underlying `stage` value
+  // on each lead is always one of new/contacted/qualified/proposal/closed/lost
+  // — only the on-screen label changes. Falls back silently to the existing
+  // defaults already baked into the page when no custom labels are set.
+  window.CUSTOM_STAGE_LABELS = {};
+
+  async function applyCustomStageLabels() {
+    if (typeof CLIENT_ID === 'undefined' || !CLIENT_ID) return;
+    try {
+      const res  = await fetch('/api/leads/' + encodeURIComponent(CLIENT_ID) + '/stage-labels');
+      const data = await res.json();
+      if (!data.success || !data.stage_labels) return;
+
+      var labels = data.stage_labels;
+      window.CUSTOM_STAGE_LABELS = labels;
+
+      Object.keys(labels).forEach(function (stage) {
+        var label  = labels[stage];
+        var suffix = stage === 'closed' ? ' ✓' : '';
+
+        var colTitle = document.querySelector('.crm-col[data-stage="' + stage + '"] .crm-col-title');
+        if (colTitle) colTitle.textContent = label + suffix;
+
+        var pill = document.querySelector('.lm-stage-pill[data-stage="' + stage + '"]');
+        if (pill) pill.textContent = label + suffix;
+
+        if (typeof LM_STAGES !== 'undefined' && LM_STAGES[stage]) {
+          LM_STAGES[stage].label = label;
+        }
+      });
+    } catch (e) {
+      console.warn('[stage-labels] failed to load custom labels', e);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyCustomStageLabels);
+  } else {
+    applyCustomStageLabels();
   }
 </script>
 

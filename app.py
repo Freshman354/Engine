@@ -802,6 +802,10 @@ try:
         'migrate_conversation_status', 'migrate_conversation_tags',
         'migrate_proactive_triggers',
         'migrate_lead_extra_fields',
+        'migrate_lead_duplicate_tracking',
+        'migrate_lead_outcome_tracking',
+        'migrate_lead_nudge_tracking',
+        'migrate_lead_intent_summary',
     ]
     for _fn in _optional_migrations:
         if hasattr(models, _fn):
@@ -921,6 +925,7 @@ init_leads(
     fire_webhook=fire_webhook_event,
     notify_webhook=notify_webhook,
     log_conversation=log_conversation,
+    ai_helper=ai_helper,
 )
 app.register_blueprint(leads_bp)
 limiter.limit('10 per hour')(_submit_lead_view)
@@ -1537,6 +1542,22 @@ def save_customization():
             'vertical':     vertical,
         }
         branding_settings['contact'].setdefault('address', '')
+
+        # Custom pipeline stage names — agency can rename the 6 fixed stage
+        # keys to match the client's business (e.g. 'qualified' -> 'Site Visit
+        # Booked'). Keys are restricted to the known stage set; values capped
+        # at 30 chars. The underlying stage key stored on each lead never
+        # changes — this only affects display labels.
+        incoming_stage_labels = data.get('stage_labels', {})
+        valid_stage_keys = {'new', 'contacted', 'qualified', 'proposal', 'closed', 'lost'}
+        stage_labels = {}
+        if isinstance(incoming_stage_labels, dict):
+            for _sk, _sv in incoming_stage_labels.items():
+                if _sk in valid_stage_keys:
+                    _label = str(_sv).strip()[:30]
+                    if _label:
+                        stage_labels[_sk] = _label
+        branding_settings['stage_labels'] = stage_labels
 
         # Availability schedule — null means "always online" (enforcement disabled)
         incoming_bh = data.get('business_hours')

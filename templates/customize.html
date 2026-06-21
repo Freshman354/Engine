@@ -524,6 +524,53 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
     </div>
   </div>
 
+  <!-- PIPELINE STAGE NAMES -->
+  <div class="card">
+    <div class="card-header open" onclick="tc(this)">
+      <div class="card-icon" style="background:#EFF6FF;"><svg viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg></div>
+      <div class="card-text"><h2>Pipeline Stage Names</h2><p>Rename the 6 CRM stages to match this client's business</p></div>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+    </div>
+    <div class="card-body open">
+      <div style="padding:10px 13px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);border-radius:9px;margin-bottom:14px;font-size:12.5px;color:var(--gold-dk);line-height:1.6;">
+        <strong>💡 How this works:</strong> These are display labels only — the underlying
+        pipeline stage stays the same, so existing automations and webhooks keep working.
+        Leave a field blank to use the default name.
+      </div>
+
+      <div class="field">
+        <label>Stage 1 — "New"</label>
+        <input type="text" id="stage_label_new" maxlength="30" placeholder="New"
+          value="{{ branding.get('stage_labels', {}).get('new', '') }}">
+      </div>
+      <div class="field">
+        <label>Stage 2 — "Contacted"</label>
+        <input type="text" id="stage_label_contacted" maxlength="30" placeholder="Contacted"
+          value="{{ branding.get('stage_labels', {}).get('contacted', '') }}">
+      </div>
+      <div class="field">
+        <label>Stage 3 — "Qualified"</label>
+        <input type="text" id="stage_label_qualified" maxlength="30" placeholder="Qualified"
+          value="{{ branding.get('stage_labels', {}).get('qualified', '') }}">
+      </div>
+      <div class="field">
+        <label>Stage 4 — "Proposal"</label>
+        <input type="text" id="stage_label_proposal" maxlength="30" placeholder="Proposal"
+          value="{{ branding.get('stage_labels', {}).get('proposal', '') }}">
+      </div>
+      <div class="field">
+        <label>Stage 5 — "Closed"</label>
+        <input type="text" id="stage_label_closed" maxlength="30" placeholder="Closed"
+          value="{{ branding.get('stage_labels', {}).get('closed', '') }}">
+      </div>
+      <div class="field">
+        <label>Stage 6 — "Lost"</label>
+        <input type="text" id="stage_label_lost" maxlength="30" placeholder="Lost"
+          value="{{ branding.get('stage_labels', {}).get('lost', '') }}">
+      </div>
+    </div>
+  </div>
+
   <!-- 5. WHITE-LABEL & CUSTOM DOMAIN (merged) -->
   <div class="card">
     <div class="card-header open" onclick="tc(this)">
@@ -1539,6 +1586,14 @@ async function save() {
     integrations: {},
     remove_branding: HWL && (document.getElementById('remove_branding')?.checked || false),
     business_hours: bhGetPayload(),
+    stage_labels: {
+      new:       document.getElementById('stage_label_new').value.trim(),
+      contacted: document.getElementById('stage_label_contacted').value.trim(),
+      qualified: document.getElementById('stage_label_qualified').value.trim(),
+      proposal:  document.getElementById('stage_label_proposal').value.trim(),
+      closed:    document.getElementById('stage_label_closed').value.trim(),
+      lost:      document.getElementById('stage_label_lost').value.trim(),
+    },
   };
 
   console.log('[Customize] main payload:', {

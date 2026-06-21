@@ -18,6 +18,8 @@ Routes
   GET/POST    /cron/enforce-subscriptions             cron_enforce_subscriptions
   GET/POST    /cron/weekly-digest                     cron_weekly_digest
   GET/POST    /cron/cleanup-logs                      cron_cleanup_logs
+  GET/POST    /cron/stale-lead-nudge                  cron_stale_lead_nudge
+  GET/POST    /cron/follow-up-reminders               cron_follow_up_reminders
   GET         /cron/status                            cron_status
   GET/POST    /cron/agency-overage                    cron_agency_overage
   GET         /api/admin/training/stats               admin_training_stats
@@ -37,6 +39,7 @@ Registration in app.py:
 
 import hmac
 import io
+import json
 import os
 import time
 
@@ -217,6 +220,194 @@ def send_weekly_digest():
     )
     models.log_cron_run(
         'weekly_digest', success=(errors == 0), result=result,
+        duration_ms=duration_ms, triggered_by='http',
+    )
+    return result
+
+
+# ── Stale lead nudge ───────────────────────────────────────────────────────────
+
+# Tunable window — a lead must be at least MIN hours old (and less than MAX
+# hours old) and never touched since capture to qualify for one nudge.
+STALE_LEAD_MIN_HOURS = 24
+STALE_LEAD_MAX_HOURS = 48
+
+
+def send_stale_lead_nudges():
+    """
+    Email the business owner about leads that have sat in 'new' for
+    24-48 hours with no update (no PATCH has touched them since capture).
+    Deduplicated via leads.stale_nudge_sent_at — each lead is nudged once.
+    """
+    t0 = time.time()
+    if not hasattr(models, 'get_stale_new_leads'):
+        current_app.logger.warning(
+            '[StaleLeadNudge] models.get_stale_new_leads not found — skipping'
+        )
+        return {'notified': 0, 'skipped': 0, 'errors': 0}
+
+    stale_leads = models.get_stale_new_leads(
+        min_hours=STALE_LEAD_MIN_HOURS, max_hours=STALE_LEAD_MAX_HOURS
+    )
+    notified = skipped = errors = 0
+    base_url = os.environ.get('APP_BASE_URL', 'https://lumvi.net')
+
+    for lead in stale_leads:
+        cid = lead['client_id']
+        client = models.get_client_by_id(cid)
+        if not client:
+            skipped += 1
+            continue
+
+        config       = json.loads(client['branding_settings']) if client.get('branding_settings') else {}
+        contact_info = config.get('contact', {})
+        recipients   = [
+            e.strip() for e in (contact_info.get('email') or '').split(',') if e.strip()
+        ]
+        if not recipients:
+            skipped += 1
+            continue
+
+        try:
+            sender_info = models.get_email_from_for_client(cid)
+            lead_label  = lead.get('name') or lead.get('email') or 'A lead'
+            html = f"""
+            <div style="font-family:'DM Sans',Arial,sans-serif;max-width:520px;margin:0 auto;
+                        background:#F7F4EF;padding:32px;border-radius:16px;">
+              <h2 style="font-size:18px;font-weight:700;color:#1C1917;margin-bottom:4px;">
+                ⏰ A lead is waiting on you</h2>
+              <p style="color:#A8A29E;font-size:13px;margin-bottom:20px;">
+                via {client.get('company_name','your chatbot')}</p>
+              <div style="background:#fff;border:1px solid #E7E2DA;border-radius:12px;
+                          padding:18px;margin-bottom:20px;">
+                <p style="font-size:14px;font-weight:700;color:#1C1917;margin:0 0 4px;">
+                  {lead_label}</p>
+                <p style="font-size:13px;color:#57534E;margin:0;">{lead.get('email','')}</p>
+              </div>
+              <p style="font-size:13px;color:#57534E;line-height:1.6;">
+                This lead has been sitting in <strong>New</strong> for over
+                {STALE_LEAD_MIN_HOURS} hours with no follow-up yet.
+              </p>
+              <a href="{base_url}/admin/leads?client_id={cid}"
+                 style="display:inline-block;margin-top:16px;padding:11px 22px;
+                        background:#B8924A;color:#fff;text-decoration:none;
+                        border-radius:9px;font-weight:700;font-size:13.5px;">
+                Follow up now →</a>
+            </div>"""
+            msg = MailMessage(
+                subject    = f"⏰ Lead waiting: {lead_label}",
+                sender     = f"{sender_info['name']} <{sender_info['address']}>",
+                recipients = recipients,
+                html       = html,
+            )
+            if _mail:
+                _mail.send(msg)
+            models.mark_stale_nudge_sent(lead['id'])
+            notified += 1
+            current_app.logger.info(
+                f"[StaleLeadNudge] notified client={cid} lead={lead['id']}"
+            )
+        except Exception as e:
+            current_app.logger.error(
+                f"[StaleLeadNudge] failed for lead={lead.get('id')}: {e}"
+            )
+            errors += 1
+
+    duration_ms = int((time.time() - t0) * 1000)
+    result = {'notified': notified, 'skipped': skipped, 'errors': errors}
+    current_app.logger.info(f'[StaleLeadNudge] complete — {result} dur={duration_ms}ms')
+    models.log_cron_run(
+        'stale_lead_nudge', success=(errors == 0), result=result,
+        duration_ms=duration_ms, triggered_by='http',
+    )
+    return result
+
+
+# ── Follow-up reminder ──────────────────────────────────────────────────────────
+
+def send_followup_reminders():
+    """
+    Email the business owner when a lead's scheduled follow_up_at date/time
+    has been reached. Deduplicated via leads.followup_reminder_sent_at — each
+    lead is reminded once per scheduled follow-up. Skips leads already in
+    'closed' or 'lost' — nothing to follow up on there.
+    """
+    t0 = time.time()
+    if not hasattr(models, 'get_due_follow_ups'):
+        current_app.logger.warning(
+            '[FollowUpReminder] models.get_due_follow_ups not found — skipping'
+        )
+        return {'notified': 0, 'skipped': 0, 'errors': 0}
+
+    due_leads = models.get_due_follow_ups()
+    notified = skipped = errors = 0
+    base_url = os.environ.get('APP_BASE_URL', 'https://lumvi.net')
+
+    for lead in due_leads:
+        cid = lead['client_id']
+        client = models.get_client_by_id(cid)
+        if not client:
+            skipped += 1
+            continue
+
+        config       = json.loads(client['branding_settings']) if client.get('branding_settings') else {}
+        contact_info = config.get('contact', {})
+        recipients   = [
+            e.strip() for e in (contact_info.get('email') or '').split(',') if e.strip()
+        ]
+        if not recipients:
+            skipped += 1
+            continue
+
+        try:
+            sender_info = models.get_email_from_for_client(cid)
+            lead_label  = lead.get('name') or lead.get('email') or 'A lead'
+            html = f"""
+            <div style="font-family:'DM Sans',Arial,sans-serif;max-width:520px;margin:0 auto;
+                        background:#F7F4EF;padding:32px;border-radius:16px;">
+              <h2 style="font-size:18px;font-weight:700;color:#1C1917;margin-bottom:4px;">
+                📅 Follow-up reminder</h2>
+              <p style="color:#A8A29E;font-size:13px;margin-bottom:20px;">
+                via {client.get('company_name','your chatbot')}</p>
+              <div style="background:#fff;border:1px solid #E7E2DA;border-radius:12px;
+                          padding:18px;margin-bottom:20px;">
+                <p style="font-size:14px;font-weight:700;color:#1C1917;margin:0 0 4px;">
+                  {lead_label}</p>
+                <p style="font-size:13px;color:#57534E;margin:0;">{lead.get('email','')}</p>
+              </div>
+              <p style="font-size:13px;color:#57534E;line-height:1.6;">
+                You scheduled a follow-up with this lead for today.
+              </p>
+              <a href="{base_url}/admin/leads?client_id={cid}"
+                 style="display:inline-block;margin-top:16px;padding:11px 22px;
+                        background:#B8924A;color:#fff;text-decoration:none;
+                        border-radius:9px;font-weight:700;font-size:13.5px;">
+                Open lead →</a>
+            </div>"""
+            msg = MailMessage(
+                subject    = f"📅 Follow-up due: {lead_label}",
+                sender     = f"{sender_info['name']} <{sender_info['address']}>",
+                recipients = recipients,
+                html       = html,
+            )
+            if _mail:
+                _mail.send(msg)
+            models.mark_followup_reminder_sent(lead['id'])
+            notified += 1
+            current_app.logger.info(
+                f"[FollowUpReminder] notified client={cid} lead={lead['id']}"
+            )
+        except Exception as e:
+            current_app.logger.error(
+                f"[FollowUpReminder] failed for lead={lead.get('id')}: {e}"
+            )
+            errors += 1
+
+    duration_ms = int((time.time() - t0) * 1000)
+    result = {'notified': notified, 'skipped': skipped, 'errors': errors}
+    current_app.logger.info(f'[FollowUpReminder] complete — {result} dur={duration_ms}ms')
+    models.log_cron_run(
+        'followup_reminder', success=(errors == 0), result=result,
         duration_ms=duration_ms, triggered_by='http',
     )
     return result
@@ -456,6 +647,50 @@ def cron_cleanup_logs():
     })
 
 
+@cron_bp.route('/cron/stale-lead-nudge', methods=['GET', 'POST'])
+def cron_stale_lead_nudge():
+    """
+    Daily cron — emails the business owner about leads stuck in 'new' for
+    24-48 hours with no update. Same CRON_SECRET as other cron routes.
+
+    Usage:
+      GET  /cron/stale-lead-nudge?secret=YOUR_CRON_SECRET
+      POST /cron/stale-lead-nudge  (body: {"secret": "YOUR_CRON_SECRET"})
+    """
+    _, err = _check_cron_secret()
+    if err:
+        return err
+
+    result = send_stale_lead_nudges()
+    return jsonify({
+        'success': True,
+        'ran_at':  datetime.utcnow().isoformat(),
+        **result,
+    })
+
+
+@cron_bp.route('/cron/follow-up-reminders', methods=['GET', 'POST'])
+def cron_follow_up_reminders():
+    """
+    Frequent cron (recommended hourly) — emails the business owner when a
+    lead's scheduled follow_up_at date/time has arrived.
+
+    Usage:
+      GET  /cron/follow-up-reminders?secret=YOUR_CRON_SECRET
+      POST /cron/follow-up-reminders  (body: {"secret": "YOUR_CRON_SECRET"})
+    """
+    _, err = _check_cron_secret()
+    if err:
+        return err
+
+    result = send_followup_reminders()
+    return jsonify({
+        'success': True,
+        'ran_at':  datetime.utcnow().isoformat(),
+        **result,
+    })
+
+
 @cron_bp.route('/cron/status', methods=['GET'])
 @login_required
 def cron_status():
@@ -466,7 +701,8 @@ def cron_status():
     if not getattr(current_user, 'is_admin', False):
         return jsonify({'error': 'Admin only'}), 403
 
-    jobs   = ['enforce_subscriptions', 'weekly_digest', 'agency_overage', 'cleanup_logs']
+    jobs   = ['enforce_subscriptions', 'weekly_digest', 'agency_overage', 'cleanup_logs',
+              'stale_lead_nudge', 'followup_reminder']
     status = {}
     for job in jobs:
         last = models.get_cron_last_run(job)

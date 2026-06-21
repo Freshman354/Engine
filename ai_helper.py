@@ -392,6 +392,56 @@ class AIHelper:
             "the team — what's the best email to reach you on?"
         )
 
+    def extract_lead_intent(
+        self,
+        message: str,
+        conversation_snippet: str = '',
+        vertical: str = 'general',
+    ) -> Dict:
+        """
+        Use Gemini to read the lead's message + conversation context and
+        produce a short human-readable intent summary plus a suggested
+        priority. Called once at lead-capture time (blueprints/leads.py
+        submit_lead) — not part of the live chat turn loop.
+
+        Returns {'summary': str, 'priority': 'high'|'med'|'low'}.
+        Falls back to a blank summary + 'high' priority (matching the
+        existing leads.priority DB default) when the model is unavailable
+        or parsing fails — a lead is never silently downgraded just
+        because Gemini is down.
+        """
+        fallback = {'summary': '', 'priority': 'high'}
+        if not self.enabled or not self.model:
+            return fallback
+
+        context = (conversation_snippet or message or '').strip()
+        if not context:
+            return fallback
+
+        prompt = (
+            f"A visitor just submitted a lead form on a {vertical} business's chatbot.\n\n"
+            f"Their message / conversation context:\n\"{context[:1500]}\"\n\n"
+            "In 2-3 sentences, summarize what this person wants and any "
+            "urgency or buying signals you notice. Then classify priority:\n"
+            "- high: ready to buy/book, urgent need, or explicit timeline\n"
+            "- med: clearly interested but no urgency signal\n"
+            "- low: vague inquiry, early research, or just browsing\n\n"
+            "Respond ONLY with JSON:\n"
+            '{"summary": "2-3 sentence summary", "priority": "high|med|low"}'
+        )
+        try:
+            resp     = _gemini_call(self.model, prompt, self._model_name)
+            parsed   = self._parse_json(resp.text or '')
+            if not parsed or not parsed.get('summary'):
+                return fallback
+            priority = str(parsed.get('priority', 'high')).strip().lower()
+            if priority not in ('high', 'med', 'low'):
+                priority = 'high'
+            return {'summary': str(parsed['summary'])[:500], 'priority': priority}
+        except Exception as e:
+            log_crash(logger, 'ExtractLeadIntent', e)
+            return fallback
+
     # ── generate_response ─────────────────────────────────────────────────────
 
     def generate_response(

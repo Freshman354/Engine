@@ -1606,3 +1606,100 @@ def migrate_lead_extra_fields():
     finally:
         if cursor: cursor.close()
         if conn:   conn.close()
+
+
+def migrate_lead_duplicate_tracking():
+    """
+    Add submission_count column to the leads table.
+      submission_count : INTEGER — how many times this email has submitted
+                          the lead form for this client. Defaults to 1 so
+                          existing rows (each a single historical submission)
+                          don't need a backfill.
+    Idempotent — safe on every startup (ADD COLUMN IF NOT EXISTS).
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "ALTER TABLE leads ADD COLUMN IF NOT EXISTS submission_count INTEGER DEFAULT 1"
+        )
+        conn.commit()
+        print("✅ migrate_lead_duplicate_tracking complete")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"⚠️  migrate_lead_duplicate_tracking: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def migrate_lead_outcome_tracking():
+    """
+    Add closed_value and outcome_notes columns to the leads table.
+      closed_value  : NUMERIC — deal value captured when a lead is marked
+                       'closed'; powers revenue-attribution reporting.
+      outcome_notes : TEXT    — free-text context captured alongside it.
+    Idempotent — safe on every startup (ADD COLUMN IF NOT EXISTS).
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS closed_value  NUMERIC")
+        cursor.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS outcome_notes TEXT")
+        conn.commit()
+        print("✅ migrate_lead_outcome_tracking complete")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"⚠️  migrate_lead_outcome_tracking: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def migrate_lead_nudge_tracking():
+    """
+    Add dedup-tracking columns used by the stale-lead-nudge and
+    follow-up-reminder cron jobs, so each lead is only ever notified once
+    per nudge/reminder.
+      stale_nudge_sent_at        : TIMESTAMP
+      followup_reminder_sent_at  : TIMESTAMP
+    Idempotent — safe on every startup (ADD COLUMN IF NOT EXISTS).
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS stale_nudge_sent_at       TIMESTAMP")
+        cursor.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS followup_reminder_sent_at TIMESTAMP")
+        conn.commit()
+        print("✅ migrate_lead_nudge_tracking complete")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"⚠️  migrate_lead_nudge_tracking: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
+def migrate_lead_intent_summary():
+    """
+    Add intent_summary column to the leads table — a 2-3 sentence Gemini
+    summary of what the lead wants, generated once at capture time
+    (blueprints/leads.py submit_lead -> ai_helper.extract_lead_intent).
+    Idempotent — safe on every startup (ADD COLUMN IF NOT EXISTS).
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute("ALTER TABLE leads ADD COLUMN IF NOT EXISTS intent_summary TEXT")
+        conn.commit()
+        print("✅ migrate_lead_intent_summary complete")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"⚠️  migrate_lead_intent_summary: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()

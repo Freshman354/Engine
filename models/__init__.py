@@ -58,6 +58,10 @@ from .cron import (
     mark_digest_sent,
     upsert_usage_warning,
     get_usage_warning,
+    get_stale_new_leads,
+    mark_stale_nudge_sent,
+    get_due_follow_ups,
+    mark_followup_reminder_sent,
 )
 
 # ── Users ─────────────────────────────────────────────────────────────────────
@@ -281,4 +285,9 @@ from .migrations import (
     migrate_conversation_status,
     migrate_conversation_tags,
     migrate_proactive_triggers,
+    migrate_lead_extra_fields,
+    migrate_lead_duplicate_tracking,
+    migrate_lead_outcome_tracking,
+    migrate_lead_nudge_tracking,
+    migrate_lead_intent_summary,
 )

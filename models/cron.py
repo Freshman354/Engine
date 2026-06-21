@@ -187,6 +187,92 @@ def get_usage_warning(client_id: str):
         conn.close()
 
 
+def get_stale_new_leads(min_hours: int = 24, max_hours: int = 48) -> list:
+    """
+    Return leads still in 'new' stage that have never been touched since
+    capture (updated_at IS NULL) and are between min_hours and max_hours
+    old. Excludes leads already nudged (stale_nudge_sent_at IS NULL) so
+    each lead is nudged at most once per stale window.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute("""
+            SELECT id, client_id, name, email, stage, created_at
+            FROM leads
+            WHERE stage = 'new'
+              AND updated_at IS NULL
+              AND stale_nudge_sent_at IS NULL
+              AND created_at <= NOW() - (%s * INTERVAL '1 hour')
+              AND created_at >  NOW() - (%s * INTERVAL '1 hour')
+        """, (min_hours, max_hours))
+        return [dict(r) for r in cursor.fetchall()]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_stale_new_leads] {e}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def mark_stale_nudge_sent(lead_id: int) -> None:
+    """Stamp stale_nudge_sent_at = NOW() after a successful stale-lead nudge."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "UPDATE leads SET stale_nudge_sent_at = NOW() WHERE id = %s",
+            (lead_id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[mark_stale_nudge_sent] {e}")
+
+
+def get_due_follow_ups() -> list:
+    """
+    Return leads whose scheduled follow_up_at has arrived and that haven't
+    been reminded yet (followup_reminder_sent_at IS NULL). Excludes leads
+    already 'closed' or 'lost' — nothing to follow up on there.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute("""
+            SELECT id, client_id, name, email, stage, follow_up_at
+            FROM leads
+            WHERE follow_up_at IS NOT NULL
+              AND follow_up_at <= NOW()
+              AND followup_reminder_sent_at IS NULL
+              AND stage NOT IN ('closed', 'lost')
+        """)
+        return [dict(r) for r in cursor.fetchall()]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_due_follow_ups] {e}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def mark_followup_reminder_sent(lead_id: int) -> None:
+    """Stamp followup_reminder_sent_at = NOW() after a successful reminder."""
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "UPDATE leads SET followup_reminder_sent_at = NOW() WHERE id = %s",
+            (lead_id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[mark_followup_reminder_sent] {e}")
+
+
 def get_unanswered_questions_for_email(client_id: str, since_days: int = 7, limit: int = 5):
     """
     Return the top unanswered questions for a client from the past N days.

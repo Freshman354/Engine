@@ -10,7 +10,15 @@ from datetime import datetime
 from .db import get_db
 
 def save_lead(client_id, lead_data):
-    """Save a lead for a client. Returns True on success, False on failure."""
+    """
+    Save a lead for a client. Returns True on success, False on failure.
+
+    Duplicate handling: if a lead with the same email already exists for
+    this client (case-insensitive match), the existing row is enriched
+    instead of inserting a new one — submission_count is incremented and
+    any newly-provided non-blank fields overwrite the old ones (blank
+    fields on the new submission never clobber existing data).
+    """
     conn, cursor = get_db()
     try:
         # Serialize custom_fields dict to JSON string for TEXT column
@@ -19,20 +27,55 @@ def save_lead(client_id, lead_data):
             custom_fields = json.dumps(custom_fields)
 
         cursor.execute(
-            '''INSERT INTO leads (client_id, name, email, phone, company, message, custom_fields, conversation_snippet, source_url)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)''',
-            (
-                client_id,
-                lead_data['name'],
-                lead_data['email'],
-                lead_data.get('phone', ''),
-                lead_data.get('company', ''),
-                lead_data.get('message', ''),
-                custom_fields,
-                lead_data.get('conversation_snippet', ''),
-                lead_data.get('source_url', '')
-            )
+            'SELECT id FROM leads WHERE client_id = %s AND LOWER(email) = LOWER(%s)',
+            (client_id, lead_data['email'])
         )
+        existing = cursor.fetchone()
+
+        if existing:
+            cursor.execute(
+                '''UPDATE leads
+                   SET name                 = COALESCE(NULLIF(%s, ''), name),
+                       phone                = COALESCE(NULLIF(%s, ''), phone),
+                       company              = COALESCE(NULLIF(%s, ''), company),
+                       message              = COALESCE(NULLIF(%s, ''), message),
+                       custom_fields        = COALESCE(%s, custom_fields),
+                       conversation_snippet = COALESCE(NULLIF(%s, ''), conversation_snippet),
+                       source_url           = COALESCE(NULLIF(%s, ''), source_url),
+                       intent_summary       = COALESCE(NULLIF(%s, ''), intent_summary),
+                       submission_count     = COALESCE(submission_count, 1) + 1,
+                       updated_at           = NOW()
+                   WHERE id = %s''',
+                (
+                    lead_data.get('name', ''),
+                    lead_data.get('phone', ''),
+                    lead_data.get('company', ''),
+                    lead_data.get('message', ''),
+                    custom_fields,
+                    lead_data.get('conversation_snippet', ''),
+                    lead_data.get('source_url', ''),
+                    lead_data.get('intent_summary', ''),
+                    existing['id']
+                )
+            )
+        else:
+            cursor.execute(
+                '''INSERT INTO leads (client_id, name, email, phone, company, message, custom_fields, conversation_snippet, source_url, intent_summary, priority)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+                (
+                    client_id,
+                    lead_data['name'],
+                    lead_data['email'],
+                    lead_data.get('phone', ''),
+                    lead_data.get('company', ''),
+                    lead_data.get('message', ''),
+                    custom_fields,
+                    lead_data.get('conversation_snippet', ''),
+                    lead_data.get('source_url', ''),
+                    lead_data.get('intent_summary', ''),
+                    lead_data.get('priority') or 'high'
+                )
+            )
         conn.commit()
         return True
     except Exception as e:
@@ -66,6 +109,8 @@ def get_lead_by_id(client_id, lead_id):
             result['updated_at'] = result['updated_at'].isoformat()
         if result.get('follow_up_at'):
             result['follow_up_at'] = result['follow_up_at'].isoformat()
+        if result.get('closed_value') is not None:
+            result['closed_value'] = float(result['closed_value'])
         if result.get('custom_fields') and isinstance(result['custom_fields'], str):
             try:
                 result['custom_fields'] = json.loads(result['custom_fields'])
@@ -93,7 +138,7 @@ def update_lead(client_id, lead_id, updates: dict):
     Returns the updated lead dict, or None on failure.
     """
     allowed = {'stage', 'notes', 'assigned_to', 'priority', 'name', 'email', 'phone', 'company',
-               'lost_reason', 'follow_up_at'}
+               'lost_reason', 'follow_up_at', 'closed_value', 'outcome_notes'}
     clean   = {k: v for k, v in updates.items() if k in allowed}
     if not clean:
         return get_lead_by_id(client_id, lead_id)
@@ -124,6 +169,11 @@ def update_lead(client_id, lead_id, updates: dict):
         existing_log.append(new_entry)
 
         set_clauses = ', '.join(f"{k} = %s" for k in clean)
+        if 'follow_up_at' in clean:
+            # A (re)scheduled follow-up date should get its own reminder —
+            # without this, get_due_follow_ups()'s dedup flag would
+            # permanently block any reminder after the very first one ever sent.
+            set_clauses += ", followup_reminder_sent_at = NULL"
         set_clauses += ", activity_log = %s, updated_at = NOW()"
         values = list(clean.values()) + [json.dumps(existing_log), lead_id, client_id]
 
@@ -252,6 +302,8 @@ def get_leads(client_id, stage=None, search=None):
                 row['updated_at'] = row['updated_at'].isoformat()
             if row.get('follow_up_at'):
                 row['follow_up_at'] = row['follow_up_at'].isoformat()
+            if row.get('closed_value') is not None:
+                row['closed_value'] = float(row['closed_value'])
             # Deserialize custom_fields back to dict if stored as JSON string
             if row.get('custom_fields') and isinstance(row['custom_fields'], str):
                 try:

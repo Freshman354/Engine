@@ -24,7 +24,8 @@ Registration in app.py:
   init_leads(mail=mail, limiter=limiter,
              fire_webhook=fire_webhook_event,
              notify_webhook=notify_webhook,
-             log_conversation=log_conversation)
+             log_conversation=log_conversation,
+             ai_helper=ai_helper)
   app.register_blueprint(leads_bp)
 """
 
@@ -32,6 +33,7 @@ import csv
 import hmac
 import io
 import json
+import math
 
 from flask import Blueprint, jsonify, make_response, request, current_app
 from flask_login import current_user, login_required
@@ -50,19 +52,25 @@ _limiter          = None
 _fire_webhook     = None
 _notify_webhook   = None
 _log_conversation = None
+_ai_helper        = None
 
 
-def init_leads(mail, limiter, fire_webhook, notify_webhook, log_conversation):
+def init_leads(mail, limiter, fire_webhook, notify_webhook, log_conversation, ai_helper=None):
     """
     Called once in app.py after all shared objects are ready.
     Must be called before the first request reaches this blueprint.
+
+    ai_helper is optional — if not passed (or disabled), lead capture
+    falls back to the existing behaviour with no intent summary and the
+    DB default priority ('high').
     """
-    global _mail, _limiter, _fire_webhook, _notify_webhook, _log_conversation
+    global _mail, _limiter, _fire_webhook, _notify_webhook, _log_conversation, _ai_helper
     _mail             = mail
     _limiter          = limiter
     _fire_webhook     = fire_webhook
     _notify_webhook   = notify_webhook
     _log_conversation = log_conversation
+    _ai_helper        = ai_helper
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -119,14 +127,41 @@ def submit_lead():
         if not client:
             return jsonify({'success': False, 'error': 'Client not found'}), 404
 
+        config       = json.loads(client['branding_settings']) if client['branding_settings'] else {}
+        contact_info = config.get('contact', {})
+        vertical     = config.get('vertical', 'general')
+
+        conversation_snippet = sanitize_input(
+            data.get('conversation_snippet', ''), max_length=2000
+        )
+
+        # Gemini intent extraction — 2-3 sentence summary + auto priority.
+        # Degrades silently to {summary: '', priority: 'high'} if ai_helper
+        # is unavailable, disabled, or parsing fails (see extract_lead_intent).
+        intent_summary = ''
+        lead_priority  = 'high'
+        if _ai_helper:
+            try:
+                intent = _ai_helper.extract_lead_intent(
+                    message=message,
+                    conversation_snippet=conversation_snippet,
+                    vertical=vertical,
+                )
+                intent_summary = intent.get('summary', '')
+                lead_priority  = intent.get('priority', 'high')
+            except Exception as _intent_err:
+                current_app.logger.warning(
+                    f"[LeadIntent] extraction failed for {client_id}: {_intent_err}"
+                )
+
         lead_data = {
             'name': name, 'email': email, 'phone': phone, 'company': company,
             'message': message,
             'custom_fields': custom_fields if custom_fields else None,
-            'conversation_snippet': sanitize_input(
-                data.get('conversation_snippet', ''), max_length=2000
-            ),
-            'source_url': data.get('source_url', '')
+            'conversation_snippet': conversation_snippet,
+            'source_url': data.get('source_url', ''),
+            'intent_summary': intent_summary,
+            'priority': lead_priority,
         }
 
         models.save_lead(client_id, lead_data)
@@ -166,9 +201,6 @@ def submit_lead():
             )
 
         current_app.logger.info(f'Lead captured for client: {client_id}')
-
-        config       = json.loads(client['branding_settings']) if client['branding_settings'] else {}
-        contact_info = config.get('contact', {})
 
         # Send branded lead notification — supports comma-separated recipients
         notify_recipients = [
@@ -253,6 +285,25 @@ def list_leads(client_id):
     })
 
 
+@leads_bp.route('/api/leads/<client_id>/stage-labels', methods=['GET'])
+@login_required
+def get_stage_labels(client_id):
+    """
+    Return this client's custom pipeline stage display names (if any),
+    configured via /api/admin/customize. Falls back to {} when unset —
+    the dashboard already defaults to the standard 6 labels client-side.
+    """
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    client = models.get_client_by_id(client_id)
+    if not client:
+        return jsonify({'success': False, 'error': 'Client not found'}), 404
+
+    config = json.loads(client['branding_settings']) if client.get('branding_settings') else {}
+    return jsonify({'success': True, 'stage_labels': config.get('stage_labels', {})})
+
+
 @leads_bp.route('/api/leads/<client_id>/<int:lead_id>', methods=['PATCH'])
 @login_required
 def update_lead(client_id, lead_id):
@@ -281,6 +332,24 @@ def update_lead(client_id, lead_id):
         if not data.get('lost_reason', '').strip():
             return jsonify({'success': False,
                             'error': 'lost_reason is required when moving a lead to lost'}), 400
+
+    # Require closed_value + outcome_notes when transitioning TO closed
+    if data.get('stage') == 'closed' and old_stage != 'closed':
+        raw_value = data.get('closed_value')
+        if raw_value in (None, ''):
+            return jsonify({'success': False,
+                            'error': 'closed_value is required when moving a lead to closed'}), 400
+        try:
+            closed_value = float(raw_value)
+        except (TypeError, ValueError):
+            return jsonify({'success': False, 'error': 'closed_value must be a number'}), 400
+        if not math.isfinite(closed_value) or closed_value < 0:
+            return jsonify({'success': False,
+                            'error': 'closed_value must be a non-negative number'}), 400
+        data['closed_value'] = closed_value  # normalized — never store the raw client value
+        if not data.get('outcome_notes', '').strip():
+            return jsonify({'success': False,
+                            'error': 'outcome_notes is required when moving a lead to closed'}), 400
 
     if stage_changed:
         action = f"Moved from {old_stage} → {data['stage']}"
@@ -383,8 +452,8 @@ def export_leads(client_id):
 
     columns = [
         'id', 'name', 'email', 'phone', 'company', 'message',
-        'stage', 'priority', 'assigned_to', 'notes',
-        'lost_reason', 'follow_up_at',
+        'stage', 'priority', 'intent_summary', 'assigned_to', 'notes',
+        'lost_reason', 'follow_up_at', 'closed_value', 'outcome_notes',
         'source_url', 'created_at', 'updated_at',
     ]
 
