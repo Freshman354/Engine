@@ -32,62 +32,36 @@ def record_kb_gap(
     session_id: Optional[str] = None,
 ) -> None:
     """
-    Persist a question the bot couldn't answer to the KbGap table.
+    Persist a question the bot couldn't answer via models.record_kb_gap().
     Called as a background task — never blocks the response pipeline.
     Silently skips when client_id is missing (development/testing).
+
+    Note: session_id is accepted for call-site compatibility, but the
+    kb_gaps table has no session_id column, so it isn't persisted.
     """
     if not client_id or not question:
         return
     try:
         import models as _m
-        existing = _m.KbGap.query.filter_by(
-            client_id=client_id, question=question.strip()[:500]
-        ).first()
-        if existing:
-            existing.count = (existing.count or 1) + 1
-            existing.last_seen = datetime.utcnow()
-        else:
-            gap = _m.KbGap(
-                client_id=client_id,
-                question=question.strip()[:500],
-                method=method,
-                confidence=round(confidence, 4),
-                session_id=session_id,
-                count=1,
-                last_seen=datetime.utcnow(),
-            )
-            _m.db.session.add(gap)
-        _m.db.session.commit()
+        _m.record_kb_gap(
+            client_id, question.strip()[:500], method, round(confidence, 4)
+        )
         logger.debug(f"[KbGap] recorded client={client_id} q='{question[:60]}'")
     except Exception as e:
         log_crash(logger, 'KbGap/record', e, client_id=client_id)
 
 
 def get_top_kb_gaps(client_id: str, limit: int = 20) -> List[Dict]:
-    """Return the most-asked unanswered questions for a client."""
+    """
+    Return the most-asked unanswered ('open') questions for a client, via
+    models.get_kb_gaps() — used to surface the FAQ Manager's 'Suggested
+    FAQs' panel.
+    """
     if not client_id:
         return []
     try:
         import models as _m
-        rows = (
-            _m.KbGap.query
-            .filter_by(client_id=client_id)
-            .order_by(_m.KbGap.count.desc(), _m.KbGap.last_seen.desc())
-            .limit(limit)
-            .all()
-        )
-        return [
-            {
-                'id':         r.id,
-                'question':   r.question,
-                'count':      r.count or 1,
-                'last_seen':  r.last_seen.isoformat() if r.last_seen else None,
-                'confidence': r.confidence,
-                'method':     r.method,
-                'status':     getattr(r, 'status', 'open'),
-            }
-            for r in rows
-        ]
+        return _m.get_kb_gaps(client_id, limit=limit)
     except Exception as e:
         log_crash(logger, 'KbGap/get_top', e, client_id=client_id)
         return []
@@ -103,56 +77,36 @@ def record_poor_answer(
     method: str,
     session_id: Optional[str] = None,
 ) -> None:
-    """Record a thumbs-down rating against a bot answer."""
+    """Record a thumbs-down rating against a bot answer via models.record_poor_answer()."""
     if not client_id:
         return
     try:
         import models as _m
-        rec = _m.PoorAnswer(
-            client_id=client_id,
-            question=question.strip()[:500],
-            bot_answer=bot_answer.strip()[:2000],
-            confidence=round(confidence, 4),
-            method=method,
-            session_id=session_id,
-            created_at=datetime.utcnow(),
+        _m.record_poor_answer(
+            client_id, question.strip()[:500], bot_answer.strip()[:2000],
+            round(confidence, 4), method, session_id,
         )
-        _m.db.session.add(rec)
-        _m.db.session.commit()
         logger.debug(f"[PoorAnswer] recorded client={client_id} q='{question[:60]}'")
     except Exception as e:
         log_crash(logger, 'PoorAnswer/record', e, client_id=client_id)
 
 
 def get_poor_answers(client_id: str, limit: int = 20) -> List[Dict]:
-    """Return recent poor-answer records for a client."""
+    """
+    Return recent poor-answer records for a client via models.get_poor_answers().
+
+    NOTE — shape changed from the old (broken) SQLAlchemy version: rows no
+    longer have 'id' or 'created_at'. The actual poor_answers table dedupes
+    by question with a hit counter rather than storing one row per
+    occurrence, so rows now have 'hit_count', 'first_seen', and 'last_seen'
+    instead. If a frontend reads 'id'/'created_at' from this response,
+    it'll need a small update — that file wasn't part of this fix.
+    """
     if not client_id:
         return []
     try:
         import models as _m
-        PoorAnswer = getattr(_m, 'PoorAnswer', None)
-        if PoorAnswer is None:
-            # Model not yet defined in models.py — return empty silently.
-            # Create a PoorAnswer model in models.py to enable thumbs-down tracking.
-            return []
-        rows = (
-            PoorAnswer.query
-            .filter_by(client_id=client_id)
-            .order_by(PoorAnswer.created_at.desc())
-            .limit(limit)
-            .all()
-        )
-        return [
-            {
-                'id':         r.id,
-                'question':   r.question,
-                'bot_answer': r.bot_answer,
-                'confidence': r.confidence,
-                'method':     r.method,
-                'created_at': r.created_at.isoformat() if r.created_at else None,
-            }
-            for r in rows
-        ]
+        return _m.get_poor_answers(client_id, limit=limit)
     except Exception as e:
         log_crash(logger, 'PoorAnswer/get', e, client_id=client_id)
         return []

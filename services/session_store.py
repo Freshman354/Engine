@@ -163,36 +163,20 @@ def persist_session(
     session_mem: Dict,
 ) -> None:
     """
-    Upsert session memory to the ChatSession table.
+    Upsert session memory via models.upsert_session() — named columns
+    (name/email/phone/purchase_stage/frustration_score/turn_count) are
+    pulled out there; everything else merges into the session_data JSONB.
     Called as a background task — must not block the pipeline.
     """
     if not client_id or not session_id:
         return
     try:
-        import json, models as _m
-        existing = _m.ChatSession.query.filter_by(
-            client_id=client_id, session_id=session_id
-        ).first()
-
+        import models as _m
         payload = {
             k: v for k, v in session_mem.items()
             if k not in ('turns',)  # don't persist full turn list
         }
-
-        if existing:
-            existing.data     = json.dumps(payload)
-            existing.updated  = datetime.utcnow()
-        else:
-            rec = _m.ChatSession(
-                client_id=client_id,
-                session_id=session_id,
-                data=json.dumps(payload),
-                created=datetime.utcnow(),
-                updated=datetime.utcnow(),
-            )
-            _m.db.session.add(rec)
-
-        _m.db.session.commit()
+        _m.upsert_session(client_id, session_id, payload)
     except Exception as e:
         log_crash(logger, 'SessionStore/persist', e,
                   client_id=client_id, session_id=session_id)
@@ -202,17 +186,33 @@ def load_chat_session(
     client_id: str,
     session_id: str,
 ) -> Dict:
-    """Load persisted session memory from DB. Returns {} on miss or error."""
+    """
+    Load persisted session memory via models.load_session(), flattened to
+    match the shape extract_session_memory() produces (named columns +
+    the session_data JSONB extras unpacked to the top level).
+
+    Note: unlike the old version, this never returns a bare {} — even on
+    a miss it returns the full default-shaped dict (all keys present,
+    values None/0/False). This is safe for the documented merge pattern
+    (mem = {**load_chat_session(...), **extract_session_memory(...)})
+    since extract_session_memory always recomputes every key it owns.
+    """
     if not client_id or not session_id:
         return {}
     try:
-        import json, models as _m
-        rec = _m.ChatSession.query.filter_by(
-            client_id=client_id, session_id=session_id
-        ).first()
-        if rec and rec.data:
-            return json.loads(rec.data)
-        return {}
+        import models as _m
+        loaded = _m.load_session(client_id, session_id)
+        flat = dict(loaded.get('session_data') or {})
+        flat.update({
+            'name':              loaded.get('name'),
+            'email':             loaded.get('email'),
+            'phone':             loaded.get('phone'),
+            'purchase_stage':    loaded.get('purchase_stage'),
+            'frustration_score': loaded.get('frustration_score', 0),
+            'turn_count':        loaded.get('turn_count', 0),
+            'handoff_offered':   loaded.get('handoff_offered', False),
+        })
+        return flat
     except Exception as e:
         log_crash(logger, 'SessionStore/load', e,
                   client_id=client_id, session_id=session_id)
@@ -223,18 +223,12 @@ def clear_chat_session(
     client_id: str,
     session_id: str,
 ) -> bool:
-    """Delete a session record. Returns True on success."""
+    """Delete a session record via models.delete_session(). Returns True on success."""
     if not client_id or not session_id:
         return False
     try:
         import models as _m
-        rec = _m.ChatSession.query.filter_by(
-            client_id=client_id, session_id=session_id
-        ).first()
-        if rec:
-            _m.db.session.delete(rec)
-            _m.db.session.commit()
-        return True
+        return _m.delete_session(client_id, session_id)
     except Exception as e:
         log_crash(logger, 'SessionStore/clear', e,
                   client_id=client_id, session_id=session_id)
