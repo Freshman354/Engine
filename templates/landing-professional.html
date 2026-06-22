@@ -1138,12 +1138,10 @@ footer p{color:var(--sub);font-size:12px;}
     document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
 
     (function() {
-        window.LUMVI_CLIENT_ID = 'demo';
-        var s = document.createElement('script');
-        s.src = '/static/widget.js';
-        s.setAttribute('data-client-id', 'demo');
-        document.body.appendChild(s);
-    })();
-</script>
+    var s = document.createElement('script');
+    s.src = 'https://lumvi.net/static/widget.js';
+    s.setAttribute('data-client-id', 'demo');
+    document.body.appendChild(s);
+})();
 </body>
 </html>
