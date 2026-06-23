@@ -138,7 +138,7 @@
           <div style={{flex:1,background:C.white,display:"flex",alignItems:"center",justifyContent:"center",padding:"18px 14px"}}>
             <div style={{width:"100%",maxWidth:230}}>
               <h1 style={{fontFamily:"Fraunces,serif",fontSize:19,fontWeight:700,color:C.dark,marginBottom:3}}>Create Account</h1>
-              <p style={{fontSize:10,color:C.sub,marginBottom:14}}>Start your free trial — no credit card required</p>
+              <p style={{fontSize:10,color:C.sub,marginBottom:14}}>Start building — no credit card required</p>
               <div style={{marginBottom:9}}>
                 <div style={{fontSize:9,fontWeight:600,color:C.mid,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Email Address</div>
                 <div style={{padding:"8px 11px",background:C.cream,border:`1.5px solid ${C.border}`,borderRadius:8,fontSize:11,color:C.sub}}>you@agency.com</div>
@@ -282,7 +282,7 @@
 
     /* ── Screen 5: Embed Code ───────────────────────────────── */
     function Screen5() {
-      const code = `<script\n  src="https://cdn.lumvi.net/widget.js"\n  data-bot-id="pinn_abc123xyz789"\n  data-color="#2B4C9B"\n><\/script>`;
+      const code = `<script\n  src="https://cdn.lumvi.net/widget.js"\n  data-bot-id="pinn_abc123xyz789"\n  data-color="#2B4C9B"\n><` + `/script>`;
       return (
         <WizShell wiz={3} title="One line of code" sub="Copy. Paste before closing body tag. Done.">
           <div className="pulse" style={{background:"#1C1917",borderRadius:12,padding:"13px 15px",position:"relative",marginBottom:10,border:`1.5px solid ${C.gold}`}}>
@@ -409,7 +409,7 @@
               </button>
               <a href={SIGNUP_URL} target="_parent" className="cta"
                 style={{padding:"12px 26px",background:C.gold,color:"#fff",borderRadius:10,fontSize:13,fontWeight:700,boxShadow:"0 4px 16px rgba(184,146,74,0.4)"}}>
-                Start Free Trial →
+                Get Started →
               </a>
             </div>
           </div>
@@ -418,26 +418,26 @@
     }
 
     /* ── Main App ───────────────────────────────────────────── */
-    const SCREENS = [<Screen1/>, <Screen2/>, <Screen3/>, <Screen4/>, <Screen5/>, <Screen6/>];
+    const SCREEN_COMPONENTS = [Screen1, Screen2, Screen3, Screen4, Screen5, Screen6];
 
     function App() {
       const [step, setStep] = useState(0);
       const [done, setDone] = useState(false);
       const [dir,  setDir]  = useState(1);
 
-      useEffect(() => {
-        const handler = (e) => {
-          if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); setDir(1); if (!done) { if (step < 5) setStep(s=>s+1); else setDone(true); } }
-          if (e.key === "ArrowLeft"  || e.key === "ArrowUp")   { e.preventDefault(); setDir(-1); if (done) { setDone(false); setStep(5); } else if (step > 0) setStep(s=>s-1); }
-        };
-        window.addEventListener("keydown", handler);
-        return () => window.removeEventListener("keydown", handler);
-      }, [step, done]);
-
       const goNext  = () => { setDir(1);  if (!done) { if (step < 5) setStep(s=>s+1); else setDone(true); } };
       const goBack  = () => { setDir(-1); if (done) { setDone(false); setStep(5); } else if (step > 0) setStep(s=>s-1); };
       const jumpTo  = (i) => { setDir(i > step ? 1 : -1); setStep(i); };
       const restart = () => { setDir(1); setStep(0); setDone(false); };
+
+      useEffect(() => {
+        const handler = (e) => {
+          if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); goNext(); }
+          if (e.key === "ArrowLeft"  || e.key === "ArrowUp")   { e.preventDefault(); goBack(); }
+        };
+        window.addEventListener("keydown", handler);
+        return () => window.removeEventListener("keydown", handler);
+      }, [step, done]);
 
       const cur      = STEPS[step];
       const animCls  = dir === 1 ? "anim-fwd" : "anim-bwd";
@@ -513,7 +513,7 @@
                       {cur.url}
                     </div>
                   </div>
-                  <div style={{flex:1,overflow:"hidden"}}>{SCREENS[step]}</div>
+                  <div style={{flex:1,overflow:"hidden"}}>{React.createElement(SCREEN_COMPONENTS[step])}</div>
                 </div>
               </div>
 
@@ -524,7 +524,7 @@
     }
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(App));
+    root.render(<App />);
   </script>
 </body>
 </html>
