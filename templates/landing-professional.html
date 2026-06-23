@@ -600,12 +600,21 @@ footer p{color:var(--sub);font-size:12px;}
                 Six steps. One script tag. A white-labeled AI chatbot live on your client's site.
             </p>
         </div>
-        <div class="fade-up" style="border-radius:20px;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,0.45),0 0 0 1px rgba(184,146,74,0.15);">
+        <div class="fade-up" style="border-radius:20px;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,0.45),0 0 0 1px rgba(184,146,74,0.15);position:relative;background:#1C1917;">
+            <!-- Loading placeholder shown until iframe paints -->
+            <div id="demo-loader" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#1C1917;z-index:2;pointer-events:none;transition:opacity 0.4s;">
+                <div style="width:36px;height:36px;border-radius:10px;background:#B8924A;display:flex;align-items:center;justify-content:center;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <span style="font-size:13px;color:rgba(247,244,239,0.4);letter-spacing:0.04em;">Loading walkthrough…</span>
+            </div>
             <iframe
+                id="demo-frame"
                 src="/static/walkthrough.html"
-                style="width:100%;height:680px;border:none;display:block;"
+                style="width:100%;height:680px;border:none;display:block;position:relative;z-index:1;"
                 title="Lumvi Product Walkthrough"
                 loading="lazy"
+                onload="(function(){var l=document.getElementById('demo-loader');if(l){l.style.opacity='0';setTimeout(function(){l.style.display='none'},400);}})();"
             ></iframe>
         </div>
         <div class="text-center fade-up" style="margin-top:36px;">
