@@ -20,3 +20,4 @@ dnspython
 flask-session
 authlib
 pytz
+openai
