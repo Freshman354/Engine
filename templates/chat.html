@@ -1128,11 +1128,8 @@ if (!SESSION_ID) {
   localStorage.setItem(`lumvi_sid_${CID}`, SESSION_ID);
 }
 
-/*
-  IMPROVEMENT [PERSISTENT-HISTORY]: Load conversation from localStorage
-  so chat survives page refresh (useful in iframe embeds).
-*/
-let history_ = loadHistory();
+
+let history_ = [];
 
 // ── Markdown renderer (lightweight, no deps) ───────────────────
 /*
@@ -1224,10 +1221,6 @@ function saveHistory() {
   document.getElementById('dayDiv').textContent =
     now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
-  // IMPROVEMENT [RESTORE-HISTORY]: Render any persisted messages on load
-  if (history_.length > 0) {
-    restorePersistedMessages();
-  }
 
   scrollBot();
   // Delay focus so it doesn't fight with parent iframe focus management
