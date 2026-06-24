@@ -3062,6 +3062,11 @@
     const saveBtn  = document.getElementById('kbModalSaveBtn');
 
     // Client-side validation
+    if (!question) {
+      errEl.textContent = 'Question cannot be empty.';
+      document.getElementById('kbModalQuestion').focus();
+      return;
+    }
     if (!answer) {
       errEl.textContent = 'Please write an answer before saving.';
       document.getElementById('kbModalAnswer').focus();
@@ -3500,19 +3505,22 @@
         color:var(--text-muted,#888); line-height:1; padding:0 4px;">&#x2715;</button>
     </div>
 
-    <!-- Question (read-only display) -->
+    <!-- Question (editable — user can clean up phrasing before saving) -->
     <div>
       <label style="font-size:11px; font-weight:600; text-transform:uppercase;
                     letter-spacing:0.05em; color:var(--text-muted,#888); display:block; margin-bottom:6px;">
-        Question (from visitor)
+        Question
       </label>
-      <input id="kbModalQuestion" readonly style="
+      <input id="kbModalQuestion" style="
         width:100%; box-sizing:border-box;
         padding:10px 12px; border-radius:8px;
         border:1px solid var(--border,#e5e7eb);
-        background:var(--surface-muted,#f9f9f7);
+        background:var(--surface,#fff);
         font-size:13.5px; color:var(--text-primary,#1a1a1a);
-        font-weight:500;" />
+        font-weight:500; font-family:inherit; outline:none;
+        transition:border-color 0.15s;"
+        onfocus="this.style.borderColor='var(--gold,#B8924A)'"
+        onblur="this.style.borderColor='var(--border,#e5e7eb)'" />
     </div>
 
     <!-- Answer textarea -->

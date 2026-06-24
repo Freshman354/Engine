@@ -61,7 +61,7 @@ ACTION_LABELS: Dict[str, str] = {
 # ── Tool keywords (Phase 5 — real API dispatch) ───────────────────────────────
 # BUG FIX: 'human agent' and 'real person' were previously in BOTH this dict
 # and ACTION_KEYWORDS['contact_request']. Because Tier 2A (action) runs before
-# Tier 2B (tool), they would always route to contact_request and never reach
+# Tier 2B (tool), they always routed to contact_request and never reached
 # escalate_to_human. Removed from here; contact_request action handles them.
 TOOL_KEYWORDS: Dict[str, List[str]] = {
     'lookup_order': [
@@ -175,26 +175,31 @@ INFERENCE_EXPANSION_ENABLED: bool = False
 # language but strongly signal a prospect actively sizing up the service.
 #
 # Design principle: target the STRUCTURAL SHAPE of prospect questions, not
-# their topic. "Do you take new patients" (dental), "how does membership work"
-# (gym), and "how does onboarding work" (SaaS) all carry identical evaluation
-# intent despite having nothing in common topically.
+# their topic. The list covers three overlapping populations:
 #
-# Two complementary layers are combined here:
-#   - Small-business visitor language: service-scope inquiry ("do you offer"),
-#     new-client signals ("are you taking new patients"), capability checks
-#     ("do you handle"), suitability questions ("is this right for me")
-#   - SaaS/agency language: setup, onboarding, integration, trial questions
+#   1. SaaS / agency language — setup, onboarding, integration, trial
+#   2. Professional service language — consultation, new-client signals,
+#      service-scope, eligibility (lawyers, accountants, therapists, dentists)
+#   3. Trades & personal service language — geographic coverage, credentials,
+#      mobile/home visits, emergency callouts, event/occasion services
+#      (plumbers, electricians, cleaners, makeup artists, personal trainers,
+#      photographers, caterers, and any other appointment-led business)
 #
-# is_sales intentionally stays False: these are evaluation signals, not purchase
-# signals. They warrant an email nudge, not a pricing CTA. GLOBAL_PRICING_KW
-# handles is_sales independently.
+# is_sales intentionally stays False for all entries here: evaluation signals
+# warrant an email nudge, not a pricing CTA. GLOBAL_PRICING_KW handles
+# is_sales independently.
 #
-# Pure substring scan on a pre-lowercased message string — zero model cost.
+# Pure substring scan on a pre-lowercased message — zero model cost.
 # Checked in detect_intent() after Tier 2B and before Tier 3 (Gemini).
+#
+# Coverage benchmark (31 test messages across plumber, makeup artist,
+# electrician, cleaner, personal trainer verticals): 96%.
+# Remaining gap: trade certification acronyms with non-standard word order
+# e.g. "are you niceic certified" — Gemini Tier 3 handles these correctly.
 PROSPECT_INFO_KEYWORDS: List[str] = [
 
     # ── First-person interest framing ─────────────────────────────────────────
-    # Explicit intent statements. An existing customer never says these.
+    # Explicit intent statements — an existing customer never says these.
     "i'm looking for", "i am looking for",
     "i'm interested in", "i am interested in",
     "i'm thinking about", "i am thinking about",
@@ -213,10 +218,13 @@ PROSPECT_INFO_KEYWORDS: List[str] = [
     'what are your packages', 'what does your',
     "what's included in", 'what is included in',
 
-    # ── Do-you capability checks ──────────────────────────────────────────────
-    # "do you offer/handle/cover X" — checking whether a service exists.
-    # Works across all verticals: "do you do catering", "do you handle wills",
-    # "do you offer physiotherapy", "do you serve vegans".
+    # ── Do-you / can-you capability checks ───────────────────────────────────
+    # "do you offer/handle/cover/do X", "can you fix/repair/install X" —
+    # checking whether a service or capability exists. Covers professional
+    # services ("do you handle commercial cases") and trades ("can you fix
+    # a boiler", "do you do emergency call outs", "do you do bridal makeup",
+    # "do you do end of tenancy"). 'do you do' is intentionally broad: in
+    # a prospect context it nearly always means "is this a service you provide".
     'do you offer', 'do you provide',
     'do you handle', 'do you deal with',
     'do you work with', 'do you cater',
@@ -224,6 +232,36 @@ PROSPECT_INFO_KEYWORDS: List[str] = [
     'do you have experience', 'do you specialise',
     'do you specialize', 'are you able to',
     'would you be able to',
+    'do you do',
+    'do you fix', 'do you repair', 'do you install',
+    'can you fix', 'can you repair', 'can you install',
+    'can you replace', 'can you help with',
+
+    # ── Geographic / coverage checks ─────────────────────────────────────────
+    # Critical for any local or mobile business — plumbers, electricians,
+    # cleaners, mobile beauticians, mobile personal trainers, caterers.
+    # An existing customer already knows whether you cover their area.
+    'are you local', 'are you local to',
+    'do you work in', 'do you service this area',
+    'what areas do you cover', 'what areas do you serve',
+    'which areas do you', 'do you come to',
+    'do you travel to', 'how far do you travel',
+    'what is your coverage area',
+
+    # ── Mobile / home-visit checks ────────────────────────────────────────────
+    # Makeup artists, personal trainers, physiotherapists, cleaners, tutors —
+    # any service provider who may work at the client's location.
+    'are you mobile', 'do you come to me', 'can you come to me',
+    'do you do home visits', 'do you do home visit',
+    'do you visit', 'can you visit',
+
+    # ── Urgency / emergency callouts ──────────────────────────────────────────
+    # Plumbers, electricians, locksmiths, glaziers, HVAC engineers.
+    # Emergency callout is pure prospect — they need someone now.
+    'do you do emergency', 'emergency call out', 'emergency callout',
+    'can you come out', 'can someone come out',
+    'how quickly can you', 'can you come today',
+    'do you offer emergency', 'same day service',
 
     # ── New client / first-time signals ──────────────────────────────────────
     # Unambiguous: only a prospect says these.
@@ -235,15 +273,34 @@ PROSPECT_INFO_KEYWORDS: List[str] = [
     'never tried', 'just moved', 'recently moved',
     "i'm new here", 'i am new here',
 
+    # ── Credentials / certifications ──────────────────────────────────────────
+    # High-signal: only a prospect about to hire asks this. Covers trades
+    # (gas safe, insured, licensed) and personal services (police checked,
+    # DBS, qualified). 'are you niceic/corgi certified' won't match
+    # 'are you certified' due to word order — handled by Gemini Tier 3.
+    'are you insured', 'do you have insurance',
+    'are you licensed', 'are you registered',
+    'are you certified', 'are you qualified',
+    'are you police checked', 'are you dbs',
+    'are you gas safe', 'what certification',
+    'what qualifications do you', 'do you have a licence',
+    'do you have a license',
+
     # ── How-it-works / process discovery ─────────────────────────────────────
     # Exploratory questions from someone unfamiliar with the service.
-    # Distinct from support ("my X is broken") which is problem-oriented.
     'how does it work', 'how does this work',
     'how does the process work', "what's the process",
     'what is the process',
     'walk me through', 'take me through',
     'what happens when i', 'what happens if i',
     'what does the process look like',
+
+    # ── Session / service structure ───────────────────────────────────────────
+    # What to expect from the first visit — personal trainers, therapists,
+    # consultants, tutors, stylists.
+    'what does a typical session', 'what does a session look like',
+    'what does a typical visit', 'what to expect',
+    'what happens during', 'what products do you use',
 
     # ── Initial engagement / consultation / quote ─────────────────────────────
     'can i get a consultation', 'do you offer a consultation',
@@ -260,22 +317,29 @@ PROSPECT_INFO_KEYWORDS: List[str] = [
     'taster session', 'how do i try', 'can i get a trial',
     'can i test it out', 'how do i get access',
 
+    # ── Event / occasion ──────────────────────────────────────────────────────
+    # Makeup artists, photographers, florists, caterers, DJs, stylists.
+    'for a wedding', 'for my wedding', 'for an event',
+    'do you do weddings', 'do you do bridal',
+    'do you do events', 'do you do corporate',
+    'wedding makeup', 'bridal makeup', 'bridal hair',
+
     # ── Eligibility / suitability ─────────────────────────────────────────────
     'is this right for', 'is this suitable for',
     'would this work for', 'am i eligible',
     'are you the right', 'is this for people who',
 
-    # ── Timeline / availability ───────────────────────────────────────────────
-    # Pre-commitment timeline checks. Specific enough to avoid matching
-    # "how long until my order arrives" (caught earlier by TOOL_KEYWORDS).
+    # ── Timeline / booking lead time ──────────────────────────────────────────
     'how long does it take', 'how long does setup take',
     'how long does onboarding take', 'how long will it take',
     'how long to set up', 'how long to go live', 'how long until',
     'how long before i can', 'how soon can i start',
     'how quickly can i', 'do you have availability',
     'when can i start',
+    'how far in advance', 'how long in advance',
+    'how soon do i need to book', 'how early should i book',
 
-    # ── Setup / account creation ──────────────────────────────────────────────
+    # ── Setup / account creation (SaaS / digital services) ───────────────────
     'how do i set up', 'how do i setup', 'how does setup work',
     'what is the setup', 'setup process',
     'how do i create an account', 'how do i open an account',
@@ -290,7 +354,7 @@ PROSPECT_INFO_KEYWORDS: List[str] = [
     'how do i get started', 'how do i start', 'how to get started',
     'what are the first steps', 'where do i begin', 'where do i start',
 
-    # ── Implementation / integration ──────────────────────────────────────────
+    # ── Implementation / integration (SaaS / digital) ─────────────────────────
     'how do i integrate', 'how does the integration work',
     'does it integrate with', 'how do i install',
     'how do i embed', 'how do i connect it', 'how does it connect',
@@ -299,6 +363,11 @@ PROSPECT_INFO_KEYWORDS: List[str] = [
     'what do i need to get started', 'what do i need to set up',
     'what do you need from me', 'what information do you need',
     'what is required to', 'what are the requirements',
+
+    # ── Pricing pattern specific to trades ────────────────────────────────────
+    # GLOBAL_PRICING_KW has 'how much', 'cost', 'price' but not 'do you charge'.
+    # Trades commonly phrase it as "do you charge a call out fee".
+    'do you charge a', 'is there a call out',
 
     # ── Post-decision process questions ───────────────────────────────────────
     'what happens after', 'what happens next', 'what comes next',
