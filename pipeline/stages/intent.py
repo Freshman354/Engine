@@ -12,13 +12,14 @@ so this module has no reference to AIHelper.
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from constants import (
     ACTION_KEYWORDS,
     ACTION_LABELS,
     GLOBAL_PRICING_KW,
     PERSONALITIES,
+    PROSPECT_INFO_KEYWORDS,
     SIMPLE_INTENTS,
     TOOL_KEYWORDS,
 )
@@ -246,11 +247,27 @@ def detect_intent(
     skip_gemini: bool = False,
 ) -> Dict:
     """
-    Run the three-tier intent pipeline and return a unified intent dict.
+    Run the five-tier intent pipeline and return a unified intent dict.
 
-    Tier 1: keyword match (free)
-    Tier 2: action/tool match (free)
-    Tier 3: Gemini classification (1 Gemini call — only when skip_gemini=False)
+    Tier 1:   keyword match — greeting / gratitude / goodbye (free)
+    Tier 2A:  action keyword match — explicit booking/demo/contact (free)
+    Tier 2B:  tool keyword match — order lookup, appointments, etc. (free)
+              NOTE: book_appointment and check_availability also set is_lead=True
+              because appointment intent is a high-value signal regardless of
+              whether the visitor is a new prospect or existing customer.
+    Tier 2.5: prospect informational signal check — setup, onboarding,
+              service-scope, new-client, how-it-works questions (free).
+              See PROSPECT_INFO_KEYWORDS in constants.py for the full list.
+              is_sales stays False intentionally: these are evaluation signals.
+    Tier 3:   Gemini classification — anything not caught above (1 Gemini call,
+              only when skip_gemini=False and model is not None)
+
+    is_lead priority chain (each layer only fires if the previous didn't set it):
+      Tier 2A action → GLOBAL_PRICING_KW → vertical lead_keywords
+        → PROSPECT_INFO_KEYWORDS → Tier 3 Gemini
+
+    Keyword-set is_lead=True is preserved through Tier 3: result.update()
+    cannot overwrite a True determined by any earlier free-path check.
 
     Returns dict with: intent, is_sales, is_lead, action, tool, confidence
     """
@@ -263,14 +280,16 @@ def detect_intent(
         'confidence': 0.5,
     }
 
-    # Tier 1 — simple intent
+    # ── Tier 1 — simple intent ────────────────────────────────────────────────
     simple = detect_simple_intent(clean_message)
     if simple:
         result['intent']     = simple
         result['confidence'] = 1.0
         return result
 
-    # Tier 2A — action (now receives lead_triggers so agency keywords work in fast path)
+    # ── Tier 2A — action ─────────────────────────────────────────────────────
+    # lead_triggers checked here so agency keywords work in the fast path
+    # without reaching Tier 3.
     action = detect_action_intent(clean_message, lead_triggers)
     if action:
         result['intent']     = 'action'
@@ -279,23 +298,31 @@ def detect_intent(
         result['confidence'] = 0.9
         return result
 
-    # Tier 2B — tool
+    # ── Tier 2B — tool ───────────────────────────────────────────────────────
+    # book_appointment and check_availability set is_lead=True: a visitor
+    # asking to book or check slots is a high-intent signal in any vertical
+    # (new patient at a dental practice, new gym member, new client at an
+    # agency) and should trigger the email-capture nudge even though it
+    # routes to the tool pipeline rather than the action pipeline.
     tool = detect_tool_intent(clean_message)
     if tool:
         result['intent']     = 'tool'
         result['tool']       = tool
         result['confidence'] = 0.9
+        if tool in ('book_appointment', 'check_availability'):
+            result['is_lead'] = True
         return result
 
-    # Pricing keyword shortcut (cheaper than Gemini Tier 3)
     msg_lower = clean_message.lower()
+
+    # ── Pricing keyword shortcut (cheaper than Gemini Tier 3) ────────────────
     if any(kw in msg_lower for kw in GLOBAL_PRICING_KW):
         result['is_sales'] = True
         result['is_lead']  = True   # pricing enquiry = confirmed lead signal
 
-    # Vertical lead keyword check (free — no model call)
-    # Catches vertical-specific signals (e.g. 'viewing', 'consultation', 'trial')
-    # that aren't in the generic ACTION_KEYWORDS list.
+    # ── Vertical lead keyword check (free — no model call) ───────────────────
+    # Catches vertical-specific signals (e.g. 'viewing', 'consultation',
+    # 'trial') that aren't in the generic ACTION_KEYWORDS list.
     if not result['is_lead']:
         personality   = PERSONALITIES.get(vertical, PERSONALITIES['general'])
         vert_lead_kws = personality.get('lead_keywords', [])
@@ -303,9 +330,39 @@ def detect_intent(
             result['is_lead']  = True
             result['is_sales'] = True
 
-    # Tier 3 — Gemini
+    # ── Tier 2.5 — prospect informational signal check (free) ────────────────
+    # Catches evaluation-stage questions about setup, onboarding, service scope,
+    # new-client eligibility, and how-it-works discovery. These don't match
+    # ACTION_KEYWORDS (no explicit booking verb) or GLOBAL_PRICING_KW (no price
+    # mention), so without this check they fall through to Gemini, which often
+    # returns is_lead=False because they look like ordinary informational
+    # questions without vertical context about what constitutes a lead signal.
+    #
+    # Covers both SaaS/agency language ("how does onboarding work") and
+    # small-business visitor language ("do you take new patients", "what
+    # services do you offer", "i'm looking for a dentist").
+    #
+    # is_sales stays False: evaluation questions warrant an email nudge, not
+    # a pricing CTA. GLOBAL_PRICING_KW handles is_sales independently.
+    if not result['is_lead']:
+        if any(kw in msg_lower for kw in PROSPECT_INFO_KEYWORDS):
+            result['is_lead'] = True
+            logger.debug(
+                f"[Intent/T2.5] prospect_info signal fired: "
+                f"msg_preview={clean_message[:60]!r}"
+            )
+
+    # ── Tier 3 — Gemini ───────────────────────────────────────────────────────
+    # Preserve any is_lead=True set by the free-path keyword checks above.
+    # result.update(gemini_result) would silently overwrite it if Gemini
+    # returns is_lead=False for the same message — common for prospect info
+    # questions that look like generic questions without vertical context.
+    # Keyword signals are definitive; Gemini cannot override them.
     if not skip_gemini and model is not None:
-        gemini_result = classify_intent_gemini(clean_message, vertical, lead_triggers, model)
+        _is_lead_pre_t3 = result['is_lead']
+        gemini_result   = classify_intent_gemini(clean_message, vertical, lead_triggers, model)
         result.update(gemini_result)
+        if _is_lead_pre_t3:
+            result['is_lead'] = True
 
     return result

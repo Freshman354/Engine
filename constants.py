@@ -19,6 +19,9 @@ SIMPLE_INTENTS: Dict[str, List[str]] = {
 }
 
 # ── Pricing / sales keywords ──────────────────────────────────────────────────
+# NOTE: 'plan', 'cost', 'buy' are short and will match broadly — e.g. 'plan'
+# hits "payment plan", "dental plan", "business plan". These are inherited
+# behaviour; narrowing them is a future-sprint concern.
 GLOBAL_PRICING_KW: List[str] = [
     'price', 'pricing', 'cost', 'how much', 'enterprise', 'plan',
     'subscription', 'buy', 'quote', 'invoice', 'billing',
@@ -56,6 +59,10 @@ ACTION_LABELS: Dict[str, str] = {
 }
 
 # ── Tool keywords (Phase 5 — real API dispatch) ───────────────────────────────
+# BUG FIX: 'human agent' and 'real person' were previously in BOTH this dict
+# and ACTION_KEYWORDS['contact_request']. Because Tier 2A (action) runs before
+# Tier 2B (tool), they would always route to contact_request and never reach
+# escalate_to_human. Removed from here; contact_request action handles them.
 TOOL_KEYWORDS: Dict[str, List[str]] = {
     'lookup_order': [
         'where is my order', 'track my order', 'order status',
@@ -77,8 +84,8 @@ TOOL_KEYWORDS: Dict[str, List[str]] = {
         'reserve a time', 'i want to book',
     ],
     'escalate_to_human': [
-        'speak to a human', 'talk to a person', 'human agent',
-        'real person', 'talk to someone', 'connect me to support',
+        'speak to a human', 'talk to a person',
+        'talk to someone', 'connect me to support',
         'i need help from a person',
     ],
     'search_knowledge_base': [
@@ -162,6 +169,141 @@ MAX_CANDIDATES: int = 50
 # ── Query expansion (inference time) ─────────────────────────────────────────
 # Set True to re-enable (adds 1 unbudgeted Gemini call per turn on 3+ word queries).
 INFERENCE_EXPANSION_ENABLED: bool = False
+
+# ── Prospect informational signals (Tier 2.5 — zero cost) ────────────────────
+# Catches evaluation-stage questions that don't carry explicit booking/pricing
+# language but strongly signal a prospect actively sizing up the service.
+#
+# Design principle: target the STRUCTURAL SHAPE of prospect questions, not
+# their topic. "Do you take new patients" (dental), "how does membership work"
+# (gym), and "how does onboarding work" (SaaS) all carry identical evaluation
+# intent despite having nothing in common topically.
+#
+# Two complementary layers are combined here:
+#   - Small-business visitor language: service-scope inquiry ("do you offer"),
+#     new-client signals ("are you taking new patients"), capability checks
+#     ("do you handle"), suitability questions ("is this right for me")
+#   - SaaS/agency language: setup, onboarding, integration, trial questions
+#
+# is_sales intentionally stays False: these are evaluation signals, not purchase
+# signals. They warrant an email nudge, not a pricing CTA. GLOBAL_PRICING_KW
+# handles is_sales independently.
+#
+# Pure substring scan on a pre-lowercased message string — zero model cost.
+# Checked in detect_intent() after Tier 2B and before Tier 3 (Gemini).
+PROSPECT_INFO_KEYWORDS: List[str] = [
+
+    # ── First-person interest framing ─────────────────────────────────────────
+    # Explicit intent statements. An existing customer never says these.
+    "i'm looking for", "i am looking for",
+    "i'm interested in", "i am interested in",
+    "i'm thinking about", "i am thinking about",
+    "i'm considering", "i am considering",
+    "i'd like to know more", "i would like to know",
+    'tell me more about your', 'tell me about your',
+    'looking for a', 'searching for a',
+
+    # ── Service scope inquiry ─────────────────────────────────────────────────
+    # Prospect mapping out what the business does — existing customers know.
+    'what do you offer', 'what do you provide',
+    'what services do you', 'what service do you',
+    'what are your services', 'what do you specialise in',
+    'what do you specialize in', 'what can you help with',
+    'what types of', 'what kind of service',
+    'what are your packages', 'what does your',
+    "what's included in", 'what is included in',
+
+    # ── Do-you capability checks ──────────────────────────────────────────────
+    # "do you offer/handle/cover X" — checking whether a service exists.
+    # Works across all verticals: "do you do catering", "do you handle wills",
+    # "do you offer physiotherapy", "do you serve vegans".
+    'do you offer', 'do you provide',
+    'do you handle', 'do you deal with',
+    'do you work with', 'do you cater',
+    'do you cover', 'do you serve',
+    'do you have experience', 'do you specialise',
+    'do you specialize', 'are you able to',
+    'would you be able to',
+
+    # ── New client / first-time signals ──────────────────────────────────────
+    # Unambiguous: only a prospect says these.
+    'are you taking new', 'do you accept new',
+    'are you accepting', 'taking on new clients',
+    'taking new patients', 'accepting new patients',
+    'first time', 'never been before', "haven't been before",
+    'new to this', 'new customer', 'new client',
+    'never tried', 'just moved', 'recently moved',
+    "i'm new here", 'i am new here',
+
+    # ── How-it-works / process discovery ─────────────────────────────────────
+    # Exploratory questions from someone unfamiliar with the service.
+    # Distinct from support ("my X is broken") which is problem-oriented.
+    'how does it work', 'how does this work',
+    'how does the process work', "what's the process",
+    'what is the process',
+    'walk me through', 'take me through',
+    'what happens when i', 'what happens if i',
+    'what does the process look like',
+
+    # ── Initial engagement / consultation / quote ─────────────────────────────
+    'can i get a consultation', 'do you offer a consultation',
+    'can i get a quote', 'can i get an estimate',
+    'can i get a free', 'how do i begin', 'how do i arrange',
+    'how do i book', 'how do i schedule',
+    'can i book a', 'can i schedule a',
+
+    # ── Trial / introductory offer ────────────────────────────────────────────
+    'is there a trial', 'is there a free trial',
+    'do you have a trial', 'trial offer', 'free session',
+    'introductory offer', 'new client offer',
+    'new patient offer', 'first visit offer',
+    'taster session', 'how do i try', 'can i get a trial',
+    'can i test it out', 'how do i get access',
+
+    # ── Eligibility / suitability ─────────────────────────────────────────────
+    'is this right for', 'is this suitable for',
+    'would this work for', 'am i eligible',
+    'are you the right', 'is this for people who',
+
+    # ── Timeline / availability ───────────────────────────────────────────────
+    # Pre-commitment timeline checks. Specific enough to avoid matching
+    # "how long until my order arrives" (caught earlier by TOOL_KEYWORDS).
+    'how long does it take', 'how long does setup take',
+    'how long does onboarding take', 'how long will it take',
+    'how long to set up', 'how long to go live', 'how long until',
+    'how long before i can', 'how soon can i start',
+    'how quickly can i', 'do you have availability',
+    'when can i start',
+
+    # ── Setup / account creation ──────────────────────────────────────────────
+    'how do i set up', 'how do i setup', 'how does setup work',
+    'what is the setup', 'setup process',
+    'how do i create an account', 'how do i open an account',
+    'how do i register', 'how do i sign up', 'how to sign up',
+
+    # ── Onboarding process ────────────────────────────────────────────────────
+    "how's the onboarding", 'how is the onboarding',
+    'how does onboarding work', 'what does onboarding look like',
+    'what is the onboarding', 'onboarding process', 'onboarding steps',
+
+    # ── Getting started ───────────────────────────────────────────────────────
+    'how do i get started', 'how do i start', 'how to get started',
+    'what are the first steps', 'where do i begin', 'where do i start',
+
+    # ── Implementation / integration ──────────────────────────────────────────
+    'how do i integrate', 'how does the integration work',
+    'does it integrate with', 'how do i install',
+    'how do i embed', 'how do i connect it', 'how does it connect',
+
+    # ── Requirements / what's needed ──────────────────────────────────────────
+    'what do i need to get started', 'what do i need to set up',
+    'what do you need from me', 'what information do you need',
+    'what is required to', 'what are the requirements',
+
+    # ── Post-decision process questions ───────────────────────────────────────
+    'what happens after', 'what happens next', 'what comes next',
+    'what are the next steps', 'what is the next step',
+]
 
 # ── Vertical personalities ────────────────────────────────────────────────────
 # Moved from AIHelper.__init__ so generation stage can access them without
