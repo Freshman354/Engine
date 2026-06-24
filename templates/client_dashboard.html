@@ -3003,7 +3003,9 @@
             <span style="font-size:12px;color:var(--text-muted);">${cnt}× unanswered</span>
           </div>
           <div class="suggestion-actions">
-            <button class="btn btn-primary btn-sm" onclick="addToKB(${i}, '${q.replace(/'/g,"\\'")}')">
+            <button class="btn btn-primary btn-sm"
+              data-question="${(item.question || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"
+              onclick="addToKB(this)">
               <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/></svg>
               Add to KB
             </button>
@@ -3023,42 +3025,101 @@
     }
   }
 
-  async function addToKB(index, question) {
-    const btn = event.target.closest('button');
-    if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  /* ── Add-to-KB modal ───────────────────────────────────────────────────────────────────────────── */
+
+  // Holds the button that opened the modal so we can update it on success.
+  let _addKbBtn = null;
+
+  function addToKB(btn) {
+    _addKbBtn = btn;
+    const question = btn.dataset.question || '';
+
+    // Pre-fill question; clear previous answer / error
+    document.getElementById('kbModalQuestion').value     = question;
+    document.getElementById('kbModalAnswer').value       = '';
+    document.getElementById('kbModalError').textContent  = '';
+    document.getElementById('kbModalSaveBtn').disabled   = false;
+    document.getElementById('kbModalSaveBtn').textContent = 'Save to KB';
+
+    document.getElementById('kbAddModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('kbModalAnswer').focus(), 80);
+  }
+
+  function closeKbModal() {
+    document.getElementById('kbAddModal').style.display = 'none';
+  }
+
+  // Close on backdrop click
+  document.addEventListener('click', function(e) {
+    const modal = document.getElementById('kbAddModal');
+    if (modal && e.target === modal) closeKbModal();
+  });
+
+  async function submitKbModal() {
+    const question = document.getElementById('kbModalQuestion').value.trim();
+    const answer   = document.getElementById('kbModalAnswer').value.trim();
+    const errEl    = document.getElementById('kbModalError');
+    const saveBtn  = document.getElementById('kbModalSaveBtn');
+
+    // Client-side validation
+    if (!answer) {
+      errEl.textContent = 'Please write an answer before saving.';
+      document.getElementById('kbModalAnswer').focus();
+      return;
+    }
+    if (answer.length < 20) {
+      errEl.textContent = 'Answer is too short — add more detail so the bot can use it.';
+      document.getElementById('kbModalAnswer').focus();
+      return;
+    }
+
+    errEl.textContent   = '';
+    saveBtn.disabled    = true;
+    saveBtn.textContent = 'Saving…';
+
     try {
-      // 1. Fetch existing FAQs
-      const existing = await fetch(`/api/faqs?client_id=${CLIENT_ID}`);
+      // 1. Fetch existing FAQs so we don’t overwrite them
+      const existing     = await fetch(`/api/faqs?client_id=${CLIENT_ID}`);
       const existingData = await existing.json();
-      const currentFaqs = (existingData.faqs || []).map(f => ({
-        question: f.question,
-        answer:   f.answer,
-        triggers: f.triggers || [],
-        is_active: f.is_active !== false
+      const currentFaqs  = (existingData.faqs || []).map(f => ({
+        question:  f.question,
+        answer:    f.answer,
+        triggers:  f.triggers || [],
+        is_active: f.is_active !== false,
       }));
-      // 2. Append new stub
+
+      // 2. Append the new Q+A — active immediately because we have a real answer
       currentFaqs.push({
-        question: question,
-        answer:   '',   // user fills in the KB editor
-        triggers: [question.toLowerCase()],
-        is_active: false   // draft — not live until answered
+        question:  question,
+        answer:    answer,
+        triggers:  [question.toLowerCase()],
+        is_active: true,
       });
-      // 3. POST updated list
-      const save = await fetch('/api/faqs', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ client_id: CLIENT_ID, faqs: currentFaqs })
+
+      // 3. POST the full list
+      const save     = await fetch('/api/faqs', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ client_id: CLIENT_ID, faqs: currentFaqs }),
       });
       const saveData = await save.json();
+
       if (saveData.success) {
-        showToast('Added to Knowledge Base — go to FAQs to write the answer ✓', 'success');
-        if (btn) { btn.textContent = '✓ Added'; btn.style.background = 'var(--green)'; }
+        closeKbModal();
+        showToast('Answer saved to Knowledge Base ✓', 'success');
+        // Mark the card button as done
+        if (_addKbBtn) {
+          _addKbBtn.textContent      = '✓ Added';
+          _addKbBtn.style.background = 'var(--green)';
+          _addKbBtn.disabled         = true;
+        }
       } else {
         throw new Error(saveData.error || 'Save failed');
       }
     } catch(e) {
-      showToast('Could not add to KB: ' + e.message, 'error');
-      if (btn) { btn.disabled = false; btn.textContent = 'Add to KB'; }
+      errEl.textContent   = 'Could not save: ' + e.message;
+      saveBtn.disabled    = false;
+      saveBtn.textContent = 'Save to KB';
     }
   }
 
@@ -3416,6 +3477,75 @@
     applyCustomStageLabels();
   }
 </script>
+
+
+<!-- ═══════════════════ ADD-TO-KB MODAL ═══════════════════ -->
+<div id="kbAddModal" style="
+  display:none; position:fixed; inset:0; z-index:9999;
+  background:rgba(0,0,0,0.55); align-items:center; justify-content:center;
+  padding:16px;">
+  <div style="
+    background:var(--surface,#fff); border-radius:16px;
+    padding:28px 28px 24px; width:100%; max-width:520px;
+    box-shadow:0 8px 40px rgba(0,0,0,0.22);
+    display:flex; flex-direction:column; gap:16px;">
+
+    <!-- Header -->
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-primary,#1a1a1a);">
+        Add Answer to Knowledge Base
+      </h3>
+      <button onclick="closeKbModal()" style="
+        background:none; border:none; cursor:pointer; font-size:20px;
+        color:var(--text-muted,#888); line-height:1; padding:0 4px;">&#x2715;</button>
+    </div>
+
+    <!-- Question (read-only display) -->
+    <div>
+      <label style="font-size:11px; font-weight:600; text-transform:uppercase;
+                    letter-spacing:0.05em; color:var(--text-muted,#888); display:block; margin-bottom:6px;">
+        Question (from visitor)
+      </label>
+      <input id="kbModalQuestion" readonly style="
+        width:100%; box-sizing:border-box;
+        padding:10px 12px; border-radius:8px;
+        border:1px solid var(--border,#e5e7eb);
+        background:var(--surface-muted,#f9f9f7);
+        font-size:13.5px; color:var(--text-primary,#1a1a1a);
+        font-weight:500;" />
+    </div>
+
+    <!-- Answer textarea -->
+    <div>
+      <label style="font-size:11px; font-weight:600; text-transform:uppercase;
+                    letter-spacing:0.05em; color:var(--text-muted,#888); display:block; margin-bottom:6px;">
+        Your Answer <span style="color:var(--red,#e53e3e);">*</span>
+      </label>
+      <textarea id="kbModalAnswer" rows="5" placeholder="Write the answer your bot should give when visitors ask this question…" style="
+        width:100%; box-sizing:border-box; resize:vertical;
+        padding:10px 12px; border-radius:8px;
+        border:1px solid var(--border,#e5e7eb);
+        background:var(--surface,#fff);
+        font-size:13.5px; color:var(--text-primary,#1a1a1a);
+        font-family:inherit; line-height:1.55;
+        transition:border-color 0.15s;
+        outline:none;"
+        onfocus="this.style.borderColor='var(--gold,#B8924A)'"
+        onblur="this.style.borderColor='var(--border,#e5e7eb)'"></textarea>
+      <p id="kbModalError" style="margin:6px 0 0; font-size:12px; color:var(--red,#e53e3e);"></p>
+    </div>
+
+    <!-- Actions -->
+    <div style="display:flex; gap:10px; justify-content:flex-end; padding-top:4px;">
+      <button onclick="closeKbModal()" class="btn btn-ghost btn-sm">Cancel</button>
+      <button id="kbModalSaveBtn" onclick="submitKbModal()" class="btn btn-primary btn-sm">
+        Save to KB
+      </button>
+    </div>
+
+  </div>
+</div>
+<!-- ══════════════════════════════════════════════════════════ -->
 
 </body>
 </html>

@@ -10,16 +10,74 @@ ai_helper.py re-exports these at module level for backward compatibility:
       record_kb_gap, get_top_kb_gaps,
       record_poor_answer, get_poor_answers,
       send_kb_gap_digest,
+      add_gap_to_kb,
   )
 """
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from utils import get_logger, log_crash
 
 logger = get_logger('lumvi.kb_gap')
+
+
+# ── Noise filter ──────────────────────────────────────────────────────────────
+
+# Single-word greetings, filler words, and common non-questions that provide
+# zero value as KB gaps.  All comparisons are lower-cased.
+_NOISE_WORDS: frozenset = frozenset({
+    # greetings / closings
+    'hi', 'hey', 'hello', 'hiya', 'yo', 'sup', 'bye', 'goodbye',
+    'ciao', 'later', 'ttyl', 'cheers',
+    # affirmatives / negatives
+    'yes', 'no', 'nope', 'yep', 'yeah', 'yup', 'nah', 'ok', 'okay',
+    'sure', 'fine', 'alright', 'alrite',
+    # filler
+    'thanks', 'thank', 'thx', 'ty', 'please', 'pls', 'plz', 'k',
+    'lol', 'lmao', 'haha', 'hmm', 'uh', 'um', 'err',
+    # punctuation-only will be caught by the length check below
+})
+
+_MIN_WORDS      = 3    # fewer than 3 words → noise
+_MIN_CHARS      = 10   # shorter than 10 chars → noise
+
+
+def _is_noise(question: str) -> bool:
+    """
+    Return True if the question is too short or trivially non-informative
+    to be worth recording as a KB gap.
+
+    Rules (any one match → noise):
+      1. Blank or under _MIN_CHARS characters after stripping punctuation/spaces.
+      2. Fewer than _MIN_WORDS words.
+      3. Entire question (lowercased, stripped) is a single known noise word.
+    """
+    if not question:
+        return True
+
+    stripped = question.strip()
+
+    # Rule 1 — character length
+    if len(stripped) < _MIN_CHARS:
+        return True
+
+    # Rule 2 — word count
+    words = stripped.split()
+    if len(words) < _MIN_WORDS:
+        # Allow short phrases only if they're clearly a real question
+        # e.g. "pricing?" — two words but not in noise set; still reject
+        # because it's below the minimum word threshold.
+        return True
+
+    # Rule 3 — entire text is a known noise word (catches "No." / "Hey!" etc.)
+    clean = re.sub(r'[^\w\s]', '', stripped).strip().lower()
+    if clean in _NOISE_WORDS:
+        return True
+
+    return False
 
 
 # ── Gap recording ─────────────────────────────────────────────────────────────
@@ -34,12 +92,16 @@ def record_kb_gap(
     """
     Persist a question the bot couldn't answer via models.record_kb_gap().
     Called as a background task — never blocks the response pipeline.
-    Silently skips when client_id is missing (development/testing).
+    Silently skips when client_id is missing (development/testing) or when
+    the question is noise (single words, greetings, filler).
 
     Note: session_id is accepted for call-site compatibility, but the
     kb_gaps table has no session_id column, so it isn't persisted.
     """
     if not client_id or not question:
+        return
+    if _is_noise(question):
+        logger.debug(f"[KbGap] noise filtered client={client_id} q='{question[:60]}'")
         return
     try:
         import models as _m
@@ -54,17 +116,90 @@ def record_kb_gap(
 def get_top_kb_gaps(client_id: str, limit: int = 20) -> List[Dict]:
     """
     Return the most-asked unanswered ('open') questions for a client, via
-    models.get_kb_gaps() — used to surface the FAQ Manager's 'Suggested
-    FAQs' panel.
+    models.get_kb_gaps() — used to surface the AI Suggestions panel.
+
+    Applies the noise filter as a retrieval-time safety net so that any
+    junk already stored in the DB is scrubbed before it reaches the UI.
+    We fetch extra rows to compensate for anything filtered out.
     """
     if not client_id:
         return []
     try:
         import models as _m
-        return _m.get_kb_gaps(client_id, limit=limit)
+        # Fetch more than needed so filtering doesn't leave us short
+        raw = _m.get_kb_gaps(client_id, limit=limit * 2)
+        filtered = [g for g in raw if not _is_noise(g.get('question', ''))]
+        return filtered[:limit]
     except Exception as e:
         log_crash(logger, 'KbGap/get_top', e, client_id=client_id)
         return []
+
+
+# ── Add gap to KB (question + answer) ────────────────────────────────────────
+
+def add_gap_to_kb(
+    client_id: str,
+    gap_id: int,
+    question: str,
+    answer: str,
+) -> Dict:
+    """
+    Promote a KB gap into an actual KB entry with both a question AND answer.
+    Called by the 'Add to KB' route in the client dashboard.
+
+    Steps:
+      1. Validate that question and answer are both present and non-trivial.
+      2. Write the Q+A pair to the knowledge base via models.save_faqs().
+      3. Mark the gap as 'resolved' via models.mark_kb_gap_resolved() so it
+         disappears from the AI Suggestions panel.
+
+    Returns a dict with 'success' bool and optional 'error' string.
+    """
+    question = (question or '').strip()
+    answer   = (answer   or '').strip()
+
+    if not question:
+        return {'success': False, 'error': 'Question is required.'}
+    if not answer:
+        return {'success': False, 'error': 'Answer is required — the KB entry would be useless without one.'}
+    if len(answer) < 10:
+        return {'success': False, 'error': 'Answer is too short to be useful.'}
+
+    try:
+        import models as _m
+        import uuid
+
+        # Build a validated FAQ dict and save it via the standard FAQ pipeline
+        faq = {
+            'faq_id':        str(uuid.uuid4()),
+            'question':      question[:500],
+            'answer':        answer[:5000],
+            'category':      'General',
+            'triggers':      [question.lower()[:100]],
+            'tags':          [],
+            'quality_score': 0.7,
+            'embedding':     None,
+        }
+        _m.save_faqs(client_id, [faq])
+
+        # Mark the gap resolved so it disappears from AI Suggestions.
+        # mark_kb_gap_resolved only needs gap_id (no client_id param).
+        if gap_id:
+            _m.mark_kb_gap_resolved(gap_id)
+
+        logger.info(
+            f"[KbGap] gap promoted to KB client={client_id} gap_id={gap_id} "
+            f"q='{question[:60]}'"
+        )
+        return {'success': True}
+
+    except AttributeError as e:
+        missing_fn = str(e)
+        logger.error(f"[KbGap] add_gap_to_kb missing model function: {missing_fn}")
+        return {'success': False, 'error': f'Model function missing: {missing_fn}'}
+    except Exception as e:
+        log_crash(logger, 'KbGap/add_to_kb', e, client_id=client_id)
+        return {'success': False, 'error': 'Failed to add entry to KB.'}
 
 
 # ── Poor-answer tracking ──────────────────────────────────────────────────────
