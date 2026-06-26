@@ -87,15 +87,19 @@ def upgrade_page():
 @login_required
 def flutterwave_callback():
     """
-    Flutterwave redirects here after payment.
-    tx_ref format: lumvi_{plan}_{cycle}_{user_id}_{timestamp}
-    cycle = 'monthly' | 'annual'
+    Flutterwave redirects here after payment (plan upgrades AND seat overages).
+
+    tx_ref formats:
+      Plan upgrade:  lumvi_{plan}_{cycle}_{user_id}_{timestamp}
+      Seat overage:  lumvi_overage_{user_id}_{timestamp}
 
     Fixes:
     - FW-001: Duplicate check before subscription update
     - FW-002: Remove USD-only currency guard on amount validation
     - FW-004: Validate via Flutterwave signature
     - FW-008: Retry logic for verify API
+    - FW-009: Handle overage tx_ref (was crashing with 'unknown plan')
+    - FW-010: Fix url_for('dashboard') → url_for('auth.dashboard')
     """
     status         = request.args.get('status', '')
     tx_ref         = request.args.get('tx_ref', '')
@@ -147,11 +151,61 @@ def flutterwave_callback():
         flash("Payment not successful. Please try again.", 'error')
         return redirect(url_for('billing.upgrade_page'))
 
-    # Parse tx_ref: lumvi_{plan}_{cycle}_{user_id}_{timestamp}
+    paid_amount    = float(txn.get('amount', 0))
+    paid_currency  = txn.get('currency', 'USD')
+    txn_created_at = txn.get('created_at')
+
+    # ── FW-009: Detect overage payments by tx_ref prefix ─────────────────────
+    parts = tx_ref.split('_')
+    is_overage = (len(parts) >= 2 and parts[1] == 'overage')
+
+    if is_overage:
+        # tx_ref format: lumvi_overage_{user_id}_{timestamp}
+        # Duplicate check
+        try:
+            conn, cursor = models.get_db()
+            cursor.execute(
+                "SELECT id FROM payments WHERE reference = %s LIMIT 1",
+                (str(transaction_id),)
+            )
+            already_processed = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            if already_processed:
+                current_app.logger.warning(
+                    f"Overage callback: duplicate txn {transaction_id} for user {current_user.id}"
+                )
+                flash("This payment has already been processed.", 'info')
+                return redirect(url_for('auth.dashboard'))
+        except Exception as e:
+            current_app.logger.error(f"Overage duplicate check failed: {e}")
+
+        models.record_payment(
+            current_user.id, paid_amount, 'agency',
+            provider='flutterwave_overage',
+            reference=str(transaction_id),
+            notes=f"Seat overage payment — tx_ref={tx_ref}",
+            payment_date=txn_created_at,
+        )
+
+        # Clear the overdue hold so the user can add clients again
+        if hasattr(models, 'mark_overage_paid'):
+            models.mark_overage_paid(current_user.id, reference=str(transaction_id))
+
+        models.track_event(
+            'overage_paid', user_id=current_user.id,
+            metadata={'amount': paid_amount, 'tx_ref': tx_ref},
+        )
+        current_app.logger.info(
+            f"Overage payment OK: user={current_user.id} amount={paid_amount} txn={transaction_id}"
+        )
+        flash("Overage invoice paid — thank you! You can now add more chatbots.", 'success')
+        return redirect(url_for('auth.dashboard'))  # FW-010 fix
+
+    # ── Standard plan-upgrade payment ─────────────────────────────────────────
     plan  = None
     cycle = 'monthly'
     try:
-        parts = tx_ref.split('_')
         plan  = parts[1].lower() if len(parts) > 1 else None
         if len(parts) > 2 and parts[2] in ('monthly', 'annual'):
             cycle = parts[2].lower()
@@ -167,9 +221,6 @@ def flutterwave_callback():
 
     is_annual    = (cycle == 'annual')
     expected_amt = PLAN_PRICES_FLW[plan]['annual'] if is_annual else PLAN_PRICES_FLW[plan]['monthly']
-    paid_amount  = float(txn.get('amount', 0))
-    paid_currency = txn.get('currency', 'USD')
-    txn_created_at = txn.get('created_at')
 
     if paid_amount < expected_amt:
         current_app.logger.error(
@@ -196,7 +247,7 @@ def flutterwave_callback():
                 f"for user {current_user.id}"
             )
             flash("This payment has already been processed.", 'info')
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('auth.dashboard'))  # FW-010 fix
     except Exception as e:
         current_app.logger.error(f"Flutterwave duplicate check failed: {e}")
         # Continue — don't block the user
@@ -232,8 +283,55 @@ def flutterwave_callback():
         f"{plan.capitalize()} plan ({cycle} billing).",
         'success'
     )
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('auth.dashboard'))  # FW-010 fix
+    tx_ref         = request.args.get('tx_ref', '')
+    transaction_id = request.args.get('transaction_id', '')
 
+    if status != 'successful':
+        flash("Payment was not completed. Please try again.", 'error')
+        return redirect(url_for('billing.upgrade_page'))
+
+    if not transaction_id:
+        flash("Invalid payment reference. Contact support@lumvi.net.", 'error')
+        return redirect(url_for('billing.upgrade_page'))
+
+    flw_secret = os.environ.get('FLW_SECRET_KEY', '')
+    if not flw_secret:
+        current_app.logger.error("FLW_SECRET_KEY not set")
+        flash("Payment configuration error. Contact support@lumvi.net.", 'error')
+        return redirect(url_for('billing.upgrade_page'))
+
+    # Verify with Flutterwave API — retry up to 3 times with exponential backoff (FW-008)
+    flw_data   = None
+    verify_url = f"https://api.flutterwave.com/v3/transactions/{transaction_id}/verify"
+    headers    = {"Authorization": f"Bearer {flw_secret}"}
+
+    for attempt in range(3):
+        try:
+            resp = _requests.get(verify_url, headers=headers, timeout=15)
+            resp.raise_for_status()
+            flw_data = resp.json()
+            break
+        except Exception as e:
+            current_app.logger.warning(
+                f"Flutterwave verify attempt {attempt + 1}/3 failed: {e}"
+            )
+            if attempt == 2:
+                current_app.logger.error(
+                    f"Flutterwave verify error after 3 attempts: {e}"
+                )
+                flash("Could not verify payment. Contact support@lumvi.net.", 'error')
+                return redirect(url_for('billing.upgrade_page'))
+            time.sleep(2 ** attempt)  # 1s, 2s backoff
+
+    if not flw_data or flw_data.get('status') != 'success':
+        flash("Payment verification failed. Contact support@lumvi.net.", 'error')
+        return redirect(url_for('billing.upgrade_page'))
+
+    txn = flw_data.get('data', {})
+    if txn.get('status') != 'successful':
+        flash("Payment not successful. Please try again.", 'error')
+        return redirect(url_for('billing.upgrade_page'))
 
 @billing_bp.route('/payment/flutterwave/webhook', methods=['POST'])
 def flutterwave_webhook():
@@ -277,12 +375,73 @@ def flutterwave_webhook():
 
     # Parse plan + cycle + user_id from tx_ref
     # Format: lumvi_{plan}_{cycle}_{user_id}_{ts}  OR  legacy lumvi_{plan}_{user_id}_{ts}
+    # Overage:  lumvi_overage_{user_id}_{ts}
+    parts   = tx_ref.split('_')
     plan    = None
     cycle   = 'monthly'
     user_id = None
+
     try:
-        parts   = tx_ref.split('_')
-        plan    = parts[1].lower() if len(parts) >= 2 else None
+        plan = parts[1].lower() if len(parts) >= 2 else None
+    except (IndexError, ValueError) as e:
+        current_app.logger.error(f"Flutterwave webhook: bad tx_ref '{tx_ref}' — {e}")
+        return jsonify({'status': 'bad tx_ref'}), 200
+
+    # ── Overage payment path ──────────────────────────────────────────────────
+    if plan == 'overage':
+        # lumvi_overage_{user_id}_{ts}
+        try:
+            user_id = int(parts[2]) if len(parts) >= 3 else None
+        except (IndexError, ValueError):
+            user_id = None
+
+        if not user_id:
+            current_app.logger.error(
+                f"Flutterwave webhook (overage): no user_id in tx_ref '{tx_ref}'"
+            )
+            return jsonify({'status': 'bad tx_ref'}), 200
+
+        # Duplicate check
+        try:
+            conn, cursor = models.get_db()
+            cursor.execute(
+                "SELECT id FROM payments WHERE reference = %s LIMIT 1", (txn_id,)
+            )
+            already = cursor.fetchone()
+            cursor.close(); conn.close()
+            if already:
+                current_app.logger.info(f"Webhook overage: already processed txn {txn_id}")
+                return jsonify({'status': 'already processed'}), 200
+        except Exception as e:
+            current_app.logger.error(f"Webhook overage duplicate check failed: {e}")
+
+        user = models.get_user_by_id(user_id)
+        if not user:
+            current_app.logger.error(f"Webhook overage: user {user_id} not found (txn {txn_id})")
+            return jsonify({'status': 'user not found'}), 200
+
+        models.record_payment(
+            user_id, amount, 'agency',
+            provider='flutterwave_overage',
+            reference=txn_id,
+            notes=f"Seat overage webhook — tx_ref={tx_ref}",
+            payment_date=txn_created_at,
+        )
+
+        if hasattr(models, 'mark_overage_paid'):
+            models.mark_overage_paid(user_id, reference=txn_id)
+
+        models.track_event(
+            'overage_paid', user_id=user_id,
+            metadata={'amount': amount, 'tx_ref': tx_ref, 'source': 'webhook'},
+        )
+        current_app.logger.info(
+            f"Webhook overage payment OK: user={user_id} amount={amount} txn={txn_id}"
+        )
+        return jsonify({'status': 'ok'}), 200
+
+    # ── Standard plan-upgrade path ────────────────────────────────────────────
+    try:
         if len(parts) > 2 and parts[2] in ('monthly', 'annual'):
             cycle   = parts[2].lower()
             user_id = int(parts[3]) if len(parts) >= 4 else None
@@ -508,7 +667,7 @@ def cancel_subscription():
                 "until the end of your current billing period.",
                 'success'
             )
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('auth.dashboard'))
         else:
             flash(
                 "Could not cancel subscription. Please contact support@lumvi.net.",

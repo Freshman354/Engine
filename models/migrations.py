@@ -1703,3 +1703,49 @@ def migrate_lead_intent_summary():
     finally:
         if cursor: cursor.close()
         if conn:   conn.close()
+
+
+def migrate_overage_tracking():
+    """
+    Add five overage-tracking columns to the users table so the billing
+    cron and the agency client-creation route can read payment status
+    without a join to the payments table.
+
+    Columns:
+      overage_amount_due     — amount currently owed (cleared on payment)
+      overage_due_date       — invoice deadline (14 days from issue)
+      overage_payment_status — 'none' | 'pending' | 'paid' | 'overdue'
+      overage_tx_ref         — Flutterwave tx_ref for the outstanding invoice
+      overage_payment_link   — hosted checkout URL sent in the invoice email
+
+    Idempotent — ADD COLUMN IF NOT EXISTS is safe to run on every startup.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS overage_amount_due "
+            "NUMERIC(10,2) DEFAULT 0"
+        )
+        cursor.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS overage_due_date TIMESTAMP"
+        )
+        cursor.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS overage_payment_status "
+            "TEXT DEFAULT 'none'"
+        )
+        cursor.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS overage_tx_ref TEXT"
+        )
+        cursor.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS overage_payment_link TEXT"
+        )
+        conn.commit()
+        print("✅ migrate_overage_tracking complete")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"⚠️  migrate_overage_tracking: {e}")
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()

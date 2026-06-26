@@ -190,15 +190,23 @@ def track_event(event_name, user_id=None, metadata=None):
 # =====================================================================
 
 def record_payment(user_id, amount, plan_type, provider='manual', currency='USD',
-                   status='completed', reference=None, notes=None):
+                   status='completed', reference=None, notes=None, payment_date=None):
     """Insert a payment record and return its id."""
     conn, cursor = get_db()
-    cursor.execute(
-        '''INSERT INTO payments
-           (user_id, amount, currency, status, provider, plan_type, reference, notes)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
-        (user_id, amount, currency, status, provider, plan_type, reference, notes)
-    )
+    if payment_date:
+        cursor.execute(
+            '''INSERT INTO payments
+               (user_id, amount, currency, status, provider, plan_type, reference, notes, payment_date)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+            (user_id, amount, currency, status, provider, plan_type, reference, notes, payment_date)
+        )
+    else:
+        cursor.execute(
+            '''INSERT INTO payments
+               (user_id, amount, currency, status, provider, plan_type, reference, notes)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id''',
+            (user_id, amount, currency, status, provider, plan_type, reference, notes)
+        )
     payment_id = cursor.fetchone()['id']
     conn.commit()
     cursor.close()
@@ -382,6 +390,112 @@ def get_agency_overage_summary(user_id: int, included_clients: int = 20):
 
 
 # =====================================================================
-# USAGE WARNINGS & WEEKLY EMAIL HELPERS
+# AGENCY OVERAGE PAYMENT TRACKING
 # =====================================================================
+
+def set_overage_pending(user_id: int, amount: float, due_date,
+                        tx_ref: str, payment_link: str) -> None:
+    """
+    Stamp an outstanding overage invoice on the user row so the
+    client-creation route and the enforcement cron can read it cheaply
+    without a JOIN to the payments table.
+
+    Called by bill_agency_overages() in cron.py after the Flutterwave
+    payment link is generated.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            """UPDATE users
+               SET overage_amount_due     = %s,
+                   overage_due_date       = %s,
+                   overage_payment_status = 'pending',
+                   overage_tx_ref         = %s,
+                   overage_payment_link   = %s
+               WHERE id = %s""",
+            (amount, due_date, tx_ref, payment_link, user_id)
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[set_overage_pending] user={user_id}: {e}")
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def mark_overage_paid(user_id: int, reference: str = None) -> None:
+    """
+    Clear the overage hold after a successful payment.
+    Called by both the Flutterwave callback and the server webhook when
+    tx_ref starts with 'lumvi_overage_'.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            """UPDATE users
+               SET overage_amount_due     = 0,
+                   overage_due_date       = NULL,
+                   overage_payment_status = 'paid',
+                   overage_tx_ref         = NULL,
+                   overage_payment_link   = NULL
+               WHERE id = %s""",
+            (user_id,)
+        )
+        conn.commit()
+        import logging
+        logging.getLogger(__name__).info(
+            f"[mark_overage_paid] user={user_id} ref={reference}"
+        )
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[mark_overage_paid] user={user_id}: {e}")
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def mark_overdue_overage_users() -> list:
+    """
+    Flip overage_payment_status → 'overdue' for every agency user whose
+    invoice due date has passed without payment.
+
+    Called daily by /cron/enforce-agency-overages.
+    Returns a list of dicts (id, email) for logging.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            """SELECT id, email FROM users
+               WHERE overage_payment_status = 'pending'
+                 AND overage_due_date IS NOT NULL
+                 AND overage_due_date < NOW()
+                 AND (is_admin IS NOT TRUE)"""
+        )
+        to_mark = cursor.fetchall()
+
+        if to_mark:
+            cursor.execute(
+                """UPDATE users
+                   SET overage_payment_status = 'overdue'
+                   WHERE overage_payment_status = 'pending'
+                     AND overage_due_date IS NOT NULL
+                     AND overage_due_date < NOW()
+                     AND (is_admin IS NOT TRUE)"""
+            )
+            conn.commit()
+
+        return [dict(u) for u in to_mark]
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[mark_overdue_overage_users] {e}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
 

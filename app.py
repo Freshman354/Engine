@@ -806,6 +806,7 @@ try:
         'migrate_lead_outcome_tracking',
         'migrate_lead_nudge_tracking',
         'migrate_lead_intent_summary',
+        'migrate_overage_tracking',   # agency $15/seat recurring billing columns
     ]
     for _fn in _optional_migrations:
         if hasattr(models, _fn):

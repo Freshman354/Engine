@@ -1,186 +1,701 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Client Logins — {{ client.company_name }}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>
-        *{margin:0;padding:0;box-sizing:border-box;}
-        body{font-family:'Inter',sans-serif;background:#0f172a;color:#f8fafc;min-height:100vh;padding:40px 20px;}
-        .container{max-width:860px;margin:0 auto;}
-        .back{color:#64748b;text-decoration:none;font-size:14px;display:inline-flex;align-items:center;gap:6px;margin-bottom:24px;}
-        .back:hover{color:#f8fafc;}
-        .page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;flex-wrap:wrap;gap:16px;}
-        .page-header h1{font-size:24px;font-weight:800;}
-        .page-header p{color:#64748b;font-size:14px;margin-top:4px;}
-        .btn{padding:10px 20px;border-radius:9px;font-weight:700;font-size:14px;cursor:pointer;border:none;font-family:'Inter',sans-serif;transition:all 0.2s;text-decoration:none;display:inline-block;}
-        .btn-primary{background:#6366f1;color:#fff;}
-        .btn-primary:hover{background:#4f46e5;transform:translateY(-1px);}
-        .btn-danger{background:rgba(239,68,68,0.15);color:#fca5a5;border:1px solid rgba(239,68,68,0.3);}
-        .btn-danger:hover{background:rgba(239,68,68,0.25);}
-        .btn-sm{padding:6px 12px;font-size:12px;}
-        .users-table{background:rgba(30,41,59,0.8);border:1px solid rgba(255,255,255,0.08);border-radius:14px;overflow:hidden;margin-bottom:24px;}
-        table{width:100%;border-collapse:collapse;}
-        th{text-align:left;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;padding:14px 20px;border-bottom:1px solid rgba(255,255,255,0.06);}
-        td{padding:14px 20px;font-size:14px;color:#cbd5e1;border-bottom:1px solid rgba(255,255,255,0.04);}
-        tr:last-child td{border-bottom:none;}
-        .empty{padding:48px;text-align:center;color:#475569;}
-        .modal{display:none;position:fixed;inset:0;z-index:1000;background:rgba(10,15,28,0.85);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px;}
-        .modal.active{display:flex;}
-        .modal-content{background:#1e293b;border:1px solid rgba(255,255,255,0.1);border-radius:18px;padding:36px;width:100%;max-width:480px;position:relative;}
-        .modal-title{font-size:20px;font-weight:800;margin-bottom:24px;}
-        .form-group{margin-bottom:18px;}
-        .form-group label{display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em;}
-        .form-group input{width:100%;padding:11px 14px;background:rgba(15,23,42,0.6);border:1px solid rgba(255,255,255,0.1);border-radius:9px;color:#f8fafc;font-size:14px;font-family:'Inter',sans-serif;transition:border-color 0.2s;}
-        .form-group input:focus{outline:none;border-color:#6366f1;}
-        .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px;}
-        .close-btn{position:absolute;top:16px;right:18px;font-size:22px;color:#475569;cursor:pointer;background:none;border:none;}
-        .close-btn:hover{color:#f8fafc;}
-        .toast{position:fixed;bottom:24px;right:24px;z-index:9999;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;display:none;box-shadow:0 8px 24px rgba(0,0,0,0.3);}
-        .toast.success{background:#064e3b;color:#6ee7b7;border:1px solid #059669;}
-        .toast.error{background:#450a0a;color:#fca5a5;border:1px solid #dc2626;}
-        .info-box{background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;padding:16px 20px;margin-bottom:24px;font-size:13px;color:#a5b4fc;line-height:1.6;}
-        .portal-link{color:#818cf8;font-weight:600;}
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Client Settings — {{ client.company_name }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
+  --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
+  --gold-glow:rgba(184,146,74,0.22);
+  --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#fff;
+  --success:#16A34A;--success-lt:#F0FDF4;--success-border:rgba(22,163,74,0.2);
+  --warning:#D97706;--warning-lt:#FFFBEB;
+  --danger:#EF4444;--danger-lt:#FEF2F2;--danger-border:rgba(239,68,68,0.2);
+  --info-bg:rgba(184,146,74,0.06);--info-border:rgba(184,146,74,0.2);
+  --radius:12px;
+  --shadow:0 1px 3px rgba(0,0,0,0.05),0 4px 16px rgba(0,0,0,0.04);
+  --shadow-md:0 2px 8px rgba(0,0,0,0.06),0 12px 32px rgba(0,0,0,0.06);
+}
+
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;}
+
+/* ── TOPBAR ─────────────────────────────────────────────────────── */
+.topbar{
+  background:var(--white);border-bottom:1px solid var(--border);
+  padding:0 28px;height:60px;
+  display:flex;align-items:center;justify-content:space-between;
+  position:sticky;top:0;z-index:100;
+}
+.topbar-left{display:flex;align-items:center;gap:16px;}
+.back-link{
+  display:inline-flex;align-items:center;gap:7px;
+  font-size:13px;font-weight:500;color:var(--sub);
+  text-decoration:none;transition:color 0.15s;
+  padding:6px 10px;border-radius:8px;margin-left:-10px;
+}
+.back-link:hover{color:var(--dark);background:var(--cream);}
+.back-link svg{width:14px;height:14px;}
+.topbar-divider{width:1px;height:20px;background:var(--border);}
+.topbar-client{
+  display:flex;align-items:center;gap:9px;
+}
+.topbar-av{
+  width:28px;height:28px;border-radius:7px;
+  background:var(--gold-lt);border:1px solid rgba(184,146,74,0.25);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif;font-size:12px;font-weight:700;
+  color:var(--gold-dk);flex-shrink:0;
+}
+.topbar-client-name{font-size:13.5px;font-weight:600;color:var(--dark);}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.preview-link{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:7px 13px;font-size:12.5px;font-weight:600;
+  color:var(--mid);border:1px solid var(--border);
+  border-radius:8px;text-decoration:none;transition:all 0.15s;
+}
+.preview-link:hover{border-color:var(--gold);color:var(--gold-dk);}
+.preview-link svg{width:12px;height:12px;}
+
+/* ── PAGE ────────────────────────────────────────────────────────── */
+.page{max-width:780px;margin:0 auto;padding:36px 24px 80px;}
+@media(max-width:640px){.page{padding:24px 14px 60px;}}
+
+.page-hd{margin-bottom:32px;}
+.page-hd h1{
+  font-family:'Fraunces',serif;font-size:24px;font-weight:700;
+  letter-spacing:-0.3px;margin-bottom:4px;
+}
+.page-hd p{font-size:13.5px;color:var(--sub);}
+
+/* ── SECTION CARD ────────────────────────────────────────────────── */
+.section-card{
+  background:var(--white);border:1px solid var(--border);
+  border-radius:16px;box-shadow:var(--shadow);
+  margin-bottom:20px;overflow:hidden;
+}
+.section-head{
+  padding:20px 24px 18px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:12px;
+}
+.section-head-left{display:flex;align-items:flex-start;gap:13px;}
+.section-icon{
+  width:36px;height:36px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;margin-top:1px;
+}
+.icon-gold{background:var(--gold-lt);}
+.icon-gold svg{width:16px;height:16px;color:var(--gold-dk);}
+.icon-blue{background:#EFF6FF;}
+.icon-blue svg{width:16px;height:16px;color:#2563EB;}
+.section-title{
+  font-family:'Fraunces',serif;font-size:15px;font-weight:700;
+  color:var(--dark);margin-bottom:3px;
+}
+.section-desc{font-size:13px;color:var(--sub);line-height:1.5;}
+.section-body{padding:24px;}
+
+/* ── FIELD ROW ───────────────────────────────────────────────────── */
+.field-row{
+  display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;
+  margin-bottom:16px;
+}
+.field-row:last-child{margin-bottom:0;}
+.field-full{margin-bottom:16px;}
+.field-full:last-child{margin-bottom:0;}
+
+.field-label{
+  display:block;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:0.07em;
+  color:var(--mid);margin-bottom:6px;
+}
+.field-hint{font-size:11.5px;color:var(--sub);margin-top:5px;line-height:1.5;}
+.field-hint a{color:var(--gold-dk);text-decoration:none;font-weight:600;}
+.field-hint a:hover{text-decoration:underline;}
+
+.input{
+  width:100%;padding:10px 13px;
+  background:var(--cream);border:1.5px solid var(--border);
+  border-radius:9px;font-size:13.5px;color:var(--dark);
+  font-family:'DM Sans',sans-serif;transition:all 0.2s;outline:none;
+}
+.input::placeholder{color:var(--sub);}
+.input:focus{background:var(--white);border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-lt);}
+.input.mono{font-family:'DM Mono',monospace;font-size:12.5px;}
+
+.pw-wrap{position:relative;}
+.pw-wrap .input{padding-right:42px;}
+.pw-toggle{
+  position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;color:var(--sub);
+  display:flex;align-items:center;padding:2px;transition:color 0.15s;
+}
+.pw-toggle:hover{color:var(--dark);}
+.pw-toggle svg{width:15px;height:15px;}
+
+/* Save button (inline with field) */
+.btn-save{
+  padding:10px 16px;background:var(--gold);color:#fff;
+  border:none;border-radius:9px;font-family:'DM Sans',sans-serif;
+  font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;
+  transition:all 0.2s;box-shadow:0 1px 4px var(--gold-glow);
+  display:inline-flex;align-items:center;gap:6px;
+}
+.btn-save:hover{background:var(--gold-dk);}
+.btn-save svg{width:13px;height:13px;}
+.btn-save.saved{background:var(--success);}
+
+/* ── DELIVERY STATUS CHIPS ───────────────────────────────────────── */
+.delivery-status{
+  display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;
+  padding-top:16px;border-top:1px solid var(--border);
+}
+.d-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 11px;border-radius:20px;
+  font-size:12px;font-weight:600;
+}
+.d-chip-active{background:var(--success-lt);color:var(--success);border:1px solid var(--success-border);}
+.d-chip-off{background:var(--panel);color:var(--sub);border:1px solid var(--border);}
+.d-chip-dot{width:5px;height:5px;border-radius:50%;background:currentColor;}
+
+/* ── DIVIDER ─────────────────────────────────────────────────────── */
+.field-divider{
+  height:1px;background:var(--border);
+  margin:20px 0;
+}
+
+/* ── USERS TABLE ─────────────────────────────────────────────────── */
+.users-table-wrap{overflow-x:auto;}
+.users-table{width:100%;border-collapse:collapse;}
+.users-table th{
+  padding:10px 14px;text-align:left;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:0.07em;color:var(--sub);
+  background:var(--cream);border-bottom:1px solid var(--border);
+  white-space:nowrap;
+}
+.users-table td{
+  padding:13px 14px;border-bottom:1px solid var(--border);
+  font-size:13.5px;vertical-align:middle;
+}
+.users-table tbody tr:last-child td{border-bottom:none;}
+.users-table tbody tr:hover{background:#FDFCFA;}
+
+.user-cell{display:flex;align-items:center;gap:10px;}
+.user-av{
+  width:32px;height:32px;border-radius:8px;
+  background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Fraunces',serif;font-size:13px;font-weight:700;
+  color:var(--gold-dk);flex-shrink:0;
+}
+.user-name{font-weight:600;color:var(--dark);}
+.user-email{font-size:11.5px;color:var(--sub);margin-top:1px;font-family:'DM Mono',monospace;}
+
+.ts{font-size:12px;color:var(--sub);}
+
+.btn-del{
+  padding:5px 11px;border-radius:7px;border:none;
+  background:var(--danger-lt);color:var(--danger);
+  font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;
+  cursor:pointer;transition:all 0.15s;white-space:nowrap;
+}
+.btn-del:hover{background:#FECACA;}
+
+/* ── EMPTY STATE ─────────────────────────────────────────────────── */
+.empty-row td{
+  padding:40px 24px;text-align:center;
+  color:var(--sub);font-size:13.5px;
+}
+
+/* ── TABLE ACTIONS BAR ───────────────────────────────────────────── */
+.table-actions-bar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 24px;border-top:1px solid var(--border);
+  background:var(--cream);
+}
+.portal-url-note{font-size:12px;color:var(--sub);}
+.portal-url-note strong{
+  font-family:'DM Mono',monospace;font-size:11.5px;
+  background:var(--panel);padding:2px 7px;border-radius:5px;
+  color:var(--mid);
+}
+
+.btn-create{
+  padding:9px 16px;background:var(--gold);color:#fff;
+  border:none;border-radius:9px;font-family:'DM Sans',sans-serif;
+  font-size:13px;font-weight:700;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;
+  transition:all 0.2s;box-shadow:0 1px 4px var(--gold-glow);
+}
+.btn-create:hover{background:var(--gold-dk);transform:translateY(-1px);}
+.btn-create svg{width:13px;height:13px;}
+
+/* ── MODAL ───────────────────────────────────────────────────────── */
+.modal-overlay{
+  display:none;position:fixed;inset:0;
+  background:rgba(28,25,23,0.5);backdrop-filter:blur(4px);
+  z-index:200;align-items:center;justify-content:center;padding:16px;
+}
+.modal-overlay.show{display:flex;}
+.modal{
+  background:var(--white);border:1px solid var(--border);
+  border-radius:20px;padding:28px;max-width:460px;width:100%;
+  box-shadow:var(--shadow-md);animation:slideUp 0.22s ease;
+}
+@keyframes slideUp{from{transform:translateY(16px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+.modal-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.modal-hd h2{font-family:'Fraunces',serif;font-size:19px;font-weight:700;}
+.modal-close{
+  width:30px;height:30px;border-radius:8px;border:none;
+  background:var(--panel);color:var(--sub);font-size:17px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  line-height:1;transition:all 0.15s;
+}
+.modal-close:hover{background:var(--cream2);color:var(--dark);}
+.modal-sub{font-size:13px;color:var(--sub);margin-bottom:22px;line-height:1.5;}
+.modal-field{margin-bottom:16px;}
+.modal-field label{
+  display:block;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:0.07em;
+  color:var(--mid);margin-bottom:6px;
+}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:22px;}
+.btn-ghost{
+  padding:10px 16px;background:transparent;color:var(--mid);
+  border:1.5px solid var(--border);border-radius:9px;
+  font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;
+  cursor:pointer;transition:all 0.15s;
+}
+.btn-ghost:hover{border-color:var(--gold);color:var(--gold-dk);}
+.btn-modal-create{
+  padding:10px 18px;background:var(--gold);color:#fff;
+  border:none;border-radius:9px;font-family:'DM Sans',sans-serif;
+  font-size:13px;font-weight:700;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:all 0.2s;
+}
+.btn-modal-create:hover{background:var(--gold-dk);}
+.btn-modal-create svg{width:13px;height:13px;}
+
+/* ── SPINNER + TOAST ─────────────────────────────────────────────── */
+.spinner{
+  width:13px;height:13px;border:2px solid rgba(255,255,255,0.35);
+  border-top-color:#fff;border-radius:50%;
+  animation:spin 0.7s linear infinite;display:inline-block;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+.toast{
+  position:fixed;bottom:20px;left:50%;
+  transform:translateX(-50%) translateY(8px);
+  padding:10px 18px;border-radius:10px;font-size:13.5px;font-weight:600;
+  color:#fff;z-index:9999;opacity:0;transition:all 0.28s;
+  pointer-events:none;display:flex;align-items:center;gap:7px;
+  white-space:nowrap;
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.success{background:var(--success);}
+.toast.error{background:var(--danger);}
+.toast svg{width:14px;height:14px;}
+</style>
 </head>
 <body>
-    <div class="container">
-        <a href="/dashboard" class="back">← Back to Dashboard</a>
 
-        <div class="page-header">
-            <div>
-                <h1>👤 Client Logins</h1>
-                <p>{{ client.company_name }} — give your client access to view their leads and FAQs</p>
-            </div>
-            <button class="btn btn-primary" onclick="openModal()">+ Create Login</button>
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <a href="/dashboard" class="back-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+      Dashboard
+    </a>
+    <div class="topbar-divider"></div>
+    <div class="topbar-client">
+      <div class="topbar-av">{{ client.company_name[0]|upper }}</div>
+      <span class="topbar-client-name">{{ client.company_name }}</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <a href="/client-portal?preview=1&client_id={{ client.client_id }}" target="_blank" class="preview-link">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+        <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+      </svg>
+      Preview client view
+    </a>
+  </div>
+</div>
+
+<div class="page">
+
+  <div class="page-hd">
+    <h1>Client Settings</h1>
+    <p>Configure how leads reach {{ client.company_name }} and manage their portal access</p>
+  </div>
+
+  <!-- ── LEAD DELIVERY ─────────────────────────────────────────────────── -->
+  <div class="section-card">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="section-icon icon-gold">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 11.9 19.79 19.79 0 0 1 1.61 3.27 2 2 0 0 1 3.6 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.56a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
         </div>
-
-        <div class="info-box">
-            Your client can log in at <a href="/client-login" target="_blank" class="portal-link">lumvi.net/client-login</a> to view their leads, FAQs, and help center articles. They cannot edit anything — read-only access only.
+        <div>
+          <div class="section-title">Lead Delivery</div>
+          <div class="section-desc">Where new leads are sent the moment they're captured</div>
         </div>
+      </div>
+    </div>
+    <div class="section-body">
 
-        <div class="users-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Created</th>
-                        <th>Last Login</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="users-tbody">
-                    <tr><td colspan="5" class="empty">Loading...</td></tr>
-                </tbody>
-            </table>
+      <!-- Email notification -->
+      <div class="field-row">
+        <div>
+          <label class="field-label">Notification Email</label>
+          <input
+            type="email"
+            id="notif-email"
+            class="input"
+            placeholder="owner@business.com"
+            value="{{ client.notification_email or '' }}"
+            autocomplete="off"
+          >
+          <div class="field-hint">New lead emails are sent from your agency's address — {{ client.company_name }} never sees Lumvi.</div>
         </div>
+        <button class="btn-save" onclick="saveField('email')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" id="save-email-icon">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Save
+        </button>
+      </div>
 
-        <a href="/dashboard" class="btn" style="background:transparent;color:#64748b;border:1px solid rgba(255,255,255,0.1);">← Back to Dashboard</a>
+      <div class="field-divider"></div>
+
+      <!-- SMS -->
+      <div class="field-row">
+        <div>
+          <label class="field-label">SMS — Mobile Number</label>
+          <input
+            type="tel"
+            id="notif-phone"
+            class="input"
+            placeholder="+44 7700 900123"
+            value="{{ client.notification_phone or '' }}"
+            autocomplete="off"
+          >
+          <div class="field-hint">A text is sent within seconds of a lead. Costs ~£0.04 per SMS. Leave blank to disable.</div>
+        </div>
+        <button class="btn-save" onclick="saveField('phone')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" id="save-phone-icon">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          Save
+        </button>
+      </div>
+
+      <div class="field-divider"></div>
+
+      <!-- Webhook -->
+      <div class="field-full">
+        <label class="field-label">Webhook URL</label>
+        <div class="field-row" style="margin-bottom:0;">
+          <input
+            type="url"
+            id="webhook-url"
+            class="input mono"
+            placeholder="https://your-system.com/leads/webhook"
+            value="{{ client.webhook_url or '' }}"
+            autocomplete="off"
+          >
+          <button class="btn-save" onclick="saveField('webhook')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" id="save-webhook-icon">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Save
+          </button>
+        </div>
+        <div class="field-hint" style="margin-top:5px;">
+          Every lead POSTs JSON to this URL — pipe into a CRM, Slack, Zapier, or your own system.
+          Payloads are signed with HMAC-SHA256.
+          <a href="/docs/webhooks" target="_blank">View payload schema →</a>
+        </div>
+      </div>
+
+      <!-- Delivery status chips -->
+      <div class="delivery-status" id="delivery-status">
+        <!-- Rendered by JS -->
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── PORTAL ACCESS ──────────────────────────────────────────────────── -->
+  <div class="section-card">
+    <div class="section-head">
+      <div class="section-head-left">
+        <div class="section-icon icon-blue">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+        <div>
+          <div class="section-title">Portal Access</div>
+          <div class="section-desc">Give {{ client.company_name }} a read-only login to view their leads and chatbot activity</div>
+        </div>
+      </div>
     </div>
 
-    <!-- Create Modal -->
-    <div class="modal" id="createModal">
-        <div class="modal-content">
-            <button class="close-btn" onclick="closeModal()">×</button>
-            <div class="modal-title">Create Client Login</div>
-            <div class="form-group">
-                <label>Client Name</label>
-                <input type="text" id="invite-name" placeholder="e.g. John Smith">
-            </div>
-            <div class="form-group">
-                <label>Email Address</label>
-                <input type="email" id="invite-email" placeholder="client@company.com">
-            </div>
-            <div class="form-group">
-                <label>Password</label>
-                <input type="text" id="invite-password" placeholder="Set a password (min 6 chars)">
-            </div>
-            <p style="font-size:12px;color:#475569;margin-bottom:16px;">An email with login details will be sent to the client automatically.</p>
-            <div class="modal-actions">
-                <button class="btn" style="background:transparent;color:#64748b;border:1px solid rgba(255,255,255,0.1);" onclick="closeModal()">Cancel</button>
-                <button class="btn btn-primary" onclick="createLogin()">Create Login</button>
-            </div>
-        </div>
+    <div class="users-table-wrap">
+      <table class="users-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>Created</th>
+            <th>Last sign-in</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+          <tr class="empty-row"><td colspan="4">Loading…</td></tr>
+        </tbody>
+      </table>
     </div>
 
-    <div class="toast" id="toast"></div>
+    <div class="table-actions-bar">
+      <div class="portal-url-note">
+        Client logs in at <strong>{{ client_portal_url or request.host_url + 'client-login' }}</strong>
+      </div>
+      <button class="btn-create" onclick="openCreateModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Create login
+      </button>
+    </div>
+  </div>
 
-    <script>
-        const CLIENT_ID = '{{ client_id }}';
+</div><!-- /page -->
 
-        async function loadUsers() {
-            const res = await fetch(`/api/client-users?client_id=${CLIENT_ID}`);
-            const data = await res.json();
-            const tbody = document.getElementById('users-tbody');
-            if (!data.success || !data.users.length) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty">No client logins yet. Create one to give your client access.</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.users.map(u => `
-                <tr>
-                    <td><strong>${escHtml(u.name || '—')}</strong></td>
-                    <td>${escHtml(u.email)}</td>
-                    <td style="color:#475569;font-size:12px;">${u.created_at ? u.created_at.substring(0,10) : '—'}</td>
-                    <td style="color:#475569;font-size:12px;">${u.last_login ? u.last_login.substring(0,10) : 'Never'}</td>
-                    <td><button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">Delete</button></td>
-                </tr>
-            `).join('');
-        }
 
-        function openModal() { document.getElementById('createModal').classList.add('active'); }
-        function closeModal() { document.getElementById('createModal').classList.remove('active'); }
+<!-- CREATE LOGIN MODAL -->
+<div class="modal-overlay" id="createModal">
+  <div class="modal">
+    <div class="modal-hd">
+      <h2>Create client login</h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <p class="modal-sub">
+      {{ client.company_name }} will receive an email with their login link.
+      They can only view leads and activity — no editing.
+    </p>
 
-        async function createLogin() {
-            const name     = document.getElementById('invite-name').value.trim();
-            const email    = document.getElementById('invite-email').value.trim();
-            const password = document.getElementById('invite-password').value.trim();
-            if (!email || !password) { showToast('Email and password are required', 'error'); return; }
-            const res = await fetch('/api/client-users/invite', {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({client_id: CLIENT_ID, name, email, password})
-            });
-            const data = await res.json();
-            if (data.success) {
-                closeModal();
-                loadUsers();
-                showToast('✔️ Login created & email sent!', 'success');
-                document.getElementById('invite-name').value = '';
-                document.getElementById('invite-email').value = '';
-                document.getElementById('invite-password').value = '';
-            } else {
-                showToast('❌ ' + (data.error || 'Failed to create login'), 'error');
-            }
-        }
+    <div class="modal-field">
+      <label>Name</label>
+      <input type="text" id="inv-name" class="input" placeholder="Sarah Jones" autocomplete="off">
+    </div>
+    <div class="modal-field">
+      <label>Email</label>
+      <input type="email" id="inv-email" class="input" placeholder="owner@business.com" autocomplete="off">
+    </div>
+    <div class="modal-field">
+      <label>Password</label>
+      <div class="pw-wrap">
+        <input type="password" id="inv-password" class="input" placeholder="Min. 8 characters" autocomplete="new-password">
+        <button type="button" class="pw-toggle" onclick="togglePw()" aria-label="Show password">
+          <svg id="pw-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
+    </div>
 
-        async function deleteUser(userId) {
-            if (!confirm('Remove this client login? They will lose access immediately.')) return;
-            const res = await fetch('/api/client-users/delete', {
-                method: 'POST',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({client_id: CLIENT_ID, user_id: userId})
-            });
-            const data = await res.json();
-            if (data.success) { loadUsers(); showToast('✔️ Login removed', 'success'); }
-            else showToast('❌ Failed to remove', 'error');
-        }
+    <div class="modal-actions">
+      <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-modal-create" id="create-btn" onclick="createLogin()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Create &amp; send invite
+      </button>
+    </div>
+  </div>
+</div>
 
-        function showToast(msg, type) {
-            const t = document.getElementById('toast');
-            t.textContent = msg;
-            t.className = `toast ${type}`;
-            t.style.display = 'block';
-            clearTimeout(t._t);
-            t._t = setTimeout(() => { t.style.display = 'none'; }, 3500);
-        }
+<div class="toast" id="toast"></div>
 
-        function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+<script>
+const CLIENT_ID = '{{ client.client_id }}';
 
-        document.getElementById('createModal').addEventListener('click', e => { if (e.target === document.getElementById('createModal')) closeModal(); });
+// ── Delivery status chips ──────────────────────────────────────────
+function renderDeliveryStatus() {
+  const email   = document.getElementById('notif-email').value.trim();
+  const phone   = document.getElementById('notif-phone').value.trim();
+  const webhook = document.getElementById('webhook-url').value.trim();
+  const el = document.getElementById('delivery-status');
+  if (!email && !phone && !webhook) {
+    el.innerHTML = '<span style="font-size:12.5px;color:var(--sub);">No delivery channels configured — leads will only appear in the portal.</span>';
+    return;
+  }
+  el.innerHTML = [
+    email   ? `<span class="d-chip d-chip-active"><span class="d-chip-dot"></span>Email</span>` : `<span class="d-chip d-chip-off"><span class="d-chip-dot"></span>Email off</span>`,
+    phone   ? `<span class="d-chip d-chip-active"><span class="d-chip-dot"></span>SMS</span>` : `<span class="d-chip d-chip-off"><span class="d-chip-dot"></span>SMS off</span>`,
+    webhook ? `<span class="d-chip d-chip-active"><span class="d-chip-dot"></span>Webhook</span>` : `<span class="d-chip d-chip-off"><span class="d-chip-dot"></span>Webhook off</span>`,
+  ].join('');
+}
+renderDeliveryStatus();
+['notif-email','notif-phone','webhook-url'].forEach(id =>
+  document.getElementById(id).addEventListener('input', renderDeliveryStatus)
+);
 
-        loadUsers();
-    </script>
+// ── Save field ─────────────────────────────────────────────────────
+async function saveField(type) {
+  const map = { email: 'notif-email', phone: 'notif-phone', webhook: 'webhook-url' };
+  const keyMap = { email: 'notification_email', phone: 'notification_phone', webhook: 'webhook_url' };
+  const val  = document.getElementById(map[type]).value.trim();
+  const icon = document.getElementById(`save-${type === 'webhook' ? 'webhook' : type}-icon`);
+  try {
+    const r = await fetch('/api/client/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: CLIENT_ID, [keyMap[type]]: val }),
+    });
+    const d = await r.json();
+    if (d.success) {
+      showToast('Saved', 'success');
+      renderDeliveryStatus();
+    } else {
+      showToast(d.error || 'Save failed', 'error');
+    }
+  } catch {
+    showToast('Network error', 'error');
+  }
+}
+
+// ── Load users ─────────────────────────────────────────────────────
+async function loadUsers() {
+  const r = await fetch(`/api/client-users?client_id=${CLIENT_ID}`);
+  const d = await r.json();
+  const tbody = document.getElementById('users-tbody');
+  if (!d.success || !d.users || !d.users.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No logins yet — create one to give your client access.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = d.users.map(u => `
+    <tr>
+      <td>
+        <div class="user-cell">
+          <div class="user-av">${esc(u.name||u.email)[0].toUpperCase()}</div>
+          <div>
+            <div class="user-name">${esc(u.name||'—')}</div>
+            <div class="user-email">${esc(u.email)}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="ts">${fmt(u.created_at)}</span></td>
+      <td><span class="ts">${u.last_login ? fmt(u.last_login) : 'Never'}</span></td>
+      <td><button class="btn-del" onclick="deleteUser(${u.id})">Remove</button></td>
+    </tr>
+  `).join('');
+}
+loadUsers();
+
+// ── Create login ───────────────────────────────────────────────────
+function openCreateModal() { document.getElementById('createModal').classList.add('show'); }
+function closeModal()       { document.getElementById('createModal').classList.remove('show'); }
+
+async function createLogin() {
+  const name     = document.getElementById('inv-name').value.trim();
+  const email    = document.getElementById('inv-email').value.trim();
+  const password = document.getElementById('inv-password').value;
+  if (!email)         { showToast('Email is required', 'error'); return; }
+  if (password.length < 8) { showToast('Password must be at least 8 characters', 'error'); return; }
+
+  const btn = document.getElementById('create-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div> Creating…';
+
+  try {
+    const r = await fetch('/api/client-users/invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: CLIENT_ID, name, email, password }),
+    });
+    const d = await r.json();
+    if (d.success) {
+      closeModal();
+      loadUsers();
+      showToast('Login created — invite sent', 'success');
+      ['inv-name','inv-email','inv-password'].forEach(id => document.getElementById(id).value = '');
+    } else {
+      showToast(d.error || 'Failed to create login', 'error');
+    }
+  } catch {
+    showToast('Network error', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Create &amp; send invite';
+  }
+}
+
+// ── Delete user ────────────────────────────────────────────────────
+async function deleteUser(userId) {
+  if (!confirm('Remove this login? They will lose access immediately.')) return;
+  const r = await fetch('/api/client-users/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ client_id: CLIENT_ID, user_id: userId }),
+  });
+  const d = await r.json();
+  if (d.success) { loadUsers(); showToast('Login removed', 'success'); }
+  else showToast(d.error || 'Failed', 'error');
+}
+
+// ── Password toggle ────────────────────────────────────────────────
+function togglePw() {
+  const inp = document.getElementById('inv-password');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+function fmt(s) {
+  if (!s) return '—';
+  const d = new Date(s);
+  return isNaN(d) ? s.substring(0,10) : d.toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+}
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Toast ──────────────────────────────────────────────────────────
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  const icon = type === 'success'
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  t.innerHTML = icon + msg;
+  t.className = `toast ${type} show`;
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.className = 'toast', type === 'success' ? 3000 : 5000);
+}
+
+// ── Close modal on backdrop ────────────────────────────────────────
+document.getElementById('createModal').addEventListener('click', e => {
+  if (e.target === document.getElementById('createModal')) closeModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+</script>
 </body>
 </html>

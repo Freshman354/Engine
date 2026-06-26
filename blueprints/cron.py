@@ -43,7 +43,7 @@ import json
 import os
 import time
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request, current_app
 from flask_login import current_user, login_required
@@ -415,11 +415,69 @@ def send_followup_reminders():
 
 # ── Agency overage billing ────────────────────────────────────────────────────
 
+def _generate_flw_payment_link(user_id: int, email: str, amount: float,
+                               tx_ref: str, base_url: str) -> str | None:
+    """
+    Call the Flutterwave /v3/payments endpoint to generate a hosted checkout
+    link for an overage invoice.  Returns the link string, or None on error.
+    """
+    import requests as _req
+    flw_secret = os.environ.get('FLW_SECRET_KEY', '')
+    if not flw_secret:
+        current_app.logger.error('[AgencyOverage] FLW_SECRET_KEY not set — cannot generate payment link')
+        return None
+    try:
+        resp = _req.post(
+            'https://api.flutterwave.com/v3/payments',
+            headers={'Authorization': f'Bearer {flw_secret}'},
+            json={
+                'tx_ref':       tx_ref,
+                'amount':       amount,
+                'currency':     'USD',
+                'redirect_url': f'{base_url}/payment/flutterwave/callback',
+                'customer':     {'email': email},
+                'meta': {
+                    'plan':    'agency',
+                    'type':    'overage',
+                    'user_id': user_id,
+                },
+                'customizations': {
+                    'title':       'Lumvi — Agency Seat Overage',
+                    'description': 'Extra chatbot seats beyond your plan limit',
+                },
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get('status') == 'success':
+            return data['data']['link']
+        current_app.logger.error(
+            f'[AgencyOverage] FLW payment link error: {data.get("message")}'
+        )
+        return None
+    except Exception as e:
+        current_app.logger.error(f'[AgencyOverage] FLW payment link exception: {e}')
+        return None
+
+
 def bill_agency_overages():
     """
     Called monthly by /cron/agency-overage.
-    For every agency user with more than AGENCY_INCLUDED_CLIENTS clients,
-    calculate the extra seats, record a pending payment, and email a receipt.
+
+    For every agency user with more clients than AGENCY_INCLUDED_CLIENTS:
+      1. Calculate the extra-seat charge.
+      2. Generate a real Flutterwave hosted-checkout payment link.
+      3. Mark the user's overage as 'pending' with a 14-day due date.
+      4. Email the invoice with a Pay Now button.
+
+    On payment, /payment/flutterwave/callback (or the webhook) receives
+    the tx_ref, recognises it as an overage ref, and calls
+    models.mark_overage_paid() to clear the hold.
+
+    Access enforcement: /cron/enforce-agency-overages (or enforce_subscriptions)
+    calls models.mark_overdue_overage_users() to flip status → 'overdue', after
+    which the client-creation route in agency.py blocks new clients.
     """
     t0 = time.time()
     if not hasattr(models, 'get_agency_users_with_overage'):
@@ -431,6 +489,8 @@ def bill_agency_overages():
     agency_users  = models.get_agency_users_with_overage(_agency_included_clients)
     billed = skipped = 0
     total_revenue   = 0.0
+    base_url        = os.environ.get('APP_BASE_URL', 'https://lumvi.net')
+    due_date        = datetime.utcnow() + timedelta(days=14)
 
     for u in agency_users:
         user_id      = u['id']
@@ -442,7 +502,23 @@ def bill_agency_overages():
             continue
 
         amount = round(extra_seats * _agency_seat_price, 2)
+        ts     = int(time.time())
+        tx_ref = f'lumvi_overage_{user_id}_{ts}'
 
+        # ── 1. Generate a real Flutterwave payment link ────────────────────
+        payment_link = _generate_flw_payment_link(
+            user_id=user_id, email=email,
+            amount=amount, tx_ref=tx_ref, base_url=base_url,
+        )
+        if not payment_link:
+            # Log failure but still email with a fallback upgrade URL so the
+            # user knows they owe money.
+            payment_link = f'{base_url}/upgrade'
+            current_app.logger.warning(
+                f'[AgencyOverage] no FLW link for user={user_id}; using upgrade URL'
+            )
+
+        # ── 2. Record the pending charge + store tracking on the user ──────
         try:
             models.record_payment(
                 user_id   = user_id,
@@ -451,6 +527,7 @@ def bill_agency_overages():
                 provider  = 'overage',
                 currency  = 'USD',
                 status    = 'pending',
+                reference = tx_ref,
                 notes     = (
                     f"Agency per-seat overage: {extra_seats} extra seat(s) "
                     f"× ${_agency_seat_price}/mo = ${amount:.2f}. "
@@ -458,69 +535,99 @@ def bill_agency_overages():
                     f"(included: {_agency_included_clients})"
                 ),
             )
-            total_revenue += amount
-            billed        += 1
-            current_app.logger.info(
-                f'[AgencyOverage] billed user={user_id} email={email} '
-                f'extra_seats={extra_seats} amount=${amount}'
-            )
-
-            try:
-                base_url = os.environ.get('APP_BASE_URL', 'https://lumvi.net')
-                html = f"""
-                <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#F7F4EF;">
-                  <div style="background:#fff;border:1px solid #E7E2DA;border-radius:16px;overflow:hidden;">
-                    <div style="background:#1C1917;padding:20px 24px;">
-                      <h2 style="color:#B8924A;font-size:18px;margin:0;">Agency Per-Seat Billing Notice</h2>
-                    </div>
-                    <div style="padding:24px;">
-                      <p style="color:#57534E;font-size:14px;line-height:1.6;margin-bottom:16px;">
-                        Hi {email},<br><br>
-                        Your Lumvi Agency plan currently has <strong>{client_count} chatbots</strong>.
-                        Your plan includes {_agency_included_clients} — the additional
-                        <strong>{extra_seats} seat(s)</strong> are billed at
-                        ${_agency_seat_price:.0f}/mo each.
-                      </p>
-                      <div style="background:#F7F4EF;border:1px solid #E7E2DA;border-radius:12px;padding:16px;margin-bottom:20px;">
-                        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                          <span style="color:#A8A29E;font-size:13px;">Included seats</span>
-                          <span style="font-weight:700;color:#1C1917;">{_agency_included_clients}</span>
-                        </div>
-                        <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                          <span style="color:#A8A29E;font-size:13px;">Extra seats</span>
-                          <span style="font-weight:700;color:#1C1917;">{extra_seats} × ${_agency_seat_price:.0f}</span>
-                        </div>
-                        <div style="display:flex;justify-content:space-between;border-top:1px solid #E7E2DA;padding-top:10px;margin-top:4px;">
-                          <span style="color:#A8A29E;font-size:13px;">Overage charge</span>
-                          <span style="font-weight:800;color:#B8924A;font-size:16px;">${amount:.2f}/mo</span>
-                        </div>
-                      </div>
-                      <p style="color:#A8A29E;font-size:12px;">
-                        This charge will be processed via your payment method on file.
-                        To reduce your bill, archive unused chatbots from your
-                        <a href="{base_url}/agency/clients" style="color:#B8924A;">Agency dashboard</a>.
-                      </p>
-                    </div>
-                  </div>
-                </div>"""
-                msg = MailMessage(
-                    subject    = f'Lumvi Agency billing: {extra_seats} extra seat(s) — ${amount:.2f}/mo',
-                    recipients = [email],
-                    html       = html,
-                    sender     = os.environ.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
-                )
-                if _mail:
-                    _mail.send(msg)
-            except Exception as mail_err:
-                current_app.logger.error(
-                    f'[AgencyOverage] email failed for {email}: {mail_err}'
-                )
-
-        except Exception as e:
+        except Exception as db_err:
             current_app.logger.error(
-                f'[AgencyOverage] billing failed for user={user_id}: {e}'
+                f'[AgencyOverage] record_payment failed for user={user_id}: {db_err}'
             )
             skipped += 1
+            continue
+
+        # Store overage tracking fields on the user row so enforcement cron
+        # and the agency client-creation route can read them quickly.
+        if hasattr(models, 'set_overage_pending'):
+            try:
+                models.set_overage_pending(
+                    user_id=user_id,
+                    amount=amount,
+                    due_date=due_date,
+                    tx_ref=tx_ref,
+                    payment_link=payment_link,
+                )
+            except Exception as track_err:
+                current_app.logger.error(
+                    f'[AgencyOverage] set_overage_pending failed user={user_id}: {track_err}'
+                )
+
+        total_revenue += amount
+        billed        += 1
+        current_app.logger.info(
+            f'[AgencyOverage] invoiced user={user_id} email={email} '
+            f'extra_seats={extra_seats} amount=${amount} tx_ref={tx_ref}'
+        )
+
+        # ── 3. Send invoice email with a real Pay Now button ───────────────
+        try:
+            html = f"""
+            <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;background:#F7F4EF;">
+              <div style="background:#fff;border:1px solid #E7E2DA;border-radius:16px;overflow:hidden;">
+                <div style="background:#1C1917;padding:20px 24px;">
+                  <h2 style="color:#B8924A;font-size:18px;margin:0;">Agency Seat Invoice</h2>
+                </div>
+                <div style="padding:24px;">
+                  <p style="color:#57534E;font-size:14px;line-height:1.6;margin-bottom:16px;">
+                    Hi {email},<br><br>
+                    Your Lumvi Agency plan currently has <strong>{client_count} chatbots</strong>.
+                    Your plan includes {_agency_included_clients} — the additional
+                    <strong>{extra_seats} seat(s)</strong> are billed at
+                    ${_agency_seat_price:.0f}/mo each.
+                  </p>
+                  <div style="background:#F7F4EF;border:1px solid #E7E2DA;border-radius:12px;padding:16px;margin-bottom:20px;">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                      <span style="color:#A8A29E;font-size:13px;">Included seats</span>
+                      <span style="font-weight:700;color:#1C1917;">{_agency_included_clients}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+                      <span style="color:#A8A29E;font-size:13px;">Extra seats</span>
+                      <span style="font-weight:700;color:#1C1917;">{extra_seats} × ${_agency_seat_price:.0f}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;border-top:1px solid #E7E2DA;padding-top:10px;margin-top:4px;">
+                      <span style="color:#A8A29E;font-size:13px;">Amount due</span>
+                      <span style="font-weight:800;color:#B8924A;font-size:16px;">${amount:.2f}/mo</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding-top:8px;">
+                      <span style="color:#A8A29E;font-size:13px;">Due by</span>
+                      <span style="font-weight:600;color:#1C1917;font-size:13px;">{due_date.strftime('%B %d, %Y')}</span>
+                    </div>
+                  </div>
+                  <div style="text-align:center;margin-bottom:16px;">
+                    <a href="{payment_link}"
+                       style="display:inline-block;padding:14px 32px;background:#B8924A;
+                              color:#fff;border-radius:10px;font-weight:700;font-size:15px;
+                              text-decoration:none;">
+                      Pay ${amount:.2f} Now →
+                    </a>
+                  </div>
+                  <p style="color:#A8A29E;font-size:12px;text-align:center;">
+                    Payment is due within 14 days. After that, adding new chatbots will be
+                    paused until the invoice is cleared.<br><br>
+                    To reduce your bill, archive unused chatbots from your
+                    <a href="{base_url}/agency/clients" style="color:#B8924A;">Agency dashboard</a>.
+                  </p>
+                </div>
+              </div>
+            </div>"""
+            msg = MailMessage(
+                subject    = f'Lumvi invoice: {extra_seats} extra seat(s) — ${amount:.2f} due {due_date.strftime("%b %d")}',
+                recipients = [email],
+                html       = html,
+                sender     = os.environ.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
+            )
+            if _mail:
+                _mail.send(msg)
+        except Exception as mail_err:
+            current_app.logger.error(
+                f'[AgencyOverage] email failed for {email}: {mail_err}'
+            )
 
     duration_ms = int((time.time() - t0) * 1000)
     result = {
@@ -537,6 +644,40 @@ def bill_agency_overages():
         duration_ms=duration_ms, triggered_by='http',
     )
     return result
+
+
+def enforce_agency_overages():
+    """
+    Run daily (tie into /cron/enforce-subscriptions or its own cron endpoint).
+
+    Flips overage_payment_status → 'overdue' for any user whose overage
+    invoice has passed its due_date without payment.  The client-creation
+    route in agency.py checks this flag and blocks new clients.
+    """
+    t0 = time.time()
+    if not hasattr(models, 'mark_overdue_overage_users'):
+        current_app.logger.warning(
+            '[EnforceOverage] models.mark_overdue_overage_users not found — skipping'
+        )
+        return {'marked_overdue': 0}
+
+    try:
+        overdue = models.mark_overdue_overage_users()
+        for u in overdue:
+            current_app.logger.info(
+                f"[EnforceOverage] user={u['id']} ({u.get('email')}) marked overdue"
+            )
+        current_app.logger.info(f'[EnforceOverage] {len(overdue)} users marked overdue')
+        duration_ms = int((time.time() - t0) * 1000)
+        models.log_cron_run(
+            'enforce_agency_overage', success=True,
+            result={'marked_overdue': len(overdue)},
+            duration_ms=duration_ms,
+        )
+        return {'marked_overdue': len(overdue)}
+    except Exception as e:
+        current_app.logger.error(f'[EnforceOverage] error: {e}')
+        return {'marked_overdue': 0}
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -720,7 +861,7 @@ def cron_status():
 @cron_bp.route('/cron/agency-overage', methods=['GET', 'POST'])
 def cron_agency_overage():
     """
-    Monthly cron — calculates and records per-seat overage charges.
+    Monthly cron — calculates overage charges and emails real payment links.
     Recommended schedule: 1st of every month at 00:05 UTC.
     """
     _, err = _check_cron_secret()
@@ -734,6 +875,26 @@ def cron_agency_overage():
         'billed':        result['billed'],
         'skipped':       result['skipped'],
         'total_revenue': result['total_revenue'],
+    })
+
+
+@cron_bp.route('/cron/enforce-agency-overages', methods=['GET', 'POST'])
+def cron_enforce_agency_overages():
+    """
+    Daily cron — marks unpaid overage invoices as 'overdue' after 14 days.
+    Run this after /cron/enforce-subscriptions (or fold into the same schedule).
+
+    Once overdue, agency.py's client-creation route returns 402 until paid.
+    """
+    _, err = _check_cron_secret()
+    if err:
+        return err
+
+    result = enforce_agency_overages()
+    return jsonify({
+        'success':       True,
+        'ran_at':        datetime.utcnow().isoformat(),
+        'marked_overdue': result['marked_overdue'],
     })
 
 
