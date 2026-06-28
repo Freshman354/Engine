@@ -76,10 +76,49 @@ PLAN_PRICES_FLW = {
 @billing_bp.route('/upgrade')
 @login_required
 def upgrade_page():
+    def _parse_plan_ids(env_var_name):
+        """Parse 'solo:<id>,starter:<id>,...' into {'solo': '<id>', ...} with env validation logging."""
+        raw = os.environ.get(env_var_name, '')
+        if not raw:
+            current_app.logger.error(
+                f"[Billing] ENV VAR MISSING: {env_var_name} is not set — "
+                f"/upgrade will fail to render"
+            )
+            return {}
+        result = {}
+        plans = ['solo', 'starter', 'pro', 'growth', 'agency']
+        for pair in raw.split(','):
+            pair = pair.strip()
+            if ':' not in pair:
+                current_app.logger.warning(
+                    f"[Billing] {env_var_name}: malformed entry '{pair}' (expected plan:id)"
+                )
+                continue
+            plan, plan_id = pair.split(':', 1)
+            plan = plan.strip().lower()
+            if plan not in plans:
+                current_app.logger.warning(
+                    f"[Billing] {env_var_name}: unknown plan '{plan}' in entry '{pair}'"
+                )
+            else:
+                result[plan] = plan_id.strip()
+        missing = [p for p in plans if p not in result]
+        if missing:
+            current_app.logger.error(
+                f"[Billing] {env_var_name}: missing plan IDs for: {missing}"
+            )
+        else:
+            current_app.logger.info(
+                f"[Billing] {env_var_name}: all 5 plan IDs present — {list(result.keys())}"
+            )
+        return result
+
     return render_template(
         'upgrade.html',
         user=current_user,
-        flw_public_key=os.environ.get('FLW_PUBLIC_KEY', '')
+        flw_public_key=os.environ.get('FLW_PUBLIC_KEY', ''),
+        FLW_PLAN_IDS_MONTHLY=_parse_plan_ids('FLW_PLAN_IDS_MONTHLY'),
+        FLW_PLAN_IDS_ANNUAL=_parse_plan_ids('FLW_PLAN_IDS_ANNUAL'),
     )
 
 
