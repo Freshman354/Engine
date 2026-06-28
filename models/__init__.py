@@ -198,6 +198,15 @@ from .webhooks import (
     get_webhook_logs,
 )
 
+from .agency_domains import (
+    upsert_agency_domain,
+    set_domain_status,
+    delete_agency_domain,
+    get_agency_domain,
+    get_verified_domain_for_client,
+    get_all_pending_domains,
+)
+
 # ── Articles ──────────────────────────────────────────────────────────────────
 from .articles import (
     get_articles,
@@ -295,4 +304,6 @@ from .migrations import (
     migrate_lead_nudge_tracking,
     migrate_lead_intent_summary,
     migrate_overage_tracking,
+    migrate_lead_delivery,          # Gap 3 — notification_email/phone/name on clients
+    migrate_agency_email_domains,   # white-label custom email domain per agency
 )

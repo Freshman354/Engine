@@ -807,6 +807,8 @@ try:
         'migrate_lead_nudge_tracking',
         'migrate_lead_intent_summary',
         'migrate_overage_tracking',   # agency $15/seat recurring billing columns
+        'migrate_lead_delivery',      # Gap 3 — notification_email/phone/name on clients
+        'migrate_agency_email_domains', # white-label custom email domain
     ]
     for _fn in _optional_migrations:
         if hasattr(models, _fn):
@@ -1003,6 +1005,12 @@ limiter.limit('20 per minute')(_chat_rate_view)
 # ── Tier 1 feature routes (CSAT, status, typing, tags, triggers) ──────────────
 from blueprints.inbox_additions import inbox_additions_bp
 app.register_blueprint(inbox_additions_bp)
+
+from blueprints.email_domains   import email_domains_bp
+app.register_blueprint(email_domains_bp)
+
+from blueprints.client_settings import client_settings_bp
+app.register_blueprint(client_settings_bp)
 
 # Platform webhook routes (Shopify, Acuity)
 _webhooks.register_webhook_routes(app)

@@ -217,10 +217,31 @@ def init_db():
     # without needing a separate startup call.
     migrate_faqs_table()
     migrate_faq_to_knowledge_base()
-    migrate_kb_gaps()       # adds UNIQUE(client_id, question) for upsert counting
-    migrate_chat_sessions() # Phase 3 — persistent session memory
-    migrate_poor_answers()  # Phase 6 — poor answer feedback loop
-    migrate_clients_active() # BUG-02 fix — adds is_active, business_name, contact_email
+    migrate_kb_gaps()           # adds UNIQUE(client_id, question) for upsert counting
+    migrate_chat_sessions()     # Phase 3 — persistent session memory
+    migrate_poor_answers()      # Phase 6 — poor answer feedback loop
+    migrate_clients_active()    # BUG-02 fix — adds is_active, business_name, contact_email
+
+    # ── Lead table columns ──────────────────────────────────────────────────
+    # These were previously defined but never called from init_db(), causing
+    # fresh-deploy crashes: save_lead() inserts `priority` and `intent_summary`
+    # which migrate_lead_pipeline() and migrate_lead_intent_summary() create.
+    migrate_lead_pipeline()             # stage, priority, notes, assigned_to, activity_log
+    migrate_lead_intent_summary()       # intent_summary — set at capture by extract_lead_intent()
+    migrate_lead_extra_fields()         # lost_reason, follow_up_at
+    migrate_lead_duplicate_tracking()   # submission_count
+    migrate_lead_outcome_tracking()     # closed_value, outcome_notes
+    migrate_lead_nudge_tracking()       # stale_nudge_sent_at, followup_reminder_sent_at
+
+    # ── Delivery infrastructure ─────────────────────────────────────────────
+    # migrate_webhooks() was never called — _fire_lead_webhook() needs webhook_configs.
+    # migrate_white_label() was never called — _send_lead_email() needs branded_email_from.
+    migrate_webhooks()                  # webhook_configs + webhook_logs tables
+    migrate_white_label()               # branded_email_from on clients, agency_branding_settings on users
+
+    # ── Gap 3: lead delivery columns (new) ──────────────────────────────────
+    migrate_lead_delivery()             # notification_email, notification_phone, notification_name
+    migrate_agency_email_domains()      # white-label custom email domain per agency
 
 
 def migrate_clients_table():
@@ -1395,6 +1416,112 @@ def migrate_to_recurring_subscriptions():
 
 
 
+
+
+def migrate_agency_email_domains():
+    """
+    Custom email domain table for agency white-label email.
+    One row per agency (user_id UNIQUE). Stores the domain, desired
+    from-email, Brevo-generated DNS records, and verification status.
+
+    Status values:
+      pending  — domain registered with Brevo, DNS records not yet confirmed
+      verified — DNS check + Brevo authentication passed
+      failed   — last DNS check failed (records not found / wrong values)
+
+    Idempotent — CREATE TABLE IF NOT EXISTS + ADD COLUMN IF NOT EXISTS.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS agency_email_domains (
+                id          SERIAL PRIMARY KEY,
+                user_id     INTEGER NOT NULL UNIQUE
+                            REFERENCES users(id) ON DELETE CASCADE,
+                domain      VARCHAR(255) NOT NULL,
+                from_name   VARCHAR(255),
+                from_email  VARCHAR(255),
+                status      VARCHAR(50)  NOT NULL DEFAULT 'pending',
+                spf_host    VARCHAR(255),
+                spf_value   TEXT,
+                dkim_host   VARCHAR(255),
+                dkim_value  TEXT,
+                last_check_at  TIMESTAMP,
+                verified_at    TIMESTAMP,
+                created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_agency_email_domains_status
+            ON agency_email_domains(status)
+        ''')
+
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_agency_email_domains_domain
+            ON agency_email_domains(domain)
+        ''')
+
+        conn.commit()
+        print("✅ migrate_agency_email_domains complete")
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        print(f"⚠️  migrate_agency_email_domains: {e}")
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+
+def migrate_lead_delivery():
+    """
+    Add lead delivery columns to the clients table.
+    These are configured by the agency (via manage_client_users.html) and
+    control where new leads are sent the moment they are captured.
+
+      notification_email : end client's email address for lead alert emails
+      notification_phone : end client's mobile number for SMS alerts (Twilio)
+      notification_name  : display name used as the email From: header
+                           (white-label — the end client sees the agency's
+                           name, never 'Lumvi')
+
+    webhook_url is intentionally NOT added here — webhook delivery is handled
+    by the existing webhook_configs / webhook_logs tables created by
+    migrate_webhooks(), which supports per-event filtering, signing secrets,
+    and delivery logs. The manage_client_users UI writes to webhook_configs.
+
+    Idempotent — ADD COLUMN IF NOT EXISTS is safe on every startup.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        for sql in [
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS notification_email TEXT",
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS notification_phone TEXT",
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS notification_name  TEXT",
+        ]:
+            cursor.execute(sql)
+        conn.commit()
+        print("✅ migrate_lead_delivery complete")
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        print(f"⚠️  migrate_lead_delivery: {e}")
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TIER 1 FEATURE MIGRATIONS

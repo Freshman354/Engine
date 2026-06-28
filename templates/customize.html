@@ -282,6 +282,43 @@ input[type=color]::-webkit-color-swatch{border-radius:6px;border:none;}
 .log-dur{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;white-space:nowrap;}
 .log-time{font-size:11px;color:var(--sub);white-space:nowrap;}
 hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
+/* ── CUSTOM EMAIL DOMAIN COMPONENT (.ced-*) ─────────────────────────────── */
+.ced-section{margin-bottom:0;}
+.ced-status-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.ced-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:20px;font-size:11.5px;font-weight:700;}
+.ced-badge-dot{width:5px;height:5px;border-radius:50%;background:currentColor;}
+.ced-badge.verified{background:var(--success-lt);color:var(--success);border:1px solid rgba(22,163,74,0.2);}
+.ced-badge.pending{background:var(--warning-lt);color:var(--warning);border:1px solid rgba(217,119,6,0.2);}
+.ced-badge.failed{background:var(--danger-lt);color:var(--danger);border:1px solid rgba(239,68,68,0.2);}
+.ced-badge.none{background:var(--panel);color:var(--sub);border:1px solid var(--border);}
+.ced-dns-wrap{margin-top:16px;}
+.ced-dns-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--mid);margin-bottom:10px;}
+.ced-dns-table{width:100%;border-collapse:collapse;font-size:12px;}
+.ced-dns-table th{padding:7px 10px;text-align:left;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--sub);background:var(--cream);border-bottom:1px solid var(--border);}
+.ced-dns-table td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top;}
+.ced-dns-table tbody tr:last-child td{border-bottom:none;}
+.ced-type{display:inline-block;padding:1px 7px;border-radius:4px;font-size:10.5px;font-weight:700;font-family:'DM Mono',monospace;background:var(--gold-lt);color:var(--gold-dk);}
+.ced-val{font-family:'DM Mono',monospace;font-size:11px;word-break:break-all;color:var(--dark);line-height:1.5;}
+.ced-copy{padding:3px 8px;border-radius:5px;border:none;background:var(--cream);color:var(--mid);font-size:10.5px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;white-space:nowrap;}
+.ced-copy:hover{background:var(--gold-lt);color:var(--gold-dk);}
+.ced-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+.ced-btn{padding:8px 15px;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:12.5px;font-weight:700;cursor:pointer;border:none;transition:all 0.15s;display:inline-flex;align-items:center;gap:5px;}
+.ced-btn svg{width:12px;height:12px;}
+.ced-btn-primary{background:var(--gold);color:#fff;box-shadow:0 1px 4px rgba(184,146,74,0.3);}
+.ced-btn-primary:hover{background:var(--gold-dk);}
+.ced-btn-ghost{background:transparent;color:var(--mid);border:1.5px solid var(--border);}
+.ced-btn-ghost:hover{border-color:var(--gold);color:var(--gold-dk);}
+.ced-btn-danger{background:var(--danger-lt);color:var(--danger);border:1px solid rgba(239,68,68,0.15);}
+.ced-btn-danger:hover{background:#fecaca;}
+.ced-btn:disabled{opacity:0.55;cursor:not-allowed;}
+.ced-alert{padding:10px 13px;border-radius:9px;font-size:12.5px;line-height:1.5;margin-top:12px;display:none;align-items:flex-start;gap:7px;}
+.ced-alert.show{display:flex;}
+.ced-alert.success{background:var(--success-lt);color:var(--success);border:1px solid rgba(22,163,74,0.2);}
+.ced-alert.error{background:var(--danger-lt);color:var(--danger);border:1px solid rgba(239,68,68,0.2);}
+.ced-alert.info{background:var(--warning-lt);color:var(--warning);border:1px solid rgba(217,119,6,0.2);}
+.ced-alert svg{width:13px;height:13px;flex-shrink:0;margin-top:1px;}
+.ced-spinner{width:12px;height:12px;border:2px solid rgba(255,255,255,0.35);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;}
+
 /* ── AVAILABILITY / BUSINESS HOURS ───────────────────── */
 .bh-day-grid { display:flex; flex-direction:column; gap:6px; }
 .bh-day-row {
@@ -607,11 +644,83 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
       <!-- ── BRANDED EMAIL FROM ── -->
       <div class="field">
         <label>Branded "From" Name
-          <span style="font-weight:400;color:var(--sub);text-transform:none;margin-left:4px;">— lead notification emails</span>
+          <span style="font-weight:400;color:var(--sub);text-transform:none;margin-left:4px;">— display name on lead emails</span>
         </label>
-        <input type="text" id="wl_email_from" placeholder="Acme Support"
+        <input type="text" id="wl_email_from" placeholder="Acme Digital Agency"
           value="{{ client.get('branded_email_from', '') if client else '' }}">
-        <p class="hint">Lead emails arrive as <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 5px;border-radius:3px;">Acme Support &lt;<a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="b2c1c7c2c2ddc0c6f2dec7dfc4db9cdcd7c6">[email&#160;protected]</a>&gt;</code> — your name, our infrastructure.</p>
+        <p class="hint">How your name appears in the lead email — e.g. <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 5px;border-radius:3px;">Acme Digital Agency &lt;leads@lumvi.net&gt;</code>. Configure a custom domain below to replace the sending address too.</p>
+      </div>
+
+      <hr class="div">
+
+      <!-- ── CUSTOM EMAIL DOMAIN ── -->
+      <div class="ced-section">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;">
+          <div>
+            <label style="display:block;font-size:11px;font-weight:700;color:var(--mid);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:3px;">Custom Sending Domain</label>
+            <p style="font-size:12px;color:var(--sub);line-height:1.5;">Send lead emails from your own domain — <code style="font-family:'DM Mono',monospace;background:var(--panel);padding:1px 5px;border-radius:3px;">leads@acmeagency.com</code> — not Lumvi infrastructure.</p>
+          </div>
+          <div id="ced-badge" class="ced-badge none" style="flex-shrink:0;margin-top:2px;">
+            <span class="ced-badge-dot"></span>
+            <span id="ced-badge-text">Not configured</span>
+          </div>
+        </div>
+
+        <!-- Form — shown when not verified -->
+        <div id="ced-form">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+            <div class="field" style="margin:0;">
+              <label>Your Domain</label>
+              <input type="text" id="ced-domain" placeholder="acmeagency.com" autocomplete="off"
+                style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;font-family:'DM Sans',sans-serif;color:var(--dark);background:var(--cream);outline:none;transition:all 0.2s;">
+              <p class="hint">Root domain only — no https:// or www</p>
+            </div>
+            <div class="field" style="margin:0;">
+              <label>From Email</label>
+              <input type="email" id="ced-from-email" placeholder="leads@acmeagency.com" autocomplete="off"
+                style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;font-family:'DM Sans',sans-serif;color:var(--dark);background:var(--cream);outline:none;transition:all 0.2s;">
+              <p class="hint">Must be an address on the domain above</p>
+            </div>
+          </div>
+          <div class="ced-actions">
+            <button class="ced-btn ced-btn-primary" id="ced-save-btn" onclick="cedSave()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Get DNS records
+            </button>
+            <button class="ced-btn ced-btn-danger" id="ced-remove-btn" onclick="cedRemove()" style="display:none;">Remove</button>
+          </div>
+        </div>
+
+        <!-- DNS records — shown after save -->
+        <div id="ced-dns-section" style="display:none;">
+          <div class="ced-dns-wrap">
+            <div class="ced-dns-title">Add these two records to your DNS provider</div>
+            <p style="font-size:12px;color:var(--sub);margin-bottom:10px;line-height:1.55;">
+              Log in to your registrar (Namecheap, GoDaddy, Cloudflare…) and add both records. DNS changes can take up to 48 hours — usually much faster.
+            </p>
+            <div style="overflow-x:auto;">
+              <table class="ced-dns-table">
+                <thead><tr><th>Type</th><th>Host / Name</th><th>Value</th><th></th></tr></thead>
+                <tbody id="ced-dns-tbody"><tr><td colspan="4" style="text-align:center;color:var(--sub);padding:16px;">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="ced-actions">
+            <button class="ced-btn ced-btn-primary" id="ced-verify-btn" onclick="cedVerify()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              I've added the records — verify now
+            </button>
+            <button class="ced-btn ced-btn-ghost" onclick="cedEditForm()">Change domain</button>
+            <button class="ced-btn ced-btn-danger" id="ced-remove-btn-2" onclick="cedRemove()">Remove</button>
+          </div>
+        </div>
+
+        <div class="ced-alert" id="ced-alert">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="ced-alert-icon">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <span id="ced-alert-text"></span>
+        </div>
       </div>
 
       <hr class="div">
@@ -2009,6 +2118,7 @@ initWebhooks();
 initWhiteLabel();
 initAgencyDefaults();
 initBusinessHours();
+if (HWL) cedInit();   // custom email domain — agency plan only
 console.log('[Customize] boot complete');
 
 // ── AVAILABILITY / BUSINESS HOURS ─────────────────────────────────────────────
@@ -2122,6 +2232,192 @@ function bhGetPayload() {
 
   return { timezone: tz, offline_message: msg, schedule };
 }
+
+// ═══════════════════════════════════════════════════════════
+// CUSTOM EMAIL DOMAIN (CED)
+// Reads from_name from wl_email_from (already saved by saveWhiteLabel).
+// Has its own fetch calls to /api/agency/email-domain — independent
+// of the main save() flow.
+// ═══════════════════════════════════════════════════════════
+(function () {
+
+let _cedState = { status: 'none', domain: null, dns: [] };
+
+async function cedInit() {
+  try {
+    const r = await fetch('/api/agency/email-domain');
+    const d = await r.json();
+    if (d.domain) {
+      _cedState = { status: d.status, domain: d.domain, dns: d.dns_records || [] };
+      document.getElementById('ced-domain').value     = d.domain     || '';
+      document.getElementById('ced-from-email').value = d.from_email || '';
+      cedRender();
+    }
+  } catch(e) { console.error('[CED] init error', e); }
+}
+window.cedInit = cedInit;
+
+window.cedSave = async function() {
+  const domain    = (document.getElementById('ced-domain')?.value || '').trim();
+  const fromEmail = (document.getElementById('ced-from-email')?.value || '').trim();
+  // from_name is read from the wl_email_from field (shared)
+  const fromName  = (document.getElementById('wl_email_from')?.value || '').trim();
+
+  if (!domain)    { cedAlert('Domain is required', 'error');     return; }
+  if (!fromEmail) { cedAlert('From email is required', 'error'); return; }
+
+  cedSetLoading('ced-save-btn', true, 'Registering…');
+  cedHideAlert();
+
+  try {
+    const r = await fetch('/api/agency/email-domain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ domain, from_email: fromEmail, from_name: fromName || domain }),
+    });
+    const d = await r.json();
+    if (d.success) {
+      _cedState = { status: 'pending', domain: d.domain, dns: d.dns_records || [] };
+      cedRender();
+      cedAlert('DNS records ready. Add them to your registrar, then click Verify.', 'info');
+    } else {
+      cedAlert(d.error || 'Something went wrong', 'error');
+    }
+  } catch { cedAlert('Network error — try again', 'error'); }
+  finally   { cedSetLoading('ced-save-btn', false, 'Get DNS records'); }
+};
+
+window.cedVerify = async function() {
+  cedSetLoading('ced-verify-btn', true, 'Checking DNS…');
+  cedHideAlert();
+  try {
+    const r = await fetch('/api/agency/email-domain/verify', { method: 'POST' });
+    const d = await r.json();
+    if (d.success) {
+      _cedState.status = 'verified';
+      cedRender();
+      cedAlert('Domain verified — lead emails will now come from your domain.', 'success');
+    } else {
+      _cedState.status = d.status || 'failed';
+      cedRender();
+      cedAlert(d.detail || 'Verification failed', d.status === 'pending' ? 'info' : 'error');
+    }
+  } catch { cedAlert('Network error — try again', 'error'); }
+  finally   { cedSetLoading('ced-verify-btn', false, "I've added the records — verify now"); }
+};
+
+window.cedRemove = async function() {
+  if (!confirm(`Remove ${_cedState.domain}? Lead emails will revert to the default sender.`)) return;
+  try {
+    await fetch('/api/agency/email-domain', { method: 'DELETE' });
+    _cedState = { status: 'none', domain: null, dns: [] };
+    const domEl   = document.getElementById('ced-domain');
+    const emailEl = document.getElementById('ced-from-email');
+    if (domEl)   domEl.value   = '';
+    if (emailEl) emailEl.value = '';
+    cedRender();
+    cedAlert('Custom domain removed', 'info');
+  } catch { cedAlert('Network error — try again', 'error'); }
+};
+
+window.cedEditForm = function() {
+  document.getElementById('ced-dns-section').style.display = 'none';
+  document.getElementById('ced-form').style.display = 'block';
+};
+
+function cedRender() {
+  const { status, dns } = _cedState;
+  const badge      = document.getElementById('ced-badge');
+  const badgeTxt   = document.getElementById('ced-badge-text');
+  const dnsSection = document.getElementById('ced-dns-section');
+  const form       = document.getElementById('ced-form');
+  const removeBtn  = document.getElementById('ced-remove-btn');
+  const removeBtn2 = document.getElementById('ced-remove-btn-2');
+
+  badge.className = 'ced-badge ' + (status || 'none');
+  const labels = {
+    verified: '✓ Verified',
+    pending:  'Pending DNS',
+    failed:   'DNS failed',
+    none:     'Not configured',
+  };
+  if (badgeTxt) badgeTxt.textContent = labels[status] || 'Not configured';
+
+  if (status === 'pending' || status === 'failed' || status === 'verified') {
+    if (dnsSection) dnsSection.style.display = 'block';
+    if (form)       form.style.display       = 'none';
+    cedRenderDns(dns);
+  } else {
+    if (dnsSection) dnsSection.style.display = 'none';
+    if (form)       form.style.display       = 'block';
+  }
+
+  const showRemove = _cedState.domain && status !== 'none';
+  if (removeBtn)  removeBtn.style.display  = showRemove ? 'inline-flex' : 'none';
+  if (removeBtn2) removeBtn2.style.display = showRemove ? 'inline-flex' : 'none';
+}
+
+function cedRenderDns(records) {
+  const tbody = document.getElementById('ced-dns-tbody');
+  if (!tbody) return;
+  if (!records || !records.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--sub);padding:16px;">No records available</td></tr>';
+    return;
+  }
+  tbody.innerHTML = records.map(rec => `
+    <tr>
+      <td><span class="ced-type">${esc(rec.type)}</span></td>
+      <td>
+        <div class="ced-val">${esc(rec.host)}</div>
+        <div style="font-size:10.5px;color:var(--sub);margin-top:2px;">${esc(rec.label)} — ${esc(rec.help)}</div>
+      </td>
+      <td><div class="ced-val">${esc(rec.value)}</div></td>
+      <td><button class="ced-copy" onclick="cedCopy(this,'${esc(rec.value)}')">Copy</button></td>
+    </tr>
+  `).join('');
+}
+
+window.cedCopy = function(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = orig; }, 2000);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  });
+};
+
+function cedAlert(msg, type) {
+  const el   = document.getElementById('ced-alert');
+  const txt  = document.getElementById('ced-alert-text');
+  const iconMap = {
+    success: '<polyline points="20 6 9 17 4 12"/>',
+    error:   '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+    info:    '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+  };
+  const icon = document.getElementById('ced-alert-icon');
+  if (icon) icon.innerHTML = iconMap[type] || iconMap.info;
+  if (el)   el.className  = `ced-alert show ${type}`;
+  if (txt)  txt.textContent = msg;
+}
+function cedHideAlert() {
+  const el = document.getElementById('ced-alert');
+  if (el) el.className = 'ced-alert';
+}
+function cedSetLoading(btnId, loading, label) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.innerHTML = loading
+    ? `<div class="ced-spinner"></div> ${label}`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12"><polyline points="20 6 9 17 4 12"/></svg> ${label}`;
+}
+
+})();
+
 </script>
 </body>
 </html>

@@ -92,8 +92,6 @@ from utils import get_logger, log_crash, generate as _gemini_call
 logger = get_logger('lumvi.ai_helper')
 
 # ── Background task executor ──────────────────────────────────────────────────
-# Single process-level executor. Under Railway --workers 1 --threads N this
-# is shared across all request threads safely.
 _BG_EXECUTOR: concurrent.futures.ThreadPoolExecutor = (
     concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix='lumvi_bg')
 )
@@ -130,7 +128,7 @@ _NAME_RE    = re.compile(
 )
 _URGENT_KW  = frozenset({'urgent', 'asap', 'immediately', 'today', 'right now', 'right away'})
 
-# ── IDK response cache TTL (shorter than normal — refresh as KB grows) ────────
+# ── IDK response cache TTL ────────────────────────────────────────────────────
 _REDIS_IDK_TTL_SEC = 900   # 15 minutes
 
 # ── Lead nudge — vertical-specific capture prompts ────────────────────────────
@@ -159,14 +157,14 @@ _VERTICAL_NUDGES: Dict[str, str] = {
         "Want us to reach out about membership options? "
         "Drop your email and we'll be in touch."
     ),
+    'fitness': (
+        "Want us to reach out about membership options? "
+        "Drop your email and we'll be in touch."
+    ),
 }
 
-# ── Purchase stage detection (module-level — called per turn in pipeline) ────
+# ── Purchase stage detection ──────────────────────────────────────────────────
 def _detect_purchase_stage(msg: str) -> Optional[str]:
-    """
-    Scan a single message for purchase stage signals.
-    Returns the detected stage name or None.
-    """
     msg_l = msg.lower()
     for stage, signals in STAGE_SIGNALS.items():
         if any(s in msg_l for s in signals):
@@ -175,10 +173,6 @@ def _detect_purchase_stage(msg: str) -> Optional[str]:
 
 
 def _advance_stage(current: Optional[str], detected: Optional[str]) -> Optional[str]:
-    """
-    One-way ratchet: only advance purchase_stage, never regress.
-    Returns the winning stage, or the existing one if detected is lower/None.
-    """
     if not detected:
         return current
     if not current:
@@ -195,10 +189,6 @@ def get_ai_helper(
     api_key:    Optional[str] = None,
     model_name: Optional[str] = None,
 ) -> 'AIHelper':
-    """
-    Return the process-level AIHelper singleton.
-    Thread-safe. Safe to call on every request.
-    """
     global _ai_helper_instance
     if _ai_helper_instance is None:
         with _ai_helper_lock:
@@ -279,7 +269,6 @@ class AIHelper:
             pass
 
     def _write_resp_cache_ttl(self, cache_key: str, result: Dict, ttl: int) -> None:
-        """Write to response cache with a custom TTL (e.g. shorter for IDK responses)."""
         if not _redis_resp_client:
             return
         try:
@@ -318,34 +307,16 @@ class AIHelper:
         vertical: str,
         lead_triggers: List[str],
     ) -> Dict:
-        """
-        Extract structured lead info using regex — no Gemini call.
-
-        Handles email, phone, name, urgency, and purchase_stage.
-        Falls back to session_mem for fields already captured in earlier turns.
-        """
         result: Dict = {}
-
-        # Email — structured pattern, regex is exact
         m = _EMAIL_RE.search(message)
         result['email'] = m.group(0) if m else session_mem.get('email')
-
-        # Phone — liberal pattern covers international formats
         m = _PHONE_RE.search(message)
         result['phone'] = m.group(0).strip() if m else session_mem.get('phone')
-
-        # Name — common self-introduction patterns
         m = _NAME_RE.search(message)
         result['name'] = m.group(1).strip() if m else session_mem.get('name')
-
-        # Urgency — keyword heuristic
         msg_lower = message.lower()
         result['urgency'] = 'high' if any(kw in msg_lower for kw in _URGENT_KW) else 'medium'
-
-        # Purchase stage — carry through to CRM/webhook record
         result['purchase_stage'] = session_mem.get('purchase_stage')
-
-        # Strip None values so callers get a clean dict
         return {k: v for k, v in result.items() if v}
 
     def _build_lead_nudge(
@@ -356,16 +327,6 @@ class AIHelper:
         is_sales: bool = False,
         lead_q3: str = '',
     ) -> str:
-        """
-        Build a contextual lead capture prompt.
-
-        Priority:
-          1. Already have email — soft confirmation + optional lead_q3 follow-up
-          2. Buying/evaluating stage or sales query — direct ask
-          3. Vertical-specific soft ask
-          4. Generic fallback
-        """
-        # Already have email
         if lead_info.get('email'):
             if lead_q3:
                 return lead_q3
@@ -374,73 +335,360 @@ class AIHelper:
                 "touch shortly. Is there anything else I can help with in the "
                 "meantime?"
             )
-
-        # High-intent stages — direct email ask
         if purchase_stage in ('buying', 'evaluating') or is_sales:
             return (
                 "To make sure the right person follows up with you — "
                 "what's the best email address for you?"
             )
-
-        # Vertical-specific phrasing
         if vertical in _VERTICAL_NUDGES:
             return _VERTICAL_NUDGES[vertical]
-
-        # Generic fallback
         return (
             "If you'd like someone to follow up, I can pass your details to "
             "the team — what's the best email to reach you on?"
         )
 
-    def extract_lead_intent(
-        self,
-        message: str,
-        conversation_snippet: str = '',
-        vertical: str = 'general',
-    ) -> Dict:
+    def _build_email_request(self, vertical: str) -> str:
         """
-        Use Gemini to read the lead's message + conversation context and
-        produce a short human-readable intent summary plus a suggested
-        priority. Called once at lead-capture time (blueprints/leads.py
-        submit_lead) — not part of the live chat turn loop.
-
-        Returns {'summary': str, 'priority': 'high'|'med'|'low'}.
-        Falls back to a blank summary + 'high' priority (matching the
-        existing leads.priority DB default) when the model is unavailable
-        or parsing fails — a lead is never silently downgraded just
-        because Gemini is down.
+        Post-acceptance email request — fires after the user says yes to a
+        handoff but before we have their email. Distinct from _build_lead_nudge
+        (which is a proactive soft ask). Here the handoff is committed; we just
+        need the contact detail to complete it.
         """
-        fallback = {'summary': '', 'priority': 'high'}
-        if not self.enabled or not self.model:
-            return fallback
-
-        context = (conversation_snippet or message or '').strip()
-        if not context:
-            return fallback
-
-        prompt = (
-            f"A visitor just submitted a lead form on a {vertical} business's chatbot.\n\n"
-            f"Their message / conversation context:\n\"{context[:1500]}\"\n\n"
-            "In 2-3 sentences, summarize what this person wants and any "
-            "urgency or buying signals you notice. Then classify priority:\n"
-            "- high: ready to buy/book, urgent need, or explicit timeline\n"
-            "- med: clearly interested but no urgency signal\n"
-            "- low: vague inquiry, early research, or just browsing\n\n"
-            "Respond ONLY with JSON:\n"
-            '{"summary": "2-3 sentence summary", "priority": "high|med|low"}'
+        _templates = {
+            'dental':           "Great — what email should we send your appointment confirmation to?",
+            'healthcare':       "Of course — what email should the team use to get in touch with you?",
+            'law_firm':         "Certainly — what email should a member of the team use to reach you?",
+            'real_estate':      "Excellent — what email can we send the property details to?",
+            'restaurant':       "Perfect — what email should we use to confirm your reservation?",
+            'fitness':          "Let's do it — what email should we send the membership details to?",
+            'gym':              "Let's do it — what email should we send the membership details to?",
+            'beauty':           "Lovely — what email should we use to confirm your booking?",
+            'automotive':       "Great — what email should we send the details to?",
+            'therapy':          "Of course — what email should the team use to reach out to you?",
+            'mortgage':         "Excellent — what email should your adviser use to get in touch?",
+            'insurance':        "Great — what email can we use to send you the details?",
+            'accounting':       "Perfect — what email should the team use to get in touch?",
+            'physiotherapy':    "Great — what email should we use to confirm your assessment?",
+            'veterinary':       "Of course — what email should we use to confirm your appointment?",
+            'optician':         "Great — what email should we send the details to?",
+            'cleaning_services':"Perfect — what email can we use to confirm your booking?",
+            'construction':     "Great — what email should we send the quote to?",
+            'interior_design':  "Wonderful — what email should we use to send the brief across?",
+            'childcare':        "Of course — what email should we use to get in touch with you?",
+        }
+        return _templates.get(
+            vertical,
+            "What's the best email address to reach you on?",
         )
+
+    # ── Gap 3: Lead persistence and notification ──────────────────────────────
+
+    def _persist_lead_and_notify(
+        self,
+        client_id: str,
+        payload: Dict,
+        vertical: str = 'general',
+    ) -> None:
+        """
+        Write lead to DB via save_lead() and fire notification to end client.
+        Best-effort — never raises. Always called via _BG_EXECUTOR so it
+        never blocks the pipeline response.
+
+        Notification priority:
+          1. Email  — fires if clients.notification_email is set
+          2. SMS    — fires if clients.notification_phone is set (Twilio)
+          3. Webhook — fires if webhook_configs row exists for 'lead_captured'
+        """
+        if not client_id:
+            return
+
+        email = payload.get('email')
+        if not email:
+            logger.debug(f"[LeadPersist] no email in payload, skipping client={client_id}")
+            return
+
         try:
-            resp     = _gemini_call(self.model, prompt, self._model_name)
-            parsed   = self._parse_json(resp.text or '')
-            if not parsed or not parsed.get('summary'):
-                return fallback
-            priority = str(parsed.get('priority', 'high')).strip().lower()
-            if priority not in ('high', 'med', 'low'):
-                priority = 'high'
-            return {'summary': str(parsed['summary'])[:500], 'priority': priority}
+            from models.leads import save_lead
+            from models.clients import get_client_by_id
+
+            lead_data = {
+                'name':    payload.get('name') or '',
+                'email':   email,
+                'phone':   payload.get('phone') or '',
+                'message': payload.get('last_question') or '',
+                'conversation_snippet': '',
+                'intent_summary': '',
+                'priority': 'high' if payload.get('is_frustrated') else 'med',
+            }
+
+            saved = save_lead(client_id, lead_data)
+            if not saved:
+                logger.warning(f"[LeadPersist] save_lead returned False client={client_id}")
+                return
+
+            logger.info(
+                f"[LeadPersist] saved client={client_id} "
+                f"email={email} stage={payload.get('purchase_stage')}"
+            )
+
+            # ── Fetch delivery settings ───────────────────────────────
+            client = get_client_by_id(client_id)
+            if not client:
+                return
+
+            notif_email = client.get('notification_email')
+            notif_phone = client.get('notification_phone')
+
+            if notif_email:
+                self._send_lead_email(notif_email, client, lead_data, vertical)
+
+            if notif_phone:
+                self._send_lead_sms(notif_phone, client, lead_data)
+
+            # Webhook delivery is handled by the existing webhook_configs
+            # infrastructure — fire it here if the table has a row for
+            # this client and the 'lead_captured' event.
+            self._fire_lead_webhook(client_id, lead_data)
+
         except Exception as e:
-            log_crash(logger, 'ExtractLeadIntent', e)
-            return fallback
+            log_crash(logger, 'LeadPersist', e, client_id=client_id)
+
+    def _send_lead_email(
+        self,
+        to_email: str,
+        client: Dict,
+        lead_data: Dict,
+        vertical: str = 'general',
+    ) -> None:
+        """
+        Send lead notification email to the end client (the plumber, dentist, etc.).
+        White-label: from_name uses branded_email_from or company_name — never 'Lumvi'.
+        Plug in your email provider below (Resend, SendGrid, etc.).
+        """
+        try:
+            from models.clients import get_email_from_for_client
+            # Check for agency verified custom domain first (white-label).
+            # Display name: branded_email_from (wl_email_from) is the single
+            # source of truth — custom domain only changes the sending address.
+            # This avoids the two-store sync problem where agency_email_domains
+            # .from_name could be stale if wl_email_from was updated after
+            # the domain was saved.
+            from models.agency_domains import get_verified_domain_for_client as _get_vd
+            _custom = _get_vd(client['client_id'])
+
+            # Display name: wl_email_from (branded_email_from) → company_name → fallback
+            # Same regardless of whether a custom domain is active.
+            _branded = client.get('branded_email_from', '').strip()
+            from_name = _branded or client.get('company_name', '') or 'Your Chatbot'
+
+            # Sending address: custom domain → Lumvi default
+            if _custom:
+                _smtp_from_addr = _custom.get('from_email') or os.environ.get('MAIL_FROM', 'support@lumvi.net')
+            else:
+                _smtp_from_addr = os.environ.get('MAIL_FROM', 'support@lumvi.net')
+
+            name    = lead_data.get('name') or 'Someone'
+            email   = lead_data.get('email', '')
+            phone   = lead_data.get('phone') or '—'
+            message = lead_data.get('message') or '—'
+
+            subject = f"New lead from your chatbot — {name}"
+
+            html = f"""
+<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1C1917;">
+  <p style="font-size:18px;font-weight:bold;margin-bottom:4px;">New lead from your chatbot</p>
+  <p style="color:#78716C;margin-top:0;font-size:13px;">Someone reached out and we captured their details.</p>
+  <hr style="border:none;border-top:1px solid #E7E2DA;margin:20px 0;">
+  <table style="width:100%;border-collapse:collapse;">
+    <tr><td style="padding:8px 0;color:#78716C;font-size:13px;width:90px;">Name</td>
+        <td style="padding:8px 0;font-weight:600;">{name}</td></tr>
+    <tr><td style="padding:8px 0;color:#78716C;font-size:13px;">Email</td>
+        <td style="padding:8px 0;"><a href="mailto:{email}" style="color:#B8924A;">{email}</a></td></tr>
+    <tr><td style="padding:8px 0;color:#78716C;font-size:13px;">Phone</td>
+        <td style="padding:8px 0;">{phone}</td></tr>
+    <tr><td style="padding:8px 0;color:#78716C;font-size:13px;vertical-align:top;">Message</td>
+        <td style="padding:8px 0;font-style:italic;">&ldquo;{message[:300]}&rdquo;</td></tr>
+  </table>
+  <hr style="border:none;border-top:1px solid #E7E2DA;margin:20px 0;">
+  <p style="font-size:13px;color:#78716C;">
+    Reply directly to <a href="mailto:{email}" style="color:#B8924A;">{email}</a>
+    to follow up.
+  </p>
+</body>
+</html>"""
+
+            text = (
+                f"New lead from your chatbot\n\n"
+                f"Name:    {name}\n"
+                f"Email:   {email}\n"
+                f"Phone:   {phone}\n"
+                f"Message: {message[:300]}\n\n"
+                f"Reply to {email} to follow up."
+            )
+
+            # ── SMTP delivery (Brevo via Flask-Mail env vars) ────────────
+            # Uses the same env vars Flask-Mail reads in app.py so no new
+            # Railway variables are needed — MAIL_USERNAME and MAIL_PASSWORD
+            # are already set for Brevo (smtp-relay.brevo.com).
+            # MAIL_FROM: the verified sender address on your Brevo account.
+            # The white-label display name (from_name) comes from
+            # get_email_from_for_client(), so the end client sees
+            # "From: Acme Digital Agency <support@lumvi.net>" — not Lumvi.
+            import smtplib
+            from email.mime.multipart import MIMEMultipart as _MIME
+            from email.mime.text      import MIMEText      as _MIMEText
+
+            _smtp_host      = os.environ.get('MAIL_SERVER', 'smtp-relay.brevo.com')
+            _smtp_port      = int(os.environ.get('MAIL_PORT', 587))
+            _smtp_user      = os.environ.get('MAIL_USERNAME')
+            _smtp_pass      = os.environ.get('MAIL_PASSWORD')
+
+            if not all([_smtp_host, _smtp_user, _smtp_pass]):
+                logger.warning(
+                    '[LeadEmail] SMTP not configured — ensure MAIL_SERVER, '
+                    'MAIL_USERNAME, MAIL_PASSWORD are set in Railway env vars'
+                )
+                return
+
+            msg             = _MIME('alternative')
+            msg['Subject']  = subject
+            msg['From']     = f'{from_name} <{_smtp_from_addr}>'
+            msg['To']       = to_email
+            msg['Reply-To'] = email          # reply goes to the lead, not Lumvi
+            msg.attach(_MIMEText(text, 'plain'))
+            msg.attach(_MIMEText(html,  'html'))
+
+            with smtplib.SMTP(_smtp_host, _smtp_port) as _srv:
+                _srv.ehlo()
+                _srv.starttls()
+                _srv.login(_smtp_user, _smtp_pass)
+                _srv.sendmail(_smtp_from_addr, to_email, msg.as_string())
+
+            logger.info(f"[LeadEmail] sent to={to_email} client={client.get('client_id')}")
+
+        except Exception as e:
+            log_crash(logger, 'LeadEmail', e, to=to_email, client_id=client.get('client_id'))
+
+    def _send_lead_sms(
+        self,
+        to_phone: str,
+        client: Dict,
+        lead_data: Dict,
+    ) -> None:
+        """
+        Send lead SMS to end client's mobile. Fires within seconds of capture.
+        Requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER env vars.
+        No-ops gracefully when Twilio is not configured.
+        """
+        try:
+            sid   = os.environ.get('TWILIO_ACCOUNT_SID')
+            token = os.environ.get('TWILIO_AUTH_TOKEN')
+            from_ = os.environ.get('TWILIO_FROM_NUMBER')
+
+            if not all([sid, token, from_]):
+                return  # SMS not configured — skip silently
+
+            name  = lead_data.get('name') or 'Someone'
+            email = lead_data.get('email', '')
+            phone = lead_data.get('phone') or ''
+
+            body = (
+                f"New chatbot lead\n\n"
+                f"{name}\n"
+                f"{email}"
+                + (f"\n{phone}" if phone else '') +
+                f"\n\nReply to follow up."
+            )
+
+            from twilio.rest import Client as TwilioClient
+            TwilioClient(sid, token).messages.create(
+                body=body[:1600],
+                from_=from_,
+                to=to_phone,
+            )
+            logger.info(f"[LeadSMS] sent to={to_phone} client={client.get('client_id')}")
+
+        except Exception as e:
+            log_crash(logger, 'LeadSMS', e, to=to_phone, client_id=client.get('client_id'))
+
+    def _fire_lead_webhook(
+        self,
+        client_id: str,
+        lead_data: Dict,
+    ) -> None:
+        """
+        Dispatch lead payload to any configured webhooks for this client.
+        Uses the existing webhook_configs / webhook_logs infrastructure.
+        No-ops if the client has no active webhook configs for lead_captured.
+
+        Function names sourced from models/__init__.py exports:
+          get_webhooks(client_id)      — returns all webhook_configs rows for client
+          log_webhook_delivery(...)    — inserts into webhook_logs
+        """
+        try:
+            import json as _json
+            import requests
+            import hmac
+            import hashlib as _hl
+            from models import get_webhooks, log_webhook_delivery
+
+            all_webhooks = get_webhooks(client_id)
+            if not all_webhooks:
+                return
+
+            # Filter to active configs that include the lead_captured event
+            active = [
+                w for w in all_webhooks
+                if w.get('enabled') and 'lead_captured' in (
+                    _json.loads(w.get('events') or '[]')
+                    if isinstance(w.get('events'), str)
+                    else (w.get('events') or [])
+                )
+            ]
+            if not active:
+                return
+
+            payload_str = _json.dumps({
+                'event':      'lead_captured',
+                'client_id':  client_id,
+                'lead':       lead_data,
+                'timestamp':  time.time(),
+            })
+
+            for wh in active:
+                secret = wh.get('signing_secret') or ''
+                sig    = hmac.new(
+                    secret.encode() if secret else b'',
+                    payload_str.encode(),
+                    _hl.sha256,
+                ).hexdigest()
+
+                try:
+                    t0 = time.time()
+                    r  = requests.post(
+                        wh['url'],
+                        data=payload_str,
+                        headers={
+                            'Content-Type':      'application/json',
+                            'X-Lumvi-Signature': f'sha256={sig}',
+                            'X-Lumvi-Event':     'lead_captured',
+                        },
+                        timeout=10,
+                    )
+                    ms = int((time.time() - t0) * 1000)
+                    log_webhook_delivery(
+                        client_id, wh['webhook_id'], 'lead_captured',
+                        wh['url'], payload_str,
+                        r.status_code, r.text[:500], r.ok, ms,
+                    )
+                except Exception as req_err:
+                    log_crash(logger, 'Webhook/request', req_err,
+                              client_id=client_id, url=wh.get('url'))
+
+        except Exception as e:
+            log_crash(logger, 'LeadWebhook', e, client_id=client_id)
 
     # ── generate_response ─────────────────────────────────────────────────────
 
@@ -508,29 +756,97 @@ class AIHelper:
             if _new_stage:
                 ctx.session_mem['purchase_stage'] = _new_stage
 
-            # ── Handoff state machine ─────────────────────────────────
-            # If the user is responding to a handoff offer
-            if ctx.session_mem.get('handoff_offered'):
-                msg_lower = ctx.clean_message.lower()
-                if any(k in msg_lower for k in ['yes', 'yeah', 'sure', 'please', 'ok', 'go ahead']):
+            # ── Email capture (waiting for email after handoff acceptance) ──
+            # Checked BEFORE handoff_offered — a user replying "sure, sarah@email.com"
+            # contains both an affirmative and an email. Without this guard the
+            # handoff_offered arm would misroute it as a fresh handoff acceptance.
+            if ctx.session_mem.get('email_capture_pending'):
+                msg_lower   = ctx.clean_message.lower()
+                email_match = _EMAIL_RE.search(ctx.clean_message)
+
+                # User changed their mind
+                if any(k in msg_lower for k in [
+                    'no', 'nope', 'never mind', 'cancel', "don't", 'skip', 'forget it'
+                ]):
+                    ctx.session_mem['email_capture_pending'] = False
+                    ctx.session_mem['handoff_offered']       = False
+                    _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
+                    return PipelineResult.declined_handoff().to_dict()
+
+                if email_match:
+                    # Email captured — complete handoff and persist lead
+                    ctx.session_mem['email']                 = email_match.group(0)
+                    ctx.session_mem['email_capture_pending'] = False
+                    ctx.session_mem['handoff_offered']       = False
                     handoff_payload = self._build_handoff_payload(
                         conversation_history, ctx.session_mem,
                         ctx.clean_message, session_id, 'accepted'
                     )
-                    result = PipelineResult(
+                    _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
+                    _BG_EXECUTOR.submit(
+                        self._persist_lead_and_notify,
+                        client_id, handoff_payload, vertical
+                    )
+                    return PipelineResult(
                         response=(
-                            "Perfect! I'll connect you with the team now. "
-                            "They'll be in touch shortly."
+                            f"Perfect — someone from the team will be in touch "
+                            f"at {email_match.group(0)} shortly."
                         ),
                         method='handoff_accepted',
                         confidence=1.0,
                         handoff=handoff_payload,
-                    )
-                    _BG_EXECUTOR.submit(
-                        persist_session, client_id, session_id,
-                        {**ctx.session_mem, 'handoff_offered': False}
-                    )
-                    return result.to_dict()
+                    ).to_dict()
+
+                # Couldn't parse email — re-ask once, stay in capture state
+                return PipelineResult(
+                    response="I didn't quite catch that — could you type out your email address?",
+                    method='email_capture_retry',
+                    confidence=1.0,
+                ).to_dict()
+
+            # ── Handoff state machine ─────────────────────────────────
+            if ctx.session_mem.get('handoff_offered'):
+                msg_lower = ctx.clean_message.lower()
+                if any(k in msg_lower for k in ['yes', 'yeah', 'sure', 'please', 'ok', 'go ahead']):
+
+                    # Check if email was included in the same message
+                    # e.g. "yes please, it's sarah@email.com"
+                    email_in_msg = _EMAIL_RE.search(ctx.clean_message)
+                    if email_in_msg:
+                        ctx.session_mem['email'] = email_in_msg.group(0)
+
+                    _have_email = bool(ctx.session_mem.get('email'))
+
+                    if _have_email:
+                        # Email already in session — confirm and close
+                        handoff_payload = self._build_handoff_payload(
+                            conversation_history, ctx.session_mem,
+                            ctx.clean_message, session_id, 'accepted'
+                        )
+                        ctx.session_mem['handoff_offered'] = False
+                        _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
+                        _BG_EXECUTOR.submit(
+                            self._persist_lead_and_notify,
+                            client_id, handoff_payload, vertical
+                        )
+                        return PipelineResult(
+                            response=(
+                                f"Perfect — someone from the team will be in touch "
+                                f"at {ctx.session_mem['email']} shortly."
+                            ),
+                            method='handoff_accepted',
+                            confidence=1.0,
+                            handoff=handoff_payload,
+                        ).to_dict()
+
+                    # No email yet — pivot to capture before confirming
+                    ctx.session_mem['email_capture_pending'] = True
+                    _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
+                    return PipelineResult(
+                        response=self._build_email_request(vertical),
+                        method='email_capture_prompt',
+                        confidence=1.0,
+                    ).to_dict()
 
                 if any(k in msg_lower for k in [
                     'no', 'nope', 'not now', 'no thanks', "don't", "i'm fine", 'im fine'
@@ -552,6 +868,11 @@ class AIHelper:
                 )
                 ctx.session_mem['handoff_offered'] = True
                 _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
+                if ctx.session_mem.get('email'):
+                    _BG_EXECUTOR.submit(
+                        self._persist_lead_and_notify,
+                        client_id, handoff_payload, vertical
+                    )
                 return PipelineResult(
                     response=escalation_text,
                     method='escalation',
@@ -569,11 +890,20 @@ class AIHelper:
                 ctx.poor_kb_ids = set()
 
             # ── Intent detection ──────────────────────────────────────
-            # skip_gemini=True on first pass; Gemini intent only if needed
             intent = detect_intent(
                 ctx.clean_message, vertical, lead_triggers,
                 model=None, skip_gemini=True,
             )
+
+            # ── Stage → is_lead coercion ──────────────────────────────
+            # STAGE_SIGNALS already scanned this message above. Promote
+            # browsing/evaluating → is_lead so prospects found via stage
+            # signals get the same email-nudge flow as those caught by
+            # PROSPECT_INFO_KEYWORDS or GLOBAL_PRICING_KW.
+            if not intent.get('is_lead'):
+                _stage = ctx.session_mem.get('purchase_stage')
+                if _stage in ('browsing', 'evaluating'):
+                    intent['is_lead'] = True
 
             # ── Simple intent exit (no retrieval needed) ──────────────
             if intent['intent'] == 'goodbye':
@@ -669,16 +999,13 @@ class AIHelper:
                     return merged_c, merged_s
                 return embedding_search(query, faqs, client_id, ctx.poor_kb_ids)
 
-            # ── Preflight embedding search (free — local model) ───────
-            # Search on the raw resolved query first. If top cosine is
-            # already ≥ confidence_high, the phrasing is unambiguous —
-            # skip rewrite_query entirely (saves Call 1 for ~60% of msgs).
+            # ── Preflight embedding search ────────────────────────────
             ctx.candidates, ctx.vector_scores = _do_embedding_search(
                 ctx.search_query, sub_queries
             )
             ctx.top_cosine = ctx.vector_scores[0] if ctx.vector_scores else 0.0
 
-            # ── Query rewriting — only when retrieval is ambiguous (Call 1)
+            # ── Query rewriting (Call 1) ──────────────────────────────
             if (self.enabled and self.model
                     and len(ctx.search_query.split()) >= 4
                     and ctx.top_cosine < ctx.confidence_high):
@@ -701,9 +1028,6 @@ class AIHelper:
             ctx.top_hybrid = ctx.hybrid_scores[0] if ctx.hybrid_scores else 0.0
 
             # ── Cross-encoder rerank ──────────────────────────────────
-            # Only fires for genuinely uncertain short-message retrievals.
-            # Gate tightened from confidence_high (0.65) → 0.35: between
-            # 0.35–0.65 the hybrid RRF is already reliable enough.
             if (self.enabled and self.model
                     and not ctx.call1_used
                     and ctx.top_cosine < 0.35
@@ -734,11 +1058,7 @@ class AIHelper:
                         f"[Pipeline] topic mismatch gate fired trace={ctx.trace_id}"
                     )
 
-            # ── FAQ-keyed semantic cache (Fix 7) ──────────────────────
-            # If this client has already answered a question that retrieved
-            # the same top FAQ, return the cached response. This catches
-            # rephrasings ("what's the price?" vs "how much does it cost?")
-            # without any vector scanning — just a second Redis lookup.
+            # ── FAQ-keyed semantic cache ───────────────────────────────
             _faq_cache_key: Optional[str] = None
             if ctx.rag_qualified and ctx.hybrid_ranked:
                 _top_faq_id = str(
@@ -768,9 +1088,6 @@ class AIHelper:
                     self.model,
                 )
             elif self.enabled and self.model:
-                # Go straight to dynamic_fallback — it references the actual
-                # query topic and is strictly better than vertical_fallback for
-                # IDK paths. Eliminates the 2-call vertical→dynamic chain.
                 final = dynamic_fallback(
                     ctx.search_query, vertical, ctx.session_mem,
                     self.model, self._model_name,
@@ -806,14 +1123,10 @@ class AIHelper:
             ).to_dict()
 
             if confidence >= ctx.confidence_high and ctx.resp_cache_key:
-                # High-confidence RAG hit — write to both exact and FAQ-keyed cache
                 _BG_EXECUTOR.submit(self._write_resp_cache, ctx.resp_cache_key, _result_to_cache)
-                if _faq_cache_key:   # same answer for all rephrasings of this FAQ
+                if _faq_cache_key:
                     _BG_EXECUTOR.submit(self._write_resp_cache, _faq_cache_key, _result_to_cache)
             elif method == 'dynamic_fallback_idk' and ctx.resp_cache_key:
-                # IDK responses cached briefly — avoids re-running Gemini for the same
-                # unanswered question from different users. Short TTL so new KB entries
-                # surface quickly.
                 _BG_EXECUTOR.submit(
                     self._write_resp_cache_ttl,
                     ctx.resp_cache_key,
@@ -829,10 +1142,7 @@ class AIHelper:
                 )
                 ctx.session_mem['handoff_offered'] = True
 
-            # ── Lead nudge (append to response if lead detected) ──────
-            # Fires whenever is_lead=True and we don't yet have an email —
-            # regardless of confidence. A high-confidence answer is the best
-            # moment to ask; removing the confidence gate captures far more leads.
+            # ── Lead nudge ────────────────────────────────────────────
             trigger_lead_collection = False
             _have_email = bool(
                 (lead_metadata or {}).get('email') or ctx.session_mem.get('email')
@@ -859,6 +1169,13 @@ class AIHelper:
                     conversation_history, ctx.session_mem,
                     ctx.clean_message, session_id, method
                 )
+                # Persist lead if we already have their email (e.g. captured
+                # in a prior turn and IDK fires later in the conversation).
+                if ctx.session_mem.get('email'):
+                    _BG_EXECUTOR.submit(
+                        self._persist_lead_and_notify,
+                        client_id, handoff, vertical
+                    )
 
             logger.info(
                 f"[Pipeline] done trace={ctx.trace_id} method={method} "
@@ -884,11 +1201,8 @@ class AIHelper:
             return PipelineResult.fatal_error().to_dict()
 
     # ── KB management methods ─────────────────────────────────────────────────
-    # These stay on AIHelper because they use self.model and are not part of
-    # the real-time request pipeline.
 
     def _split_content(self, text: str, max_chars: int = 1200) -> List[str]:
-        """Split long text into overlapping chunks at sentence boundaries."""
         sentences = re.split(r'(?<=[.!?])\s+', text.strip())
         chunks, current = [], ''
         for sent in sentences:
@@ -903,7 +1217,6 @@ class AIHelper:
         return chunks or [text[:max_chars]]
 
     def _extract_tags(self, text: str) -> List[str]:
-        """Extract keyword tags from FAQ text (no model call)."""
         words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
         from collections import Counter
         freq = Counter(words)
@@ -913,7 +1226,6 @@ class AIHelper:
         }]
 
     def _ai_enrich(self, question: str, answer: str, vertical: str) -> Dict:
-        """Use Gemini to enrich an FAQ entry with tags, paraphrases, and metadata."""
         if not self.enabled or not self.model:
             return {'tags': self._extract_tags(f"{question} {answer}"), 'paraphrases': []}
         prompt = (
@@ -931,16 +1243,7 @@ class AIHelper:
             log_crash(logger, 'AIEnrich', e)
             return {'tags': [], 'paraphrases': []}
 
-    def _ai_enrich_batch(
-        self,
-        faq_pairs: List[tuple],
-        vertical: str,
-    ) -> List[Dict]:
-        """
-        Enrich up to 5 FAQ pairs in a single Gemini call.
-        Returns a list of enrichment dicts in the same order as faq_pairs.
-        Falls back to tag-only enrichment if the model is unavailable or parsing fails.
-        """
+    def _ai_enrich_batch(self, faq_pairs: List[tuple], vertical: str) -> List[Dict]:
         if not self.enabled or not self.model:
             return [
                 {'tags': self._extract_tags(f"{q} {a}"), 'paraphrases': []}
@@ -968,7 +1271,6 @@ class AIHelper:
         return [{'tags': [], 'paraphrases': []} for _ in faq_pairs]
 
     def _quality_score(self, question: str, answer: str) -> float:
-        """Heuristic quality score for an FAQ entry (0.0–1.0)."""
         q_len = len(question.split())
         a_len = len(answer.split())
         score = 0.0
@@ -985,19 +1287,10 @@ class AIHelper:
         vertical: str = 'general',
         client_id: Optional[str] = None,
     ) -> List[Dict]:
-        """
-        Enrich a Q&A pair with AI-generated metadata and split long answers
-        into overlapping chunks. Returns a list of chunk dicts ready for indexing.
-        """
         enriched = self._ai_enrich(question, answer, vertical)
         chunks   = self._split_content(answer)
         results  = []
-
         for i, chunk in enumerate(chunks):
-            # Include paraphrases in the embed text so alternative phrasings
-            # of the question are captured in the vector space. This improves
-            # retrieval on natural language variations and reduces how often
-            # rewrite_query needs to fire.
             paraphrase_str = ' '.join(enriched.get('paraphrases', [])[:3])
             embed_text = (
                 f"{question} "
@@ -1026,11 +1319,6 @@ class AIHelper:
         client_id: Optional[str] = None,
         vertical: str = 'general',
     ) -> int:
-        """
-        Embed and upsert a list of FAQ dicts into the database.
-        Enrichment is batched (5 FAQs per Gemini call) to minimise API cost.
-        Returns the count of successfully indexed entries.
-        """
         import models as _m
         from cache_utils import bump_kb_version
         from itertools import islice
@@ -1040,7 +1328,6 @@ class AIHelper:
             while batch := list(islice(it, n)):
                 yield batch
 
-        # Filter valid FAQs upfront
         valid_faqs = [
             f for f in faqs
             if str(f.get('question', '')).strip() and str(f.get('answer', '')).strip()
@@ -1048,7 +1335,6 @@ class AIHelper:
 
         indexed = 0
         for batch in _batched(valid_faqs, 5):
-            # Enrich entire batch in one Gemini call
             pairs       = [(str(f['question']).strip(), str(f['answer']).strip()) for f in batch]
             enrichments = self._ai_enrich_batch(pairs, vertical)
 
@@ -1112,7 +1398,6 @@ class AIHelper:
         client_id: str,
         vertical: str = 'general',
     ) -> bool:
-        """Approve a KB gap draft, index it, and mark the gap as resolved."""
         try:
             import models as _m
             from cache_utils import bump_kb_version
@@ -1140,7 +1425,6 @@ class AIHelper:
         api_key: Optional[str] = None,
         model_name: Optional[str] = None,
     ) -> Optional[str]:
-        """Use Gemini to draft an answer for an unanswered question."""
         if not self.enabled or not self.model:
             return None
         prompt = (
@@ -1156,12 +1440,43 @@ class AIHelper:
             log_crash(logger, 'DraftGap', e, client_id=client_id)
             return None
 
+    def extract_lead_intent(
+        self,
+        message: str,
+        conversation_snippet: str = '',
+        vertical: str = 'general',
+    ) -> Dict:
+        fallback = {'summary': '', 'priority': 'high'}
+        if not self.enabled or not self.model:
+            return fallback
+        context = (conversation_snippet or message or '').strip()
+        if not context:
+            return fallback
+        prompt = (
+            f"A visitor just submitted a lead form on a {vertical} business's chatbot.\n\n"
+            f"Their message / conversation context:\n\"{context[:1500]}\"\n\n"
+            "In 2-3 sentences, summarize what this person wants and any "
+            "urgency or buying signals you notice. Then classify priority:\n"
+            "- high: ready to buy/book, urgent need, or explicit timeline\n"
+            "- med: clearly interested but no urgency signal\n"
+            "- low: vague inquiry, early research, or just browsing\n\n"
+            "Respond ONLY with JSON:\n"
+            '{"summary": "2-3 sentence summary", "priority": "high|med|low"}'
+        )
+        try:
+            resp     = _gemini_call(self.model, prompt, self._model_name)
+            parsed   = self._parse_json(resp.text or '')
+            if not parsed or not parsed.get('summary'):
+                return fallback
+            priority = str(parsed.get('priority', 'high')).strip().lower()
+            if priority not in ('high', 'med', 'low'):
+                priority = 'high'
+            return {'summary': str(parsed['summary'])[:500], 'priority': priority}
+        except Exception as e:
+            log_crash(logger, 'ExtractLeadIntent', e)
+            return fallback
+
     def reindex_all_clients(self, app_context: Any = None) -> Dict[str, int]:
-        """
-        Re-embed all KB entries for all clients.
-        Used after a model version change (e.g., voyage-3-lite upgrade).
-        Heavy operation — run from a one-off Railway job, not a web request.
-        """
         try:
             import models as _m
             context = app_context or __import__('flask').current_app.app_context()
@@ -1191,7 +1506,6 @@ class AIHelper:
         faqs: List[Dict],
         threshold: float = 0.40,
     ) -> Optional[Dict]:
-        """Backward-compat helper: return single best FAQ or None."""
         candidates, scores = embedding_search(query, faqs, client_id=None)
         if candidates and scores and scores[0] >= threshold:
             return candidates[0]
