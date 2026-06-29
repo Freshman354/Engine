@@ -6,49 +6,50 @@
 <title>Integrations — Lumvi Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 
 <style>
 /* ── TOKENS ────────────────────────────────────────────────── */
 :root {
-  --bg:          #0b0d12;
-  --surface:     #13161f;
-  --surface-2:   #1a1e2a;
-  --surface-3:   #22273a;
-  --border:      rgba(255,255,255,0.07);
-  --border-hi:   rgba(255,255,255,0.13);
+  --cream:       #F7F4EF;
+  --cream2:      #F0EBE1;
+  --panel:       #EDEAE3;
+  --white:       #FFFFFF;
+  --border:      #E7E2DA;
 
-  --ink:         #f0f2f8;
-  --ink-2:       #8b92aa;
-  --ink-3:       #555d78;
+  --gold:        #B8924A;
+  --gold-lt:     rgba(184,146,74,0.12);
+  --gold-dk:     #9A7A3A;
+  --gold-glow:   rgba(184,146,74,0.3);
 
-  --accent:      #7c5cfc;
-  --accent-dim:  rgba(124,92,252,0.15);
-  --accent-glow: rgba(124,92,252,0.35);
+  --dark:        #1C1917;
+  --mid:         #57534E;
+  --sub:         #A8A29E;
 
-  --green:       #22c97a;
-  --green-dim:   rgba(34,201,122,0.12);
-  --red:         #f04560;
-  --red-dim:     rgba(240,69,96,0.12);
-  --amber:       #f5a623;
-  --amber-dim:   rgba(245,166,35,0.12);
+  --success:     #16A34A;
+  --success-lt:  #F0FDF4;
+  --danger:      #EF4444;
+  --danger-lt:   #FEF2F2;
+  --warning:     #D97706;
+  --warning-lt:  #FFFBEB;
 
-  --shopify:     #96bf48;
-  --shopify-dim: rgba(150,191,72,0.12);
-  --acuity:      #4ab8e8;
-  --acuity-dim:  rgba(74,184,232,0.12);
+  --shopify:     #5a7a2a;
+  --shopify-lt:  rgba(90,122,42,0.1);
+  --acuity:      #1e6fa0;
+  --acuity-lt:   rgba(30,111,160,0.1);
 
   --radius:      12px;
-  --radius-sm:   8px;
-  --radius-lg:   18px;
+  --radius-sm:   9px;
+  --radius-lg:   16px;
 
-  --shadow:      0 4px 24px rgba(0,0,0,0.35);
-  --shadow-lg:   0 12px 48px rgba(0,0,0,0.5);
+  --shadow:      0 4px 20px rgba(0,0,0,0.06);
+  --shadow-lg:   0 20px 60px rgba(0,0,0,0.1);
 
   --font:        'DM Sans', sans-serif;
+  --serif:       'Fraunces', serif;
   --mono:        'DM Mono', monospace;
 
-  --sidebar-w:   240px;
+  --sidebar-w:   224px;
   --header-h:    60px;
 }
 
@@ -57,11 +58,12 @@
 html, body { height: 100%; }
 body {
   font-family: var(--font);
-  background: var(--bg);
-  color: var(--ink);
+  background: var(--cream);
+  color: var(--dark);
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  display: flex;
 }
 button { font-family: inherit; cursor: pointer; border: none; outline: none; }
 input, textarea, select { font-family: inherit; outline: none; }
@@ -69,131 +71,149 @@ a { text-decoration: none; color: inherit; }
 
 /* ── LAYOUT ─────────────────────────────────────────────────── */
 .layout {
-  display: grid;
-  grid-template-columns: var(--sidebar-w) 1fr;
-  grid-template-rows: var(--header-h) 1fr;
+  display: flex;
   min-height: 100vh;
+  width: 100%;
 }
 
 /* ── SIDEBAR ────────────────────────────────────────────────── */
 .sidebar {
-  grid-row: 1 / -1;
-  background: var(--surface);
+  width: var(--sidebar-w);
+  background: var(--white);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  padding: 0 12px 24px;
-  position: sticky;
-  top: 0;
+  position: fixed;
+  top: 0; left: 0;
   height: 100vh;
+  z-index: 50;
   overflow-y: auto;
 }
 
 .sidebar-logo {
+  padding: 20px 18px;
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
   gap: 10px;
   height: var(--header-h);
-  padding: 0 8px;
-  margin-bottom: 8px;
 }
 .sidebar-logo img {
-  width: 28px; height: 28px;
-  border-radius: 7px;
-  object-fit: contain;
+  width: 34px; height: 34px;
+  border-radius: 9px;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 .sidebar-logo span {
-  font-size: 16px;
+  font-family: var(--serif);
+  font-size: 17px;
   font-weight: 700;
-  letter-spacing: -0.3px;
-  color: var(--ink);
+  color: var(--dark);
 }
 
 .sidebar-label {
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-3);
-  padding: 16px 8px 6px;
+  color: var(--sub);
+  padding: 10px 10px 4px;
+  margin-top: 6px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 10px;
-  border-radius: var(--radius-sm);
-  color: var(--ink-2);
+  padding: 9px 12px;
+  border-radius: 9px;
+  color: var(--mid);
   font-size: 13.5px;
   font-weight: 500;
   transition: all 0.15s;
   cursor: pointer;
-  margin-bottom: 1px;
+  margin: 1px 10px;
+  text-decoration: none;
 }
-.nav-item svg { flex-shrink: 0; opacity: 0.7; }
-.nav-item:hover { background: var(--surface-2); color: var(--ink); }
+.nav-item svg { flex-shrink: 0; width: 16px; height: 16px; opacity: 0.65; }
+.nav-item:hover { background: var(--cream); color: var(--dark); }
 .nav-item:hover svg { opacity: 1; }
 .nav-item.active {
-  background: var(--accent-dim);
-  color: var(--accent);
+  background: var(--gold-lt);
+  color: var(--gold-dk);
+  font-weight: 600;
 }
 .nav-item.active svg { opacity: 1; }
 
 .sidebar-divider {
   height: 1px;
   background: var(--border);
-  margin: 12px 0;
+  margin: 10px 0;
 }
 
 .sidebar-bottom {
   margin-top: auto;
+  padding: 14px 12px;
+  border-top: 1px solid var(--border);
 }
 
 .sidebar-user {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  padding: 8px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s;
 }
+.sidebar-user:hover { background: var(--cream); }
 .user-avatar {
   width: 32px; height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), #a78bfa);
+  background: var(--gold);
   display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0;
+  font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0;
 }
 .user-info { flex: 1; min-width: 0; }
-.user-name { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.user-plan { font-size: 11px; color: var(--ink-3); }
+.user-name { font-size: 13px; font-weight: 600; color: var(--dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-plan { font-size: 11px; color: var(--sub); }
+
+/* ── MAIN WRAPPER ───────────────────────────────────────────── */
+.main-wrapper {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
 
 /* ── HEADER ─────────────────────────────────────────────────── */
 .header {
-  grid-column: 2;
-  height: var(--header-h);
+  background: var(--white);
   border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  height: var(--header-h);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 28px;
-  background: var(--surface);
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 40;
 }
-.header-title { font-size: 15px; font-weight: 600; color: var(--ink); }
+.header-title {
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--dark);
+}
 .header-actions { display: flex; align-items: center; gap: 10px; }
 
 /* ── MAIN ───────────────────────────────────────────────────── */
 .main {
-  grid-column: 2;
-  padding: 32px 28px;
-  overflow-y: auto;
+  padding: 28px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 24px;
 }
 
 /* ── SECTION HEADER ─────────────────────────────────────────── */
@@ -203,52 +223,61 @@ a { text-decoration: none; color: inherit; }
   justify-content: space-between;
   gap: 16px;
 }
-.section-title { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; color: var(--ink); }
-.section-subtitle { font-size: 13.5px; color: var(--ink-2); margin-top: 3px; }
+.section-title {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  color: var(--dark);
+  margin-bottom: 2px;
+}
+.section-subtitle { font-size: 13px; color: var(--sub); }
 
 /* ── CLIENT SELECTOR ─────────────────────────────────────────── */
 .client-bar {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--surface);
+  background: var(--white);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 14px;
 }
-.client-bar-label { font-size: 12px; color: var(--ink-3); font-weight: 500; white-space: nowrap; }
+.client-bar-label { font-size: 12px; color: var(--sub); font-weight: 500; white-space: nowrap; }
 .client-select {
   flex: 1;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: var(--cream);
+  border: 1.5px solid var(--border);
   border-radius: var(--radius-sm);
-  color: var(--ink);
+  color: var(--dark);
   padding: 7px 10px;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%238b92aa' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23A8A29E' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
   padding-right: 28px;
+  transition: all 0.2s;
 }
-.client-select:focus { border-color: var(--accent); }
+.client-select:focus { border-color: var(--gold); background: var(--white); box-shadow: 0 0 0 3px var(--gold-lt); }
 
 .client-badge {
   display: flex; align-items: center; gap: 6px;
-  padding: 5px 10px;
+  padding: 5px 12px;
   border-radius: 20px;
-  background: var(--green-dim);
-  color: var(--green);
+  background: var(--success-lt);
+  color: var(--success);
   font-size: 12px;
   font-weight: 600;
+  border: 1px solid #bbf7d0;
 }
 .client-badge::before {
   content: '';
-  width: 6px; height: 6px;
+  width: 5px; height: 5px;
   border-radius: 50%;
-  background: var(--green);
+  background: var(--success);
   flex-shrink: 0;
 }
 
@@ -260,30 +289,20 @@ a { text-decoration: none; color: inherit; }
 }
 
 .platform-card {
-  background: var(--surface);
+  background: var(--white);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 24px;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: all 0.2s;
   position: relative;
   overflow: hidden;
 }
-.platform-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  transition: opacity 0.2s;
-  pointer-events: none;
+.platform-card:hover {
+  box-shadow: var(--shadow);
+  border-color: rgba(184,146,74,0.2);
 }
-.platform-card.shopify::before { background: radial-gradient(circle at top right, var(--shopify-dim), transparent 60%); }
-.platform-card.acuity::before  { background: radial-gradient(circle at top right, var(--acuity-dim),  transparent 60%); }
-.platform-card:hover { border-color: var(--border-hi); }
-.platform-card:hover::before { opacity: 1; }
-.platform-card.connected.shopify { border-color: rgba(150,191,72,0.25); }
-.platform-card.connected.acuity  { border-color: rgba(74,184,232,0.25); }
-.platform-card.connected.shopify::before { opacity: 1; }
-.platform-card.connected.acuity::before  { opacity: 1; }
+.platform-card.connected.shopify { border-color: rgba(90,122,42,0.25); }
+.platform-card.connected.acuity  { border-color: rgba(30,111,160,0.25); }
 
 .platform-top {
   display: flex;
@@ -298,31 +317,31 @@ a { text-decoration: none; color: inherit; }
   font-size: 22px;
   flex-shrink: 0;
 }
-.platform-icon.shopify { background: var(--shopify-dim); }
-.platform-icon.acuity  { background: var(--acuity-dim); }
+.platform-icon.shopify { background: var(--shopify-lt); border: 1px solid rgba(90,122,42,0.15); }
+.platform-icon.acuity  { background: var(--acuity-lt);  border: 1px solid rgba(30,111,160,0.15); }
 
 .platform-status {
-  display: flex; align-items: center; gap: 6px;
-  padding: 4px 10px;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px;
   border-radius: 20px;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
 }
 .platform-status.connected {
-  background: var(--green-dim);
-  color: var(--green);
+  background: var(--success-lt);
+  color: var(--success);
 }
 .platform-status.connected::before {
   content: '';
-  width: 6px; height: 6px;
+  width: 5px; height: 5px;
   border-radius: 50%;
-  background: var(--green);
+  background: var(--success);
   flex-shrink: 0;
   animation: pulse-dot 2s infinite;
 }
 .platform-status.not-connected {
-  background: var(--surface-3);
-  color: var(--ink-3);
+  background: var(--panel);
+  color: var(--sub);
 }
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
@@ -330,39 +349,41 @@ a { text-decoration: none; color: inherit; }
 }
 
 .platform-name {
+  font-family: var(--serif);
   font-size: 17px;
   font-weight: 700;
-  letter-spacing: -0.2px;
-  color: var(--ink);
+  color: var(--dark);
   margin-bottom: 4px;
 }
 .platform-desc {
   font-size: 13px;
-  color: var(--ink-2);
-  line-height: 1.5;
+  color: var(--mid);
+  line-height: 1.55;
   margin-bottom: 20px;
+  font-weight: 300;
 }
 
 .platform-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 20px;
 }
 .meta-tag {
   padding: 3px 9px;
   border-radius: 5px;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 500;
-  background: var(--surface-2);
-  color: var(--ink-3);
+  background: var(--cream);
+  color: var(--sub);
   border: 1px solid var(--border);
+  font-family: var(--mono);
 }
-.meta-tag.shopify { color: var(--shopify); border-color: rgba(150,191,72,0.2); background: var(--shopify-dim); }
-.meta-tag.acuity  { color: var(--acuity);  border-color: rgba(74,184,232,0.2);  background: var(--acuity-dim); }
+.meta-tag.shopify { color: var(--shopify); border-color: rgba(90,122,42,0.2); background: var(--shopify-lt); }
+.meta-tag.acuity  { color: var(--acuity);  border-color: rgba(30,111,160,0.2); background: var(--acuity-lt); }
 
 .platform-webhook-url {
-  background: var(--surface-2);
+  background: var(--cream);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 9px 12px;
@@ -371,30 +392,30 @@ a { text-decoration: none; color: inherit; }
   align-items: center;
   gap: 8px;
 }
-.webhook-url-label { font-size: 10.5px; color: var(--ink-3); font-weight: 500; white-space: nowrap; }
+.webhook-url-label { font-size: 10.5px; color: var(--sub); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
 .webhook-url-value {
   flex: 1;
   font-family: var(--mono);
   font-size: 11.5px;
-  color: var(--ink-2);
+  color: var(--mid);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .copy-btn {
-  background: var(--surface-3);
+  background: var(--panel);
   border: 1px solid var(--border);
-  color: var(--ink-2);
-  padding: 4px 8px;
-  border-radius: 5px;
+  color: var(--mid);
+  padding: 4px 10px;
+  border-radius: 6px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   transition: all 0.15s;
   white-space: nowrap;
   flex-shrink: 0;
 }
-.copy-btn:hover { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
-.copy-btn.copied { background: var(--green-dim); color: var(--green); border-color: var(--green); }
+.copy-btn:hover { border-color: var(--gold); color: var(--gold-dk); background: var(--gold-lt); }
+.copy-btn.copied { background: var(--success-lt); color: var(--success); border-color: #bbf7d0; }
 
 .platform-actions {
   display: flex;
@@ -403,75 +424,87 @@ a { text-decoration: none; color: inherit; }
 
 /* ── BUTTONS ─────────────────────────────────────────────────── */
 .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 9px 16px;
-  border-radius: var(--radius-sm);
+  border-radius: 9px;
   font-size: 13px;
   font-weight: 600;
-  transition: all 0.15s;
+  transition: all 0.2s;
   white-space: nowrap;
+  font-family: var(--font);
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
 }
+.btn svg { width: 14px; height: 14px; flex-shrink: 0; }
 .btn-primary {
-  background: var(--accent);
+  background: var(--gold);
   color: #fff;
-  box-shadow: 0 0 0 0 var(--accent-glow);
+  box-shadow: 0 2px 8px var(--gold-glow);
 }
-.btn-primary:hover {
-  background: #8f70fd;
-  box-shadow: 0 0 0 4px var(--accent-glow);
-}
+.btn-primary:hover { background: var(--gold-dk); transform: translateY(-1px); }
 .btn-secondary {
-  background: var(--surface-2);
-  color: var(--ink-2);
+  background: var(--white);
+  color: var(--dark);
   border: 1px solid var(--border);
 }
-.btn-secondary:hover { background: var(--surface-3); color: var(--ink); border-color: var(--border-hi); }
+.btn-secondary:hover { background: var(--cream); }
 .btn-danger {
-  background: var(--red-dim);
-  color: var(--red);
-  border: 1px solid rgba(240,69,96,0.2);
+  background: var(--danger-lt);
+  color: var(--danger);
+  border: 1px solid #fecaca;
 }
-.btn-danger:hover { background: rgba(240,69,96,0.2); }
+.btn-danger:hover { background: #fecaca; }
 .btn-ghost {
   background: transparent;
-  color: var(--ink-2);
+  color: var(--mid);
   padding: 7px 10px;
 }
-.btn-ghost:hover { background: var(--surface-2); color: var(--ink); }
+.btn-ghost:hover { background: var(--cream); color: var(--dark); }
 .btn[disabled] { opacity: 0.45; pointer-events: none; }
 .btn-sm { padding: 6px 12px; font-size: 12px; }
-.btn-full { width: 100%; }
+.btn-full { width: 100%; justify-content: center; }
 
 /* ── ACTIVITY LOG ────────────────────────────────────────────── */
-.log-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.log-section {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
 .log-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
 }
-.log-title { font-size: 14px; font-weight: 600; color: var(--ink); }
-.log-count { font-size: 12px; color: var(--ink-3); }
+.log-title {
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--dark);
+}
+.log-count { font-size: 12px; color: var(--sub); }
 
 .log-table { width: 100%; border-collapse: collapse; }
+.log-table thead tr { background: var(--cream); border-bottom: 1px solid var(--border); }
 .log-table th {
   text-align: left;
-  padding: 10px 20px;
+  padding: 11px 20px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--ink-3);
-  border-bottom: 1px solid var(--border);
-  background: var(--surface-2);
+  color: var(--sub);
 }
 .log-table td {
-  padding: 12px 20px;
-  font-size: 13px;
-  color: var(--ink-2);
+  padding: 14px 20px;
+  font-size: 13.5px;
+  color: var(--mid);
   border-bottom: 1px solid var(--border);
+  vertical-align: middle;
 }
-.log-table tr:last-child td { border-bottom: none; }
-.log-table tr:hover td { background: var(--surface-2); }
+.log-table tbody tr:last-child td { border-bottom: none; }
+.log-table tbody tr:hover td { background: #FDFCFA; }
 
 .log-platform { display: flex; align-items: center; gap: 7px; }
 .log-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -480,19 +513,19 @@ a { text-decoration: none; color: inherit; }
 
 .log-status {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 8px; border-radius: 5px;
-  font-size: 11.5px; font-weight: 600;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600;
 }
-.log-status.ok     { background: var(--green-dim); color: var(--green); }
-.log-status.error  { background: var(--red-dim);   color: var(--red); }
-.log-status.sig_fail { background: var(--amber-dim); color: var(--amber); }
+.log-status.ok     { background: var(--success-lt); color: var(--success); }
+.log-status.error  { background: var(--danger-lt);  color: var(--danger); }
+.log-status.sig_fail { background: var(--warning-lt); color: var(--warning); }
 
 .log-mono { font-family: var(--mono); font-size: 12px; }
 
 /* ── MODAL ───────────────────────────────────────────────────── */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 100;
-  background: rgba(0,0,0,0.7);
+  background: rgba(28,25,23,0.5);
   backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
   padding: 20px;
@@ -502,29 +535,38 @@ a { text-decoration: none; color: inherit; }
 .modal-overlay.open { opacity: 1; pointer-events: all; }
 
 .modal {
-  background: var(--surface);
-  border: 1px solid var(--border-hi);
-  border-radius: var(--radius-lg);
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 20px;
   width: 100%; max-width: 520px;
   box-shadow: var(--shadow-lg);
   transform: translateY(12px);
-  transition: transform 0.2s;
+  transition: transform 0.25s ease;
+  animation: slideUp 0.25s ease;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 .modal-overlay.open .modal { transform: translateY(0); }
+@keyframes slideUp { from { opacity: 0; transform: translateY(16px); } }
 
 .modal-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 20px 24px;
   border-bottom: 1px solid var(--border);
 }
-.modal-title { font-size: 16px; font-weight: 700; color: var(--ink); }
-.modal-close {
-  background: var(--surface-2); border: 1px solid var(--border);
-  color: var(--ink-2); width: 30px; height: 30px;
-  border-radius: 6px; display: flex; align-items: center; justify-content: center;
-  font-size: 16px; transition: all 0.15s;
+.modal-title {
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--dark);
 }
-.modal-close:hover { background: var(--surface-3); color: var(--ink); }
+.modal-close {
+  background: var(--cream); border: 1px solid var(--border);
+  color: var(--mid); width: 32px; height: 32px;
+  border-radius: 8px; display: flex; align-items: center; justify-content: center;
+  font-size: 18px; transition: all 0.15s; line-height: 1;
+}
+.modal-close:hover { background: var(--panel); color: var(--dark); }
 
 .modal-body { padding: 24px; display: flex; flex-direction: column; gap: 18px; }
 .modal-footer {
@@ -534,32 +576,35 @@ a { text-decoration: none; color: inherit; }
 }
 
 /* ── FORM ────────────────────────────────────────────────────── */
-.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 0; }
 .form-label {
-  font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+  display: block;
+  font-size: 11px; font-weight: 600; color: var(--mid);
+  text-transform: uppercase; letter-spacing: 0.06em;
   display: flex; align-items: center; gap: 6px;
 }
-.form-label .required { color: var(--red); }
-.form-label .optional { color: var(--ink-3); font-weight: 400; font-size: 11px; }
+.form-label .required { color: var(--danger); }
+.form-label .optional { color: var(--sub); font-weight: 400; font-size: 11px; text-transform: none; }
 
 .form-input {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--ink);
-  padding: 10px 12px;
-  font-size: 13.5px;
-  transition: border-color 0.15s;
+  background: var(--cream);
+  border: 1.5px solid var(--border);
+  border-radius: 9px;
+  color: var(--dark);
+  padding: 11px 14px;
+  font-size: 14px;
+  transition: all 0.2s;
   width: 100%;
+  font-family: var(--font);
 }
-.form-input:focus { border-color: var(--accent); }
-.form-input::placeholder { color: var(--ink-3); }
+.form-input:focus { border-color: var(--gold); background: var(--white); box-shadow: 0 0 0 3px var(--gold-lt); }
+.form-input::placeholder { color: var(--sub); }
 .form-input.secret { font-family: var(--mono); letter-spacing: 0.05em; }
-.form-input.error { border-color: var(--red); }
+.form-input.error { border-color: var(--danger); }
 
-.form-hint { font-size: 12px; color: var(--ink-3); line-height: 1.5; }
-.form-hint a { color: var(--accent); }
-.form-hint.error { color: var(--red); }
+.form-hint { font-size: 12px; color: var(--sub); line-height: 1.5; }
+.form-hint a { color: var(--gold-dk); text-decoration: underline; }
+.form-hint.error { color: var(--danger); }
 
 .platform-tabs {
   display: grid; grid-template-columns: 1fr 1fr;
@@ -567,67 +612,68 @@ a { text-decoration: none; color: inherit; }
 }
 .platform-tab {
   padding: 12px 14px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--surface-2);
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--cream);
   display: flex; align-items: center; gap: 10px;
   cursor: pointer; transition: all 0.15s;
 }
-.platform-tab:hover { border-color: var(--border-hi); }
-.platform-tab.active.shopify { border-color: rgba(150,191,72,0.4); background: var(--shopify-dim); }
-.platform-tab.active.acuity  { border-color: rgba(74,184,232,0.4); background: var(--acuity-dim); }
-.platform-tab-name { font-size: 13px; font-weight: 600; color: var(--ink); }
-.platform-tab-sub  { font-size: 11px; color: var(--ink-3); }
+.platform-tab:hover { border-color: var(--gold); background: var(--white); }
+.platform-tab.active.shopify { border-color: rgba(90,122,42,0.4); background: var(--shopify-lt); }
+.platform-tab.active.acuity  { border-color: rgba(30,111,160,0.4); background: var(--acuity-lt); }
+.platform-tab-name { font-size: 13px; font-weight: 600; color: var(--dark); }
+.platform-tab-sub  { font-size: 11px; color: var(--sub); }
 
 /* ── STEPS (onboarding instructions) ────────────────────────── */
 .steps-panel {
-  background: var(--surface-2);
+  background: var(--cream);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 10px;
   padding: 14px 16px;
   display: flex; flex-direction: column; gap: 10px;
 }
-.steps-title { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 2px; }
+.steps-title { font-size: 11px; font-weight: 700; color: var(--sub); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 2px; }
 .step-item {
   display: flex; align-items: flex-start; gap: 10px;
-  font-size: 12.5px; color: var(--ink-2);
+  font-size: 12.5px; color: var(--mid);
 }
 .step-num {
   width: 20px; height: 20px; border-radius: 50%;
-  background: var(--surface-3); border: 1px solid var(--border);
+  background: var(--gold-lt); border: 1px solid rgba(184,146,74,0.2);
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 700; color: var(--ink-3);
+  font-size: 10px; font-weight: 700; color: var(--gold-dk);
   flex-shrink: 0; margin-top: 1px;
 }
 
 /* ── SUCCESS STATE ───────────────────────────────────────────── */
 .success-box {
-  background: var(--green-dim);
-  border: 1px solid rgba(34,201,122,0.2);
-  border-radius: var(--radius-sm);
+  background: var(--success-lt);
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
   padding: 16px;
   display: flex; flex-direction: column; gap: 10px;
 }
-.success-box-title { font-size: 13.5px; font-weight: 700; color: var(--green); display: flex; align-items: center; gap: 8px; }
+.success-box-title { font-size: 13.5px; font-weight: 700; color: var(--success); display: flex; align-items: center; gap: 8px; }
 .success-url-row { display: flex; align-items: center; gap: 8px; }
 .success-url {
   flex: 1; font-family: var(--mono); font-size: 12px;
-  background: rgba(0,0,0,0.2); border: 1px solid rgba(34,201,122,0.2);
-  border-radius: 6px; padding: 8px 10px; color: var(--green);
+  background: rgba(22,163,74,0.08); border: 1px solid #bbf7d0;
+  border-radius: 7px; padding: 8px 10px; color: var(--success);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 /* ── EMPTY / LOADING ─────────────────────────────────────────── */
 .empty-log {
   text-align: center; padding: 40px 20px;
-  color: var(--ink-3); font-size: 13px;
+  color: var(--sub); font-size: 13px;
 }
 .spinner {
   width: 18px; height: 18px;
   border: 2px solid var(--border);
-  border-top-color: var(--accent);
+  border-top-color: var(--gold);
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
+  display: inline-block;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -638,31 +684,31 @@ a { text-decoration: none; color: inherit; }
 }
 .toast {
   display: flex; align-items: center; gap: 10px;
-  background: var(--surface);
-  border: 1px solid var(--border-hi);
-  border-radius: var(--radius-sm);
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
   padding: 12px 16px;
-  box-shadow: var(--shadow-lg);
-  font-size: 13px; font-weight: 500; color: var(--ink);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  font-size: 13px; font-weight: 500; color: var(--dark);
   min-width: 280px; max-width: 380px;
   pointer-events: all;
   animation: slide-in 0.25s ease;
 }
-.toast.success { border-left: 3px solid var(--green); }
-.toast.error   { border-left: 3px solid var(--red); }
+.toast.success { border-left: 3px solid var(--success); }
+.toast.error   { border-left: 3px solid var(--danger); }
 @keyframes slide-in { from { opacity: 0; transform: translateX(20px); } }
 @keyframes slide-out { to   { opacity: 0; transform: translateX(20px); } }
 .toast.out { animation: slide-out 0.2s ease forwards; }
 
 /* ── DISCONNECT CONFIRM ──────────────────────────────────────── */
 .danger-zone {
-  background: var(--red-dim);
-  border: 1px solid rgba(240,69,96,0.2);
-  border-radius: var(--radius-sm);
+  background: var(--danger-lt);
+  border: 1px solid #fecaca;
+  border-radius: 10px;
   padding: 14px 16px;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
-.danger-zone-text { font-size: 12.5px; color: var(--red); }
+.danger-zone-text { font-size: 12.5px; color: var(--danger); }
 .danger-zone-title { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
 
 /* ── ONBOARDING BANNER ───────────────────────────────────────── */
@@ -670,8 +716,8 @@ a { text-decoration: none; color: inherit; }
   display: none;
   flex-direction: column;
   gap: 0;
-  background: var(--surface);
-  border: 1px solid var(--border-hi);
+  background: var(--white);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
   opacity: 0;
@@ -684,7 +730,7 @@ a { text-decoration: none; color: inherit; }
 }
 
 .onboarding-top {
-  background: linear-gradient(135deg, rgba(124,92,252,0.18) 0%, rgba(124,92,252,0.05) 100%);
+  background: linear-gradient(135deg, var(--gold-lt) 0%, rgba(184,146,74,0.04) 100%);
   border-bottom: 1px solid var(--border);
   padding: 24px 28px 20px;
   display: flex;
@@ -698,34 +744,36 @@ a { text-decoration: none; color: inherit; }
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--gold-dk);
   margin-bottom: 6px;
 }
 .onboarding-title {
-  font-size: 18px;
+  font-family: var(--serif);
+  font-size: 19px;
   font-weight: 700;
   letter-spacing: -0.3px;
-  color: var(--ink);
+  color: var(--dark);
   margin-bottom: 6px;
 }
 .onboarding-subtitle {
   font-size: 13.5px;
-  color: var(--ink-2);
+  color: var(--mid);
   line-height: 1.55;
+  font-weight: 300;
 }
 .onboarding-dismiss {
-  background: var(--surface-2);
+  background: var(--panel);
   border: 1px solid var(--border);
-  color: var(--ink-3);
+  color: var(--sub);
   width: 28px; height: 28px;
-  border-radius: 6px;
+  border-radius: 7px;
   display: flex; align-items: center; justify-content: center;
   font-size: 14px;
   flex-shrink: 0;
   transition: all 0.15s;
   cursor: pointer;
 }
-.onboarding-dismiss:hover { background: var(--surface-3); color: var(--ink); }
+.onboarding-dismiss:hover { background: var(--cream2); color: var(--dark); }
 
 /* Three steps track */
 .onboarding-steps {
@@ -755,17 +803,17 @@ a { text-decoration: none; color: inherit; }
   font-weight: 700;
   flex-shrink: 0;
 }
-.ob-step-num.done { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,201,122,0.3); }
-.ob-step-num.active { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(124,92,252,0.3); }
-.ob-step-num.upcoming { background: var(--surface-2); color: var(--ink-3); border: 1px solid var(--border); }
+.ob-step-num.done    { background: var(--success-lt); color: var(--success); border: 1px solid #bbf7d0; }
+.ob-step-num.active  { background: var(--gold-lt); color: var(--gold-dk); border: 1px solid rgba(184,146,74,0.3); }
+.ob-step-num.upcoming { background: var(--panel); color: var(--sub); border: 1px solid var(--border); }
 
-.ob-step-title { font-size: 13.5px; font-weight: 600; color: var(--ink); }
-.ob-step-desc  { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+.ob-step-title { font-size: 13.5px; font-weight: 600; color: var(--dark); }
+.ob-step-desc  { font-size: 12.5px; color: var(--mid); line-height: 1.5; font-weight: 300; }
 
 .onboarding-footer {
   padding: 14px 28px;
   border-top: 1px solid var(--border);
-  background: var(--surface-2);
+  background: var(--cream);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -773,10 +821,10 @@ a { text-decoration: none; color: inherit; }
 }
 .onboarding-footer-text {
   font-size: 12.5px;
-  color: var(--ink-3);
+  color: var(--sub);
 }
 .onboarding-footer-text a {
-  color: var(--accent);
+  color: var(--gold-dk);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -790,18 +838,46 @@ a { text-decoration: none; color: inherit; }
 /* ── RESPONSIVE ──────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .platforms-grid { grid-template-columns: 1fr; }
-  .layout { grid-template-columns: 1fr; }
+  .main-wrapper { margin-left: 0; }
   .sidebar { display: none; }
-  .header { grid-column: 1; }
-  .main { grid-column: 1; }
 }
-</style>
-  .platforms-grid { grid-template-columns: 1fr; }
-  .layout { grid-template-columns: 1fr; }
-  .sidebar { display: none; }
-  .header { grid-column: 1; }
-  .main { grid-column: 1; }
+
+/* ── MODAL STEP LABELS ───────────────────────────────────────── */
+.modal-step-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--mid);
 }
+.modal-step-badge {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--gold-lt);
+  border: 1px solid rgba(184,146,74,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+  color: var(--gold-dk);
+  flex-shrink: 0;
+}
+#modal-setup-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── CARD LAST-EVENT HEALTH SIGNAL ───────────────────────────── */
+.card-last-event {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--sub);
+  margin-bottom: 14px;
+}
+.card-last-event svg { flex-shrink: 0; }
+.card-last-event.stale { color: var(--warning); }
 </style>
 <!-- Jinja2 template variables — populated by Flask's render_template() -->
 <!-- In production these are rendered by Flask; in standalone demo they fall back to JS defaults above -->
@@ -823,45 +899,45 @@ a { text-decoration: none; color: inherit; }
       <span>Lumvi</span>
     </div>
 
-    <div class="sidebar-label">Workspace</div>
-    <div class="nav-item" onclick="navigate('dashboard')">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      Dashboard
-    </div>
-    <div class="nav-item" onclick="navigate('clients')">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-      Clients
-    </div>
-    <div class="nav-item" onclick="navigate('chatbots')">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      Chatbots
-    </div>
-    <div class="nav-item" onclick="navigate('leads')">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-      Leads
-    </div>
-    <div class="nav-item" onclick="navigate('analytics')">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-      Analytics
-    </div>
+    <nav style="flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+      <div class="nav-label">Workspace</div>
+      <div class="nav-item" onclick="navigate('dashboard')">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-item" onclick="navigate('clients')">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Clients
+      </div>
+      <div class="nav-item" onclick="navigate('chatbots')">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Chatbots
+      </div>
+      <div class="nav-item" onclick="navigate('leads')">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Leads
+      </div>
+      <div class="nav-item" onclick="navigate('analytics')">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Analytics
+      </div>
 
-    <div class="sidebar-divider"></div>
-    <div class="sidebar-label">Settings</div>
+      <div class="sidebar-divider"></div>
+      <div class="nav-label">Settings</div>
 
-    <div class="nav-item active">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-      Integrations
-    </div>
-    <div class="nav-item" onclick="navigate('settings')">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M16.24 7.76a6 6 0 0 1 0 8.49M4.93 4.93a10 10 0 0 0 0 14.14M7.76 7.76a6 6 0 0 0 0 8.49"/></svg>
-      Branding
-    </div>
-    <div class="nav-item" onclick="navigate('billing')">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-      Billing
-    </div>
-
-    <div class="sidebar-divider"></div>
+      <div class="nav-item active">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        Integrations
+      </div>
+      <div class="nav-item" onclick="navigate('settings')">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M16.24 7.76a6 6 0 0 1 0 8.49M4.93 4.93a10 10 0 0 0 0 14.14M7.76 7.76a6 6 0 0 0 0 8.49"/></svg>
+        Branding
+      </div>
+      <div class="nav-item" onclick="navigate('billing')">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        Billing
+      </div>
+    </nav>
 
     <div class="sidebar-bottom">
       <div class="sidebar-user">
@@ -874,12 +950,15 @@ a { text-decoration: none; color: inherit; }
     </div>
   </aside>
 
+  <!-- ── MAIN WRAPPER ────────────────────────────────────────── -->
+  <div class="main-wrapper">
+
   <!-- ── HEADER ──────────────────────────────────────────────── -->
   <header class="header">
     <div class="header-title">Integrations</div>
     <div class="header-actions">
-      <button class="btn btn-secondary btn-sm" onclick="openModal()">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <button class="btn btn-primary btn-sm" onclick="openModal()">
+        <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Connect Platform
       </button>
     </div>
@@ -926,7 +1005,7 @@ a { text-decoration: none; color: inherit; }
             <div class="ob-step-title">Select a client &amp; connect</div>
           </div>
           <div class="ob-step-desc">
-            Pick a client from the selector below, then click <strong style="color:var(--ink)">Connect Shopify</strong> or <strong style="color:var(--ink)">Connect Acuity</strong>.
+            Pick a client from the selector below, then click <strong style="color:var(--dark)">Connect Shopify</strong> or <strong style="color:var(--dark)">Connect Acuity</strong>.
             Paste in the webhook secret from the platform — takes about 60 seconds.
           </div>
         </div>
@@ -936,8 +1015,8 @@ a { text-decoration: none; color: inherit; }
             <div class="ob-step-title">Test it — ask a live question</div>
           </div>
           <div class="ob-step-desc">
-            Once connected, open your client's chatbot and type <em style="color:var(--ink-2)">"where is my order?"</em>
-            or <em style="color:var(--ink-2)">"book an appointment"</em>. Lumvi answers with real data instantly.
+            Once connected, open your client's chatbot and type <em style="color:var(--mid)">"where is my order?"</em>
+            or <em style="color:var(--mid)">"book an appointment"</em>. Lumvi answers with real data instantly.
           </div>
         </div>
       </div>
@@ -958,9 +1037,9 @@ a { text-decoration: none; color: inherit; }
     <div class="client-bar">
       <span class="client-bar-label">Viewing client:</span>
       <select class="client-select" id="clientSelect" onchange="onClientChange()">
-        <option value="client_abc123">Bloom Flower Shop (client_abc123)</option>
-        <option value="client_def456">Peak Fitness Studio (client_def456)</option>
-        <option value="client_ghi789">Westside Legal (client_ghi789)</option>
+        <option value="client_abc123">Bloom Flower Shop</option>
+        <option value="client_def456">Peak Fitness Studio</option>
+        <option value="client_ghi789">Westside Legal</option>
       </select>
       <div class="client-badge" id="clientBadge">3 integrations</div>
     </div>
@@ -977,9 +1056,9 @@ a { text-decoration: none; color: inherit; }
         <div class="platform-name">Shopify</div>
         <div class="platform-desc">Order status, tracking, and cancellations — answered automatically from your client's live store data.</div>
         <div class="platform-meta">
-          <span class="meta-tag shopify">orders/created</span>
-          <span class="meta-tag shopify">orders/updated</span>
-          <span class="meta-tag shopify">orders/cancelled</span>
+          <span class="meta-tag shopify">New orders</span>
+          <span class="meta-tag shopify">Order updates</span>
+          <span class="meta-tag shopify">Cancellations</span>
         </div>
         <div class="platform-webhook-url" id="shopify-url-row">
           <span class="webhook-url-label">Webhook URL</span>
@@ -1007,9 +1086,9 @@ a { text-decoration: none; color: inherit; }
         <div class="platform-name">Acuity Scheduling</div>
         <div class="platform-desc">Appointment availability, bookings, and rescheduling — synced in real time from your client's calendar.</div>
         <div class="platform-meta">
-          <span class="meta-tag acuity">appointment.scheduled</span>
-          <span class="meta-tag acuity">appointment.rescheduled</span>
-          <span class="meta-tag acuity">appointment.cancelled</span>
+          <span class="meta-tag acuity">New bookings</span>
+          <span class="meta-tag acuity">Rescheduled</span>
+          <span class="meta-tag acuity">Cancellations</span>
         </div>
         <div class="platform-actions" id="acuity-actions">
           <button class="btn btn-primary btn-sm btn-full" onclick="openModal('acuity')">
@@ -1044,6 +1123,7 @@ a { text-decoration: none; color: inherit; }
     </div>
 
   </main>
+  </div><!-- end main-wrapper -->
 </div>
 
 <!-- ── CONNECT / EDIT MODAL ────────────────────────────────────── -->
@@ -1077,32 +1157,55 @@ a { text-decoration: none; color: inherit; }
         </div>
       </div>
 
+      <!-- Setup flow: shown in connect mode, hidden in edit mode -->
+      <div id="modal-setup-flow">
+
+        <!-- Step A: Copy the webhook URL first -->
+        <div id="modal-url-preview-row">
+          <div class="modal-step-label">
+            <span class="modal-step-badge">1</span>
+            Copy this URL and paste it into your platform settings
+          </div>
+          <div class="platform-webhook-url" style="margin-top:8px">
+            <span class="webhook-url-label">Webhook URL</span>
+            <span class="webhook-url-value" id="modal-url-preview"></span>
+            <button class="copy-btn" onclick="(()=>{
+              navigator.clipboard.writeText(document.getElementById('modal-url-preview').textContent);
+              this.textContent='Copied!'; this.classList.add('copied');
+              setTimeout(()=>{this.textContent='Copy';this.classList.remove('copied')},2000);
+            })()">Copy</button>
+          </div>
+        </div>
+
+        <!-- Setup guide steps -->
+        <div class="steps-panel" id="steps-panel">
+          <div class="steps-title" id="steps-title">Setup steps — Shopify</div>
+          <div id="steps-list"></div>
+        </div>
+
+        <!-- Step B: label above the secret field -->
+        <div class="modal-step-label">
+          <span class="modal-step-badge">2</span>
+          Come back here and paste the security key below
+        </div>
+
+      </div>
+
+      <!-- Secret input: always shown -->
       <div class="form-group">
         <label class="form-label">
-          Webhook Secret
+          <span id="secret-label">Security key from Shopify</span>
           <span class="required">*</span>
         </label>
         <input type="password" class="form-input secret" id="secret-input"
-               placeholder="Paste the signing secret from the platform…" />
+               placeholder="Paste the security key from the platform…" />
         <div class="form-hint" id="secret-hint">
-          In Shopify: Settings → Notifications → Webhooks → shown after saving. In Acuity: Integrations → Webhooks → Secret key.
+          Shopify gives you this key automatically when you create a webhook — copy and paste it here.
         </div>
-      </div>
-
-      <!-- Webhook URL preview — copy this BEFORE entering the secret above -->
-      <div class="platform-webhook-url" id="modal-url-preview-row" style="display:none">
-        <span class="webhook-url-label">Your webhook URL</span>
-        <span class="webhook-url-value" id="modal-url-preview"></span>
-        <button class="copy-btn" onclick="(()=>{
-          navigator.clipboard.writeText(document.getElementById('modal-url-preview').textContent);
-          this.textContent='Copied!'; this.classList.add('copied');
-          setTimeout(()=>{this.textContent='Copy';this.classList.remove('copied')},2000);
-        })()">Copy</button>
-      </div>
-
-      <div class="steps-panel" id="steps-panel">
-        <div class="steps-title" id="steps-title">Setup steps — Shopify</div>
-        <div id="steps-list"></div>
+        <div class="form-hint" style="display:flex;align-items:center;gap:5px;margin-top:4px">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          Encrypted and never shown again after saving.
+        </div>
       </div>
 
     </div>
@@ -1150,12 +1253,12 @@ a { text-decoration: none; color: inherit; }
         <div>
           <div class="danger-zone-title">⚠️ This will stop syncing data</div>
           <div class="danger-zone-text">
-            Any future webhooks from this platform will be rejected. Existing order / appointment data already stored in Lumvi will remain intact.
+            Your chatbot will stop answering live order and appointment questions and fall back to general responses. Any future webhooks from this platform will be rejected. Existing data already stored in Lumvi will remain intact.
           </div>
         </div>
       </div>
       <p style="font-size:13px;color:var(--ink-2);line-height:1.6">
-        Are you sure you want to disconnect <strong id="disconnect-platform-name" style="color:var(--ink)"></strong> for this client? You can reconnect at any time.
+        Are you sure you want to disconnect <strong id="disconnect-platform-name" style="color:var(--dark)"></strong> for this client? You can reconnect at any time.
       </p>
     </div>
     <div class="modal-footer">
@@ -1197,6 +1300,27 @@ window.addEventListener('DOMContentLoaded', () => {
   checkOnboarding();
 });
 
+/* ── ONBOARDING STEPS — reflect real integration state ───────── */
+function updateOnboardingSteps() {
+  const hasAny = Object.values(integrationCache).some(c =>
+    Object.values(c).some(Boolean)
+  );
+  const step2Num  = document.querySelector('#onboardingBanner .onboarding-step:nth-child(2) .ob-step-num');
+  const step3Num  = document.querySelector('#onboardingBanner .onboarding-step:nth-child(3) .ob-step-num');
+  if (!step2Num || !step3Num) return;
+  if (hasAny) {
+    step2Num.className   = 'ob-step-num done';
+    step2Num.textContent = '✓';
+    step3Num.className   = 'ob-step-num active';
+    step3Num.textContent = '3';
+  } else {
+    step2Num.className   = 'ob-step-num active';
+    step2Num.textContent = '2';
+    step3Num.className   = 'ob-step-num upcoming';
+    step3Num.textContent = '3';
+  }
+}
+
 /* ── ONBOARDING ──────────────────────────────────────────────────
    Show the onboarding banner if:
    - user has at least one client
@@ -1234,7 +1358,7 @@ function dismissOnboarding() {
 function populateClientSelect() {
   const sel = document.getElementById('clientSelect');
   sel.innerHTML = CLIENTS.map(c =>
-    `<option value="${c.client_id}">${c.company_name} (${c.client_id})</option>`
+    `<option value="${c.client_id}">${c.company_name}</option>`
   ).join('');
   if (CLIENTS.length) currentClient = CLIENTS[0].client_id;
 }
@@ -1271,6 +1395,7 @@ async function loadIntegrations(clientId) {
 
     setCardState('shopify', state.shopify, clientId, urlMap.shopify);
     setCardState('acuity',  state.acuity,  clientId, urlMap.acuity);
+    updateOnboardingSteps();
 
   } catch (err) {
     showToast('Could not load integrations: ' + err.message, 'error');
@@ -1297,7 +1422,7 @@ async function loadLog(clientId) {
 function renderLog(logs) {
   const tbody = document.getElementById('log-body');
   if (!logs.length) {
-    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-log">No webhook events yet for this client.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5"><div class="empty-log">No events yet. Once connected, activity appears here in real time.</div></td></tr>`;
     document.getElementById('log-count').textContent = '0 events';
     return;
   }
@@ -1310,22 +1435,53 @@ function renderLog(logs) {
     if (h < 24) return `${h} hr ago`;
     return `${Math.floor(h/24)} day ago`;
   }
+  function friendlyEvent(type) {
+    const map = {
+      'orders/created':          'New order',
+      'orders/updated':          'Order updated',
+      'orders/cancelled':        'Order cancelled',
+      'appointment.scheduled':   'New booking',
+      'appointment.rescheduled': 'Rescheduled',
+      'appointment.cancelled':   'Cancellation',
+    };
+    return map[type] || type || '—';
+  }
+
+  // Track most recent event per platform for card health signals
+  const latestByPlatform = {};
+  for (const l of logs) {
+    if (l.time && l.platform && !latestByPlatform[l.platform]) {
+      latestByPlatform[l.platform] = l.time;
+    }
+  }
+  // Update card last-event slots
+  for (const [platform, time] of Object.entries(latestByPlatform)) {
+    const slot = document.getElementById(`${platform}-last-event`);
+    if (!slot) continue;
+    const diffHours = (Date.now() - new Date(time).getTime()) / 3600000;
+    const isStale = diffHours > 48;
+    slot.className = `card-last-event${isStale ? ' stale' : ''}`;
+    slot.innerHTML = isStale
+      ? `<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> No events in 48h — check connection`
+      : `<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Last event: ${timeAgo(time)}`;
+  }
+
   tbody.innerHTML = logs.map(l => `
     <tr>
       <td>
         <div class="log-platform">
           <div class="log-dot ${l.platform}"></div>
-          <span style="font-weight:500;color:var(--ink)">${l.platform === 'shopify' ? 'Shopify' : 'Acuity'}</span>
+          <span style="font-weight:500;color:var(--dark)">${l.platform === 'shopify' ? 'Shopify' : 'Acuity'}</span>
         </div>
       </td>
-      <td class="log-mono">${l.event_type || '—'}</td>
+      <td>${friendlyEvent(l.event_type)}</td>
       <td>
         <span class="log-status ${l.status}">
-          ${l.status === 'ok' ? '✓ ok' : l.status === 'sig_fail' ? '⚠ sig fail' : '✕ error'}
+          ${l.status === 'ok' ? '✓ Delivered' : l.status === 'sig_fail' ? '⚠ Auth failed' : '✕ Error'}
         </span>
       </td>
-      <td class="log-mono" style="color:var(--ink)">${l.ref || '—'}</td>
-      <td style="color:var(--ink-3)">${l.time ? timeAgo(l.time) : '—'}</td>
+      <td class="log-mono" style="color:var(--dark)">${l.ref || '—'}</td>
+      <td style="color:var(--sub)">${l.time ? timeAgo(l.time) : '—'}</td>
     </tr>
   `).join('');
   document.getElementById('log-count').textContent = `Last ${logs.length} events`;
@@ -1342,6 +1498,18 @@ function setCardState(platform, connected, clientId, webhookUrl) {
   if (connected) {
     status.className   = 'platform-status connected';
     status.textContent = 'Connected';
+
+    // Last-event health slot
+    let lastEventSlot = document.getElementById(`${platform}-last-event`);
+    if (!lastEventSlot) {
+      lastEventSlot = document.createElement('div');
+      lastEventSlot.id = `${platform}-last-event`;
+      lastEventSlot.className = 'card-last-event';
+      lastEventSlot.textContent = 'Checking activity…';
+      // Insert after the status badge row
+      const top = card.querySelector('.platform-top');
+      top.insertAdjacentElement('afterend', lastEventSlot);
+    }
 
     let urlRow = document.getElementById(`${platform}-url-row`);
     if (!urlRow) {
@@ -1375,6 +1543,8 @@ function setCardState(platform, connected, clientId, webhookUrl) {
   } else {
     status.className   = 'platform-status not-connected';
     status.textContent = 'Not connected';
+    const lastEvent = document.getElementById(`${platform}-last-event`);
+    if (lastEvent) lastEvent.remove();
     const urlRow = document.getElementById(`${platform}-url-row`);
     if (urlRow) urlRow.remove();
     const actions = card.querySelector('.platform-actions');
@@ -1444,7 +1614,8 @@ function renderSteps(platform, containerId) {
 /* ── MODAL ───────────────────────────────────────────────────── */
 function openModal(platform) {
   isEditMode = false;
-  document.getElementById('modal-title').textContent    = 'Connect a Platform';
+  const clientName = CLIENTS.find(c => c.client_id === currentClient)?.company_name || '';
+  document.getElementById('modal-title').textContent    = clientName ? `Connect a Platform — ${clientName}` : 'Connect a Platform';
   document.getElementById('submit-label').textContent   = 'Connect Platform';
   document.getElementById('modal-step-1').style.display = 'flex';
   document.getElementById('modal-step-2').style.display = 'none';
@@ -1458,6 +1629,7 @@ function openModal(platform) {
   `;
   document.getElementById('secret-input').value        = '';
   document.getElementById('platform-picker-group').style.display = 'block';
+  document.getElementById('modal-setup-flow').style.display      = 'flex';
   selectedPlatform = platform || 'shopify';
   document.getElementById('tab-shopify').classList.toggle('active', selectedPlatform === 'shopify');
   document.getElementById('tab-acuity').classList.toggle('active',  selectedPlatform === 'acuity');
@@ -1465,10 +1637,9 @@ function openModal(platform) {
   renderSteps(selectedPlatform, 'steps-list');
   document.getElementById('steps-title').textContent = `Setup steps — ${selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1)}`;
 
-  // Show the webhook URL so the operator can paste it into the platform BEFORE saving
+  // Show the webhook URL so the operator can paste it into the platform BEFORE entering the secret
   const previewUrl = `${BASE_URL}/webhooks/${selectedPlatform}/${currentClient}`;
   document.getElementById('modal-url-preview').textContent = previewUrl;
-  document.getElementById('modal-url-preview-row').style.display = 'flex';
 
   document.getElementById('connectModal').classList.add('open');
 }
@@ -1477,7 +1648,8 @@ function openEditModal(platform) {
   isEditMode = true;
   selectedPlatform = platform;
   const pName = platform.charAt(0).toUpperCase() + platform.slice(1);
-  document.getElementById('modal-title').textContent    = `Update ${pName} Secret`;
+  const clientName = CLIENTS.find(c => c.client_id === currentClient)?.company_name || '';
+  document.getElementById('modal-title').textContent    = clientName ? `Update ${pName} Key — ${clientName}` : `Update ${pName} Secret`;
   document.getElementById('modal-step-1').style.display = 'flex';
   document.getElementById('modal-step-2').style.display = 'none';
   document.getElementById('modal-footer').style.display = 'flex';
@@ -1490,7 +1662,7 @@ function openEditModal(platform) {
   `;
   document.getElementById('secret-input').value = '';
   document.getElementById('platform-picker-group').style.display = 'none';
-  document.getElementById('modal-url-preview-row').style.display = 'none';
+  document.getElementById('modal-setup-flow').style.display      = 'none';
   updateSecretHint(platform);
   document.getElementById('steps-title').textContent = `Where to find the ${pName} secret`;
   renderSteps(platform, 'steps-list');
@@ -1514,9 +1686,15 @@ function selectPlatform(platform) {
 }
 
 function updateSecretHint(platform) {
-  document.getElementById('secret-hint').textContent = platform === 'shopify'
-    ? 'Found in Shopify: Settings → Notifications → Webhooks → shown after creating a webhook.'
-    : 'Found in Acuity: Integrations → Webhooks → Secret key shown next to each endpoint.';
+  const label = document.getElementById('secret-label');
+  const hint  = document.getElementById('secret-hint');
+  if (platform === 'shopify') {
+    if (label) label.textContent = 'Security key from Shopify';
+    if (hint)  hint.textContent  = 'Shopify gives you this key automatically when you create a webhook — copy and paste it here.';
+  } else {
+    if (label) label.textContent = 'Security key from Acuity';
+    if (hint)  hint.textContent  = 'Acuity gives you this key when you add a webhook endpoint — copy and paste it here.';
+  }
 }
 
 /* ── SUBMIT (real API) ───────────────────────────────────────── */
