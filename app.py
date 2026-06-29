@@ -807,6 +807,7 @@ try:
         'migrate_lead_nudge_tracking',
         'migrate_lead_intent_summary',
         'migrate_overage_tracking',   # agency $15/seat recurring billing columns
+        'migrate_seat_subscriptions', # agency per-seat purchase subscriptions table
         'migrate_lead_delivery',      # Gap 3 — notification_email/phone/name on clients
         'migrate_agency_email_domains', # white-label custom email domain
     ]
@@ -955,6 +956,7 @@ init_agency(
     plan_limits=PLAN_LIMITS,
     dns_executor=_dns_executor,
     futures_timeout=_FuturesTimeout,
+    agency_included_clients=AGENCY_INCLUDED_CLIENTS,
 )
 app.register_blueprint(agency_bp)
 

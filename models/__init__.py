@@ -100,6 +100,14 @@ from .billing import (
     set_overage_pending,
     mark_overage_paid,
     mark_overdue_overage_users,
+    # Seat subscription system (Option A — proactive buy-before-add)
+    SEAT_PACKAGES,
+    calculate_seat_proration,
+    get_active_seat_count,
+    create_seat_subscription,
+    get_seats_due_today,
+    renew_seat,
+    fail_seat,
 )
 
 # ── Clients ───────────────────────────────────────────────────────────────────
@@ -306,4 +314,5 @@ from .migrations import (
     migrate_overage_tracking,
     migrate_lead_delivery,          # Gap 3 — notification_email/phone/name on clients
     migrate_agency_email_domains,   # white-label custom email domain per agency
+    migrate_seat_subscriptions,     # agency per-seat purchase subscriptions
 )

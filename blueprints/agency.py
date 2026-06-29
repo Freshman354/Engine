@@ -71,22 +71,25 @@ import models
 agency_bp = Blueprint('agency', __name__)
 
 # Injected dependencies — populated by init_agency() before first request.
-_mail            = None
-_plan_limits     = None
-_dns_executor    = None
-_FuturesTimeout_ = None
+_mail                    = None
+_plan_limits             = None
+_dns_executor            = None
+_FuturesTimeout_         = None
+_agency_included_clients = None   # used in clone_client_route seat gate
 
 
-def init_agency(mail, plan_limits, dns_executor, futures_timeout):
+def init_agency(mail, plan_limits, dns_executor, futures_timeout,
+                agency_included_clients=20):
     """
     Called once in app.py after all shared objects are ready.
     Must be called before the first request reaches this blueprint.
     """
-    global _mail, _plan_limits, _dns_executor, _FuturesTimeout_
-    _mail            = mail
-    _plan_limits     = plan_limits
-    _dns_executor    = dns_executor
-    _FuturesTimeout_ = futures_timeout
+    global _mail, _plan_limits, _dns_executor, _FuturesTimeout_, _agency_included_clients
+    _mail                    = mail
+    _plan_limits             = plan_limits
+    _dns_executor            = dns_executor
+    _FuturesTimeout_         = futures_timeout
+    _agency_included_clients = agency_included_clients
 
 
 # ── Portal authentication decorator ─────────────────────────────────────────
@@ -959,32 +962,32 @@ def clone_client_route():
     plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
     plan_limits = _plan_limits.get(plan_type, _plan_limits['free'])
 
-    # Block client creation if overage invoice is overdue (agency only)
-    if plan_type == 'agency' and fresh_user:
-        overage_status = (fresh_user or {}).get('overage_payment_status', 'none')
-        if overage_status == 'overdue':
-            overage_link = (fresh_user or {}).get('overage_payment_link', '')
-            pay_hint = f' Pay your outstanding invoice: {overage_link}' if overage_link else ''
-            return jsonify({
-                'success': False,
-                'error':   (
-                    'Account on hold: your extra-seat invoice is overdue. '
-                    'Please pay to continue adding chatbots.' + pay_hint
-                ),
-                'overage_overdue': True,
-                'payment_link': overage_link,
-            }), 402
-
     # Advisory lock — prevents clone + create race past the client limit
     _lc, _lcur = models.get_db()
     try:
         _lcur.execute("SELECT pg_advisory_lock(%s)", (current_user.id,))
         current_count = len(models.get_user_clients(current_user.id))
-        if current_count >= plan_limits['clients']:
+
+        if plan_type == 'agency':
+            # Gate: included slots + any active purchased seat subscriptions
+            included    = _agency_included_clients or 20
+            active_seats = models.get_active_seat_count(current_user.id)
+            ceiling     = included + active_seats
+            if current_count >= ceiling:
+                return jsonify({
+                    'success': False,
+                    'error':   (
+                        'All seats are in use. Purchase an extra seat '
+                        'to add more chatbots.'
+                    ),
+                    'requires_seat_purchase': True,
+                }), 402
+        elif current_count >= plan_limits['clients']:
             return jsonify({
                 'success': False,
                 'error':   f'Client limit reached for {plan_type} plan',
             }), 403
+
         new_cid = models.clone_client(source_client_id, current_user.id, new_name)
     finally:
         try:

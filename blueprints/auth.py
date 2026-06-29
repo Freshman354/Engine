@@ -372,6 +372,14 @@ def dashboard():
     slots_display = 'Unlimited' if client_limit >= 999999 else str(client_limit)
     limit_reached = False if client_limit >= 999999 else client_count >= client_limit
 
+    # For agency plans, recompute limit against included slots + purchased seats
+    active_seat_count = 0
+    if plan_type == 'agency':
+        active_seat_count = models.get_active_seat_count(current_user.id)
+        client_limit  = _agency_included_clients + active_seat_count
+        slots_display = str(client_limit)
+        limit_reached = client_count >= client_limit
+
     agency_extra_seats  = (max(0, client_count - _agency_included_clients)
                            if plan_type == 'agency' else 0)
     agency_overage_cost = agency_extra_seats * _agency_seat_price
@@ -410,6 +418,16 @@ def dashboard():
         agency_included_clients  = _agency_included_clients,
         agency_seat_price        = _agency_seat_price,
         has_payment_method       = has_payment_method,
+        # Seat subscription system
+        active_seat_count        = active_seat_count,
+        # Overage payment tracking — invoice banners + button guards
+        overage_payment_status   = (fresh_user or {}).get('overage_payment_status', 'none'),
+        overage_amount_due       = float((fresh_user or {}).get('overage_amount_due') or 0),
+        overage_due_date_str     = (
+            (fresh_user or {}).get('overage_due_date').strftime('%B %d, %Y')
+            if (fresh_user or {}).get('overage_due_date') else None
+        ),
+        overage_payment_link     = (fresh_user or {}).get('overage_payment_link', '') or '',
     )
 
 

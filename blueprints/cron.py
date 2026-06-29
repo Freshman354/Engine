@@ -43,6 +43,8 @@ import json
 import os
 import time
 
+import requests as _requests
+
 from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request, current_app
@@ -421,13 +423,12 @@ def _generate_flw_payment_link(user_id: int, email: str, amount: float,
     Call the Flutterwave /v3/payments endpoint to generate a hosted checkout
     link for an overage invoice.  Returns the link string, or None on error.
     """
-    import requests as _req
     flw_secret = os.environ.get('FLW_SECRET_KEY', '')
     if not flw_secret:
         current_app.logger.error('[AgencyOverage] FLW_SECRET_KEY not set — cannot generate payment link')
         return None
     try:
-        resp = _req.post(
+        resp = _requests.post(
             'https://api.flutterwave.com/v3/payments',
             headers={'Authorization': f'Bearer {flw_secret}'},
             json={
@@ -480,6 +481,11 @@ def bill_agency_overages():
     which the client-creation route in agency.py blocks new clients.
     """
     t0 = time.time()
+    if _agency_included_clients is None or _agency_seat_price is None:
+        current_app.logger.error(
+            '[AgencyOverage] init_cron() not called with agency params — aborting'
+        )
+        return {'billed': 0, 'skipped': 0, 'total_revenue': 0.0}
     if not hasattr(models, 'get_agency_users_with_overage'):
         current_app.logger.warning(
             '[AgencyOverage] models.get_agency_users_with_overage not found'
@@ -895,6 +901,209 @@ def cron_enforce_agency_overages():
         'success':       True,
         'ran_at':        datetime.utcnow().isoformat(),
         'marked_overdue': result['marked_overdue'],
+    })
+
+
+def renew_seat_subscriptions():
+    """
+    Daily cron — charges monthly renewal for every active seat subscription
+    whose next_billing_date is today or past.
+
+    Flow per subscription:
+      1. Generate a Flutterwave payment link for monthly_amount.
+      2. Email the agency with a "Pay renewal now" button.
+      3. On payment, the webhook (lumvi_seat_renewal_{sub_id}_{agency_id}_{ts})
+         calls models.renew_seat() to advance next_billing_date by one month.
+      4. On failure to generate the link, mark the subscription 'failed'
+         and notify the agency.
+
+    Note: Flutterwave does not support server-side card charging without a
+    stored token. Renewals therefore work like the overage cron — a hosted
+    checkout link is emailed to the user. The webhook handles confirmation.
+    """
+    t0    = time.time()
+    due   = models.get_seats_due_today()
+    ok    = 0
+    failed = 0
+    base_url   = os.environ.get('APP_BASE_URL', 'https://lumvi.net')
+    flw_secret = os.environ.get('FLW_SECRET_KEY', '')
+
+    for row in due:
+        sub_id   = row['id']
+        agency_id = row['agency_id']
+        email    = row['email']
+        pkg_type = row['package_type']
+        amount   = float(row['monthly_amount'])
+        seats    = int(row['seat_count'])
+        ts       = int(time.time())
+        tx_ref   = f'lumvi_seat_renewal_{sub_id}_{agency_id}_{ts}'
+        seat_label = '1 seat' if seats == 1 else f'{seats} seats'
+
+        payment_link = None
+        if flw_secret:
+            try:
+                import requests as _r
+                resp = _r.post(
+                    'https://api.flutterwave.com/v3/payments',
+                    headers={'Authorization': f'Bearer {flw_secret}'},
+                    json={
+                        'tx_ref':       tx_ref,
+                        'amount':       amount,
+                        'currency':     'USD',
+                        'redirect_url': f'{base_url}/payment/flutterwave/callback',
+                        'customer':     {'email': email},
+                        'meta':         {'type': 'seat_renewal', 'sub_id': sub_id,
+                                         'user_id': agency_id},
+                        'customizations': {
+                            'title':       f'Lumvi — Seat Renewal ({seat_label})',
+                            'description': f'Monthly renewal for {seat_label} extra chatbot seat(s)',
+                        },
+                    },
+                    timeout=15,
+                )
+                resp.raise_for_status()
+                link_data = resp.json()
+                if link_data.get('status') == 'success':
+                    payment_link = link_data['data']['link']
+            except Exception as e:
+                current_app.logger.error(
+                    f'[SeatRenewal] FLW link failed sub_id={sub_id}: {e}'
+                )
+
+        if not payment_link:
+            models.fail_seat(sub_id)
+            failed += 1
+            current_app.logger.warning(
+                f'[SeatRenewal] sub_id={sub_id} marked failed — no payment link'
+            )
+            # Notify agency
+            try:
+                html = f"""
+                <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;
+                            padding:24px;background:#F7F4EF;">
+                  <div style="background:#fff;border:1px solid #E7E2DA;border-radius:16px;
+                              overflow:hidden;">
+                    <div style="background:#1C1917;padding:20px 24px;">
+                      <h2 style="color:#EF4444;font-size:18px;margin:0;">
+                        Seat Renewal Failed
+                      </h2>
+                    </div>
+                    <div style="padding:24px;">
+                      <p style="color:#57534E;font-size:14px;line-height:1.6;">
+                        Hi {email},<br><br>
+                        We were unable to process the monthly renewal for your
+                        <strong>{seat_label} seat subscription</strong> (${amount:.2f}/mo).
+                        The subscription has been paused.<br><br>
+                        Please visit your dashboard to reactivate your seats.
+                      </p>
+                      <div style="text-align:center;margin-top:20px;">
+                        <a href="{base_url}/dashboard"
+                           style="padding:12px 28px;background:#B8924A;color:#fff;
+                                  border-radius:8px;font-weight:700;font-size:14px;
+                                  text-decoration:none;">
+                          Go to Dashboard →
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                </div>"""
+                from flask_mail import Message as MailMsg
+                msg = MailMsg(
+                    subject    = f'Action required: Lumvi seat renewal failed — ${amount:.2f}',
+                    recipients = [email],
+                    html       = html,
+                    sender     = os.environ.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
+                )
+                if _mail:
+                    _mail.send(msg)
+            except Exception as mail_err:
+                current_app.logger.error(
+                    f'[SeatRenewal] failure email error for {email}: {mail_err}'
+                )
+            continue
+
+        ok += 1
+        current_app.logger.info(
+            f'[SeatRenewal] sub_id={sub_id} agency={agency_id} '
+            f'pkg={pkg_type} amount=${amount} link generated'
+        )
+
+        # Email renewal invoice
+        try:
+            html = f"""
+            <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;
+                        padding:24px;background:#F7F4EF;">
+              <div style="background:#fff;border:1px solid #E7E2DA;border-radius:16px;
+                          overflow:hidden;">
+                <div style="background:#1C1917;padding:20px 24px;">
+                  <h2 style="color:#B8924A;font-size:18px;margin:0;">
+                    Monthly Seat Renewal
+                  </h2>
+                </div>
+                <div style="padding:24px;">
+                  <p style="color:#57534E;font-size:14px;line-height:1.6;">
+                    Hi {email},<br><br>
+                    Your monthly renewal of <strong>${amount:.2f}</strong> for
+                    <strong>{seat_label}</strong> is due today.
+                  </p>
+                  <div style="text-align:center;margin:20px 0;">
+                    <a href="{payment_link}" target="_blank"
+                       style="padding:14px 32px;background:#B8924A;color:#fff;
+                              border-radius:10px;font-weight:700;font-size:15px;
+                              text-decoration:none;">
+                      Pay ${amount:.2f} Now →
+                    </a>
+                  </div>
+                  <p style="color:#A8A29E;font-size:12px;text-align:center;">
+                    If you no longer need this seat, you can cancel from your
+                    <a href="{base_url}/dashboard" style="color:#B8924A;">dashboard</a>.
+                  </p>
+                </div>
+              </div>
+            </div>"""
+            from flask_mail import Message as MailMsg
+            msg = MailMsg(
+                subject    = f'Lumvi seat renewal: ${amount:.2f} due today',
+                recipients = [email],
+                html       = html,
+                sender     = os.environ.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
+            )
+            if _mail:
+                _mail.send(msg)
+        except Exception as mail_err:
+            current_app.logger.error(
+                f'[SeatRenewal] invoice email failed for {email}: {mail_err}'
+            )
+
+    duration_ms = int((time.time() - t0) * 1000)
+    result = {'invoiced': ok, 'failed': failed, 'total': len(due)}
+    models.log_cron_run(
+        'seat_renewals', success=True, result=result,
+        duration_ms=duration_ms, triggered_by='http',
+    )
+    current_app.logger.info(
+        f'[SeatRenewal] done — invoiced={ok} failed={failed} dur={duration_ms}ms'
+    )
+    return result
+
+
+@cron_bp.route('/cron/seat-renewals', methods=['GET', 'POST'])
+def cron_seat_renewals():
+    """
+    Daily cron — send renewal invoices for seat subscriptions due today.
+    Recommended schedule: daily at 07:00 UTC (before /cron/enforce-subscriptions).
+    """
+    _, err = _check_cron_secret()
+    if err:
+        return err
+
+    result = renew_seat_subscriptions()
+    return jsonify({
+        'success':  True,
+        'ran_at':   datetime.utcnow().isoformat(),
+        'invoiced': result['invoiced'],
+        'failed':   result['failed'],
+        'total':    result['total'],
     })
 
 

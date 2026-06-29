@@ -499,3 +499,169 @@ def mark_overdue_overage_users() -> list:
         cursor.close()
         conn.close()
 
+
+
+# =====================================================================
+# SEAT SUBSCRIPTION FUNCTIONS
+# =====================================================================
+
+import calendar as _calendar
+from datetime import date as _date
+
+SEAT_PACKAGES = {
+    'single': {'seats': 1, 'monthly': 15.00},
+    'bundle': {'seats': 5, 'monthly': 60.00},
+}
+
+
+def calculate_seat_proration(package_type='single', purchase_date=None):
+    """
+    Calculate prorated first payment for a seat subscription.
+
+    Returns (prorated_amount, next_billing_date, seat_count, monthly_amount).
+
+    The prorated amount covers the remaining days in the current month
+    so renewals always land cleanly on the 1st.
+    """
+    today        = purchase_date or _date.today()
+    package      = SEAT_PACKAGES[package_type]
+    days_in_month   = _calendar.monthrange(today.year, today.month)[1]
+    days_remaining  = days_in_month - today.day + 1
+    prorated        = round((days_remaining / days_in_month) * package['monthly'], 2)
+    if today.month == 12:
+        next_billing = _date(today.year + 1, 1, 1)
+    else:
+        next_billing = _date(today.year, today.month + 1, 1)
+    return prorated, next_billing, package['seats'], package['monthly']
+
+
+def get_active_seat_count(agency_id: int) -> int:
+    """
+    Return total extra seats available from active subscriptions.
+    Used by clone_client_route() and auth.py dashboard to compute the ceiling.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            """SELECT COALESCE(SUM(seat_count), 0) AS total
+               FROM seat_subscriptions
+               WHERE agency_id = %s AND status = 'active'""",
+            (agency_id,)
+        )
+        row = cursor.fetchone()
+        return int(row['total']) if row else 0
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_active_seat_count] {e}")
+        return 0
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def create_seat_subscription(agency_id: int, package_type: str,
+                              first_payment: float, monthly_amount: float,
+                              seat_count: int, next_billing_date, tx_ref: str) -> int:
+    """
+    Insert a new active seat subscription and return its id.
+    Called from the Flutterwave callback after a successful initial seat payment.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            """INSERT INTO seat_subscriptions
+               (agency_id, next_billing_date, first_payment, monthly_amount,
+                seat_count, package_type, status, tx_ref)
+               VALUES (%s, %s, %s, %s, %s, %s, 'active', %s)
+               RETURNING id""",
+            (agency_id, next_billing_date, first_payment,
+             monthly_amount, seat_count, package_type, tx_ref)
+        )
+        sub_id = cursor.fetchone()['id']
+        conn.commit()
+        return sub_id
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[create_seat_subscription] {e}")
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_seats_due_today() -> list:
+    """
+    Return all active seat subscriptions whose next_billing_date is today or past.
+    Called daily by /cron/seat-renewals.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            """SELECT ss.id, ss.agency_id, ss.package_type, ss.monthly_amount,
+                      ss.seat_count, ss.next_billing_date, u.email
+               FROM seat_subscriptions ss
+               JOIN users u ON u.id = ss.agency_id
+               WHERE ss.status = 'active'
+                 AND ss.next_billing_date <= CURRENT_DATE
+               ORDER BY ss.id"""
+        )
+        return [dict(r) for r in cursor.fetchall()]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[get_seats_due_today] {e}")
+        return []
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def renew_seat(sub_id: int, tx_ref: str) -> None:
+    """
+    Advance next_billing_date by one month after a successful renewal payment.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            """UPDATE seat_subscriptions
+               SET next_billing_date = (
+                   CASE WHEN EXTRACT(MONTH FROM next_billing_date) = 12
+                        THEN MAKE_DATE(EXTRACT(YEAR FROM next_billing_date)::INT + 1, 1, 1)
+                        ELSE (DATE_TRUNC('month', next_billing_date)
+                              + INTERVAL '1 month')::DATE
+                   END
+               ),
+               tx_ref = %s
+               WHERE id = %s""",
+            (tx_ref, sub_id)
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[renew_seat] sub_id={sub_id}: {e}")
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def fail_seat(sub_id: int) -> None:
+    """
+    Mark a seat subscription as failed after a renewal payment failure.
+    The seat count is removed from get_active_seat_count() immediately.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            "UPDATE seat_subscriptions SET status = 'failed' WHERE id = %s",
+            (sub_id,)
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        import logging
+        logging.getLogger(__name__).error(f"[fail_seat] sub_id={sub_id}: {e}")
+    finally:
+        cursor.close()
+        conn.close()

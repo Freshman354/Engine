@@ -242,6 +242,7 @@ def init_db():
     # ── Gap 3: lead delivery columns (new) ──────────────────────────────────
     migrate_lead_delivery()             # notification_email, notification_phone, notification_name
     migrate_agency_email_domains()      # white-label custom email domain per agency
+    migrate_seat_subscriptions()        # agency per-seat purchase subscriptions
 
 
 def migrate_clients_table():
@@ -1876,3 +1877,59 @@ def migrate_overage_tracking():
     finally:
         if cursor: cursor.close()
         if conn:   conn.close()
+
+
+def migrate_seat_subscriptions():
+    """
+    Create seat_subscriptions table for agency per-seat purchases.
+
+    Each row represents one paid seat subscription (single or bundle).
+    The cron charges monthly_amount on next_billing_date every month.
+
+    package_type : 'single' (1 seat, $15/mo) | 'bundle' (5 seats, $60/mo)
+    status       : 'active' | 'past_due' | 'failed' | 'cancelled'
+    tx_ref       : last Flutterwave tx_ref (updated on each renewal)
+
+    Idempotent — CREATE TABLE IF NOT EXISTS + indexes use IF NOT EXISTS.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS seat_subscriptions (
+                id                SERIAL          PRIMARY KEY,
+                agency_id         INTEGER         NOT NULL
+                                  REFERENCES users(id) ON DELETE CASCADE,
+                purchased_at      TIMESTAMP       NOT NULL DEFAULT NOW(),
+                next_billing_date DATE            NOT NULL,
+                first_payment     DECIMAL(10,2)   NOT NULL,
+                monthly_amount    DECIMAL(10,2)   NOT NULL,
+                seat_count        INTEGER         NOT NULL DEFAULT 1,
+                package_type      VARCHAR(20)     NOT NULL DEFAULT 'single',
+                status            VARCHAR(20)     NOT NULL DEFAULT 'active',
+                tx_ref            VARCHAR(100),
+                created_at        TIMESTAMP       NOT NULL DEFAULT NOW()
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_seat_subs_agency "
+            "ON seat_subscriptions (agency_id, status)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_seat_subs_billing "
+            "ON seat_subscriptions (next_billing_date) WHERE status = 'active'"
+        )
+        conn.commit()
+        print("✅ migrate_seat_subscriptions complete")
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        print(f"⚠️  migrate_seat_subscriptions: {e}")
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass

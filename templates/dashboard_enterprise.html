@@ -314,9 +314,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 <a href="/sales" class="btn btn-secondary">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Sales Page
                 </a>
-                {% if limit_reached %}
+                {% if limit_reached and plan_type == 'agency' %}
+                    <button class="btn btn-primary" onclick="openNewClientModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Seat
+                    </button>
+                {% elif limit_reached %}
                     <a href="/upgrade" class="btn btn-upgrade">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>Upgrade
+                    </a>
+                {% elif plan_type == 'agency' and overage_payment_status == 'overdue' %}
+                    <a href="{{ overage_payment_link }}" class="btn btn-upgrade" style="background:linear-gradient(135deg,#DC2626,#B91C1C);" target="_blank" rel="noopener">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Pay Invoice
                     </a>
                 {% elif plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
                     <a href="/upgrade" class="btn btn-upgrade" title="Add a payment method to create extra seats">
@@ -363,7 +371,34 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 <div class="stat-sub">{% if limit_reached %}<span style="color:var(--warning);font-weight:600;">Limit reached</span>{% else %}Slots available{% endif %}</div>
             </div>
         </div>
-        {% if plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
+        {% if plan_type == 'agency' and limit_reached %}
+        {# ── ALL SEATS IN USE: prompt to buy ── #}
+        <div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:16px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;">
+            <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" style="width:22px;height:22px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span style="font-size:13.5px;color:#78350F;line-height:1.5;">
+                    <strong>All {{ client_limit }} seat{{ 's' if client_limit != 1 else '' }} in use.</strong>
+                    Add a seat to create more chatbots — $15/mo for 1 seat or $60/mo for 5.
+                </span>
+            </div>
+            <button onclick="openNewClientModal()"
+                    style="flex-shrink:0;padding:10px 20px;background:#D97706;color:#fff;border-radius:8px;font-weight:700;font-size:13px;border:none;cursor:pointer;white-space:nowrap;">
+                Add Seat →
+            </button>
+        </div>
+
+        {% elif plan_type == 'agency' and active_seat_count > 0 %}
+        {# ── HAS EXTRA SEATS, STILL ROOM ── #}
+        <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            <span style="font-size:13.5px;color:#166534;line-height:1.5;">
+                {{ active_seat_count }} active seat subscription{{ 's' if active_seat_count != 1 else '' }} —
+                {{ client_limit }} total slots available ({{ client_limit - client_count }} remaining).
+            </span>
+        </div>
+
+        {% elif plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
+        {# ── NO PAYMENT METHOD ── #}
         <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
             <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <span style="font-size:13.5px;color:#92400E;line-height:1.5;">
@@ -371,18 +406,23 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 <a href="/upgrade" style="color:#B45309;font-weight:700;text-decoration:underline;">Add a payment method →</a>
             </span>
         </div>
-        {% elif plan_type == 'agency' and agency_extra_seats > 0 %}
-        <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-            <span style="font-size:13.5px;color:#166534;line-height:1.5;">
-                {{ agency_overage_label }}
+        {% endif %}
             </span>
         </div>
         {% endif %}
         <div class="section-header">
             <span class="section-title">Your Clients</span>
             {% if not limit_reached %}
-                {% if plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
+                {% if plan_type == 'agency' and limit_reached %}
+                    <button class="btn btn-primary" onclick="openNewClientModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Seat
+                    </button>
+                {% elif plan_type == 'agency' and overage_payment_status == 'overdue' %}
+                    <a href="{{ overage_payment_link }}" target="_blank" rel="noopener"
+                       class="btn btn-upgrade" style="background:linear-gradient(135deg,#DC2626,#B91C1C);" title="Pay your overdue invoice to add more chatbots">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Pay Invoice
+                    </a>
+                {% elif plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
                     <a href="/upgrade" class="btn btn-upgrade" title="Add a payment method to create extra seats">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Add Payment Method
                     </a>
@@ -445,7 +485,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 <div class="empty-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
                 <h2>No Clients Yet</h2>
                 <p>Create your first chatbot client to get started</p>
-                <button class="btn btn-primary" onclick="openNewClientModal()">Create First Client</button>
+                <button class="btn btn-primary" onclick="openNewClientModal()">
+                    {% if plan_type == 'agency' and limit_reached %}Add Seat{% elif overage_payment_status == 'overdue' %}Pay Invoice to Add Chatbots{% else %}Create First Client{% endif %}
+                </button>
             </div>
         </div>
         {% endif %}
@@ -498,6 +540,59 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         </form>
     </div>
 </div>
+<!-- BUY SEAT MODAL -->
+<div class="modal" id="buy-seat-modal">
+    <div class="modal-content" style="max-width:580px;width:100%;">
+        <div class="modal-header">
+            <h2>Add Extra Seat</h2>
+            <button class="modal-close" onclick="closeBuySeatModal()">×</button>
+        </div>
+        <p style="color:var(--sub);font-size:14px;line-height:1.6;margin:-8px 0 20px;">
+            You've used all your included slots. Choose a seat package —
+            you'll pay a prorated amount today, then the monthly rate on the 1st of each month.
+        </p>
+        <div id="seat-loading" style="text-align:center;padding:20px;color:var(--sub);font-size:14px;">
+            Loading prices…
+        </div>
+        <div id="seat-options" style="display:none;display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">
+            <!-- Single Seat -->
+            <div style="border:2px solid var(--border);border-radius:14px;padding:20px;cursor:pointer;transition:all 0.15s;"
+                 id="seat-card-single"
+                 onclick="selectSeatPackage('single')"
+                 onmouseenter="this.style.borderColor='var(--gold)'"
+                 onmouseleave="if(selectedPkg!=='single')this.style.borderColor='var(--border)'">
+                <div style="font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:500;">SINGLE SEAT</div>
+                <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:700;color:var(--dark);" id="single-prorated">—</div>
+                <div style="font-size:12px;color:var(--sub);margin-top:2px;">today (prorated)</div>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--mid);">
+                    then <strong>$15/month</strong> from <span id="single-next">—</span>
+                </div>
+                <div style="margin-top:10px;font-size:12px;color:var(--sub);">+1 chatbot slot</div>
+            </div>
+            <!-- Bundle -->
+            <div style="border:2px solid var(--border);border-radius:14px;padding:20px;cursor:pointer;transition:all 0.15s;position:relative;"
+                 id="seat-card-bundle"
+                 onclick="selectSeatPackage('bundle')"
+                 onmouseenter="this.style.borderColor='var(--gold)'"
+                 onmouseleave="if(selectedPkg!=='bundle')this.style.borderColor='var(--border)'">
+                <div style="position:absolute;top:-1px;right:12px;background:var(--gold);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:0 0 6px 6px;letter-spacing:0.5px;">BEST VALUE</div>
+                <div style="font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:500;">5-SEAT BUNDLE</div>
+                <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:700;color:var(--dark);" id="bundle-prorated">—</div>
+                <div style="font-size:12px;color:var(--sub);margin-top:2px;">today (prorated)</div>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--mid);">
+                    then <strong>$60/month</strong> from <span id="bundle-next">—</span>
+                </div>
+                <div style="margin-top:10px;font-size:12px;color:var(--sub);">+5 chatbot slots · save $15/mo vs single</div>
+            </div>
+        </div>
+        <div id="seat-error" style="display:none;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;padding:12px 14px;font-size:13px;color:#7F1D1D;margin-bottom:16px;"></div>
+        <button id="seat-pay-btn" onclick="confirmBuySeat()"
+                style="display:none;width:100%;padding:14px;background:var(--gold);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer;font-family:'DM Sans',sans-serif;justify-content:center;">
+            Pay & Add Seat →
+        </button>
+    </div>
+</div>
+
 <!-- DELETE MODAL -->
 <div class="delete-modal" id="delete-modal">
     <div class="delete-modal-content">
@@ -575,7 +670,114 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
   photography:'Creative and personable. Handles shoot enquiries, packages and availability.'
 };
     function selectVertical(card){document.querySelectorAll('.vertical-card').forEach(c=>c.classList.remove('selected'));card.classList.add('selected');const v=card.getAttribute('data-vertical');document.getElementById('vertical-input').value=v;document.getElementById('preview-text').textContent=VERTICAL_PREVIEWS[v]||'';}
-    function openNewClientModal(){document.getElementById('new-client-modal').style.display='flex';}
+    // Overage payment state (legacy fallback — kept for safety net cron)
+    const OVERAGE_STATUS = {{ overage_payment_status | tojson }};
+    const OVERAGE_LINK   = {{ overage_payment_link   | tojson }};
+    const OVERAGE_DUE    = {{ overage_amount_due      | tojson }};
+    const PLAN_TYPE      = {{ plan_type              | tojson }};
+    const LIMIT_REACHED  = {{ limit_reached          | tojson }};
+
+    let selectedPkg = null;
+    let seatPrices  = null;
+
+    function openNewClientModal() {
+        // Agency + seat limit reached → show Buy Seat modal instead
+        if (PLAN_TYPE === 'agency' && LIMIT_REACHED) {
+            openBuySeatModal();
+            return;
+        }
+        // Legacy overage guard (safety net)
+        if (OVERAGE_STATUS === 'overdue') {
+            if (OVERAGE_LINK && confirm(
+                'Your extra-seat invoice of $' + OVERAGE_DUE.toFixed(2) + ' is overdue.\n' +
+                'Adding new chatbots is paused until payment is received.\n\nOpen payment page?'
+            )) { window.open(OVERAGE_LINK, '_blank'); }
+            else if (!OVERAGE_LINK) { alert('Your extra-seat invoice is overdue. Check your email for the payment link.'); }
+            return;
+        }
+        document.getElementById('new-client-modal').style.display = 'flex';
+    }
+
+    function openBuySeatModal() {
+        selectedPkg = null;
+        document.getElementById('seat-pay-btn').style.display  = 'none';
+        document.getElementById('seat-error').style.display    = 'none';
+        document.getElementById('seat-loading').style.display  = 'block';
+        document.getElementById('seat-options').style.display  = 'none';
+        document.getElementById('buy-seat-modal').style.display = 'flex';
+        fetchSeatPrices();
+    }
+
+    function closeBuySeatModal() {
+        document.getElementById('buy-seat-modal').style.display = 'none';
+        selectedPkg = null;
+    }
+
+    async function fetchSeatPrices() {
+        try {
+            const res  = await fetch('/agency/seat-prices');
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            seatPrices = data;
+            document.getElementById('single-prorated').textContent = '$' + data.single.prorated.toFixed(2);
+            document.getElementById('single-next').textContent     = data.single.next_billing;
+            document.getElementById('bundle-prorated').textContent = '$' + data.bundle.prorated.toFixed(2);
+            document.getElementById('bundle-next').textContent     = data.bundle.next_billing;
+            document.getElementById('seat-loading').style.display  = 'none';
+            document.getElementById('seat-options').style.display  = 'grid';
+        } catch (e) {
+            document.getElementById('seat-loading').textContent = 'Could not load prices. Please refresh.';
+        }
+    }
+
+    function selectSeatPackage(pkg) {
+        selectedPkg = pkg;
+        ['single', 'bundle'].forEach(p => {
+            const card = document.getElementById('seat-card-' + p);
+            card.style.borderColor = (p === pkg) ? 'var(--gold)' : 'var(--border)';
+            card.style.background  = (p === pkg) ? 'var(--cream)' : '';
+        });
+        const btn = document.getElementById('seat-pay-btn');
+        const price = seatPrices ? seatPrices[pkg] : null;
+        btn.textContent = price
+            ? `Pay $${price.prorated.toFixed(2)} Today & Add ${price.seats} Seat${price.seats > 1 ? 's' : ''} →`
+            : 'Pay & Add Seat →';
+        btn.style.display = 'block';
+        document.getElementById('seat-error').style.display = 'none';
+    }
+
+    async function confirmBuySeat() {
+        if (!selectedPkg) return;
+        const btn = document.getElementById('seat-pay-btn');
+        btn.textContent = 'Redirecting to payment…';
+        btn.disabled    = true;
+        document.getElementById('seat-error').style.display = 'none';
+        try {
+            const res  = await fetch('/agency/buy-seat', {
+                method:  'POST',
+                headers: {'Content-Type': 'application/json'},
+                body:    JSON.stringify({package_type: selectedPkg}),
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Unknown error');
+            window.location.href = data.payment_link;
+        } catch (e) {
+            const errEl = document.getElementById('seat-error');
+            errEl.textContent = e.message || 'Could not generate payment link. Please try again.';
+            errEl.style.display = 'block';
+            btn.textContent = 'Pay & Add Seat →';
+            btn.disabled    = false;
+        }
+    }
+
+    // Auto-open new-client modal if returning from a successful seat purchase
+    (function checkSeatPurchased() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('seat_purchased') === '1') {
+            history.replaceState({}, '', window.location.pathname);
+            document.getElementById('new-client-modal').style.display = 'flex';
+        }
+    })();
     function closeModal(){document.getElementById('new-client-modal').style.display='none';}
     function showEmbedCode(clientId){const baseUrl=window.location.origin;const code=`<!-- Lumvi Chatbot Widget -->\n<script>\n    (function() {\n        var s = document.createElement('script');\n        s.src = '${baseUrl}/static/widget.js';\n        s.setAttribute('data-client-id', '${clientId}');\n        document.body.appendChild(s);\n    })();\n<\/script>`;document.getElementById('embedCodeText').value=code;document.getElementById('embedModal').style.display='flex';}
     function closeEmbedModal(){document.getElementById('embedModal').style.display='none';}
@@ -585,8 +787,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
     function closeDeleteModal(){pendingDeleteId=null;document.getElementById('delete-modal').style.display='none';}
     async function executeDelete(){if(!pendingDeleteId)return;const btn=document.getElementById('confirm-delete-btn');btn.textContent='Deleting…';btn.disabled=true;try{const res=await fetch(`/api/clients/${pendingDeleteId}/delete`,{method:'DELETE',headers:{'Content-Type':'application/json'}});const data=await res.json();if(data.success){['row-','card-'].forEach(p=>{const el=document.getElementById(p+pendingDeleteId);if(el){el.style.transition='opacity 0.3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);}});closeDeleteModal();showToast('Chatbot deleted','success');const badge=document.querySelector('.nav-badge');if(badge){const c=parseInt(badge.textContent)||0;if(c-1<=0)badge.remove();else badge.textContent=c-1;}}else{showToast(data.error||'Delete failed','error');btn.textContent='Delete';btn.disabled=false;}}catch{showToast('Network error','error');btn.textContent='Delete';btn.disabled=false;}}
     function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} show`;setTimeout(()=>{t.className='toast';},3500);}
-    document.addEventListener('click',function(e){if(e.target===document.getElementById('embedModal'))closeEmbedModal();if(e.target===document.getElementById('new-client-modal'))closeModal();if(e.target===document.getElementById('delete-modal'))closeDeleteModal();});
-    document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeEmbedModal();closeModal();closeDeleteModal();closeSidebar();}});
+    document.addEventListener('click',function(e){if(e.target===document.getElementById('embedModal'))closeEmbedModal();if(e.target===document.getElementById('new-client-modal'))closeModal();if(e.target===document.getElementById('delete-modal'))closeDeleteModal();if(e.target===document.getElementById('buy-seat-modal'))closeBuySeatModal();});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeEmbedModal();closeModal();closeDeleteModal();closeSidebar();closeBuySeatModal();}});
 </script>
 <!-- ── CLIENT DASHBOARD SLIDE PANEL ── -->
 <div class="cdash-overlay" id="cdashOverlay" onclick="closeClientDashPanel()"></div>
