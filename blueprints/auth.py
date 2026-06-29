@@ -495,37 +495,25 @@ def create_client():
             current_clients = models.get_user_clients(current_user.id)
             client_count    = len(current_clients)
 
-            is_agency_overage = (
-                plan_type == 'agency' and
-                client_count >= _agency_included_clients
-            )
-            extra_seats  = (max(0, client_count - _agency_included_clients + 1)
-                            if is_agency_overage else 0)
-            overage_cost = extra_seats * _agency_seat_price
-
-            if is_agency_overage:
-                _user_data  = models.get_user_by_id(current_user.id)
-                _sub_id     = (_user_data or {}).get('subscription_id')
-                _sub_status = (_user_data or {}).get('subscription_status', 'active')
-                if not _sub_id or _sub_status in ('cancelled', 'past_due'):
+            # ── Agency: gate on included slots + purchased seat subscriptions ──
+            if plan_type == 'agency':
+                active_seats = models.get_active_seat_count(current_user.id)
+                ceiling      = _agency_included_clients + active_seats
+                if client_count >= ceiling:
                     _lock_cursor.execute("SELECT pg_advisory_unlock(%s)", (current_user.id,))
                     _lock_cursor.close()
                     _lock_conn.close()
-                    _err = (
-                        "A saved payment method is required to add extra seats. "
-                        "Please update your billing details on the upgrade page."
-                    )
-                    _is_xhr = (
-                        request.headers.get('X-Requested-With') == 'XMLHttpRequest' or
-                        request.headers.get('Accept', '').startswith('application/json')
-                    )
-                    if _is_xhr:
-                        return jsonify({
-                            'success': False, 'error': _err, 'upgrade_url': '/upgrade'
-                        }), 402
-                    return redirect(url_for('billing.upgrade_page'))
+                    return jsonify({
+                        'success':                False,
+                        'error':                  (
+                            'All seats are in use. Purchase an extra seat '
+                            'to add more chatbots.'
+                        ),
+                        'requires_seat_purchase': True,
+                    }), 402
 
-            if client_count >= plan_limit and not is_agency_overage:
+            # ── Non-agency: standard plan limit ────────────────────────────────
+            elif client_count >= plan_limit:
                 _lock_cursor.execute("SELECT pg_advisory_unlock(%s)", (current_user.id,))
                 _lock_cursor.close()
                 _lock_conn.close()
@@ -598,21 +586,6 @@ p{{color:#57534E;margin-bottom:16px;line-height:1.65;font-size:15px;}}
             f"[CreateClient] Created {client_id} for user {current_user.id}"
         )
 
-        if is_agency_overage and client_id:
-            try:
-                models.record_agency_overage_seat(
-                    user_id   = current_user.id,
-                    client_id = client_id,
-                    seat_num  = client_count + 1,
-                )
-                current_app.logger.info(
-                    f"[AgencyOverage] user={current_user.id} seat={client_count+1} "
-                    f"extra_cost=${overage_cost:.2f}/mo client={client_id}"
-                )
-            except Exception as _ov_err:
-                current_app.logger.error(
-                    f"[AgencyOverage] Failed to record seat: {_ov_err}"
-                )
 
         _is_xhr = (
             request.headers.get('X-Requested-With') == 'XMLHttpRequest' or

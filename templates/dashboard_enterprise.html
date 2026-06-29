@@ -774,6 +774,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
             history.replaceState({}, '', window.location.pathname);
             document.getElementById('new-client-modal').style.display = 'flex';
         }
+        // Redirected from portal when seat limit hit — open Buy Seat modal directly
+        if (params.get('buy_seat') === '1') {
+            history.replaceState({}, '', window.location.pathname);
+            openBuySeatModal();
+        }
     })();
     function closeModal(){document.getElementById('new-client-modal').style.display='none';}
     function showEmbedCode(clientId){const baseUrl=window.location.origin;const code=`<!-- Lumvi Chatbot Widget -->\n<script>\n    (function() {\n        var s = document.createElement('script');\n        s.src = '${baseUrl}/static/widget.js';\n        s.setAttribute('data-client-id', '${clientId}');\n        document.body.appendChild(s);\n    })();\n<\/script>`;document.getElementById('embedCodeText').value=code;document.getElementById('embedModal').style.display='flex';}

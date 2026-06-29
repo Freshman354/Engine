@@ -803,8 +803,21 @@ async function addClient(){
   const form = new FormData(); form.append('company_name',name);
   try{
     const r = await fetch('/create-client',{method:'POST',body:form});
-    if(r.ok||r.redirected){ toast(`"${name}" created`,'success'); closeModal('addModal'); setTimeout(()=>location.reload(),900); }
-    else toast('Failed to create client','error');
+    if(r.ok || r.redirected){
+      toast(`"${name}" created`,'success');
+      closeModal('addModal');
+      setTimeout(()=>location.reload(),900);
+    } else {
+      let d = {};
+      try{ d = await r.json(); }catch{}
+      if(d.requires_seat_purchase){
+        closeModal('addModal');
+        toast('All seats in use — buy a seat to continue','warn');
+        setTimeout(()=>{ window.location.href='/dashboard?buy_seat=1'; },1200);
+      } else {
+        toast(d.error||'Failed to create client','error');
+      }
+    }
   }catch{ toast('Network error','error'); }
   finally{ btn.disabled=false; btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Create Client'; }
 }
@@ -826,6 +839,11 @@ async function cloneClient(){
     const r = await fetch('/api/admin/client/clone',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({client_id:_cloneClientId,new_name:newName})});
     const d = await r.json();
     if(d.success){ toast(d.message||'Client cloned','success'); closeModal('cloneModal'); setTimeout(()=>location.reload(),900); }
+    else if(d.requires_seat_purchase){
+      closeModal('cloneModal');
+      toast('All seats in use — buy a seat to continue','warn');
+      setTimeout(()=>{ window.location.href='/dashboard?buy_seat=1'; },1200);
+    }
     else toast(d.error||'Clone failed','error');
   }catch{ toast('Network error','error'); }
   finally{ btn.disabled=false; btn.innerHTML='Clone'; }
