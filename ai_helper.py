@@ -44,9 +44,16 @@ from constants import (
     PERSONALITIES,
     STAGE_SIGNALS,
     STAGE_ORDER,
+    LEAD_NUDGE_MAX_PER_SESSION,
+    LEAD_NUDGE_COOLDOWN_TURNS,
 )
 from pipeline.context import PipelineRequest, PipelineResult
 from pipeline.stages.escalation  import check_escalation
+from pipeline.stages.agent_actions import (
+    client_has_active_actions,
+    handle_pending_confirmation,
+    try_dispatch_external_action,
+)
 from pipeline.stages.generation  import (
     build_context,
     dynamic_fallback,
@@ -756,6 +763,24 @@ class AIHelper:
             if _new_stage:
                 ctx.session_mem['purchase_stage'] = _new_stage
 
+            # ── Pending external integration action (yes/no confirmation) ──
+            # Checked BEFORE email_capture_pending / handoff_offered — a stray
+            # "yes" while a Buy-Seat-style action confirmation is pending must
+            # resolve the action, not get misrouted into the handoff flow.
+            _pending_result = handle_pending_confirmation(
+                client_id, session_id, ctx.session_mem, ctx.clean_message
+            )
+            if _pending_result is not None:
+                if _pending_result.pop('clear_pending', False):
+                    ctx.session_mem['pending_integration_action'] = None
+                _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
+                return PipelineResult(
+                    response=_pending_result['response'],
+                    method=_pending_result['method'],
+                    confidence=1.0,
+                    action=_pending_result.get('action'),
+                ).to_dict()
+
             # ── Email capture (waiting for email after handoff acceptance) ──
             # Checked BEFORE handoff_offered — a user replying "sure, sarah@email.com"
             # contains both an affirmative and an email. Without this guard the
@@ -939,6 +964,25 @@ class AIHelper:
                     confidence=0.9 if tool_result.get('success') else 0.0,
                     action={'tool': intent['tool'], **tool_result},
                 ).to_dict()
+
+            # ── External integration dispatch (agency-configured client systems) ──
+            # Cheap gate first — only clients with at least one configured
+            # client_ext_integration_actions row pay for the Gemini tools call.
+            if self.enabled and client_id and client_has_active_actions(client_id):
+                _ext_result = try_dispatch_external_action(
+                    self.model, self._model_name, client_id, session_id,
+                    ctx.clean_message, conversation_history,
+                )
+                if _ext_result is not None:
+                    if _ext_result.get('method') == 'external_action_confirm':
+                        ctx.session_mem['pending_integration_action'] = _ext_result['pending']
+                    _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
+                    return PipelineResult(
+                        response=_ext_result['response'],
+                        method=_ext_result['method'],
+                        confidence=0.9,
+                        action=_ext_result.get('action'),
+                    ).to_dict()
 
             # ── Confidence thresholds (sales queries get lower floor) ──
             ctx.is_sales_query = intent.get('is_sales', False)
@@ -1143,20 +1187,31 @@ class AIHelper:
                 ctx.session_mem['handoff_offered'] = True
 
             # ── Lead nudge ────────────────────────────────────────────
+            # Gated by count + cooldown (constants.py) — without this,
+            # purchase_stage's one-way ratchet keeps is_lead True for the
+            # rest of the session and this would fire on every single turn.
             trigger_lead_collection = False
             _have_email = bool(
                 (lead_metadata or {}).get('email') or ctx.session_mem.get('email')
             )
             if is_lead and not _have_email:
-                nudge = self._build_lead_nudge(
-                    lead_info=ctx.session_mem,
-                    vertical=vertical,
-                    purchase_stage=ctx.session_mem.get('purchase_stage'),
-                    is_sales=ctx.is_sales_query,
-                    lead_q3=lead_q3,
-                )
-                final += '\n\n' + nudge
-                trigger_lead_collection = True
+                _nudge_count     = ctx.session_mem.get('lead_nudge_count', 0)
+                _current_turn    = len(conversation_history)
+                _last_nudge_turn = ctx.session_mem.get('lead_nudge_last_turn', -LEAD_NUDGE_COOLDOWN_TURNS)
+                _cooldown_ok     = (_current_turn - _last_nudge_turn) >= LEAD_NUDGE_COOLDOWN_TURNS
+
+                if _nudge_count < LEAD_NUDGE_MAX_PER_SESSION and _cooldown_ok:
+                    nudge = self._build_lead_nudge(
+                        lead_info=ctx.session_mem,
+                        vertical=vertical,
+                        purchase_stage=ctx.session_mem.get('purchase_stage'),
+                        is_sales=ctx.is_sales_query,
+                        lead_q3=lead_q3,
+                    )
+                    final += '\n\n' + nudge
+                    trigger_lead_collection = True
+                    ctx.session_mem['lead_nudge_count']     = _nudge_count + 1
+                    ctx.session_mem['lead_nudge_last_turn'] = _current_turn
 
             # ── Session persistence ───────────────────────────────────
             if client_id and session_id:

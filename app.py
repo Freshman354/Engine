@@ -242,36 +242,42 @@ PLAN_LIMITS = {
         'analytics': False, 'analytics_level': 'none',
         'customization': False, 'white_label': False,
         'webhooks': False, 'priority_support': False,
+        'agentic_actions': False,
     },
     'solo': {
         'clients': 1, 'faqs_per_client': 999, 'messages_per_day': 999999,
         'analytics': True, 'analytics_level': 'basic',
         'customization': True, 'white_label': False,
         'webhooks': False, 'priority_support': False,
+        'agentic_actions': False,
     },
     'starter': {
         'clients': 3, 'faqs_per_client': 999, 'messages_per_day': 2000,
         'analytics': True, 'analytics_level': 'basic',
         'customization': True, 'white_label': False,
         'webhooks': False, 'priority_support': False,
+        'agentic_actions': False,
     },
     'pro': {
         'clients': 10, 'faqs_per_client': 999, 'messages_per_day': 999999,
         'analytics': True, 'analytics_level': 'full',
         'customization': True, 'white_label': False,
         'webhooks': True, 'priority_support': True,
+        'agentic_actions': True,
     },
     'agency': {
         'clients': 999999, 'faqs_per_client': 999, 'messages_per_day': 999999,
         'analytics': True, 'analytics_level': 'full',
         'customization': True, 'white_label': True,
         'webhooks': True, 'priority_support': True,
+        'agentic_actions': True,
     },
     'enterprise': {
         'clients': 999999, 'faqs_per_client': 999, 'messages_per_day': 999999,
         'analytics': True, 'analytics_level': 'full',
         'customization': True, 'white_label': True,
         'webhooks': True, 'priority_support': True,
+        'agentic_actions': True,
     },
 }
 
@@ -810,6 +816,7 @@ try:
         'migrate_seat_subscriptions', # agency per-seat purchase subscriptions table
         'migrate_lead_delivery',      # Gap 3 — notification_email/phone/name on clients
         'migrate_agency_email_domains', # white-label custom email domain
+        'migrate_external_integrations',       # client_ext_integrations + actions + audit log (agentic external tool calls)
     ]
     for _fn in _optional_migrations:
         if hasattr(models, _fn):
@@ -1856,7 +1863,182 @@ def get_integration_log(client_id):
         if conn:   conn.close()
 
 
-# ── Analytics ─────────────────────────────────────────────────────────────────
+# ── Agent Actions (agency-configured external system integrations) ────────────
+# Distinct from the platform integrations above: those receive INBOUND
+# webhooks from Shopify/Acuity. This lets the chatbot make OUTBOUND calls
+# to a client's own external system (their booking API, CRM, etc.) —
+# see models/integrations.py, pipeline/integration_adapter.py,
+# pipeline/stages/agent_actions.py.
+
+@app.route('/agent-actions')
+@login_required
+def agent_actions_page():
+    fresh_user  = models.get_user_by_id(current_user.id)
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+    if not plan_limits.get('agentic_actions'):
+        return redirect(url_for('auth.dashboard') + '?upgrade=agentic_actions')
+    clients = models.get_user_clients(current_user.id)
+    return render_template(
+        'agent_actions.html',
+        user=current_user, plan_type=plan_type,
+        plan_limits=plan_limits, clients=clients,
+    )
+
+
+@app.route('/api/agent-actions/<client_id>/integrations', methods=['GET'])
+@login_required
+def list_agent_integrations(client_id):
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
+        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+    integrations = models.get_integrations(client_id)
+    all_actions  = models.get_actions_for_client(client_id)
+    for i in integrations:
+        i['actions'] = [a for a in all_actions if a['integration_id'] == i['integration_id']]
+    return jsonify({'success': True, 'integrations': integrations}), 200
+
+
+@app.route('/api/agent-actions/<client_id>/integrations', methods=['POST'])
+@login_required
+def create_agent_integration(client_id):
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
+        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+    data = request.get_json(force=True) or {}
+    result = models.create_integration(
+        client_id=client_id,
+        name=data.get('name', ''),
+        base_url=data.get('base_url', ''),
+        auth_type=data.get('auth_type', ''),
+        credentials=data.get('credentials') or {},
+        created_by_agency_user_id=current_user.id,
+    )
+    if not result.get('success'):
+        return jsonify(result), 400
+    app.logger.info(
+        f'[AgentActions] user={current_user.id} created integration={result["integration_id"]} client={client_id}'
+    )
+    return jsonify(result), 200
+
+
+@app.route('/api/agent-actions/<client_id>/integrations/<integration_id>', methods=['PATCH'])
+@login_required
+def update_agent_integration(client_id, integration_id):
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
+        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+    data = request.get_json(force=True) or {}
+    if 'credentials' in data:
+        ok = models.update_integration_credentials(integration_id, data['credentials'] or {})
+        if not ok:
+            return jsonify({'success': False, 'error': 'Failed to update credentials'}), 500
+    if 'active' in data:
+        ok = models.set_integration_active(integration_id, bool(data['active']))
+        if not ok:
+            return jsonify({'success': False, 'error': 'Failed to update status'}), 500
+    return jsonify({'success': True}), 200
+
+
+@app.route('/api/agent-actions/<client_id>/integrations/<integration_id>', methods=['DELETE'])
+@login_required
+def delete_agent_integration(client_id, integration_id):
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
+        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+    ok = models.delete_integration(integration_id)
+    if not ok:
+        return jsonify({'success': False, 'error': 'Failed to delete integration'}), 500
+    app.logger.info(f'[AgentActions] user={current_user.id} deleted integration={integration_id}')
+    return jsonify({'success': True}), 200
+
+
+@app.route('/api/agent-actions/<client_id>/integrations/<integration_id>/actions', methods=['POST'])
+@login_required
+def create_agent_action(client_id, integration_id):
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
+        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+    data = request.get_json(force=True) or {}
+    max_auto_amount = data.get('max_auto_amount')
+    try:
+        max_auto_amount = float(max_auto_amount) if max_auto_amount not in (None, '') else None
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'max_auto_amount must be a number'}), 400
+    result = models.add_action(
+        integration_id=integration_id,
+        action_name=data.get('action_name', ''),
+        http_method=data.get('http_method', ''),
+        endpoint_path=data.get('endpoint_path', ''),
+        param_mapping=data.get('param_mapping') or {},
+        response_mapping=data.get('response_mapping') or {},
+        requires_confirmation=data.get('requires_confirmation', True),
+        description=data.get('description', ''),
+        amount_param=(data.get('amount_param') or None),
+        max_auto_amount=max_auto_amount,
+    )
+    if not result.get('success'):
+        return jsonify(result), 400
+    app.logger.info(
+        f'[AgentActions] user={current_user.id} added action={data.get("action_name")} '
+        f'integration={integration_id} client={client_id}'
+    )
+    return jsonify(result), 200
+
+
+@app.route('/api/agent-actions/<client_id>/actions/<int:action_id>', methods=['DELETE'])
+@login_required
+def delete_agent_action(client_id, action_id):
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
+        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+    ok = models.delete_action(action_id)
+    if not ok:
+        return jsonify({'success': False, 'error': 'Failed to delete action'}), 500
+    return jsonify({'success': True}), 200
+
+
+@app.route('/api/agent-actions/<client_id>/test', methods=['POST'])
+@login_required
+def test_agent_action(client_id):
+    """Fire a single action with sample params so the agency can verify the
+    mapping before going live — mirrors the existing /api/test-webhook pattern."""
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
+        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+    data      = request.get_json(force=True) or {}
+    action_id = data.get('action_id')
+    params    = data.get('params') or {}
+    if not action_id:
+        return jsonify({'success': False, 'error': 'action_id is required'}), 400
+    from pipeline.integration_adapter import execute_client_action
+    result = execute_client_action(
+        action_id=action_id, params=params,
+        client_id=client_id, session_id=f'test:{current_user.id}',
+    )
+    return jsonify(result), 200
+
+
+@app.route('/api/agent-actions/<client_id>/log', methods=['GET'])
+@login_required
+def get_agent_action_log(client_id):
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
+        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+    limit = min(int(request.args.get('limit', 50)), 100)
+    log   = models.get_action_log(client_id, limit=limit)
+    return jsonify({'success': True, 'log': log}), 200
+
+
+
 
 @app.route('/analytics')
 @login_required

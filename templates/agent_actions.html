@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agent Actions — Lumvi Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ── TOKENS (matches templates/integrations.html) ─────────────── */
+:root {
+  --cream:       #F7F4EF;
+  --cream2:      #F0EBE1;
+  --panel:       #EDEAE3;
+  --white:       #FFFFFF;
+  --border:      #E7E2DA;
+
+  --gold:        #B8924A;
+  --gold-lt:     rgba(184,146,74,0.12);
+  --gold-dk:     #9A7A3A;
+  --gold-glow:   rgba(184,146,74,0.3);
+
+  --dark:        #1C1917;
+  --mid:         #57534E;
+  --sub:         #A8A29E;
+
+  --success:     #16A34A;
+  --success-lt:  #F0FDF4;
+  --danger:      #EF4444;
+  --danger-lt:   #FEF2F2;
+  --warning:     #D97706;
+  --warning-lt:  #FFFBEB;
+
+  --radius:      12px;
+  --radius-sm:   9px;
+  --radius-lg:   16px;
+
+  --shadow:      0 4px 20px rgba(0,0,0,0.06);
+  --shadow-lg:   0 20px 60px rgba(0,0,0,0.1);
+
+  --font:        'DM Sans', sans-serif;
+  --serif:       'Fraunces', serif;
+  --mono:        'DM Mono', monospace;
+
+  --sidebar-w:   224px;
+  --header-h:    60px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: var(--font);
+  background: var(--cream);
+  color: var(--dark);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+}
+button { font-family: inherit; cursor: pointer; border: none; outline: none; }
+input, textarea, select { font-family: inherit; outline: none; }
+a { text-decoration: none; color: inherit; }
+
+.layout { display: flex; min-height: 100vh; width: 100%; }
+
+/* ── SIDEBAR ────────────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--white);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0;
+  height: 100vh;
+  z-index: 50;
+  overflow-y: auto;
+}
+.sidebar-logo {
+  padding: 20px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+  height: var(--header-h);
+}
+.sidebar-logo span { font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--dark); }
+.nav-label {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--sub); padding: 10px 10px 4px; margin-top: 6px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 9px;
+  color: var(--mid); font-size: 13.5px; font-weight: 500;
+  transition: all 0.15s; cursor: pointer; margin: 1px 10px; text-decoration: none;
+}
+.nav-item svg { flex-shrink: 0; width: 16px; height: 16px; opacity: 0.65; }
+.nav-item:hover { background: var(--cream); color: var(--dark); }
+.nav-item:hover svg { opacity: 1; }
+.nav-item.active { background: var(--gold-lt); color: var(--gold-dk); font-weight: 600; }
+.nav-item.active svg { opacity: 1; }
+.sidebar-divider { height: 1px; background: var(--border); margin: 10px 0; }
+.sidebar-bottom { margin-top: auto; padding: 14px 12px; border-top: 1px solid var(--border); }
+.sidebar-user { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; cursor: pointer; transition: background 0.15s; }
+.sidebar-user:hover { background: var(--cream); }
+.user-avatar {
+  width: 32px; height: 32px; border-radius: 50%; background: var(--gold);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.user-info { flex: 1; min-width: 0; }
+.user-name { font-size: 13px; font-weight: 600; color: var(--dark); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-plan { font-size: 11px; color: var(--sub); }
+
+.main-wrapper { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+.header {
+  background: var(--white); border-bottom: 1px solid var(--border);
+  padding: 0 28px; height: var(--header-h);
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 40;
+}
+.header-title { font-family: var(--serif); font-size: 15px; font-weight: 600; color: var(--dark); }
+.header-actions { display: flex; align-items: center; gap: 10px; }
+
+.main { padding: 28px; display: flex; flex-direction: column; gap: 24px; }
+
+.section-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.section-title { font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: -0.3px; color: var(--dark); margin-bottom: 2px; }
+.section-subtitle { font-size: 13px; color: var(--sub); }
+
+.client-bar {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--white); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 14px;
+}
+.client-bar-label { font-size: 12px; color: var(--sub); font-weight: 500; white-space: nowrap; }
+.client-select {
+  flex: 1; background: var(--cream); border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--dark); padding: 7px 10px; font-size: 13px; font-weight: 500; cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23A8A29E' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; transition: all 0.2s;
+}
+.client-select:focus { border-color: var(--gold); background: var(--white); box-shadow: 0 0 0 3px var(--gold-lt); }
+.client-badge {
+  display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 20px;
+  background: var(--success-lt); color: var(--success); font-size: 12px; font-weight: 600; border: 1px solid #bbf7d0;
+}
+.client-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--success); flex-shrink: 0; }
+.client-badge.empty { background: var(--panel); color: var(--sub); border-color: var(--border); }
+.client-badge.empty::before { background: var(--sub); }
+
+/* ── INTEGRATION CARDS ──────────────────────────────────────── */
+.integrations-list { display: flex; flex-direction: column; gap: 16px; }
+
+.integration-card {
+  background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 22px; transition: all 0.2s;
+}
+.integration-card:hover { box-shadow: var(--shadow); }
+.integration-card.inactive { opacity: 0.6; }
+
+.integration-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 14px; gap: 12px; }
+.integration-name { font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--dark); margin-bottom: 3px; }
+.integration-url { font-family: var(--mono); font-size: 12px; color: var(--sub); word-break: break-all; }
+
+.integration-status {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; white-space: nowrap; flex-shrink: 0;
+}
+.integration-status.active { background: var(--success-lt); color: var(--success); }
+.integration-status.active::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--success); animation: pulse-dot 2s infinite; }
+.integration-status.inactive { background: var(--panel); color: var(--sub); }
+@keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.integration-meta { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.meta-pill {
+  padding: 3px 9px; border-radius: 5px; font-size: 11px; font-weight: 500;
+  background: var(--cream); color: var(--mid); border: 1px solid var(--border); font-family: var(--mono);
+}
+
+.actions-table { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+.actions-table th {
+  text-align: left; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--sub); padding: 6px 8px; border-bottom: 1px solid var(--border);
+}
+.actions-table td { padding: 8px; font-size: 12.5px; color: var(--mid); border-bottom: 1px solid var(--border); vertical-align: middle; }
+.actions-table tr:last-child td { border-bottom: none; }
+.action-name-cell { font-family: var(--mono); font-weight: 600; color: var(--dark); }
+.confirm-badge {
+  display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px;
+  font-size: 10.5px; font-weight: 600;
+}
+.confirm-badge.on  { background: var(--warning-lt); color: var(--warning); }
+.confirm-badge.off { background: var(--success-lt); color: var(--success); }
+.action-row-btns { display: flex; gap: 6px; }
+.icon-btn {
+  width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+  background: var(--cream); border: 1px solid var(--border); color: var(--mid); transition: all 0.15s;
+}
+.icon-btn:hover { border-color: var(--gold); color: var(--gold-dk); background: var(--gold-lt); }
+.icon-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-lt); }
+.icon-btn svg { width: 12px; height: 12px; }
+
+.empty-actions { padding: 16px; text-align: center; color: var(--sub); font-size: 12.5px; background: var(--cream); border-radius: var(--radius-sm); margin-bottom: 14px; }
+
+.integration-actions-footer { display: flex; gap: 8px; }
+
+.empty-state {
+  background: var(--white); border: 1px dashed var(--border); border-radius: var(--radius-lg);
+  padding: 48px 24px; text-align: center; color: var(--sub);
+}
+.empty-state-title { font-family: var(--serif); font-size: 16px; font-weight: 700; color: var(--dark); margin-bottom: 6px; }
+.empty-state-desc { font-size: 13px; margin-bottom: 18px; max-width: 380px; margin-left: auto; margin-right: auto; }
+
+/* ── BUTTONS ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600;
+  transition: all 0.2s; white-space: nowrap; font-family: var(--font); border: none; cursor: pointer; text-decoration: none;
+}
+.btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+.btn-primary { background: var(--gold); color: #fff; box-shadow: 0 2px 8px var(--gold-glow); }
+.btn-primary:hover { background: var(--gold-dk); transform: translateY(-1px); }
+.btn-secondary { background: var(--white); color: var(--dark); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--cream); }
+.btn-danger { background: var(--danger-lt); color: var(--danger); border: 1px solid #fecaca; }
+.btn-danger:hover { background: #fecaca; }
+.btn-sm { padding: 6px 12px; font-size: 12px; }
+.btn-full { width: 100%; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+
+/* ── MODAL ───────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(28,25,23,0.5); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--white); border-radius: var(--radius-lg); width: 480px; max-width: 92vw;
+  max-height: 88vh; overflow-y: auto; box-shadow: var(--shadow-lg);
+  transform: translateY(16px); transition: transform 0.25s;
+}
+.modal-overlay.open .modal { transform: translateY(0); }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.modal-title { font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--dark); }
+.modal-close { width: 30px; height: 30px; border-radius: 8px; background: var(--cream); color: var(--sub); display: flex; align-items: center; justify-content: center; font-size: 16px; transition: all 0.15s; }
+.modal-close:hover { background: var(--panel); color: var(--dark); }
+.modal-body { padding: 24px; display: flex; flex-direction: column; gap: 16px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-row { display: flex; gap: 10px; }
+.form-row .form-group { flex: 1; }
+.form-label { font-size: 12px; font-weight: 600; color: var(--mid); }
+.form-label .required { color: var(--danger); }
+.form-label .optional { color: var(--sub); font-weight: 400; font-size: 11px; }
+.form-input, .form-select {
+  background: var(--cream); border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--dark); padding: 9px 12px; font-size: 13px; transition: all 0.2s; width: 100%;
+}
+.form-input:focus, .form-select:focus { border-color: var(--gold); background: var(--white); box-shadow: 0 0 0 3px var(--gold-lt); }
+.form-input::placeholder { color: var(--sub); }
+.form-input.mono { font-family: var(--mono); font-size: 12.5px; }
+.form-hint { font-size: 11.5px; color: var(--sub); }
+.form-toggle-row { display: flex; align-items: center; justify-content: space-between; background: var(--cream); border-radius: var(--radius-sm); padding: 10px 12px; }
+.toggle-label { font-size: 12.5px; font-weight: 500; color: var(--dark); }
+.toggle-sub { font-size: 11px; color: var(--sub); }
+.switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch-track { position: absolute; inset: 0; background: var(--border); border-radius: 20px; transition: 0.2s; cursor: pointer; }
+.switch-track::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.switch input:checked + .switch-track { background: var(--gold); }
+.switch input:checked + .switch-track::before { transform: translateX(16px); }
+
+.mapping-rows { display: flex; flex-direction: column; gap: 8px; }
+.mapping-row { display: flex; gap: 8px; align-items: center; }
+.mapping-row .form-input { flex: 1; }
+.mapping-remove { width: 30px; height: 30px; border-radius: 8px; background: var(--danger-lt); color: var(--danger); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.add-row-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--gold-dk); padding: 6px 0; align-self: flex-start; }
+
+.test-result { border-radius: var(--radius-sm); padding: 12px; font-size: 12px; font-family: var(--mono); white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow-y: auto; }
+.test-result.ok  { background: var(--success-lt); color: #15803d; border: 1px solid #bbf7d0; }
+.test-result.err { background: var(--danger-lt); color: #b91c1c; border: 1px solid #fecaca; }
+
+/* ── ACTION LOG ─────────────────────────────────────────────── */
+.log-section { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.log-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.log-title { font-family: var(--serif); font-size: 15px; font-weight: 700; color: var(--dark); }
+.log-count { font-size: 11.5px; color: var(--sub); }
+.log-table { width: 100%; border-collapse: collapse; }
+.log-table th { text-align: left; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--sub); padding: 10px 20px; background: var(--cream); }
+.log-table td { padding: 10px 20px; font-size: 12.5px; color: var(--mid); border-top: 1px solid var(--border); }
+.log-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; }
+.log-dot.ok   { background: var(--success); }
+.log-dot.fail { background: var(--danger); }
+.empty-log { padding: 32px; text-align: center; color: var(--sub); font-size: 12.5px; }
+
+/* ── TOAST / SPINNER ─────────────────────────────────────────── */
+.spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  background: var(--white); border-radius: var(--radius-sm); padding: 12px 16px; box-shadow: var(--shadow-lg);
+  font-size: 13px; font-weight: 500; color: var(--dark); animation: slide-in 0.2s ease; max-width: 320px;
+}
+.toast.success { border-left: 3px solid var(--success); }
+.toast.error   { border-left: 3px solid var(--danger); }
+@keyframes slide-in { from { opacity: 0; transform: translateX(20px); } }
+.toast.out { animation: slide-out 0.2s ease forwards; }
+@keyframes slide-out { to { opacity: 0; transform: translateX(20px); } }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ── SIDEBAR ────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <span>Lumvi</span>
+    </div>
+
+    <nav style="flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+      <div class="nav-label">Workspace</div>
+      <a class="nav-item" href="{{ url_for('auth.dashboard') }}">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Dashboard
+      </a>
+      <a class="nav-item" href="{{ url_for('analytics_page') }}">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Analytics
+      </a>
+
+      <div class="sidebar-divider"></div>
+      <div class="nav-label">Settings</div>
+
+      <a class="nav-item" href="{{ url_for('integrations_page') }}">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        Integrations
+      </a>
+      <a class="nav-item active" href="{{ url_for('agent_actions_page') }}">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        Agent Actions
+      </a>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="sidebar-user">
+        <div class="user-avatar">{{ (user.company_name or user.email or 'A')[0]|upper }}</div>
+        <div class="user-info">
+          <div class="user-name">{{ user.company_name or user.email }}</div>
+          <div class="user-plan">{{ plan_type|capitalize }} Plan · {{ clients|length }} client{{ '' if clients|length == 1 else 's' }}</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN WRAPPER ────────────────────────────────────────── -->
+  <div class="main-wrapper">
+
+  <header class="header">
+    <div class="header-title">Agent Actions</div>
+    <div class="header-actions">
+      <button class="btn btn-primary btn-sm" id="addIntegrationBtn" onclick="openIntegrationModal()" disabled>
+        <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Integration
+      </button>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">External System Integrations</div>
+        <div class="section-subtitle">Connect a client's own booking, ordering, or CRM system so their chatbot can take real actions — not just answer questions.</div>
+      </div>
+    </div>
+
+    <div class="client-bar">
+      <span class="client-bar-label">Viewing client:</span>
+      <select class="client-select" id="clientSelect" onchange="onClientChange()">
+        <option value="">Loading clients…</option>
+      </select>
+      <div class="client-badge empty" id="clientBadge">—</div>
+    </div>
+
+    <div class="integrations-list" id="integrationsList">
+      <!-- populated by JS -->
+    </div>
+
+    <div class="log-section">
+      <div class="log-header">
+        <div class="log-title">Action Activity</div>
+        <div class="log-count" id="log-count">Last 50 events</div>
+      </div>
+      <table class="log-table">
+        <thead>
+          <tr><th>Action</th><th>Result</th><th>Time</th></tr>
+        </thead>
+        <tbody id="log-body">
+          <tr><td colspan="3"><div class="empty-log">Select a client to see activity.</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </main>
+  </div><!-- end main-wrapper -->
+</div>
+
+<!-- ── ADD INTEGRATION MODAL ───────────────────────────────────── -->
+<div class="modal-overlay" id="integrationModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="integrationModalTitle">Connect an External System</div>
+      <button class="modal-close" onclick="closeModal('integrationModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" id="int-name-group">
+        <div class="form-label">Integration name <span class="required">*</span></div>
+        <input class="form-input" id="int-name" placeholder="e.g. Acuity Scheduling, Client's Custom API">
+      </div>
+      <div class="form-group" id="int-url-group">
+        <div class="form-label">Base URL <span class="required">*</span></div>
+        <input class="form-input mono" id="int-base-url" placeholder="https://api.clientsite.com">
+      </div>
+      <div class="form-group">
+        <div class="form-label">Authentication type <span class="required">*</span></div>
+        <select class="form-select" id="int-auth-type" onchange="renderAuthFields()">
+          <option value="api_key">API Key (header)</option>
+          <option value="bearer">Bearer Token</option>
+          <option value="basic">Basic Auth (username/password)</option>
+        </select>
+      </div>
+      <div id="authFields"></div>
+      <div class="form-hint" id="int-cred-hint">Credentials are encrypted before they're stored — never shown again in plain text after saving.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('integrationModal')">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="saveIntegrationBtn" onclick="saveIntegration()">Save Integration</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ADD ACTION MODAL ────────────────────────────────────────── -->
+<div class="modal-overlay" id="actionModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Add an Action</div>
+      <button class="modal-close" onclick="closeModal('actionModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <div class="form-label">Action name <span class="required">*</span> <span class="optional">letters/numbers/underscore only — this is what the AI sees</span></div>
+        <input class="form-input mono" id="act-name" placeholder="e.g. book_appointment">
+      </div>
+      <div class="form-group">
+        <div class="form-label">Description <span class="optional">helps the AI know when to use it</span></div>
+        <input class="form-input" id="act-desc" placeholder="e.g. Books a new appointment on the client's calendar">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <div class="form-label">HTTP Method <span class="required">*</span></div>
+          <select class="form-select" id="act-method">
+            <option>POST</option><option>GET</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:2">
+          <div class="form-label">Endpoint path <span class="required">*</span></div>
+          <input class="form-input mono" id="act-endpoint" placeholder="/v1/bookings">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="form-label">Parameters <span class="optional">what the AI fills in → what the client's API expects</span></div>
+        <div class="mapping-rows" id="paramRows"></div>
+        <div class="add-row-btn" onclick="addMappingRow('paramRows')">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add parameter
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="form-label">Response fields <span class="optional">what to extract from the client API's response</span></div>
+        <div class="mapping-rows" id="responseRows"></div>
+        <div class="add-row-btn" onclick="addMappingRow('responseRows')">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add response field
+        </div>
+      </div>
+
+      <div class="form-toggle-row">
+        <div>
+          <div class="toggle-label">Require confirmation before running</div>
+          <div class="toggle-sub">Recommended for anything that changes data (bookings, refunds, cancellations)</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="act-confirm" checked>
+          <span class="switch-track"></span>
+        </label>
+      </div>
+
+      <div class="form-group">
+        <div class="form-label">Spend cap <span class="optional">for financial actions — amounts above this go to a human instead of running automatically</span></div>
+        <div class="form-row">
+          <div class="form-group">
+            <select class="form-select" id="act-amount-param">
+              <option value="">No spend cap</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <input class="form-input" id="act-max-amount" type="number" step="0.01" min="0" placeholder="Max auto-approve amount ($)" disabled>
+          </div>
+        </div>
+        <div class="form-hint">Choose which parameter above holds a dollar amount, then set the limit. Leave as "No spend cap" if this action has no financial amount.</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('actionModal')">Cancel</button>
+      <button class="btn btn-primary btn-sm" id="saveActionBtn" onclick="saveAction()">Save Action</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TEST ACTION MODAL ───────────────────────────────────────── -->
+<div class="modal-overlay" id="testModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Test Action</div>
+      <button class="modal-close" onclick="closeModal('testModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-hint">Fires a real request against the client's system. Use sample/test data if their API supports it.</div>
+      <div class="mapping-rows" id="testParamRows"></div>
+      <div id="testResultBox"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('testModal')">Close</button>
+      <button class="btn btn-primary btn-sm" id="runTestBtn" onclick="runTest()">Run Test</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+const CLIENTS = {{ clients | tojson }};
+let currentClient   = null;
+let integrationCache = [];      // integrations (with nested .actions) for currentClient
+let pendingDeleteIntegrationId = null;
+let currentTestAction = null;   // {action_id, param_mapping}
+let integrationModalMode = 'create';   // 'create' | 'edit'
+let editIntegrationId = null;
+
+/* ── INIT ────────────────────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', () => {
+  populateClientSelect();
+  if (currentClient) {
+    document.getElementById('addIntegrationBtn').disabled = false;
+    loadIntegrations(currentClient);
+    loadLog(currentClient);
+  } else {
+    showNoClients();
+  }
+});
+
+function populateClientSelect() {
+  const sel = document.getElementById('clientSelect');
+  if (!CLIENTS.length) {
+    sel.innerHTML = '<option value="">No clients yet</option>';
+    return;
+  }
+  sel.innerHTML = CLIENTS.map(c => `<option value="${c.client_id}">${c.company_name || c.client_id}</option>`).join('');
+  currentClient = CLIENTS[0].client_id;
+}
+
+function onClientChange() {
+  currentClient = document.getElementById('clientSelect').value;
+  loadIntegrations(currentClient);
+  loadLog(currentClient);
+}
+
+function showNoClients() {
+  document.getElementById('integrationsList').innerHTML = `
+    <div class="empty-state">
+      <div class="empty-state-title">No clients yet</div>
+      <div class="empty-state-desc">Add a client first, then come back here to connect their external systems.</div>
+    </div>`;
+}
+
+/* ── LOAD INTEGRATIONS ──────────────────────────────────────── */
+async function loadIntegrations(clientId) {
+  const list = document.getElementById('integrationsList');
+  list.innerHTML = `<div style="display:flex;justify-content:center;padding:40px;"><div class="spinner"></div></div>`;
+  try {
+    const res  = await fetch(`/api/agent-actions/${clientId}/integrations`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to load');
+    integrationCache = data.integrations || [];
+    renderIntegrations();
+    const badge = document.getElementById('clientBadge');
+    const n = integrationCache.length;
+    badge.textContent = `${n} integration${n !== 1 ? 's' : ''}`;
+    badge.classList.toggle('empty', n === 0);
+  } catch (err) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-state-title">Could not load integrations</div><div class="empty-state-desc">${escapeHtml(err.message)}</div></div>`;
+  }
+}
+
+function renderIntegrations() {
+  const list = document.getElementById('integrationsList');
+  if (!integrationCache.length) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-title">No integrations yet</div>
+        <div class="empty-state-desc">Connect this client's booking system, CRM, or custom API so their chatbot can take real actions — bookings, order lookups, cancellations, and more.</div>
+        <button class="btn btn-primary btn-sm" onclick="openIntegrationModal()">Connect first integration</button>
+      </div>`;
+    return;
+  }
+
+  list.innerHTML = integrationCache.map(i => `
+    <div class="integration-card ${i.active ? '' : 'inactive'}">
+      <div class="integration-top">
+        <div>
+          <div class="integration-name">${escapeHtml(i.name)}</div>
+          <div class="integration-url">${escapeHtml(i.base_url)}</div>
+        </div>
+        <div class="integration-status ${i.active ? 'active' : 'inactive'}">${i.active ? 'Active' : 'Paused'}</div>
+      </div>
+      <div class="integration-meta">
+        <span class="meta-pill">${escapeHtml(i.auth_type)}</span>
+        <span class="meta-pill">${i.actions.length} action${i.actions.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      ${i.actions.length ? `
+        <table class="actions-table">
+          <thead><tr><th>Action</th><th>Method</th><th>Endpoint</th><th>Confirm</th><th>Spend Cap</th><th></th></tr></thead>
+          <tbody>
+            ${i.actions.map(a => `
+              <tr>
+                <td class="action-name-cell">${escapeHtml(a.action_name)}</td>
+                <td>${escapeHtml(a.http_method)}</td>
+                <td style="font-family:var(--mono);font-size:11.5px;">${escapeHtml(a.endpoint_path)}</td>
+                <td><span class="confirm-badge ${a.requires_confirmation ? 'on' : 'off'}">${a.requires_confirmation ? 'Required' : 'Auto'}</span></td>
+                <td>${a.max_auto_amount != null ? `<span class="meta-pill">≤ $${Number(a.max_auto_amount).toLocaleString()}</span>` : '<span style="color:var(--sub);">—</span>'}</td>
+                <td>
+                  <div class="action-row-btns">
+                    <button class="icon-btn" title="Test" onclick='openTestModal(${a.action_id}, ${JSON.stringify(a.param_mapping)})'>
+                      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    </button>
+                    <button class="icon-btn danger" title="Delete" onclick="deleteAction(${a.action_id})">
+                      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : `<div class="empty-actions">No actions configured yet.</div>`}
+
+      <div class="integration-actions-footer">
+        <button class="btn btn-secondary btn-sm" onclick="openActionModal('${i.integration_id}')">
+          <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Action
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="openEditCredentialsModal('${i.integration_id}', '${i.auth_type}')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Edit Credentials
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleIntegrationActive('${i.integration_id}', ${!i.active})">
+          ${i.active ? 'Pause' : 'Resume'}
+        </button>
+        <button class="btn btn-danger btn-sm" onclick="deleteIntegration('${i.integration_id}')">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ── ADD INTEGRATION ─────────────────────────────────────────── */
+function openIntegrationModal() {
+  integrationModalMode = 'create';
+  editIntegrationId = null;
+  document.getElementById('integrationModalTitle').textContent = 'Connect an External System';
+  document.getElementById('saveIntegrationBtn').textContent = 'Save Integration';
+  document.getElementById('int-name-group').style.display = '';
+  document.getElementById('int-url-group').style.display = '';
+  document.getElementById('int-cred-hint').textContent =
+    "Credentials are encrypted before they're stored — never shown again in plain text after saving.";
+  document.getElementById('int-name').value = '';
+  document.getElementById('int-base-url').value = '';
+  document.getElementById('int-auth-type').value = 'api_key';
+  document.getElementById('int-auth-type').disabled = false;
+  renderAuthFields();
+  document.getElementById('integrationModal').classList.add('open');
+}
+
+function openEditCredentialsModal(integrationId, authType) {
+  integrationModalMode = 'edit';
+  editIntegrationId = integrationId;
+  document.getElementById('integrationModalTitle').textContent = 'Update Credentials';
+  document.getElementById('saveIntegrationBtn').textContent = 'Save Credentials';
+  document.getElementById('int-name-group').style.display = 'none';
+  document.getElementById('int-url-group').style.display = 'none';
+  document.getElementById('int-cred-hint').textContent =
+    'Enter the new credentials in full — existing values are never shown again and are fully replaced on save.';
+  document.getElementById('int-auth-type').value = authType;
+  document.getElementById('int-auth-type').disabled = true;  // auth type is fixed once set; delete + recreate to change it
+  renderAuthFields();
+  document.getElementById('integrationModal').classList.add('open');
+}
+
+function renderAuthFields() {
+  const type = document.getElementById('int-auth-type').value;
+  const box  = document.getElementById('authFields');
+  if (type === 'api_key') {
+    box.innerHTML = `
+      <div class="form-row">
+        <div class="form-group"><div class="form-label">Header name</div><input class="form-input mono" id="cred-header-name" placeholder="X-API-Key" value="X-API-Key"></div>
+        <div class="form-group"><div class="form-label">API key <span class="required">*</span></div><input class="form-input mono" id="cred-api-key" type="password" placeholder="sk_live_..."></div>
+      </div>`;
+  } else if (type === 'bearer') {
+    box.innerHTML = `<div class="form-group"><div class="form-label">Bearer token <span class="required">*</span></div><input class="form-input mono" id="cred-token" type="password" placeholder="eyJhbGciOi..."></div>`;
+  } else {
+    box.innerHTML = `
+      <div class="form-row">
+        <div class="form-group"><div class="form-label">Username <span class="required">*</span></div><input class="form-input" id="cred-username"></div>
+        <div class="form-group"><div class="form-label">Password <span class="required">*</span></div><input class="form-input" id="cred-password" type="password"></div>
+      </div>`;
+  }
+}
+
+function collectCredentials() {
+  const type = document.getElementById('int-auth-type').value;
+  if (type === 'api_key') {
+    return { header_name: document.getElementById('cred-header-name').value || 'X-API-Key', api_key: document.getElementById('cred-api-key').value };
+  } else if (type === 'bearer') {
+    return { token: document.getElementById('cred-token').value };
+  }
+  return { username: document.getElementById('cred-username').value, password: document.getElementById('cred-password').value };
+}
+
+async function saveIntegration() {
+  if (!currentClient) return;
+  const authType = document.getElementById('int-auth-type').value;
+  const btn = document.getElementById('saveIntegrationBtn');
+
+  if (integrationModalMode === 'edit') {
+    const creds = collectCredentials();
+    const hasValue = Object.values(creds).some(v => (v || '').trim().length > 0);
+    if (!hasValue) { showToast('Enter the new credential value(s) before saving.', 'error'); return; }
+    btn.disabled = true;
+    try {
+      const res = await fetch(`/api/agent-actions/${currentClient}/integrations/${editIntegrationId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credentials: creds }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to update credentials');
+      showToast('Credentials updated.', 'success');
+      closeModal('integrationModal');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+    return;
+  }
+
+  const name    = document.getElementById('int-name').value.trim();
+  const baseUrl = document.getElementById('int-base-url').value.trim();
+  if (!name || !baseUrl) { showToast('Name and base URL are required.', 'error'); return; }
+
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/agent-actions/${currentClient}/integrations`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, base_url: baseUrl, auth_type: authType, credentials: collectCredentials() }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to save');
+    showToast('Integration connected.', 'success');
+    closeModal('integrationModal');
+    loadIntegrations(currentClient);
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function toggleIntegrationActive(integrationId, active) {
+  try {
+    const res = await fetch(`/api/agent-actions/${currentClient}/integrations/${integrationId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to update');
+    loadIntegrations(currentClient);
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function deleteIntegration(integrationId) {
+  if (!confirm('Delete this integration and all its actions? This cannot be undone.')) return;
+  try {
+    const res = await fetch(`/api/agent-actions/${currentClient}/integrations/${integrationId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to delete');
+    showToast('Integration deleted.', 'success');
+    loadIntegrations(currentClient);
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+/* ── ADD ACTION ──────────────────────────────────────────────── */
+let currentActionIntegrationId = null;
+
+function openActionModal(integrationId) {
+  currentActionIntegrationId = integrationId;
+  document.getElementById('act-name').value = '';
+  document.getElementById('act-desc').value = '';
+  document.getElementById('act-method').value = 'POST';
+  document.getElementById('act-endpoint').value = '';
+  document.getElementById('act-confirm').checked = true;
+  document.getElementById('act-max-amount').value = '';
+  document.getElementById('act-max-amount').disabled = true;
+  document.getElementById('paramRows').innerHTML = '';
+  document.getElementById('responseRows').innerHTML = '';
+  addMappingRow('paramRows');
+  addMappingRow('responseRows');
+  refreshAmountParamOptions();
+  document.getElementById('actionModal').classList.add('open');
+}
+
+function refreshAmountParamOptions() {
+  const sel = document.getElementById('act-amount-param');
+  const prev = sel.value;
+  const paramNames = Array.from(document.querySelectorAll('#paramRows .mapping-row input'))
+    .filter((input, idx) => idx % 2 === 0)   // left-side input of each row = the param name
+    .map(input => input.value.trim())
+    .filter(Boolean);
+  sel.innerHTML = '<option value="">No spend cap</option>' +
+    paramNames.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+  if (paramNames.includes(prev)) sel.value = prev;
+}
+
+document.getElementById('paramRows')?.addEventListener('input', refreshAmountParamOptions);
+document.getElementById('act-amount-param')?.addEventListener('change', () => {
+  const has = !!document.getElementById('act-amount-param').value;
+  const amtInput = document.getElementById('act-max-amount');
+  amtInput.disabled = !has;
+  if (!has) amtInput.value = '';
+});
+
+function addMappingRow(containerId, key = '', val = '') {
+  const container = document.getElementById(containerId);
+  const row = document.createElement('div');
+  row.className = 'mapping-row';
+  const leftPlaceholder  = containerId === 'paramRows' ? 'date' : 'confirmation_id';
+  const rightPlaceholder = containerId === 'paramRows' ? 'appt_date' : 'data.id';
+  row.innerHTML = `
+    <input class="form-input mono" placeholder="${leftPlaceholder}" value="${escapeHtml(key)}">
+    <span style="color:var(--sub);font-size:12px;">→</span>
+    <input class="form-input mono" placeholder="${rightPlaceholder}" value="${escapeHtml(val)}">
+    <button class="mapping-remove" onclick="this.parentElement.remove()">✕</button>`;
+  container.appendChild(row);
+}
+
+function collectMapping(containerId) {
+  const rows = document.querySelectorAll(`#${containerId} .mapping-row`);
+  const out = {};
+  rows.forEach(r => {
+    const inputs = r.querySelectorAll('input');
+    const k = inputs[0].value.trim();
+    const v = inputs[1].value.trim();
+    if (k && v) out[k] = v;
+  });
+  return out;
+}
+
+async function saveAction() {
+  const actionName = document.getElementById('act-name').value.trim();
+  const endpoint    = document.getElementById('act-endpoint').value.trim();
+  if (!actionName || !endpoint) { showToast('Action name and endpoint are required.', 'error'); return; }
+  if (!/^[a-zA-Z0-9_]+$/.test(actionName)) { showToast('Action name can only contain letters, numbers, and underscores.', 'error'); return; }
+
+  const amountParam = document.getElementById('act-amount-param').value;
+  const maxAmountRaw = document.getElementById('act-max-amount').value;
+  if (amountParam && !maxAmountRaw) { showToast('Set a max auto-approve amount, or switch back to "No spend cap".', 'error'); return; }
+
+  const btn = document.getElementById('saveActionBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`/api/agent-actions/${currentClient}/integrations/${currentActionIntegrationId}/actions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action_name: actionName,
+        description: document.getElementById('act-desc').value.trim(),
+        http_method: document.getElementById('act-method').value,
+        endpoint_path: endpoint,
+        param_mapping: collectMapping('paramRows'),
+        response_mapping: collectMapping('responseRows'),
+        requires_confirmation: document.getElementById('act-confirm').checked,
+        amount_param: amountParam || null,
+        max_auto_amount: amountParam ? maxAmountRaw : null,
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to save action');
+    showToast('Action added.', 'success');
+    closeModal('actionModal');
+    loadIntegrations(currentClient);
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteAction(actionId) {
+  if (!confirm('Delete this action?')) return;
+  try {
+    const res = await fetch(`/api/agent-actions/${currentClient}/actions/${actionId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to delete');
+    loadIntegrations(currentClient);
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+/* ── TEST ACTION ─────────────────────────────────────────────── */
+function openTestModal(actionId, paramMapping) {
+  currentTestAction = { action_id: actionId };
+  const container = document.getElementById('testParamRows');
+  container.innerHTML = '';
+  document.getElementById('testResultBox').innerHTML = '';
+  Object.keys(paramMapping || {}).forEach(paramName => {
+    const row = document.createElement('div');
+    row.className = 'mapping-row';
+    row.innerHTML = `<span style="font-family:var(--mono);font-size:12px;color:var(--mid);min-width:90px;">${escapeHtml(paramName)}</span><input class="form-input mono" data-param="${escapeHtml(paramName)}" placeholder="test value">`;
+    container.appendChild(row);
+  });
+  document.getElementById('testModal').classList.add('open');
+}
+
+async function runTest() {
+  const inputs = document.querySelectorAll('#testParamRows input[data-param]');
+  const params = {};
+  inputs.forEach(i => { params[i.dataset.param] = i.value; });
+
+  const btn = document.getElementById('runTestBtn');
+  const box = document.getElementById('testResultBox');
+  btn.disabled = true;
+  box.innerHTML = `<div style="display:flex;justify-content:center;padding:12px;"><div class="spinner"></div></div>`;
+  try {
+    const res = await fetch(`/api/agent-actions/${currentClient}/test`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action_id: currentTestAction.action_id, params }),
+    });
+    const data = await res.json();
+    box.innerHTML = `<div class="test-result ${data.success ? 'ok' : 'err'}">${escapeHtml(JSON.stringify(data, null, 2))}</div>`;
+  } catch (err) {
+    box.innerHTML = `<div class="test-result err">${escapeHtml(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ── LOG ─────────────────────────────────────────────────────── */
+async function loadLog(clientId) {
+  const tbody = document.getElementById('log-body');
+  tbody.innerHTML = `<tr><td colspan="3"><div class="empty-log"><div class="spinner"></div></div></td></tr>`;
+  try {
+    const res  = await fetch(`/api/agent-actions/${clientId}/log`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    renderLog(data.log || []);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3"><div class="empty-log">Could not load activity log.</div></td></tr>`;
+  }
+}
+
+function renderLog(log) {
+  const tbody = document.getElementById('log-body');
+  if (!log.length) {
+    tbody.innerHTML = `<tr><td colspan="3"><div class="empty-log">No actions run yet for this client.</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = log.map(l => `
+    <tr>
+      <td style="font-family:var(--mono);">${escapeHtml(l.action_name)}</td>
+      <td><span class="log-dot ${l.success ? 'ok' : 'fail'}"></span>${escapeHtml(l.summary || (l.success ? 'Completed' : 'Failed'))}</td>
+      <td>${escapeHtml(l.fired_at || '')}</td>
+    </tr>
+  `).join('');
+}
+
+/* ── UTIL ────────────────────────────────────────────────────── */
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+function showToast(msg, type) {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 200); }, 3200);
+}
+</script>
+</body>
+</html>

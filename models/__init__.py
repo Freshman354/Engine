@@ -43,6 +43,7 @@ from .migrations import (
     migrate_kb_gap_status,
     migrate_knowledge_base,
     migrate_webhooks,
+    migrate_external_integrations,
     migrate_api_usage_log,
     migrate_subscription_expiry,
     migrate_to_recurring_subscriptions,
@@ -204,6 +205,22 @@ from .webhooks import (
     regenerate_signing_secret,
     log_webhook_delivery,
     get_webhook_logs,
+)
+
+# ── External client integrations (agentic tool calls) ─────────────────────────
+from .integrations import (
+    create_integration,
+    get_integrations,
+    get_integration_with_credentials,
+    update_integration_credentials,
+    set_integration_active,
+    delete_integration,
+    add_action,
+    get_actions_for_client,
+    get_action_by_id,
+    delete_action,
+    log_action_event,
+    get_action_log,
 )
 
 from .agency_domains import (

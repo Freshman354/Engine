@@ -429,12 +429,18 @@ def chat():
                             'confidence': round(confidence, 4),
                         })
 
+                    _confirm_replies = (
+                        ['Yes, go ahead', 'No, cancel']
+                        if method == 'external_action_confirm' else None
+                    )
+
                     return jsonify({
                         'success':    True,
                         'response':   response_text,
                         'confidence': confidence,
                         'method':     method,
                         'session_id': session_id,  # echoed so widget can store it
+                        **({'quick_replies': _confirm_replies} if _confirm_replies else {}),
                     })
 
             except Exception as ai_error:

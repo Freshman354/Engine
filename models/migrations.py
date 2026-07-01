@@ -1351,6 +1351,89 @@ def migrate_webhooks():
         conn.close()
 
 
+def migrate_external_integrations():
+    """
+    Create client_ext_integrations, client_ext_integration_actions, and
+    integration_action_log tables — agency-configured external system
+    connections (e.g. a client's own Calendly/Shopify/REST API) for
+    fully agentic tool calls. Safe to call every startup (IF NOT EXISTS).
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS client_ext_integrations (
+                id                         SERIAL PRIMARY KEY,
+                integration_id             TEXT NOT NULL UNIQUE,
+                client_id                  TEXT NOT NULL,
+                name                       TEXT NOT NULL,
+                base_url                   TEXT NOT NULL,
+                auth_type                  TEXT NOT NULL,
+                encrypted_credentials      TEXT NOT NULL,
+                active                     BOOLEAN DEFAULT TRUE,
+                created_by_agency_user_id  INTEGER,
+                created_at                 TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at                 TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (client_id) REFERENCES clients (client_id)
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ci_client ON client_ext_integrations (client_id)"
+        )
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS client_ext_integration_actions (
+                id                     SERIAL PRIMARY KEY,
+                integration_id         TEXT NOT NULL,
+                action_name            TEXT NOT NULL,
+                description            TEXT,
+                http_method            TEXT NOT NULL,
+                endpoint_path          TEXT NOT NULL,
+                param_mapping          TEXT NOT NULL DEFAULT '{}',
+                response_mapping       TEXT NOT NULL DEFAULT '{}',
+                requires_confirmation  BOOLEAN DEFAULT TRUE,
+                amount_param           TEXT,
+                max_auto_amount        NUMERIC(12,2),
+                active                 BOOLEAN DEFAULT TRUE,
+                created_at             TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (integration_id) REFERENCES client_ext_integrations (integration_id) ON DELETE CASCADE
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cia_integration ON client_ext_integration_actions (integration_id)"
+        )
+        # Idempotent for deployments that already ran phase-1's CREATE TABLE
+        # before these two columns existed.
+        cursor.execute("ALTER TABLE client_ext_integration_actions ADD COLUMN IF NOT EXISTS amount_param TEXT")
+        cursor.execute("ALTER TABLE client_ext_integration_actions ADD COLUMN IF NOT EXISTS max_auto_amount NUMERIC(12,2)")
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS integration_action_log (
+                id              SERIAL PRIMARY KEY,
+                client_id       TEXT NOT NULL,
+                session_id      TEXT,
+                integration_id  TEXT,
+                action_name     TEXT NOT NULL,
+                params          TEXT,
+                result          TEXT,
+                success         BOOLEAN DEFAULT FALSE,
+                summary         TEXT,
+                fired_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ial_client ON integration_action_log (client_id, fired_at DESC)"
+        )
+
+        conn.commit()
+        print("✅ Integration tables ready (client_ext_integrations, client_ext_integration_actions, integration_action_log).")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_external_integrations: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def migrate_api_usage_log():
     """Create api_usage_log table. Safe — uses IF NOT EXISTS."""
     try:

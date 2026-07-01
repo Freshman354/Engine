@@ -1359,6 +1359,7 @@ function addBotMsg(text, opts = {}) {
 
   const timeStr  = nowTime();
   const rendered = renderMarkdown(text);
+  const qrId     = 'inlineqr_' + Math.random().toString(36).slice(2);
 
   div.innerHTML = `
     <div class="msg-avatar" aria-hidden="true">${botAvatarHTML()}</div>
@@ -1369,6 +1370,9 @@ function addBotMsg(text, opts = {}) {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 .49-3"/></svg>
         Retry
       </button>` : ''}
+      ${opts.quickReplies && opts.quickReplies.length ? `<div class="qr-wrap" id="${qrId}" role="group" aria-label="Quick replies">
+        ${opts.quickReplies.map(qr => `<button class="qr-btn" onclick="sendInlineQR('${qrId}', ${JSON.stringify(qr)})">${esc(qr)}</button>`).join('')}
+      </div>` : ''}
       <div class="msg-time" aria-hidden="true">${timeStr}</div>
     </div>`;
 
@@ -1376,6 +1380,20 @@ function addBotMsg(text, opts = {}) {
   scrollBot();
   return div;
 }
+
+// Inline quick-reply buttons attached to one specific bot message (e.g. a
+// "should I go ahead?" confirmation prompt) — distinct from the persistent
+// qrWrap starter-prompt bar. Removes itself once tapped so it can't be
+// clicked twice or linger after the confirmation is resolved.
+window.sendInlineQR = function(wrapId, text) {
+  const wrap = document.getElementById(wrapId);
+  if (wrap) wrap.remove();
+
+  addUserMsg(text);
+  history_.push({ role: 'user', content: text, time: nowTime() });
+  saveHistory();
+  _sendToAPI(text);
+};
 
 function addErrorMsg(text, retryText) {
   return addBotMsg(text, { retryText });
@@ -1504,7 +1522,7 @@ async function _sendToAPI(text) {
     const d = await r.json();
 
     if (d.success) {
-      addBotMsg(d.response);
+      addBotMsg(d.response, { quickReplies: d.quick_replies });
       history_.push({ role: 'assistant', content: d.response, time: nowTime() });
       saveHistory();
 

@@ -111,6 +111,17 @@ STAGE_SIGNALS: Dict[str, List[str]] = {
 # Ordered list used as a one-way ratchet — stage can only advance, never regress.
 STAGE_ORDER: List[str] = ['browsing', 'evaluating', 'buying', 'onboarding', 'support']
 
+# ── Lead nudge pacing ───────────────────────────────────────────────────────
+# purchase_stage is a one-way ratchet (above) — once it reaches 'evaluating'
+# or later, is_lead stays True for the rest of the session. Without a cap,
+# _build_lead_nudge() (ai_helper.py) would append an email ask to every
+# single reply for the rest of the conversation. These bound that: nudge at
+# most LEAD_NUDGE_MAX_PER_SESSION times total, with at least
+# LEAD_NUDGE_COOLDOWN_TURNS turns between asks.
+LEAD_NUDGE_MAX_PER_SESSION: int = 2
+LEAD_NUDGE_COOLDOWN_TURNS:  int = 4
+
+
 # ── Frustration and urgency signals ──────────────────────────────────────────
 FRUSTRATION_SIGNALS: List[str] = [
     "that's wrong", "that's not right", "that doesn't help",
