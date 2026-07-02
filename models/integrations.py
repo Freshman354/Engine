@@ -384,6 +384,54 @@ def get_action_log(client_id: str, limit: int = 50) -> list:
         return []
 
 
+def get_agency_integration_overview(client_ids: list) -> list:
+    """
+    Cross-client rollup for the agency dashboard: per-client integration
+    counts, active/inactive status, and recent failure counts.
+
+    Deliberately does NOT include "pending confirmations" — those live in
+    Redis session state (pipeline/stages/agent_actions.py), keyed per
+    session_id, and there's no reliable way to enumerate them across every
+    client's every active session from here. Scoped to what's actually
+    backed by durable, queryable data: client_ext_integrations and
+    integration_action_log.
+    """
+    if not client_ids:
+        return []
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            """SELECT ci.client_id,
+                      COUNT(DISTINCT ci.integration_id)                                   AS integration_count,
+                      COUNT(DISTINCT ci.integration_id) FILTER (WHERE ci.active)          AS active_integration_count,
+                      COUNT(DISTINCT cia.id)                                              AS action_count,
+                      MAX(ial.fired_at)                                                   AS last_action_at,
+                      COUNT(ial.id) FILTER (
+                          WHERE ial.success = FALSE AND ial.fired_at > NOW() - INTERVAL '7 days'
+                      )                                                                    AS failures_last_7_days
+               FROM client_ext_integrations ci
+               LEFT JOIN client_ext_integration_actions cia ON cia.integration_id = ci.integration_id
+               LEFT JOIN integration_action_log ial ON ial.integration_id = ci.integration_id
+               WHERE ci.client_id = ANY(%s)
+               GROUP BY ci.client_id""",
+            (client_ids,)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [{
+            'client_id':                r['client_id'],
+            'integration_count':        r['integration_count'],
+            'active_integration_count': r['active_integration_count'],
+            'action_count':             r['action_count'],
+            'last_action_at':           r['last_action_at'].isoformat() if r['last_action_at'] else None,
+            'failures_last_7_days':     r['failures_last_7_days'],
+        } for r in rows]
+    except Exception as e:
+        logger.error(f'[Integrations] get_agency_integration_overview error: {e}')
+        return []
+
+
 def _build_plain_english_summary(action_name: str, params: dict, result: dict) -> str:
     """Best-effort human-readable line for the audit log. Stays generic — action-specific
     phrasing can be layered in later per action type if needed."""

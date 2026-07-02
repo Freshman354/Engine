@@ -78,6 +78,15 @@ from .users import (
     delete_password_reset_token,
     update_user_password,
     mark_onboarding_complete,
+    update_user_profile,
+    update_user_email,
+    get_notification_prefs,
+    update_notification_prefs,
+    request_account_deletion,
+    cancel_account_deletion,
+    get_pending_deletion,
+    get_users_due_for_hard_delete,
+    hard_delete_user,
 )
 
 # ── Billing & subscriptions ───────────────────────────────────────────────────
@@ -221,6 +230,7 @@ from .integrations import (
     delete_action,
     log_action_event,
     get_action_log,
+    get_agency_integration_overview,
 )
 
 from .agency_domains import (

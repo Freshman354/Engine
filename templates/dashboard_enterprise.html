@@ -273,19 +273,23 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
             Support
         </a>
+        <a href="{{ url_for('account.settings_page') }}" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+            Account Settings
+        </a>
         <a href="/logout" class="nav-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             Logout
         </a>
     </nav>
     <div class="sidebar-footer">
-        <div class="user-profile">
+        <a href="{{ url_for('account.settings_page') }}" class="user-profile" style="text-decoration:none;">
             <div class="user-avatar">{{ user.email[0]|upper }}</div>
             <div class="user-info">
                 <div class="user-name">{{ user.email }}</div>
                 <div class="user-plan">{{ (plan_type or user.plan_type)|title }} Plan</div>
             </div>
-        </div>
+        </a>
     </div>
 </aside>
 <div class="main">

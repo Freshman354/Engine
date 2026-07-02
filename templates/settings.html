@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Account Settings — Lumvi Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --cream:       #F7F4EF;
+  --cream2:      #F0EBE1;
+  --panel:       #EDEAE3;
+  --white:       #FFFFFF;
+  --border:      #E7E2DA;
+
+  --gold:        #B8924A;
+  --gold-lt:     rgba(184,146,74,0.12);
+  --gold-dk:     #9A7A3A;
+  --gold-glow:   rgba(184,146,74,0.3);
+
+  --dark:        #1C1917;
+  --mid:         #57534E;
+  --sub:         #A8A29E;
+
+  --success:     #16A34A;
+  --success-lt:  #F0FDF4;
+  --danger:      #EF4444;
+  --danger-lt:   #FEF2F2;
+  --warning:     #D97706;
+  --warning-lt:  #FFFBEB;
+
+  --radius:      12px;
+  --radius-sm:   9px;
+  --radius-lg:   16px;
+
+  --shadow:      0 4px 20px rgba(0,0,0,0.06);
+  --shadow-lg:   0 20px 60px rgba(0,0,0,0.1);
+
+  --font:        'DM Sans', sans-serif;
+  --serif:       'Fraunces', serif;
+  --mono:        'DM Mono', monospace;
+
+  --sidebar-w:   224px;
+  --header-h:    60px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font); background: var(--cream); color: var(--dark);
+  font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; display: flex;
+}
+button { font-family: inherit; cursor: pointer; border: none; outline: none; }
+input, textarea, select { font-family: inherit; outline: none; }
+a { text-decoration: none; color: inherit; }
+
+.sidebar {
+  width: var(--sidebar-w); background: var(--white); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; z-index: 50;
+}
+.sidebar-logo { padding: 20px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; height: var(--header-h); }
+.sidebar-logo span { font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--dark); }
+.nav-label { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sub); padding: 10px 10px 4px; margin-top: 6px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 9px;
+  color: var(--mid); font-size: 13.5px; font-weight: 500; transition: all 0.15s; cursor: pointer; margin: 1px 10px; text-decoration: none;
+}
+.nav-item svg { flex-shrink: 0; width: 16px; height: 16px; opacity: 0.65; }
+.nav-item:hover { background: var(--cream); color: var(--dark); }
+.nav-item.active { background: var(--gold-lt); color: var(--gold-dk); font-weight: 600; }
+.nav-item.active svg { opacity: 1; }
+.sidebar-divider { height: 1px; background: var(--border); margin: 10px 0; }
+
+.main-wrapper { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+.header { background: var(--white); border-bottom: 1px solid var(--border); padding: 0 28px; height: var(--header-h); display: flex; align-items: center; position: sticky; top: 0; z-index: 40; }
+.header-title { font-family: var(--serif); font-size: 15px; font-weight: 600; color: var(--dark); }
+.main { padding: 28px; max-width: 720px; display: flex; flex-direction: column; gap: 24px; }
+
+.section-title { font-family: var(--serif); font-size: 22px; font-weight: 700; letter-spacing: -0.3px; color: var(--dark); margin-bottom: 2px; }
+.section-subtitle { font-size: 13px; color: var(--sub); }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); }
+.tab-btn { padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--sub); border-bottom: 2px solid transparent; margin-bottom: -1px; background:transparent; }
+.tab-btn.active { color: var(--gold-dk); border-bottom-color: var(--gold); }
+.tab-panel { display: none; flex-direction: column; gap: 20px; }
+.tab-panel.active { display: flex; }
+
+.card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 22px; }
+.card.danger { border-color: #fecaca; }
+.card-title { font-family: var(--serif); font-size: 15px; font-weight: 700; color: var(--dark); margin-bottom: 4px; }
+.card-desc { font-size: 12.5px; color: var(--sub); margin-bottom: 16px; }
+
+.form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.form-group:last-child { margin-bottom: 0; }
+.form-label { font-size: 12px; font-weight: 600; color: var(--mid); }
+.form-input {
+  background: var(--cream); border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--dark); padding: 9px 12px; font-size: 13px; transition: all 0.2s; width: 100%;
+}
+.form-input:focus { border-color: var(--gold); background: var(--white); box-shadow: 0 0 0 3px var(--gold-lt); }
+.form-hint { font-size: 11.5px; color: var(--sub); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; transition: all 0.2s; white-space: nowrap;
+}
+.btn-primary { background: var(--gold); color: #fff; box-shadow: 0 2px 8px var(--gold-glow); }
+.btn-primary:hover { background: var(--gold-dk); }
+.btn-secondary { background: var(--white); color: var(--dark); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--cream); }
+.btn-danger { background: var(--danger-lt); color: var(--danger); border: 1px solid #fecaca; }
+.btn-danger:hover { background: #fecaca; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.toggle-row:last-child { border-bottom: none; }
+.toggle-label { font-size: 13px; font-weight: 500; color: var(--dark); }
+.toggle-sub { font-size: 11.5px; color: var(--sub); margin-top: 2px; }
+.switch { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch-track { position: absolute; inset: 0; background: var(--border); border-radius: 20px; transition: 0.2s; cursor: pointer; }
+.switch-track::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.switch input:checked + .switch-track { background: var(--gold); }
+.switch input:checked + .switch-track::before { transform: translateX(16px); }
+
+.deletion-banner {
+  background: var(--warning-lt); border: 1px solid #fde68a; border-radius: var(--radius-sm);
+  padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.deletion-banner-text { font-size: 13px; color: #92400e; font-weight: 500; }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(28,25,23,0.5); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal { background: var(--white); border-radius: var(--radius-lg); width: 440px; max-width: 92vw; box-shadow: var(--shadow-lg); }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.modal-title { font-family: var(--serif); font-size: 17px; font-weight: 700; color: var(--dark); }
+.modal-close { width: 30px; height: 30px; border-radius: 8px; background: var(--cream); color: var(--sub); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.modal-body { padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+.toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 200; display: flex; flex-direction: column; gap: 8px; }
+.toast { background: var(--white); border-radius: var(--radius-sm); padding: 12px 16px; box-shadow: var(--shadow-lg); font-size: 13px; font-weight: 500; color: var(--dark); max-width: 320px; }
+.toast.success { border-left: 3px solid var(--success); }
+.toast.error { border-left: 3px solid var(--danger); }
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-logo"><span>Lumvi</span></div>
+  <nav style="flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;">
+    <div class="nav-label">Workspace</div>
+    <a class="nav-item" href="{{ url_for('auth.dashboard') }}">
+      <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </a>
+    <div class="sidebar-divider"></div>
+    <div class="nav-label">Settings</div>
+    <a class="nav-item" href="{{ url_for('integrations_page') }}">
+      <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      Integrations
+    </a>
+    <a class="nav-item" href="{{ url_for('agent_actions_page') }}">
+      <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      Agent Actions
+    </a>
+    <a class="nav-item active" href="{{ url_for('account.settings_page') }}">
+      <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+      Account
+    </a>
+  </nav>
+</aside>
+
+<div class="main-wrapper">
+  <header class="header"><div class="header-title">Account Settings</div></header>
+
+  <main class="main">
+    <div>
+      <div class="section-title">Account Settings</div>
+      <div class="section-subtitle">Manage your profile, security, and notification preferences.</div>
+    </div>
+
+    {% if pending_deletion.pending %}
+    <div class="deletion-banner">
+      <div class="deletion-banner-text">
+        Your account is scheduled for permanent deletion in {{ pending_deletion.days_left }} day{{ '' if pending_deletion.days_left == 1 else 's' }}.
+      </div>
+      <button class="btn btn-secondary" onclick="cancelDeletion()">Cancel deletion</button>
+    </div>
+    {% endif %}
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="profile" onclick="switchTab('profile')">Profile</button>
+      <button class="tab-btn" data-tab="security" onclick="switchTab('security')">Security</button>
+      <button class="tab-btn" data-tab="notifications" onclick="switchTab('notifications')">Notifications</button>
+      <button class="tab-btn" data-tab="danger" onclick="switchTab('danger')">Danger Zone</button>
+    </div>
+
+    <!-- PROFILE -->
+    <div class="tab-panel active" id="tab-profile">
+      <div class="card">
+        <div class="card-title">Business Profile</div>
+        <div class="card-desc">This shows up across your dashboard and in agency-branded areas.</div>
+        <div class="form-group">
+          <div class="form-label">Company name</div>
+          <input class="form-input" id="p-company" value="{{ user.company_name or '' }}" placeholder="Your agency name">
+        </div>
+        <div class="form-group">
+          <div class="form-label">Logo URL</div>
+          <input class="form-input" id="p-logo" value="{{ user.logo_url or '' }}" placeholder="https://...">
+        </div>
+        <div class="form-group">
+          <div class="form-label">Contact phone</div>
+          <input class="form-input" id="p-phone" value="{{ user.contact_phone or '' }}" placeholder="+1 555 123 4567">
+        </div>
+        <button class="btn btn-primary" id="saveProfileBtn" onclick="saveProfile()">Save Profile</button>
+      </div>
+    </div>
+
+    <!-- SECURITY -->
+    <div class="tab-panel" id="tab-security">
+      <div class="card">
+        <div class="card-title">Login Email</div>
+        <div class="card-desc">Current: {{ user.email }}</div>
+        <div class="form-group">
+          <div class="form-label">New email</div>
+          <input class="form-input" id="s-new-email" type="email" placeholder="new@email.com">
+        </div>
+        <div class="form-group">
+          <div class="form-label">Current password</div>
+          <input class="form-input" id="s-email-password" type="password" placeholder="Confirm with your password">
+        </div>
+        <button class="btn btn-primary" id="saveEmailBtn" onclick="saveEmail()">Update Email</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Password</div>
+        <div class="form-group">
+          <div class="form-label">Current password</div>
+          <input class="form-input" id="s-current-password" type="password">
+        </div>
+        <div class="form-group">
+          <div class="form-label">New password</div>
+          <input class="form-input" id="s-new-password" type="password">
+          <div class="form-hint">At least 8 characters.</div>
+        </div>
+        <button class="btn btn-primary" id="savePasswordBtn" onclick="savePassword()">Update Password</button>
+      </div>
+    </div>
+
+    <!-- NOTIFICATIONS -->
+    <div class="tab-panel" id="tab-notifications">
+      <div class="card">
+        <div class="card-title">Email Notifications</div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Weekly digest</div>
+            <div class="toggle-sub">Top unanswered questions from your chatbots, every week</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="n-weekly-digest" {{ 'checked' if notification_prefs.weekly_digest }} onchange="saveNotifications()"><span class="switch-track"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Lead alerts</div>
+            <div class="toggle-sub">Get notified when your chatbots capture a new lead</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="n-lead-alerts" {{ 'checked' if notification_prefs.lead_alerts }} onchange="saveNotifications()"><span class="switch-track"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Billing alerts</div>
+            <div class="toggle-sub">Payment issues, renewals, and plan changes</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="n-billing-alerts" {{ 'checked' if notification_prefs.billing_alerts }} onchange="saveNotifications()"><span class="switch-track"></span></label>
+        </div>
+      </div>
+    </div>
+
+    <!-- DANGER ZONE -->
+    <div class="tab-panel" id="tab-danger">
+      <div class="card danger">
+        <div class="card-title" style="color:var(--danger);">Delete Account</div>
+        <div class="card-desc">
+          Your account and clients stay intact for 30 days after you request deletion, in case you change your mind.
+          After that, everything is permanently deleted and cannot be recovered.
+        </div>
+        {% if pending_deletion.pending %}
+          <div class="form-hint" style="margin-bottom:12px;">Deletion already scheduled — {{ pending_deletion.days_left }} day{{ '' if pending_deletion.days_left == 1 else 's' }} left. Use the banner above to cancel.</div>
+        {% else %}
+          <button class="btn btn-danger" onclick="openDeleteModal()">Delete My Account</button>
+        {% endif %}
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- DELETE ACCOUNT MODAL -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Delete Your Account?</div>
+      <button class="modal-close" onclick="closeModal('deleteModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-hint">
+        Your account and all your clients' chatbots will stop being billed at the end of the current
+        period and be permanently deleted in 30 days. You can cancel any time before then from this page.
+      </div>
+      <div class="form-group">
+        <div class="form-label">Why are you leaving? <span style="font-weight:400;color:var(--sub);">(optional)</span></div>
+        <input class="form-input" id="d-reason" placeholder="Helps us improve">
+      </div>
+      <div class="form-group">
+        <div class="form-label">Confirm with your password</div>
+        <input class="form-input" id="d-password" type="password">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn btn-danger" id="confirmDeleteBtn" onclick="confirmDelete()">Delete My Account</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
+}
+
+async function saveProfile() {
+  const btn = document.getElementById('saveProfileBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/account/profile', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company_name: document.getElementById('p-company').value.trim(),
+        logo_url: document.getElementById('p-logo').value.trim(),
+        contact_phone: document.getElementById('p-phone').value.trim(),
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to save');
+    showToast('Profile updated.', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function saveEmail() {
+  const newEmail = document.getElementById('s-new-email').value.trim();
+  const password  = document.getElementById('s-email-password').value;
+  if (!newEmail || !password) { showToast('Fill in both fields.', 'error'); return; }
+  const btn = document.getElementById('saveEmailBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/account/email', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_email: newEmail, current_password: password }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to update email');
+    showToast('Email updated. Use it next time you log in.', 'success');
+    document.getElementById('s-new-email').value = '';
+    document.getElementById('s-email-password').value = '';
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function savePassword() {
+  const current = document.getElementById('s-current-password').value;
+  const next     = document.getElementById('s-new-password').value;
+  if (!current || next.length < 8) { showToast('Enter your current password and a new one (8+ characters).', 'error'); return; }
+  const btn = document.getElementById('savePasswordBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/account/password', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_password: current, new_password: next }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to update password');
+    showToast('Password updated.', 'success');
+    document.getElementById('s-current-password').value = '';
+    document.getElementById('s-new-password').value = '';
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function saveNotifications() {
+  try {
+    const res = await fetch('/api/account/notifications', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        weekly_digest:  document.getElementById('n-weekly-digest').checked,
+        lead_alerts:    document.getElementById('n-lead-alerts').checked,
+        billing_alerts: document.getElementById('n-billing-alerts').checked,
+      }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to save');
+    showToast('Notification preferences saved.', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function openDeleteModal() { document.getElementById('deleteModal').classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+async function confirmDelete() {
+  const password = document.getElementById('d-password').value;
+  if (!password) { showToast('Enter your password to confirm.', 'error'); return; }
+  const btn = document.getElementById('confirmDeleteBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/account/request-deletion', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ current_password: password, reason: document.getElementById('d-reason').value.trim() }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to schedule deletion');
+    closeModal('deleteModal');
+    showToast('Account deletion scheduled. Reloading…', 'success');
+    setTimeout(() => window.location.reload(), 1200);
+  } catch (err) {
+    showToast(err.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+async function cancelDeletion() {
+  try {
+    const res = await fetch('/api/account/cancel-deletion', { method: 'POST' });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'Failed to cancel');
+    showToast('Deletion cancelled.', 'success');
+    setTimeout(() => window.location.reload(), 1000);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function showToast(msg, type) {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+</script>
+</body>
+</html>

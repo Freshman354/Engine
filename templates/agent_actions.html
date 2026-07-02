@@ -346,6 +346,10 @@ a { text-decoration: none; color: inherit; }
         <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         Agent Actions
       </a>
+      <a class="nav-item" href="{{ url_for('account.settings_page') }}">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+        Account
+      </a>
     </nav>
 
     <div class="sidebar-bottom">
@@ -379,6 +383,21 @@ a { text-decoration: none; color: inherit; }
         <div class="section-title">External System Integrations</div>
         <div class="section-subtitle">Connect a client's own booking, ordering, or CRM system so their chatbot can take real actions — not just answer questions.</div>
       </div>
+    </div>
+
+    <div class="log-section">
+      <div class="log-header">
+        <div class="log-title">All Clients</div>
+        <div class="log-count">Integration health across your whole agency</div>
+      </div>
+      <table class="log-table">
+        <thead>
+          <tr><th>Client</th><th>Integrations</th><th>Active</th><th>Actions</th><th>Failures (7d)</th><th>Last Activity</th></tr>
+        </thead>
+        <tbody id="overviewBody">
+          <tr><td colspan="6"><div class="empty-log"><div class="spinner"></div></div></td></tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="client-bar">
@@ -420,6 +439,13 @@ a { text-decoration: none; color: inherit; }
       <button class="modal-close" onclick="closeModal('integrationModal')">✕</button>
     </div>
     <div class="modal-body">
+      <div class="form-group" id="int-template-group">
+        <div class="form-label">Start from a template <span class="optional">pre-fills setup for common platforms</span></div>
+        <select class="form-select" id="int-template" onchange="onTemplateChange()">
+          <option value="">Custom / no template</option>
+        </select>
+        <div class="form-hint" id="int-template-hint"></div>
+      </div>
       <div class="form-group" id="int-name-group">
         <div class="form-label">Integration name <span class="required">*</span></div>
         <input class="form-input" id="int-name" placeholder="e.g. Acuity Scheduling, Client's Custom API">
@@ -555,10 +581,14 @@ let pendingDeleteIntegrationId = null;
 let currentTestAction = null;   // {action_id, param_mapping}
 let integrationModalMode = 'create';   // 'create' | 'edit'
 let editIntegrationId = null;
+let TEMPLATES = [];             // platform template summaries for the picker
+let selectedTemplatePlatform = null;
 
 /* ── INIT ────────────────────────────────────────────────────── */
 window.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
+  loadTemplates();
+  loadOverview();
   if (currentClient) {
     document.getElementById('addIntegrationBtn').disabled = false;
     loadIntegrations(currentClient);
@@ -567,6 +597,73 @@ window.addEventListener('DOMContentLoaded', () => {
     showNoClients();
   }
 });
+
+async function loadTemplates() {
+  try {
+    const res = await fetch('/api/agent-actions/templates');
+    const data = await res.json();
+    if (!data.success) return;
+    TEMPLATES = data.templates || [];
+    const sel = document.getElementById('int-template');
+    sel.innerHTML = '<option value="">Custom / no template</option>' +
+      TEMPLATES.map(t => `<option value="${t.platform}">${escapeHtml(t.name)} (${t.action_count} starter actions)</option>`).join('');
+  } catch (err) {
+    // Non-fatal — template picker just stays empty, manual setup still works.
+  }
+}
+
+async function loadOverview() {
+  const box = document.getElementById('overviewBody');
+  if (!box) return;
+  try {
+    const res = await fetch('/api/agent-actions/overview');
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    renderOverview(data.overview || []);
+  } catch (err) {
+    box.innerHTML = `<tr><td colspan="6"><div class="empty-log">Could not load overview.</div></td></tr>`;
+  }
+}
+
+function renderOverview(overview) {
+  const box = document.getElementById('overviewBody');
+  if (!overview.length) {
+    box.innerHTML = `<tr><td colspan="6"><div class="empty-log">No clients yet.</div></td></tr>`;
+    return;
+  }
+  box.innerHTML = overview.map(o => `
+    <tr>
+      <td>${escapeHtml(o.company_name)}</td>
+      <td>${o.integration_count}</td>
+      <td>${o.active_integration_count}</td>
+      <td>${o.action_count}</td>
+      <td>${o.failures_last_7_days > 0 ? `<span class="log-dot fail"></span>${o.failures_last_7_days}` : '<span style="color:var(--sub);">0</span>'}</td>
+      <td style="color:var(--sub);font-size:12px;">${o.last_action_at ? new Date(o.last_action_at).toLocaleDateString() : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function onTemplateChange() {
+  const platform = document.getElementById('int-template').value;
+  const hint = document.getElementById('int-template-hint');
+  selectedTemplatePlatform = platform || null;
+
+  if (!platform) {
+    hint.textContent = '';
+    document.getElementById('int-auth-type').disabled = false;
+    return;
+  }
+  const t = TEMPLATES.find(x => x.platform === platform);
+  if (!t) return;
+  document.getElementById('int-name').value = t.name;
+  document.getElementById('int-base-url').value = t.base_url;
+  document.getElementById('int-auth-type').value = t.auth_type;
+  document.getElementById('int-auth-type').disabled = true;   // template sets this
+  renderAuthFields();
+  hint.textContent = t.base_url.includes('{')
+    ? `${t.auth_hint || ''} Replace the {placeholder} in the base URL with this client's actual value.`
+    : (t.auth_hint || '');
+}
 
 function populateClientSelect() {
   const sel = document.getElementById('clientSelect');
@@ -686,8 +783,12 @@ function renderIntegrations() {
 function openIntegrationModal() {
   integrationModalMode = 'create';
   editIntegrationId = null;
+  selectedTemplatePlatform = null;
   document.getElementById('integrationModalTitle').textContent = 'Connect an External System';
   document.getElementById('saveIntegrationBtn').textContent = 'Save Integration';
+  document.getElementById('int-template-group').style.display = '';
+  document.getElementById('int-template').value = '';
+  document.getElementById('int-template-hint').textContent = '';
   document.getElementById('int-name-group').style.display = '';
   document.getElementById('int-url-group').style.display = '';
   document.getElementById('int-cred-hint').textContent =
@@ -703,8 +804,10 @@ function openIntegrationModal() {
 function openEditCredentialsModal(integrationId, authType) {
   integrationModalMode = 'edit';
   editIntegrationId = integrationId;
+  selectedTemplatePlatform = null;
   document.getElementById('integrationModalTitle').textContent = 'Update Credentials';
   document.getElementById('saveIntegrationBtn').textContent = 'Save Credentials';
+  document.getElementById('int-template-group').style.display = 'none';   // no templates when just rotating credentials
   document.getElementById('int-name-group').style.display = 'none';
   document.getElementById('int-url-group').style.display = 'none';
   document.getElementById('int-cred-hint').textContent =
@@ -775,18 +878,32 @@ async function saveIntegration() {
   const name    = document.getElementById('int-name').value.trim();
   const baseUrl = document.getElementById('int-base-url').value.trim();
   if (!name || !baseUrl) { showToast('Name and base URL are required.', 'error'); return; }
+  if (baseUrl.includes('{')) { showToast('Replace the {placeholder} in the base URL with this client\'s actual value.', 'error'); return; }
 
   btn.disabled = true;
   try {
-    const res = await fetch(`/api/agent-actions/${currentClient}/integrations`, {
+    const endpoint = selectedTemplatePlatform
+      ? `/api/agent-actions/${currentClient}/apply-template`
+      : `/api/agent-actions/${currentClient}/integrations`;
+    const body = selectedTemplatePlatform
+      ? { platform: selectedTemplatePlatform, name, base_url: baseUrl, credentials: collectCredentials() }
+      : { name, base_url: baseUrl, auth_type: authType, credentials: collectCredentials() };
+
+    const res = await fetch(endpoint, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, base_url: baseUrl, auth_type: authType, credentials: collectCredentials() }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || 'Failed to save');
-    showToast('Integration connected.', 'success');
+    showToast(
+      selectedTemplatePlatform
+        ? `Connected — ${(data.actions_created || []).length} starter actions added.`
+        : 'Integration connected.',
+      'success'
+    );
     closeModal('integrationModal');
     loadIntegrations(currentClient);
+    loadOverview();
   } catch (err) {
     showToast(err.message, 'error');
   } finally {

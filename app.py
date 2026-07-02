@@ -817,6 +817,7 @@ try:
         'migrate_lead_delivery',      # Gap 3 — notification_email/phone/name on clients
         'migrate_agency_email_domains', # white-label custom email domain
         'migrate_external_integrations',       # client_ext_integrations + actions + audit log (agentic external tool calls)
+        'migrate_account_profile',             # profile fields + soft/hard delete on users
     ]
     for _fn in _optional_migrations:
         if hasattr(models, _fn):
@@ -966,6 +967,10 @@ init_agency(
     agency_included_clients=AGENCY_INCLUDED_CLIENTS,
 )
 app.register_blueprint(agency_bp)
+
+# Account settings (profile, email, password, notifications, deletion)
+from blueprints.account import account_bp
+app.register_blueprint(account_bp)
 
 # Auth
 from blueprints.auth import auth_bp, init_auth
@@ -2066,6 +2071,99 @@ def get_agent_action_log(client_id):
     limit = min(int(request.args.get('limit', 50)), 100)
     log   = models.get_action_log(client_id, limit=limit)
     return jsonify({'success': True, 'log': log}), 200
+
+
+@app.route('/api/agent-actions/overview', methods=['GET'])
+@login_required
+def get_agent_actions_overview():
+    """Cross-client rollup — every client this agency owns, one call."""
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
+        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+    clients = models.get_user_clients(current_user.id)
+    client_ids = [c['client_id'] for c in clients]
+    stats = {s['client_id']: s for s in models.get_agency_integration_overview(client_ids)}
+    overview = [{
+        'client_id': c['client_id'],
+        'company_name': c.get('company_name') or c['client_id'],
+        **stats.get(c['client_id'], {
+            'integration_count': 0, 'active_integration_count': 0,
+            'action_count': 0, 'last_action_at': None, 'failures_last_7_days': 0,
+        }),
+    } for c in clients]
+    return jsonify({'success': True, 'overview': overview}), 200
+
+
+
+@login_required
+def list_agent_action_templates():
+    """No client_id needed — templates are generic, same list for every agency."""
+    from integration_templates import list_templates
+    return jsonify({'success': True, 'templates': list_templates()}), 200
+
+
+@app.route('/api/agent-actions/<client_id>/apply-template', methods=['POST'])
+@login_required
+def apply_agent_action_template(client_id):
+    """
+    Creates one integration plus its full starter action set from a
+    template in a single call, instead of an agency hand-configuring
+    param_mapping/response_mapping per action from scratch.
+    """
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
+        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+
+    from integration_templates import get_template
+    data = request.get_json(force=True) or {}
+    platform = data.get('platform', '')
+    template = get_template(platform)
+    if not template:
+        return jsonify({'success': False, 'error': 'Unknown template.'}), 400
+
+    base_url = (data.get('base_url') or template['base_url']).strip()
+    if '{' in base_url:
+        return jsonify({'success': False, 'error': 'Base URL still has a placeholder in it — fill in the real address.'}), 400
+
+    integration_result = models.create_integration(
+        client_id=client_id,
+        name=data.get('name') or template['name'],
+        base_url=base_url,
+        auth_type=template['auth_type'],
+        credentials=data.get('credentials') or {},
+        created_by_agency_user_id=current_user.id,
+    )
+    if not integration_result.get('success'):
+        return jsonify(integration_result), 400
+
+    integration_id = integration_result['integration_id']
+    created, failed = [], []
+    for action in template['actions']:
+        result = models.add_action(
+            integration_id=integration_id,
+            action_name=action['action_name'],
+            http_method=action['http_method'],
+            endpoint_path=action['endpoint_path'],
+            param_mapping=action['param_mapping'],
+            response_mapping=action.get('response_mapping') or {},
+            requires_confirmation=action.get('requires_confirmation', True),
+            description=action.get('description', ''),
+            amount_param=action.get('suggested_amount_param'),
+            max_auto_amount=None,  # template never guesses a dollar limit — agency sets one deliberately
+        )
+        if result.get('success'):
+            created.append(action['action_name'])
+        else:
+            failed.append({'action_name': action['action_name'], 'error': result.get('error')})
+
+    app.logger.info(
+        f'[AgentActions] user={current_user.id} applied template={platform} '
+        f'client={client_id} integration={integration_id} created={len(created)} failed={len(failed)}'
+    )
+    return jsonify({
+        'success': True, 'integration_id': integration_id,
+        'actions_created': created, 'actions_failed': failed,
+    }), 200
 
 
 

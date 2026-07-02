@@ -18,6 +18,7 @@ Routes
   GET/POST    /cron/enforce-subscriptions             cron_enforce_subscriptions
   GET/POST    /cron/weekly-digest                     cron_weekly_digest
   GET/POST    /cron/cleanup-logs                      cron_cleanup_logs
+  GET/POST    /cron/hard-delete-accounts               cron_hard_delete_accounts
   GET/POST    /cron/stale-lead-nudge                  cron_stale_lead_nudge
   GET/POST    /cron/follow-up-reminders               cron_follow_up_reminders
   GET         /cron/status                            cron_status
@@ -794,7 +795,46 @@ def cron_cleanup_logs():
     })
 
 
-@cron_bp.route('/cron/stale-lead-nudge', methods=['GET', 'POST'])
+@cron_bp.route('/cron/hard-delete-accounts', methods=['GET', 'POST'])
+def cron_hard_delete_accounts():
+    """
+    Daily cron — permanently processes any account whose self-service
+    deletion grace period (constants.ACCOUNT_DELETION_GRACE_DAYS, currently
+    30 days) has expired. See models/users.py::hard_delete_user for exactly
+    what "permanent" means here (PII scrub + client removal — see the
+    module-level note there on cascade coverage).
+
+    Recommended schedule: daily (e.g. every day at 04:00 UTC).
+    """
+    _, err = _check_cron_secret()
+    if err:
+        return err
+
+    t0 = time.time()
+    due = models.get_users_due_for_hard_delete()
+    processed, failures = [], []
+    for u in due:
+        result = models.hard_delete_user(u['id'])
+        if result.get('success'):
+            processed.append(u['id'])
+        else:
+            failures.append({'user_id': u['id'], 'error': result.get('error')})
+
+    duration_ms = int((time.time() - t0) * 1000)
+    result = {'processed': len(processed), 'failed': len(failures), 'failures': failures}
+    models.log_cron_run(
+        'hard_delete_accounts', success=(len(failures) == 0), result=result,
+        duration_ms=duration_ms, triggered_by='http',
+    )
+    current_app.logger.info(f'[HardDeleteAccounts] {result} dur={duration_ms}ms')
+    return jsonify({
+        'success': True,
+        'ran_at':  datetime.utcnow().isoformat(),
+        **result,
+    })
+
+
+
 def cron_stale_lead_nudge():
     """
     Daily cron — emails the business owner about leads stuck in 'new' for

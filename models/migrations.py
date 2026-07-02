@@ -1351,6 +1351,38 @@ def migrate_webhooks():
         conn.close()
 
 
+def migrate_account_profile():
+    """
+    Profile fields (company name, logo, contact phone, notification prefs)
+    and self-service account deletion tracking on users. Soft delete sets
+    deletion_requested_at + scheduled_hard_delete_at; a daily cron job
+    (blueprints/cron.py::cron_hard_delete_accounts) permanently removes
+    accounts past their scheduled_hard_delete_at. Safe to call every
+    startup (ADD COLUMN IF NOT EXISTS).
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS company_name TEXT")
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS logo_url TEXT")
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS contact_phone TEXT")
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS notification_prefs TEXT DEFAULT '{}'")
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMP")
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS scheduled_hard_delete_at TIMESTAMP")
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_reason TEXT")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_users_hard_delete_due "
+            "ON users (scheduled_hard_delete_at) WHERE scheduled_hard_delete_at IS NOT NULL"
+        )
+        conn.commit()
+        print("✅ Account profile + deletion tracking ready (users table).")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_account_profile: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def migrate_external_integrations():
     """
     Create client_ext_integrations, client_ext_integration_actions, and

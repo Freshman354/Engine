@@ -121,6 +121,14 @@ STAGE_ORDER: List[str] = ['browsing', 'evaluating', 'buying', 'onboarding', 'sup
 LEAD_NUDGE_MAX_PER_SESSION: int = 2
 LEAD_NUDGE_COOLDOWN_TURNS:  int = 4
 
+# ── Account deletion ────────────────────────────────────────────────────────
+# Self-service "delete account" is a soft delete: the agency's account and
+# widgets keep working for this many days (in case it was a mistake or they
+# want to export data), then a daily cron job permanently deletes it.
+# See blueprints/cron.py::cron_hard_delete_accounts and models/users.py.
+ACCOUNT_DELETION_GRACE_DAYS: int = 30
+
+
 
 # ── Frustration and urgency signals ──────────────────────────────────────────
 FRUSTRATION_SIGNALS: List[str] = [
