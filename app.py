@@ -1864,6 +1864,26 @@ def get_integration_log(client_id):
 
 
 # ── Agent Actions (agency-configured external system integrations) ────────────
+# SECURITY: every route below takes client_id (checked against the caller via
+# verify_client_ownership) AND a separate integration_id/action_id from the
+# URL or JSON body. Those two are independent — verify_client_ownership alone
+# does NOT prove the integration/action actually belongs to that client_id.
+# Without the checks below, an authenticated agency user could keep their own
+# client_id (passes ownership) while substituting another agency's
+# integration_id/action_id and read, modify, delete, or fire a real request
+# against a completely different agency's connected system.
+
+def _integration_belongs_to_client(integration_id: str, client_id: str) -> bool:
+    return any(i['integration_id'] == integration_id for i in models.get_integrations(client_id))
+
+
+def _action_belongs_to_client(action_id, client_id: str) -> bool:
+    action = models.get_action_by_id(action_id)
+    if not action:
+        return False
+    return _integration_belongs_to_client(action['integration_id'], client_id)
+
+
 # Distinct from the platform integrations above: those receive INBOUND
 # webhooks from Shopify/Acuity. This lets the chatbot make OUTBOUND calls
 # to a client's own external system (their booking API, CRM, etc.) —
@@ -1929,6 +1949,8 @@ def create_agent_integration(client_id):
 def update_agent_integration(client_id, integration_id):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not _integration_belongs_to_client(integration_id, client_id):
+        return jsonify({'success': False, 'error': 'Integration not found'}), 404
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
         return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
     data = request.get_json(force=True) or {}
@@ -1948,6 +1970,8 @@ def update_agent_integration(client_id, integration_id):
 def delete_agent_integration(client_id, integration_id):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not _integration_belongs_to_client(integration_id, client_id):
+        return jsonify({'success': False, 'error': 'Integration not found'}), 404
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
         return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
     ok = models.delete_integration(integration_id)
@@ -1962,6 +1986,8 @@ def delete_agent_integration(client_id, integration_id):
 def create_agent_action(client_id, integration_id):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not _integration_belongs_to_client(integration_id, client_id):
+        return jsonify({'success': False, 'error': 'Integration not found'}), 404
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
         return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
     data = request.get_json(force=True) or {}
@@ -1996,6 +2022,8 @@ def create_agent_action(client_id, integration_id):
 def delete_agent_action(client_id, action_id):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not _action_belongs_to_client(action_id, client_id):
+        return jsonify({'success': False, 'error': 'Action not found'}), 404
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
         return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
     ok = models.delete_action(action_id)
@@ -2018,6 +2046,8 @@ def test_agent_action(client_id):
     params    = data.get('params') or {}
     if not action_id:
         return jsonify({'success': False, 'error': 'action_id is required'}), 400
+    if not _action_belongs_to_client(action_id, client_id):
+        return jsonify({'success': False, 'error': 'Action not found'}), 404
     from pipeline.integration_adapter import execute_client_action
     result = execute_client_action(
         action_id=action_id, params=params,

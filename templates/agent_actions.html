@@ -650,7 +650,7 @@ function renderIntegrations() {
                 <td>${a.max_auto_amount != null ? `<span class="meta-pill">≤ $${Number(a.max_auto_amount).toLocaleString()}</span>` : '<span style="color:var(--sub);">—</span>'}</td>
                 <td>
                   <div class="action-row-btns">
-                    <button class="icon-btn" title="Test" onclick='openTestModal(${a.action_id}, ${JSON.stringify(a.param_mapping)})'>
+                    <button class="icon-btn" title="Test" onclick='openTestModal(${a.action_id}, ${attrSafe(JSON.stringify(a.param_mapping))})'>
                       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     </button>
                     <button class="icon-btn danger" title="Delete" onclick="deleteAction(${a.action_id})">
@@ -1001,6 +1001,11 @@ function renderLog(log) {
 /* ── UTIL ────────────────────────────────────────────────────── */
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+// This page's onclick attributes use single quotes; JSON.stringify() output
+// can contain a literal apostrophe (e.g. a param value like "customer's
+// email"), which would close the attribute early. Escape it as an HTML
+// entity — the browser decodes it back before running the handler.
+function attrSafe(jsonString) { return jsonString.replace(/'/g, '&#39;'); }
 function showToast(msg, type) {
   const c = document.getElementById('toastContainer');
   const t = document.createElement('div');

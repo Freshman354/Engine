@@ -21,6 +21,7 @@ in pipeline/context.py and should be accounted for there as the pipeline
 matures.
 """
 import logging
+import re
 import threading
 import time
 from typing import Any, Dict, List, Optional
@@ -31,8 +32,21 @@ from utils import log_crash
 
 logger = logging.getLogger('lumvi.agent_actions')
 
-_CONFIRM_YES = {'yes', 'yeah', 'yep', 'sure', 'please', 'ok', 'okay', 'go ahead', 'confirm', 'do it'}
-_CONFIRM_NO  = {'no', 'nope', 'not now', "don't", 'dont', 'cancel', 'never mind', 'stop'}
+# Word-boundary matched, not substring matched — plain `in` matching would
+# false-positive on e.g. "it's broken" (contains "ok") or "is it not
+# possible" (contains "no" inside "not"), which could silently fire or
+# cancel a real action (booking, refund) the user never actually confirmed.
+_CONFIRM_YES = {'yes', 'yeah', 'yep', 'sure', 'please', 'ok', 'okay', 'confirm'}
+_CONFIRM_YES_PHRASES = {'go ahead', 'do it'}
+_CONFIRM_NO = {'no', 'nope', 'cancel', 'stop', 'dont'}
+_CONFIRM_NO_PHRASES = {'not now', "don't", 'never mind'}
+
+
+def _matches_confirm_set(msg_lower: str, words: set, phrases: set) -> bool:
+    tokens = set(re.findall(r"[a-z']+", msg_lower))
+    if tokens & words:
+        return True
+    return any(p in msg_lower for p in phrases)
 
 # ── Cheap "does this client have any active external actions?" cache ──────────
 # In-process, short TTL. Avoids a DB round trip on every single message for
@@ -265,7 +279,7 @@ def handle_pending_confirmation(client_id: str, session_id: str, session_mem: Di
     msg = clean_message.strip().lower()
     label = pending.get('action_name', 'that').replace('_', ' ')
 
-    if any(k in msg for k in _CONFIRM_NO):
+    if _matches_confirm_set(msg, _CONFIRM_NO, _CONFIRM_NO_PHRASES):
         session_mem['pending_integration_action'] = None
         return {
             'response': "No problem, I won't go ahead with that.",
@@ -273,7 +287,7 @@ def handle_pending_confirmation(client_id: str, session_id: str, session_mem: Di
             'clear_pending': True,
         }
 
-    if any(k in msg for k in _CONFIRM_YES):
+    if _matches_confirm_set(msg, _CONFIRM_YES, _CONFIRM_YES_PHRASES):
         session_mem['pending_integration_action'] = None
         result = execute_client_action(
             action_id=pending['action_id'], params=pending.get('params') or {},

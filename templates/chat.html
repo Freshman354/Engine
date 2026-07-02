@@ -1366,12 +1366,12 @@ function addBotMsg(text, opts = {}) {
     <div class="msg-col">
       <div class="sender-label" aria-hidden="true">${esc(BNAME)}</div>
       <div class="bubble bot"><div class="md-content">${rendered}</div></div>
-      ${opts.retryText ? `<button class="retry-btn" onclick="retryMessage(${JSON.stringify(opts.retryText)}, this)">
+      ${opts.retryText ? `<button class="retry-btn" onclick="retryMessage(${attrSafe(JSON.stringify(opts.retryText))}, this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 .49-3"/></svg>
         Retry
       </button>` : ''}
       ${opts.quickReplies && opts.quickReplies.length ? `<div class="qr-wrap" id="${qrId}" role="group" aria-label="Quick replies">
-        ${opts.quickReplies.map(qr => `<button class="qr-btn" onclick="sendInlineQR('${qrId}', ${JSON.stringify(qr)})">${esc(qr)}</button>`).join('')}
+        ${opts.quickReplies.map(qr => `<button class="qr-btn" onclick="sendInlineQR('${qrId}', ${attrSafe(JSON.stringify(qr))})">${esc(qr)}</button>`).join('')}
       </div>` : ''}
       <div class="msg-time" aria-hidden="true">${timeStr}</div>
     </div>`;
@@ -2014,6 +2014,16 @@ function esc(s) {
   const d = document.createElement('div');
   d.textContent = s || '';
   return d.innerHTML;
+}
+
+// JSON.stringify() always wraps strings in literal double quotes. Embedding
+// its output directly inside a double-quoted onclick="..." attribute closes
+// that attribute early and breaks the button — not an edge case, this
+// happens for every string, every time. Escape the quotes as HTML entities;
+// the browser decodes them back to '"' when parsing the attribute, so the
+// JS the handler actually runs is unaffected.
+function attrSafe(jsonString) {
+  return jsonString.replace(/"/g, '&quot;');
 }
 
 function isEmail(s) {
