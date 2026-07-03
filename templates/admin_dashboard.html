@@ -375,6 +375,9 @@
         <a href="/admin/leads" class="nav-item {% if section=='leads' %}active{% endif %}">
             <span class="icon">🎯</span> Leads
         </a>
+        <a href="/admin/conversations" class="nav-item {% if section=='conversations' %}active{% endif %}">
+            <span class="icon">💬</span> Conversations
+        </a>
         <a href="/admin/analytics" class="nav-item {% if section=='analytics' %}active{% endif %}">
             <span class="icon">📡</span> Events
         </a>
@@ -746,6 +749,21 @@
         </div>
     </div>
 
+    <!-- Generic Confirm Modal — replaces native browser confirm() everywhere,
+         and is the confirmation step for actions (like Grant Admin) that
+         previously had none at all. -->
+    <div class="modal-overlay" id="genericConfirmModal">
+        <div class="modal" style="text-align:center;">
+            <div id="gcIcon" style="font-size:40px;margin-bottom:12px;">⚠️</div>
+            <h2 id="gcTitle">Are you sure?</h2>
+            <p id="gcMessage" style="margin:8px 0 0;"></p>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeModal('genericConfirmModal')" style="flex:1;justify-content:center;">Cancel</button>
+                <button class="btn btn-danger" id="gcConfirmBtn" style="flex:1;justify-content:center;">Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <script>
     let editingUserId = null;
     let deletingUserId = null;
@@ -1076,6 +1094,106 @@
     <!-- ================================================================
          SECTION: ANALYTICS EVENTS
     ================================================================ -->
+    {% elif section == 'conversations' %}
+
+    <style>
+        .conv-day-filter { display:flex; gap:8px; margin-bottom:18px; }
+        .conv-day-filter a {
+            padding:6px 14px; border-radius:8px; font-size:12.5px; font-weight:600;
+            background:var(--surface2); border:1px solid var(--border); color:var(--muted); text-decoration:none;
+        }
+        .conv-day-filter a.active { background:var(--primary-dim); color:var(--gold); border-color:var(--gold); }
+        .conv-client-row {
+            display:flex; align-items:center; justify-content:space-between; padding:14px 18px;
+            border-bottom:1px solid var(--border); text-decoration:none; color:inherit; transition:background 0.15s;
+        }
+        .conv-client-row:hover { background:var(--surface2); }
+        .conv-client-row:last-child { border-bottom:none; }
+        .conv-client-name { font-weight:600; font-size:13.5px; color:var(--text); }
+        .conv-client-sub { font-size:11.5px; color:var(--muted); margin-top:2px; }
+        .conv-match-rate { font-size:15px; font-weight:800; }
+        .conv-match-rate.good { color:var(--success); }
+        .conv-match-rate.warn { color:var(--warning); }
+        .conv-match-rate.bad { color:var(--danger); }
+        .conv-session { background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:14px; }
+        .conv-session-header { font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:10px; }
+        .conv-turn { margin-bottom:14px; }
+        .conv-turn:last-child { margin-bottom:0; }
+        .conv-user-msg { background:var(--surface3); border-radius:10px 10px 10px 2px; padding:10px 14px; font-size:13px; color:var(--text); max-width:80%; }
+        .conv-bot-msg { background:var(--primary-dim); border-radius:10px 10px 2px 10px; padding:10px 14px; font-size:13px; color:var(--text); max-width:80%; margin-left:auto; margin-top:6px; }
+        .conv-turn-meta { display:flex; gap:8px; align-items:center; margin-top:6px; justify-content:flex-end; }
+        .conv-method { font-size:10.5px; color:var(--muted); font-family:monospace; }
+    </style>
+
+    {% if view == 'overview' %}
+        <div class="page-header">
+            <h1>💬 Conversations</h1>
+            <p>See how your chatbots are actually performing — matched vs. fallback answers, for QA and research.</p>
+        </div>
+
+        <div class="conv-day-filter">
+            <a href="/admin/conversations?days=1"  class="{% if days==1 %}active{% endif %}">Today</a>
+            <a href="/admin/conversations?days=7"  class="{% if days==7 %}active{% endif %}">7 days</a>
+            <a href="/admin/conversations?days=30" class="{% if days==30 %}active{% endif %}">30 days</a>
+        </div>
+
+        <div class="table-card">
+            <div class="table-card-header"><h3>Chatbots by Activity</h3></div>
+            {% if clients_summary %}
+                {% for c in clients_summary %}
+                <a href="/admin/conversations?client_id={{ c.client_id }}&days={{ days }}" class="conv-client-row">
+                    <div>
+                        <div class="conv-client-name">{{ c.company_name }}</div>
+                        <div class="conv-client-sub">{{ c.owner_email }} · {{ c.turn_count }} message{{ 's' if c.turn_count != 1 }}</div>
+                    </div>
+                    <div class="conv-match-rate {% if c.match_rate >= 80 %}good{% elif c.match_rate >= 50 %}warn{% else %}bad{% endif %}">
+                        {{ c.match_rate }}%
+                    </div>
+                </a>
+                {% endfor %}
+            {% else %}
+                <div style="padding:40px;text-align:center;color:var(--muted);">No conversation activity in this period.</div>
+            {% endif %}
+        </div>
+
+    {% else %}
+        <div class="page-header">
+            <h1>💬 {{ client_name }}</h1>
+            <p>
+                {{ total_turns }} messages · <strong style="color:{% if match_rate >= 80 %}var(--success){% elif match_rate >= 50 %}var(--warning){% else %}var(--danger){% endif %};">{{ match_rate }}% matched</strong>
+                <a href="/admin/conversations?days={{ days }}" style="margin-left:12px;color:var(--gold);">← All chatbots</a>
+            </p>
+        </div>
+
+        <div class="conv-day-filter">
+            <a href="/admin/conversations?client_id={{ client_id }}&days={{ days }}" class="{% if not match_filter %}active{% endif %}">All</a>
+            <a href="/admin/conversations?client_id={{ client_id }}&days={{ days }}&match=matched" class="{% if match_filter=='matched' %}active{% endif %}">✅ Matched only</a>
+            <a href="/admin/conversations?client_id={{ client_id }}&days={{ days }}&match=unmatched" class="{% if match_filter=='unmatched' %}active{% endif %}">⚠️ Unmatched only</a>
+        </div>
+
+        {% if sessions %}
+            {% for s in sessions %}
+            <div class="conv-session">
+                <div class="conv-session-header">Session {{ s.session_id }} · {{ s.turns|length }} turn{{ 's' if s.turns|length != 1 }}</div>
+                {% for t in s.turns %}
+                <div class="conv-turn">
+                    <div class="conv-user-msg">{{ t.user_message }}</div>
+                    <div class="conv-bot-msg">{{ t.bot_response }}</div>
+                    <div class="conv-turn-meta">
+                        <span class="conv-method">{{ t.method or '—' }}</span>
+                        <span class="badge {% if t.matched %}badge-active{% else %}badge-failed{% endif %}">
+                            {{ '✅ Matched' if t.matched else '⚠️ Fallback' }}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="table-card" style="padding:40px;text-align:center;color:var(--muted);">No conversations match this filter.</div>
+        {% endif %}
+    {% endif %}
+
     {% elif section == 'analytics' %}
     <div class="page-header">
         <h1>Event Analytics</h1>
@@ -1776,22 +1894,6 @@ models.track_event('payment', user_id=current_user.id,
 
 <!-- TOAST -->
 <div class="toast" id="globalToast"></div>
-
-<!-- Generic Confirm Modal — replaces native browser confirm() everywhere,
-     and is the confirmation step for actions (like Grant Admin) that
-     previously had none at all. Lives outside the section if/elif chain
-     so it's present in the DOM on every admin tab, not just Users. -->
-<div class="modal-overlay" id="genericConfirmModal">
-    <div class="modal" style="text-align:center;">
-        <div id="gcIcon" style="font-size:40px;margin-bottom:12px;">⚠️</div>
-        <h2 id="gcTitle">Are you sure?</h2>
-        <p id="gcMessage" style="margin:8px 0 0;"></p>
-        <div class="modal-actions">
-            <button class="btn btn-ghost" onclick="closeModal('genericConfirmModal')" style="flex:1;justify-content:center;">Cancel</button>
-            <button class="btn btn-danger" id="gcConfirmBtn" style="flex:1;justify-content:center;">Confirm</button>
-        </div>
-    </div>
-</div>
 
 <script>
 function showToast(msg, type='success') {

@@ -14,6 +14,15 @@ from .db import get_db
 # their listed default, not a guarantee of the exact rate every request
 # routes to. Verify at openrouter.ai/models if this needs to be precise
 # for billing (not just directional cost tracking).
+# ── Per-token pricing, by model ─────────────────────────────────────────────
+# Priced by the model that ACTUALLY answered each call (stored per-row),
+# not by whatever the live provider switch happens to be set to right now.
+# Using the live switch here would retroactively reprice historical rows
+# any time an agency toggles it — e.g. every Gemini-era row would suddenly
+# show OpenRouter's rate after a switch. Source: provider list prices.
+# OpenRouter aggregates multiple hosting providers for the same model at
+# potentially different rates — this is their listed default, not a
+# guarantee of the exact rate every request routes to.
 _PRICING_PER_TOKEN = {
     'gemini': {
         'input':  0.075 / 1_000_000,
@@ -26,9 +35,20 @@ _PRICING_PER_TOKEN = {
 }
 
 
-def _calc_cost(input_tokens, output_tokens):
-    from utils import get_ai_provider
-    rates = _PRICING_PER_TOKEN.get(get_ai_provider(), _PRICING_PER_TOKEN['gemini'])
+def _rates_for_model(model: str) -> dict:
+    m = (model or '').lower()
+    if 'llama' in m or 'openrouter' in m:
+        return _PRICING_PER_TOKEN['openrouter']
+    return _PRICING_PER_TOKEN['gemini']
+
+
+def _calc_cost(input_tokens, output_tokens, model: str = 'gemini'):
+    """
+    Back-compat signature for any caller still passing raw token sums
+    without a per-row model (aggregate queries migrated to SUM(cost)
+    instead — see log_api_usage). Prefer storing cost at insert time.
+    """
+    rates = _rates_for_model(model)
     return (
         (input_tokens  or 0) * rates['input'] +
         (output_tokens or 0) * rates['output']
@@ -193,16 +213,17 @@ def get_all_leads_admin(limit=500, client_id_filter=None, search=None):
 
 
 def log_api_usage(user_id, client_id, input_tokens, output_tokens,
-                  model='gemini-1.5-flash', endpoint=None):
-    """Log one Gemini API call. Never raises."""
+                  model='gemini-2.0-flash', endpoint=None):
+    """Log one AI generation call's token usage for cost tracking. Never raises."""
     try:
         conn, cursor = get_db()
+        cost = _calc_cost(input_tokens, output_tokens, model=model)
         cursor.execute(
             """INSERT INTO api_usage_log
-                   (user_id, client_id, model, input_tokens, output_tokens, endpoint)
-               VALUES (%s, %s, %s, %s, %s, %s)""",
+                   (user_id, client_id, model, input_tokens, output_tokens, cost, endpoint)
+               VALUES (%s, %s, %s, %s, %s, %s, %s)""",
             (user_id, client_id, model,
-             int(input_tokens or 0), int(output_tokens or 0), endpoint)
+             int(input_tokens or 0), int(output_tokens or 0), cost, endpoint)
         )
         conn.commit()
         cursor.close()
@@ -219,12 +240,11 @@ def get_api_cost_summary():
         conn, cursor = get_db()
         cursor.execute("""
             SELECT
-                COALESCE(SUM(CASE WHEN DATE_TRUNC('day',   created_at)=DATE_TRUNC('day',   NOW()) THEN input_tokens  END),0) AS in_today,
-                COALESCE(SUM(CASE WHEN DATE_TRUNC('day',   created_at)=DATE_TRUNC('day',   NOW()) THEN output_tokens END),0) AS out_today,
-                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at)=DATE_TRUNC('month', NOW()) THEN input_tokens  END),0) AS in_month,
-                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at)=DATE_TRUNC('month', NOW()) THEN output_tokens END),0) AS out_month,
-                COALESCE(SUM(input_tokens),0)  AS in_all,
-                COALESCE(SUM(output_tokens),0) AS out_all
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('day',   created_at)=DATE_TRUNC('day',   NOW()) THEN cost END),0) AS cost_today,
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at)=DATE_TRUNC('month', NOW()) THEN cost END),0) AS cost_month,
+                COALESCE(SUM(cost),0) AS cost_all,
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('day',   created_at)=DATE_TRUNC('day',   NOW()) THEN input_tokens + output_tokens END),0) AS tok_today,
+                COALESCE(SUM(CASE WHEN DATE_TRUNC('month', created_at)=DATE_TRUNC('month', NOW()) THEN input_tokens + output_tokens END),0) AS tok_month
             FROM api_usage_log
         """)
         r = cursor.fetchone()
@@ -233,11 +253,11 @@ def get_api_cost_summary():
         if not r:
             return _zero
         return {
-            'cost_today':        _calc_cost(r['in_today'],  r['out_today']),
-            'cost_this_month':   _calc_cost(r['in_month'],  r['out_month']),
-            'cost_all_time':     _calc_cost(r['in_all'],    r['out_all']),
-            'tokens_today':      int(r['in_today'])  + int(r['out_today']),
-            'tokens_this_month': int(r['in_month'])  + int(r['out_month']),
+            'cost_today':        float(r['cost_today']),
+            'cost_this_month':   float(r['cost_month']),
+            'cost_all_time':     float(r['cost_all']),
+            'tokens_today':      int(r['tok_today']),
+            'tokens_this_month': int(r['tok_month']),
         }
     except Exception:
         return _zero
@@ -249,13 +269,14 @@ def get_top_chatbots_by_cost(months=1, limit=10):
         cursor.execute("""
             SELECT a.client_id, c.company_name, u.email AS owner_email,
                    COALESCE(SUM(a.input_tokens),0)  AS input_tokens,
-                   COALESCE(SUM(a.output_tokens),0) AS output_tokens
+                   COALESCE(SUM(a.output_tokens),0) AS output_tokens,
+                   COALESCE(SUM(a.cost),0)           AS est_cost
             FROM api_usage_log a
             LEFT JOIN clients c ON a.client_id = c.client_id
             LEFT JOIN users  u ON c.user_id    = u.id
             WHERE DATE_TRUNC('month', a.created_at) = DATE_TRUNC('month', NOW())
             GROUP BY a.client_id, c.company_name, u.email
-            ORDER BY (SUM(a.input_tokens)+SUM(a.output_tokens)) DESC
+            ORDER BY SUM(a.cost) DESC
             LIMIT %s
         """, (limit,))
         rows = cursor.fetchall()
@@ -263,10 +284,9 @@ def get_top_chatbots_by_cost(months=1, limit=10):
         conn.close()
         result = []
         for r in rows:
-            it, ot = int(r['input_tokens']), int(r['output_tokens'])
             result.append({'client_id': r['client_id'], 'company_name': r['company_name'] or r['client_id'],
-                           'owner_email': r['owner_email'] or '—', 'input_tokens': it,
-                           'output_tokens': ot, 'est_cost': _calc_cost(it, ot)})
+                           'owner_email': r['owner_email'] or '—', 'input_tokens': int(r['input_tokens']),
+                           'output_tokens': int(r['output_tokens']), 'est_cost': float(r['est_cost'])})
         return result
     except Exception:
         return []
@@ -278,18 +298,19 @@ def get_user_cost_breakdown():
         cursor.execute("""
             SELECT u.id AS user_id, u.email, u.plan_type,
                    COALESCE(SUM(a.input_tokens),0)  AS input_tokens,
-                   COALESCE(SUM(a.output_tokens),0) AS output_tokens
+                   COALESCE(SUM(a.output_tokens),0) AS output_tokens,
+                   COALESCE(SUM(a.cost),0)           AS ai_cost
             FROM api_usage_log a
             JOIN users u ON a.user_id = u.id
             WHERE DATE_TRUNC('month', a.created_at) = DATE_TRUNC('month', NOW())
             GROUP BY u.id, u.email, u.plan_type
-            ORDER BY (SUM(a.input_tokens)+SUM(a.output_tokens)) DESC
+            ORDER BY SUM(a.cost) DESC
         """)
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
         return [{'user_id': r['user_id'], 'email': r['email'], 'plan_type': r['plan_type'],
-                 'ai_cost': _calc_cost(int(r['input_tokens']), int(r['output_tokens']))} for r in rows]
+                 'ai_cost': float(r['ai_cost'])} for r in rows]
     except Exception:
         return []
 
@@ -298,7 +319,7 @@ def get_user_ai_costs_dict():
     try:
         conn, cursor = get_db()
         cursor.execute("""
-            SELECT user_id, COALESCE(SUM(input_tokens),0) AS it, COALESCE(SUM(output_tokens),0) AS ot
+            SELECT user_id, COALESCE(SUM(cost),0) AS cost
             FROM api_usage_log
             WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', NOW()) AND user_id IS NOT NULL
             GROUP BY user_id
@@ -306,7 +327,7 @@ def get_user_ai_costs_dict():
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
-        return {int(r['user_id']): _calc_cost(int(r['it']), int(r['ot'])) for r in rows}
+        return {int(r['user_id']): float(r['cost']) for r in rows}
     except Exception:
         return {}
 
@@ -326,12 +347,12 @@ def get_cost_revenue_by_month(months=6):
         cursor.execute("""
             SELECT TO_CHAR(DATE_TRUNC('month', created_at),'Mon YYYY') AS month,
                    DATE_TRUNC('month', created_at) AS month_dt,
-                   COALESCE(SUM(input_tokens),0) AS it, COALESCE(SUM(output_tokens),0) AS ot
+                   COALESCE(SUM(cost),0) AS cost
             FROM api_usage_log WHERE created_at >= NOW()-(INTERVAL '1 month'*%s)
             GROUP BY DATE_TRUNC('month', created_at) ORDER BY month_dt
         """, (months,))
         for r in cursor.fetchall():
-            cost = _calc_cost(int(r['it']), int(r['ot']))
+            cost = float(r['cost'])
             if r['month_dt'] in rev:
                 rev[r['month_dt']]['cost'] = cost
             else:
@@ -349,14 +370,14 @@ def get_daily_burn_last_30():
         cursor.execute("""
             SELECT TO_CHAR(DATE_TRUNC('day', created_at),'DD Mon') AS date,
                    DATE_TRUNC('day', created_at) AS day_dt,
-                   COALESCE(SUM(input_tokens),0) AS it, COALESCE(SUM(output_tokens),0) AS ot
+                   COALESCE(SUM(cost),0) AS cost
             FROM api_usage_log WHERE created_at >= NOW()-INTERVAL '30 days'
             GROUP BY DATE_TRUNC('day', created_at) ORDER BY day_dt
         """)
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
-        return [{'date': r['date'], 'cost': _calc_cost(int(r['it']), int(r['ot']))} for r in rows]
+        return [{'date': r['date'], 'cost': float(r['cost'])} for r in rows]
     except Exception:
         return []
 

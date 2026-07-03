@@ -111,6 +111,7 @@ def dynamic_fallback(
     session_mem: Dict,
     model: Any,
     model_name: str = '',
+    client_id: str = '',
 ) -> str:
     """
     Generate a natural, contextual IDK response using Gemini.
@@ -141,7 +142,7 @@ def dynamic_fallback(
         "Write the response only. No quotes, no explanation."
     )
     try:
-        resp = _gemini_generate(model, prompt, model_name)
+        resp = _gemini_generate(model, prompt, model_name, client_id=client_id, endpoint='dynamic_fallback')
         text = (resp.text or '').strip()
         # Sanity check: must be a real sentence, not an empty or very short response
         if text and len(text) > 25 and len(text) < 400:
@@ -232,6 +233,7 @@ def rag_generate_and_polish(
     session_mem: Dict,
     is_sales_query: bool,
     model: Any,
+    client_id: str = '',
 ) -> Tuple[str, float, str]:
     """
     Generate a polished answer from the top-ranked FAQ candidates.
@@ -269,7 +271,7 @@ def rag_generate_and_polish(
     )
 
     try:
-        resp  = _gemini_generate(model, prompt)
+        resp  = _gemini_generate(model, prompt, client_id=client_id, endpoint='rag_generate_and_polish')
         text  = (resp.text or '').strip()
         if not text:
             return make_fallback(vertical, session_mem.get('is_frustrated', False)), 0.0, 'empty_generation'

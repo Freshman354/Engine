@@ -196,10 +196,41 @@ class _OpenAICompatResponse:
             )
         except Exception:
             self.text = ''
+        try:
+            self.input_tokens  = completion.usage.prompt_tokens
+            self.output_tokens = completion.usage.completion_tokens
+        except Exception:
+            self.input_tokens  = None
+            self.output_tokens = None
 
     def __repr__(self) -> str:
         preview = (self.text or '')[:60].replace('\n', ' ')
         return f'<_OpenAICompatResponse text={preview!r}>'
+
+
+def _extract_usage(resp: Any) -> tuple:
+    """
+    Returns (input_tokens, output_tokens) for either response shape —
+    google.genai's native response (.usage_metadata) or
+    _OpenAICompatResponse (.input_tokens/.output_tokens). Returns
+    (None, None) if usage data isn't available for any reason; callers
+    should skip logging rather than log zeros, which would be wrong data,
+    not missing data.
+    """
+    try:
+        if hasattr(resp, 'usage_metadata') and resp.usage_metadata is not None:
+            return (
+                getattr(resp.usage_metadata, 'prompt_token_count', None),
+                getattr(resp.usage_metadata, 'candidates_token_count', None),
+            )
+    except Exception:
+        pass
+    try:
+        if hasattr(resp, 'input_tokens'):
+            return (resp.input_tokens, resp.output_tokens)
+    except Exception:
+        pass
+    return (None, None)
 
 
 # Backward-compatible alias — _GroqResponse was the name before OpenRouter
@@ -247,22 +278,58 @@ def _is_quota_error(exc: Exception) -> bool:
 
 # ── Core generate() ───────────────────────────────────────────────────────────
 
-def generate(model_client: Any, prompt: str, model_name: str = '') -> Any:
+def generate(model_client: Any, prompt: str, model_name: str = '',
+             client_id: Optional[str] = None, endpoint: Optional[str] = None) -> Any:
     """
     Text generation entry point used by every pipeline stage. Routes to
-    Gemini or OpenRouter based on the AI_PROVIDER env var (see module
-    docstring). Signature is identical regardless of provider — no
-    changes needed in any pipeline stage that calls this.
+    Gemini or OpenRouter based on the live AI_PROVIDER switch (see module
+    docstring).
 
     model_client : google.genai Client().models object from AIHelper.
-                   Ignored when AI_PROVIDER='openrouter'.
+                   Ignored when the live provider is 'openrouter'.
     prompt       : plain text prompt string
-    model_name   : e.g. 'gemini-2.0-flash'. Ignored when AI_PROVIDER='openrouter'
-                   (use OPENROUTER_MODEL env var instead).
+    model_name   : e.g. 'gemini-2.0-flash'. Ignored when the live provider
+                   is 'openrouter' (OPENROUTER_MODEL env var is used instead).
+    client_id    : optional — when provided, this call's token usage is
+                   logged to api_usage_log (models.log_api_usage) for the
+                   Costs admin dashboard, regardless of which provider
+                   actually answered. Omit to skip cost logging (e.g. for
+                   calls that aren't part of a specific client's usage).
+    endpoint     : optional label for which pipeline stage made this call
+                   (e.g. 'rag_generate', 'dynamic_fallback') — shows up in
+                   the Costs dashboard's per-endpoint breakdown.
     """
-    if get_ai_provider() == 'openrouter':
-        return _generate_openrouter_primary(prompt)
-    return _generate_gemini_primary(model_client, prompt, model_name)
+    provider = get_ai_provider()
+    if provider == 'openrouter':
+        resp = _generate_openrouter_primary(prompt)
+        used_model = OPENROUTER_MODEL
+    else:
+        resp = _generate_gemini_primary(model_client, prompt, model_name)
+        used_model = model_name or os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash')
+
+    if client_id:
+        _log_usage_fire_and_forget(resp, client_id, used_model, endpoint)
+
+    return resp
+
+
+def _log_usage_fire_and_forget(resp: Any, client_id: str, model: str, endpoint: Optional[str]) -> None:
+    """Never allowed to raise or block — a cost-logging failure must never affect the chat response."""
+    try:
+        input_tokens, output_tokens = _extract_usage(resp)
+        if input_tokens is None and output_tokens is None:
+            return   # no usage data available (e.g. call errored before completion) — skip rather than log zeros
+        import models
+        user_id = models.get_client_owner_id(client_id)
+        if not user_id:
+            return
+        models.log_api_usage(
+            user_id=user_id, client_id=client_id,
+            input_tokens=input_tokens or 0, output_tokens=output_tokens or 0,
+            model=model, endpoint=endpoint,
+        )
+    except Exception as e:
+        _logger.warning(f'[Utils] Cost logging failed (non-fatal): {e}')
 
 
 def _generate_gemini_primary(model_client: Any, prompt: str, model_name: str = '') -> Any:

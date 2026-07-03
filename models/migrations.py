@@ -1475,13 +1475,15 @@ def migrate_api_usage_log():
                 id            SERIAL PRIMARY KEY,
                 user_id       INTEGER REFERENCES users(id) ON DELETE SET NULL,
                 client_id     VARCHAR(100),
-                model         VARCHAR(80)  DEFAULT 'gemini-1.5-flash',
+                model         VARCHAR(80)  DEFAULT 'gemini-2.0-flash',
                 input_tokens  INTEGER      NOT NULL DEFAULT 0,
                 output_tokens INTEGER      NOT NULL DEFAULT 0,
+                cost          NUMERIC(10,6),
                 endpoint      VARCHAR(100),
                 created_at    TIMESTAMP    DEFAULT NOW()
             )
         """)
+        cursor.execute("ALTER TABLE api_usage_log ADD COLUMN IF NOT EXISTS cost NUMERIC(10,6)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_api_usage_user    ON api_usage_log(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_api_usage_created ON api_usage_log(created_at)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_api_usage_client  ON api_usage_log(client_id)")

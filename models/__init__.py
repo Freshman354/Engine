@@ -125,6 +125,7 @@ from .clients import (
     create_client,
     get_user_clients,
     get_client_by_id,
+    get_client_owner_id,
     verify_client_ownership,
     delete_client,
     toggle_client_suspended,
@@ -149,6 +150,7 @@ from .conversations import (
     get_latest_conversation_summary,
     get_recent_conversations,
     get_conversations,
+    get_conversation_clients_summary,
 )
 
 # ── FAQs ──────────────────────────────────────────────────────────────────────

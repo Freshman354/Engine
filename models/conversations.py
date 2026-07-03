@@ -135,13 +135,13 @@ def get_conversations(client_id: str, limit: int = 200) -> list:
     Return the last `limit` real conversation turns for a client,
     newest first, as a list of dicts ready for the dashboard UI.
     Excludes lead_captured rows (form submissions).
-    Each dict contains: session_id, user_message, bot_response, timestamp (ISO str).
-    Returns [] on failure.
+    Each dict contains: session_id, user_message, bot_response, matched,
+    method, timestamp (ISO str). Returns [] on failure.
     """
     try:
         conn, cursor = get_db()
         cursor.execute(
-            '''SELECT session_id, user_message, bot_response, timestamp
+            '''SELECT session_id, user_message, bot_response, matched, method, timestamp
                FROM conversations
                WHERE client_id = %s
                  AND (method IS NULL OR method != 'lead_captured')
@@ -158,12 +158,59 @@ def get_conversations(client_id: str, limit: int = 200) -> list:
                 'session_id':   row.get('session_id') or '—',
                 'user_message': row.get('user_message') or '',
                 'bot_response': row.get('bot_response') or '',
+                'matched':      bool(row.get('matched')),
+                'method':       row.get('method') or '',
                 'timestamp':    row['timestamp'].isoformat() if row.get('timestamp') else '',
             })
         return result
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f'[get_conversations] {e}')
+        return []
+
+
+def get_conversation_clients_summary(days: int = 7) -> list:
+    """
+    Every client with conversation activity in the last `days` days,
+    with turn count and match rate — powers the admin dashboard's
+    Conversations tab overview (which chatbots to look at first).
+    Match rate excludes lead_captured rows (not a real answer attempt).
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''SELECT c.client_id, cl.company_name, u.email AS owner_email,
+                      COUNT(*) AS turn_count,
+                      COUNT(*) FILTER (WHERE c.matched = TRUE) AS matched_count,
+                      MAX(c.timestamp) AS last_activity
+               FROM conversations c
+               LEFT JOIN clients cl ON c.client_id = cl.client_id
+               LEFT JOIN users   u  ON cl.user_id   = u.id
+               WHERE c.timestamp >= NOW() - (INTERVAL '1 day' * %s)
+                 AND (c.method IS NULL OR c.method != 'lead_captured')
+               GROUP BY c.client_id, cl.company_name, u.email
+               ORDER BY turn_count DESC''',
+            (days,)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for r in rows:
+            turns = int(r['turn_count'])
+            matched = int(r['matched_count'])
+            result.append({
+                'client_id':     r['client_id'],
+                'company_name':  r['company_name'] or r['client_id'],
+                'owner_email':   r['owner_email'] or '—',
+                'turn_count':    turns,
+                'match_rate':    round(100 * matched / turns, 1) if turns else 0.0,
+                'last_activity': r['last_activity'].isoformat() if r['last_activity'] else None,
+            })
+        return result
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_conversation_clients_summary] {e}')
         return []
 
 

@@ -177,6 +177,66 @@ def leads():
 
 
 # =====================================================================
+# SECTION: CONVERSATIONS
+# =====================================================================
+
+@admin_bp.route('/conversations')
+@admin_required
+def conversations():
+    client_id   = request.args.get('client_id', '').strip() or None
+    days        = int(request.args.get('days', 7))
+    match_filter = request.args.get('match', '').strip() or None  # 'matched' | 'unmatched' | None
+
+    ctx = _base_context()
+
+    if client_id:
+        turns = _safe(models.get_conversations, [], client_id, 300)
+        if match_filter == 'matched':
+            turns = [t for t in turns if t['matched']]
+        elif match_filter == 'unmatched':
+            turns = [t for t in turns if not t['matched']]
+
+        # Group into sessions, preserving newest-first session order while
+        # keeping each session's turns oldest-first (readable as a thread).
+        sessions = {}
+        order = []
+        for t in turns:
+            sid = t['session_id']
+            if sid not in sessions:
+                sessions[sid] = []
+                order.append(sid)
+            sessions[sid].append(t)
+        for sid in sessions:
+            sessions[sid].reverse()
+
+        total = len(turns)
+        matched_count = sum(1 for t in turns if t['matched'])
+        client_row = _safe(models.get_client_by_id, {}, client_id) or {}
+
+        ctx.update({
+            'section':        'conversations',
+            'view':           'detail',
+            'client_id':      client_id,
+            'client_name':    client_row.get('company_name') or client_id,
+            'sessions':       [{'session_id': sid, 'turns': sessions[sid]} for sid in order],
+            'total_turns':    total,
+            'match_rate':     round(100 * matched_count / total, 1) if total else 0.0,
+            'match_filter':   match_filter or '',
+            'days':           days,
+        })
+    else:
+        clients_summary = _safe(models.get_conversation_clients_summary, [], days)
+        ctx.update({
+            'section':         'conversations',
+            'view':            'overview',
+            'clients_summary': clients_summary,
+            'days':            days,
+        })
+
+    return render_template('admin_dashboard.html', **ctx)
+
+
+# =====================================================================
 # SECTION: ANALYTICS
 # =====================================================================
 

@@ -1201,11 +1201,12 @@ class AIHelper:
                     ctx.session_mem,
                     ctx.is_sales_query,
                     self.model,
+                    client_id=client_id,
                 )
             elif self.enabled and self.model:
                 final = dynamic_fallback(
                     ctx.search_query, vertical, ctx.session_mem,
-                    self.model, self._model_name,
+                    self.model, self._model_name, client_id=client_id,
                 )
                 confidence = 0.0
                 method     = 'dynamic_fallback_idk'
@@ -1560,7 +1561,8 @@ class AIHelper:
             "Acknowledge any uncertainty. Do not make up specific numbers or policies."
         )
         try:
-            resp = _gemini_call(self.model, prompt, self._model_name)
+            resp = _gemini_call(self.model, prompt, self._model_name,
+                                 client_id=client_id, endpoint='draft_gap_response')
             return (resp.text or '').strip() or None
         except Exception as e:
             log_crash(logger, 'DraftGap', e, client_id=client_id)

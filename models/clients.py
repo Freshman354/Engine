@@ -384,6 +384,48 @@ def get_client_by_id(client_id):
             try: conn.close()
             except Exception: pass
 
+
+# In-process cache — client_id -> user_id rarely changes, and this is
+# called on every single chat message (utils.py cost-logging). A full
+# row fetch per message would be wasteful; client_id:owner pairs are
+# effectively immutable in practice (clients aren't re-parented between
+# agencies), so a long TTL is safe.
+_owner_cache: dict = {}
+_owner_cache_lock = __import__('threading').Lock()
+_OWNER_CACHE_TTL_SECONDS = 600
+
+
+def get_client_owner_id(client_id):
+    """Lightweight client_id -> owning user_id lookup, cached. Returns None if not found."""
+    import time
+    now = time.time()
+    with _owner_cache_lock:
+        cached = _owner_cache.get(client_id)
+        if cached and cached[1] > now:
+            return cached[0]
+
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('SELECT user_id FROM clients WHERE client_id = %s', (client_id,))
+        row = cursor.fetchone()
+        user_id = row['user_id'] if row else None
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'[get_client_owner_id] {e}')
+        return None
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+    with _owner_cache_lock:
+        _owner_cache[client_id] = (user_id, now + _OWNER_CACHE_TTL_SECONDS)
+    return user_id
+
 def verify_client_ownership(user_id, client_id):
     """Verify that a user owns a client. Returns False on DB error."""
     conn = cursor = None
