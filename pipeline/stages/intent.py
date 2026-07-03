@@ -209,6 +209,7 @@ def classify_intent_gemini(
     vertical: str,
     lead_triggers: List[str],
     model: Any,
+    model_name: str = '',
 ) -> Dict:
     """
     Use Gemini to classify intent when Tier 1 and Tier 2 return nothing.
@@ -231,7 +232,7 @@ def classify_intent_gemini(
         '"confidence": 0.0-1.0}'
     )
     try:
-        resp = _gemini_generate(model, prompt)
+        resp = _gemini_generate(model, prompt, model_name)
         text = (resp.text or '').strip().strip('`')
         if text.startswith('json'):
             text = text[4:].strip()
@@ -258,6 +259,7 @@ def detect_intent(
     lead_triggers: List[str],
     model: Any,
     skip_gemini: bool = False,
+    model_name: str = '',
 ) -> Dict:
     """
     Run the five-tier intent pipeline and return a unified intent dict.
@@ -373,7 +375,9 @@ def detect_intent(
     # Keyword signals are definitive; Gemini cannot override them.
     if not skip_gemini and model is not None:
         _is_lead_pre_t3 = result['is_lead']
-        gemini_result   = classify_intent_gemini(clean_message, vertical, lead_triggers, model)
+        gemini_result   = classify_intent_gemini(
+            clean_message, vertical, lead_triggers, model, model_name
+        )
         result.update(gemini_result)
         if _is_lead_pre_t3:
             result['is_lead'] = True

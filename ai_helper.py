@@ -986,9 +986,15 @@ class AIHelper:
                 ctx.poor_kb_ids = set()
 
             # ── Intent detection ──────────────────────────────────────
+            # Tier 3 (Gemini/OpenRouter classification) only fires when Tier 1/2
+            # keyword checks above found nothing — self.model is the live
+            # provider's client (or the OpenRouter sentinel; utils.generate()
+            # routes to the correct provider internally either way).
             intent = detect_intent(
                 ctx.clean_message, vertical, lead_triggers,
-                model=None, skip_gemini=True,
+                model=self.model,
+                skip_gemini=not self.enabled,
+                model_name=self._model_name,
             )
 
             # ── Stage → is_lead coercion ──────────────────────────────
@@ -1125,7 +1131,8 @@ class AIHelper:
                     and len(ctx.search_query.split()) >= 4
                     and ctx.top_cosine < ctx.confidence_high):
                 rewritten = rewrite_query(
-                    ctx.search_query, vertical, conversation_history, self.model
+                    ctx.search_query, vertical, conversation_history,
+                    self.model, self._model_name,
                 )
                 if rewritten != ctx.search_query:
                     ctx.search_query = rewritten
@@ -1148,13 +1155,15 @@ class AIHelper:
                     and ctx.top_cosine < 0.35
                     and len(ctx.hybrid_ranked) >= 2):
                 ctx.hybrid_ranked = cross_encoder_rerank(
-                    ctx.search_query, ctx.hybrid_ranked, self.model
+                    ctx.search_query, ctx.hybrid_ranked, self.model,
+                    model_name=self._model_name,
                 )
                 ctx.call1_used = True
 
             # ── Context building + summarisation ──────────────────────
             _BG_EXECUTOR.submit(
-                maybe_summarise, client_id, conversation_history, self.model
+                maybe_summarise, client_id, conversation_history, self.model,
+                trigger_length=12, model_name=self._model_name,
             )
             ctx.context_str = build_context(conversation_history, client_id, ctx.clean_message)
 
@@ -1201,6 +1210,7 @@ class AIHelper:
                     ctx.session_mem,
                     ctx.is_sales_query,
                     self.model,
+                    model_name=self._model_name,
                     client_id=client_id,
                 )
             elif self.enabled and self.model:

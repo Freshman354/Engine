@@ -137,6 +137,7 @@ def rewrite_query(
     vertical: str,
     conversation_history: List[Dict],
     model: Any,
+    model_name: str = '',
 ) -> str:
     """
     Use Gemini to rewrite a user query into a clean retrieval query.
@@ -167,7 +168,7 @@ def rewrite_query(
         "Respond ONLY with the rewritten query text. No explanation, no quotes, no JSON."
     )
     try:
-        resp  = _gemini_generate(model, prompt)
+        resp  = _gemini_generate(model, prompt, model_name)
         query = (resp.text or '').strip().strip('"').strip("'").strip()
         query = query or clean_message
         logger.debug(f"[Retrieval/Rewrite] '{clean_message[:50]}' → '{query[:50]}'")
@@ -303,6 +304,7 @@ def cross_encoder_rerank(
     candidates: List[Dict],
     model: Any,
     top_n: int = 5,
+    model_name: str = '',
 ) -> List[Dict]:
     """
     Use Gemini as a cross-encoder to reorder the top-N candidates by
@@ -335,17 +337,19 @@ def cross_encoder_rerank(
         f"relevance order, e.g. [2,1,3]. No explanation."
     )
     try:
-        resp  = _gemini_generate(model, prompt)
+        resp  = _gemini_generate(model, prompt, model_name)
         text  = (resp.text or '').strip()
         match = re.search(r'\[[\d,\s]+\]', text)
         if not match:
             return candidates
         order = __import__('json').loads(match.group(0))
         reordered = []
+        seen_idx: set = set()
         for rank in order:
             idx = int(rank) - 1
-            if 0 <= idx < len(pool):
+            if 0 <= idx < len(pool) and idx not in seen_idx:
                 reordered.append(pool[idx])
+                seen_idx.add(idx)
         # Append any remaining candidates not in the reordered list
         reordered_ids = {id(c) for c in reordered}
         for c in candidates[top_n:]:

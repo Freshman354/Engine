@@ -233,6 +233,7 @@ def rag_generate_and_polish(
     session_mem: Dict,
     is_sales_query: bool,
     model: Any,
+    model_name: str = '',
     client_id: str = '',
 ) -> Tuple[str, float, str]:
     """
@@ -271,7 +272,7 @@ def rag_generate_and_polish(
     )
 
     try:
-        resp  = _gemini_generate(model, prompt, client_id=client_id, endpoint='rag_generate_and_polish')
+        resp  = _gemini_generate(model, prompt, model_name, client_id=client_id, endpoint='rag_generate_and_polish')
         text  = (resp.text or '').strip()
         if not text:
             return make_fallback(vertical, session_mem.get('is_frustrated', False)), 0.0, 'empty_generation'
@@ -302,6 +303,7 @@ def vertical_fallback(
     vertical: str,
     session_mem: Dict,
     model: Any,
+    model_name: str = '',
 ) -> Tuple[str, float, str]:
     """
     When RAG confidence is too low, attempt a vertical-aware Gemini fallback
@@ -323,7 +325,7 @@ def vertical_fallback(
         "Respond with ONLY the answer text."
     )
     try:
-        resp = _gemini_generate(model, prompt)
+        resp = _gemini_generate(model, prompt, model_name)
         text = (resp.text or '').strip()
         if not text:
             return make_fallback(vertical, session_mem.get('is_frustrated', False)), 0.0, 'vertical_fallback_empty'
@@ -387,6 +389,7 @@ def maybe_summarise(
     conversation_history: List[Dict],
     model: Any,
     trigger_length: int = 12,
+    model_name: str = '',
 ) -> None:
     """
     If the conversation has grown long, summarise it and store in the DB.
@@ -415,7 +418,7 @@ def maybe_summarise(
             f"Conversation:\n{history_txt}\n\n"
             "Summary:"
         )
-        resp    = _gemini_generate(model, prompt)
+        resp    = _gemini_generate(model, prompt, model_name)
         summary = (resp.text or '').strip()
         if not summary:
             return
