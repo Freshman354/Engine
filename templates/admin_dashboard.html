@@ -746,21 +746,6 @@
         </div>
     </div>
 
-    <!-- Generic Confirm Modal — replaces native browser confirm() everywhere,
-         and is the confirmation step for actions (like Grant Admin) that
-         previously had none at all. -->
-    <div class="modal-overlay" id="genericConfirmModal">
-        <div class="modal" style="text-align:center;">
-            <div id="gcIcon" style="font-size:40px;margin-bottom:12px;">⚠️</div>
-            <h2 id="gcTitle">Are you sure?</h2>
-            <p id="gcMessage" style="margin:8px 0 0;"></p>
-            <div class="modal-actions">
-                <button class="btn btn-ghost" onclick="closeModal('genericConfirmModal')" style="flex:1;justify-content:center;">Cancel</button>
-                <button class="btn btn-danger" id="gcConfirmBtn" style="flex:1;justify-content:center;">Confirm</button>
-            </div>
-        </div>
-    </div>
-
     <script>
     let editingUserId = null;
     let deletingUserId = null;
@@ -1791,6 +1776,22 @@ models.track_event('payment', user_id=current_user.id,
 
 <!-- TOAST -->
 <div class="toast" id="globalToast"></div>
+
+<!-- Generic Confirm Modal — replaces native browser confirm() everywhere,
+     and is the confirmation step for actions (like Grant Admin) that
+     previously had none at all. Lives outside the section if/elif chain
+     so it's present in the DOM on every admin tab, not just Users. -->
+<div class="modal-overlay" id="genericConfirmModal">
+    <div class="modal" style="text-align:center;">
+        <div id="gcIcon" style="font-size:40px;margin-bottom:12px;">⚠️</div>
+        <h2 id="gcTitle">Are you sure?</h2>
+        <p id="gcMessage" style="margin:8px 0 0;"></p>
+        <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="closeModal('genericConfirmModal')" style="flex:1;justify-content:center;">Cancel</button>
+            <button class="btn btn-danger" id="gcConfirmBtn" style="flex:1;justify-content:center;">Confirm</button>
+        </div>
+    </div>
+</div>
 
 <script>
 function showToast(msg, type='success') {
