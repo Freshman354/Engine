@@ -253,14 +253,24 @@ def get_webhook_logs(client_id: str, limit: int = 20) -> list:
 # Additive only. Pattern: cursor.close()/conn.close() inside try block.
 # =====================================================================
 
-_GEMINI_INPUT_PRICE_PER_TOKEN  = 0.075 / 1_000_000
-_GEMINI_OUTPUT_PRICE_PER_TOKEN = 0.300 / 1_000_000
+_PRICING_PER_TOKEN = {
+    'gemini': {
+        'input':  0.075 / 1_000_000,
+        'output': 0.300 / 1_000_000,
+    },
+    'openrouter': {  # meta-llama/llama-4-maverick, checked 2026-07-02
+        'input':  0.15 / 1_000_000,
+        'output': 0.60 / 1_000_000,
+    },
+}
 
 
 def _calc_cost(input_tokens, output_tokens):
+    from utils import get_ai_provider
+    rates = _PRICING_PER_TOKEN.get(get_ai_provider(), _PRICING_PER_TOKEN['gemini'])
     return (
-        (input_tokens  or 0) * _GEMINI_INPUT_PRICE_PER_TOKEN +
-        (output_tokens or 0) * _GEMINI_OUTPUT_PRICE_PER_TOKEN
+        (input_tokens  or 0) * rates['input'] +
+        (output_tokens or 0) * rates['output']
     )
 
 

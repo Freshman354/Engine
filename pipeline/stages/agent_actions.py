@@ -107,6 +107,41 @@ def _build_function_declarations(actions: List[Dict]):
     return declarations
 
 
+def _build_openai_tools(actions: List[Dict]) -> list:
+    """Same as _build_function_declarations but in OpenAI/OpenRouter's tools= shape."""
+    tools = []
+    for action in actions:
+        param_names = list((action.get('param_mapping') or {}).keys())
+        tools.append({
+            'type': 'function',
+            'function': {
+                'name': action['action_name'],
+                'description': action.get('description') or
+                    f"Performs {action['action_name'].replace('_', ' ')} on the client's system.",
+                'parameters': {
+                    'type': 'object',
+                    'properties': {p: {'type': 'string'} for p in param_names},
+                    'required': param_names,
+                },
+            },
+        })
+    return tools
+
+
+def _build_tool_prompt(clean_message: str, conversation_history: List[Dict]) -> str:
+    recent = conversation_history[-6:] if conversation_history else []
+    history_text = '\n'.join(
+        f"{t.get('role', 'user')}: {t.get('content', '')}" for t in recent
+    )
+    return (
+        f"Recent conversation:\n{history_text}\n\n"
+        f"Latest customer message: \"{clean_message}\"\n\n"
+        "If this message is requesting an action you have a tool for, call that tool "
+        "with the best arguments you can extract from the conversation. "
+        "If it's just a question or doesn't match any available action, don't call a tool."
+    )
+
+
 def _call_gemini_with_tools(genai_client: Any, model_name: str, clean_message: str,
                              conversation_history: List[Dict], actions: List[Dict]) -> Optional[Dict]:
     """
@@ -117,20 +152,7 @@ def _call_gemini_with_tools(genai_client: Any, model_name: str, clean_message: s
     from google.genai import types as _types
 
     tools = [_types.Tool(function_declarations=_build_function_declarations(actions))]
-
-    # Minimal conversational context — last few turns, not the full history,
-    # to keep this call cheap and fast.
-    recent = conversation_history[-6:] if conversation_history else []
-    history_text = '\n'.join(
-        f"{t.get('role', 'user')}: {t.get('content', '')}" for t in recent
-    )
-    prompt = (
-        f"Recent conversation:\n{history_text}\n\n"
-        f"Latest customer message: \"{clean_message}\"\n\n"
-        "If this message is requesting an action you have a tool for, call that tool "
-        "with the best arguments you can extract from the conversation. "
-        "If it's just a question or doesn't match any available action, don't call a tool."
-    )
+    prompt = _build_tool_prompt(clean_message, conversation_history)
 
     try:
         response = genai_client.generate_content(
@@ -153,6 +175,46 @@ def _call_gemini_with_tools(genai_client: Any, model_name: str, clean_message: s
         return None
     except Exception as e:
         log_crash(logger, 'AgentActions/call_gemini_with_tools', e, model=model_name)
+        return None
+
+
+def _call_openrouter_with_tools(clean_message: str, conversation_history: List[Dict],
+                                 actions: List[Dict]) -> Optional[Dict]:
+    """
+    OpenRouter/OpenAI-compatible equivalent of _call_gemini_with_tools.
+    Same return shape: {'name': action_name, 'args': {...}} or None.
+    """
+    import json as _json
+    from utils import _get_openrouter_client, OPENROUTER_MODEL
+
+    client = _get_openrouter_client()
+    if client is None:
+        logger.error('[AgentActions] OPENROUTER_API_KEY not set — cannot dispatch external actions')
+        return None
+
+    tools = _build_openai_tools(actions)
+    prompt = _build_tool_prompt(clean_message, conversation_history)
+
+    try:
+        response = client.chat.completions.create(
+            model=OPENROUTER_MODEL,
+            messages=[{'role': 'user', 'content': prompt}],
+            tools=tools,
+            temperature=0.1,
+            max_tokens=256,
+        )
+        message = response.choices[0].message
+        tool_calls = getattr(message, 'tool_calls', None) or []
+        if not tool_calls:
+            return None
+        call = tool_calls[0]
+        try:
+            args = _json.loads(call.function.arguments or '{}')
+        except (ValueError, TypeError):
+            args = {}
+        return {'name': call.function.name, 'args': args}
+    except Exception as e:
+        log_crash(logger, 'AgentActions/call_openrouter_with_tools', e, model=OPENROUTER_MODEL)
         return None
 
 
@@ -226,7 +288,14 @@ def try_dispatch_external_action(genai_client: Any, model_name: str, client_id: 
     if not actions:
         return None
 
-    matched = _call_gemini_with_tools(genai_client, model_name, clean_message, conversation_history, actions)
+    from utils import get_ai_provider
+    if get_ai_provider() == 'openrouter':
+        # genai_client is AIHelper's truthy sentinel in this mode, not a
+        # real client (see ai_helper.py AIHelper.__init__) — this path
+        # gets its own OpenRouter client internally instead.
+        matched = _call_openrouter_with_tools(clean_message, conversation_history, actions)
+    else:
+        matched = _call_gemini_with_tools(genai_client, model_name, clean_message, conversation_history, actions)
     if not matched:
         return None
 

@@ -1596,6 +1596,33 @@ def migrate_agency_email_domains():
             except Exception: pass
 
 
+def migrate_system_settings():
+    """
+    Generic key-value store for admin-toggleable settings that need to
+    take effect live, without a redeploy — e.g. the AI provider switch
+    (models/system_settings.py, utils.py::get_ai_provider). Safe to call
+    every startup (IF NOT EXISTS).
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key         TEXT PRIMARY KEY,
+                value       TEXT NOT NULL,
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_by  INTEGER
+            )
+        ''')
+        conn.commit()
+        print("✅ system_settings table ready.")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_system_settings: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def migrate_lead_delivery():
     """
     Add lead delivery columns to the clients table.

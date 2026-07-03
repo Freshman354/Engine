@@ -818,6 +818,7 @@ try:
         'migrate_agency_email_domains', # white-label custom email domain
         'migrate_external_integrations',       # client_ext_integrations + actions + audit log (agentic external tool calls)
         'migrate_account_profile',             # profile fields + soft/hard delete on users
+        'migrate_system_settings',             # generic key-value store for live admin toggles
     ]
     for _fn in _optional_migrations:
         if hasattr(models, _fn):
@@ -1399,6 +1400,7 @@ def admin_set_plan():
         secret      = request.form.get('secret')
         email       = request.form.get('email', '').strip().lower()
         plan        = request.form.get('plan', '').strip().lower()
+        grace_days_raw = request.form.get('grace_days', '30').strip()
         valid_plans = ['free', 'solo', 'starter', 'pro', 'growth', 'agency', 'enterprise']
         if secret != ADMIN_SECRET:
             error = 'Invalid admin secret.'
@@ -1407,16 +1409,43 @@ def admin_set_plan():
         elif plan not in valid_plans:
             error = f'Invalid plan. Must be one of: {", ".join(valid_plans)}'
         else:
+            try:
+                grace_days = int(grace_days_raw)
+            except ValueError:
+                grace_days = 30
             user = models.get_user_by_email(email)
             if not user:
                 error = f'No user found with email: {email}'
             else:
                 conn, cursor = models.get_db()
-                cursor.execute(
-                    'UPDATE users SET plan_type = %s WHERE email = %s', (plan, email)
-                )
+                if plan in ('free', 'enterprise') or grace_days == 0:
+                    # free has nothing to expire; enterprise is excluded from
+                    # the downgrade cron entirely; grace_days=0 is an
+                    # explicit, deliberate permanent grant.
+                    cursor.execute(
+                        '''UPDATE users SET plan_type = %s, upgraded_at = CURRENT_TIMESTAMP,
+                               grace_period_ends_at = NULL, subscription_expires_at = NULL
+                           WHERE email = %s''',
+                        (plan, email)
+                    )
+                else:
+                    # Was previously a bare `SET plan_type = %s` with no expiry
+                    # at all — the downgrade cron (downgrade_expired_users)
+                    # only acts on users with grace_period_ends_at or
+                    # subscription_expires_at set in the past, so a manually
+                    # granted plan with neither set became silently permanent
+                    # regardless of intent. Defaults to 30 days now instead.
+                    cursor.execute(
+                        '''UPDATE users SET plan_type = %s, upgraded_at = CURRENT_TIMESTAMP,
+                               grace_period_ends_at = CURRENT_TIMESTAMP + make_interval(days => %s)
+                           WHERE email = %s''',
+                        (plan, grace_days, email)
+                    )
                 conn.commit(); cursor.close(); conn.close()
-                success = f'✅ {email} updated to {plan.capitalize()} plan.'
+                success = f'✅ {email} updated to {plan.capitalize()} plan.' + (
+                    ' (permanent — no auto-downgrade)' if (plan in ('free', 'enterprise') or grace_days == 0)
+                    else f' (auto-downgrades to free in {grace_days} days unless renewed)'
+                )
 
     return f'''<!DOCTYPE html>
 <html>
@@ -1451,6 +1480,13 @@ def admin_set_plan():
       <option value="pro">Pro ($99/mo)</option>
       <option value="agency">Agency ($299/mo)</option>
       <option value="enterprise">Enterprise</option>
+    </select>
+    <label>Auto-downgrade to Free after (paid plans only)</label>
+    <select name="grace_days">
+      <option value="7">7 days</option>
+      <option value="30" selected>30 days</option>
+      <option value="90">90 days</option>
+      <option value="0">Never (permanent — use deliberately)</option>
     </select>
     <button type="submit">Update Plan</button>
   </form>

@@ -233,6 +233,13 @@ from .integrations import (
     get_agency_integration_overview,
 )
 
+# ── System settings (live admin toggles, e.g. AI provider switch) ─────────────
+from .system_settings import (
+    get_setting,
+    set_setting,
+    get_all_settings,
+)
+
 from .agency_domains import (
     upsert_agency_domain,
     set_domain_status,

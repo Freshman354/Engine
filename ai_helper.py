@@ -200,8 +200,12 @@ def get_ai_helper(
     if _ai_helper_instance is None:
         with _ai_helper_lock:
             if _ai_helper_instance is None:
+                # Both providers get built if their keys are present,
+                # regardless of which one is "active" right now — that's
+                # what makes the admin dashboard's live switch actually
+                # work without a restart. See AIHelper.__init__.
                 _ai_helper_instance = AIHelper(
-                    api_key    = api_key    or os.environ.get('GEMINI_API_KEY', ''),
+                    api_key    = api_key or os.environ.get('GEMINI_API_KEY', ''),
                     model_name = model_name or os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash'),
                 )
     return _ai_helper_instance
@@ -212,32 +216,99 @@ def get_ai_helper(
 # ═════════════════════════════════════════════════════════════════════════════
 
 class AIHelper:
+    """
+    Live AI-provider switch lives here. self.model, self.model_name,
+    self._model_name, and self.provider are all @property — they check
+    utils.get_ai_provider() FRESH on every access, not once at
+    construction. This is deliberate: AIHelper is a process-lifetime
+    singleton (see get_ai_helper() above), so if the choice of provider
+    were baked into plain instance attributes set in __init__, toggling
+    the switch in the admin dashboard would silently do nothing until
+    the next deploy/restart. Building both clients up front (whichever
+    are configured) and deciding which to use per-access is what makes
+    the switch actually live.
+    """
 
     def __init__(
         self,
         api_key:    str = '',
         model_name: str = 'gemini-2.0-flash',
     ) -> None:
-        self.api_key    = api_key
-        self.model_name = model_name
-        self.enabled    = bool(api_key)
-        self.model: Optional[Any] = None
+        self.api_key           = api_key
+        self._gemini_model_name = model_name
+        self._genai_client      = None
+        self._gemini_model_obj  = None   # client.models, or None if unavailable
+        self._gemini_init_error = None
 
-        if self.enabled:
+        openrouter_key = os.environ.get('OPENROUTER_API_KEY', '').strip()
+        self._openrouter_configured = bool(openrouter_key)
+
+        if api_key:
             try:
                 self._genai_client = genai.Client(api_key=api_key)
-                self.model = self._genai_client.models
-                self._model_name = model_name
+                self._gemini_model_obj = self._genai_client.models
                 logger.info(f"[AIHelper] google.genai ready model={model_name}")
             except Exception as e:
                 log_crash(logger, 'AIHelper/init', e, model=model_name)
-                self.enabled = False
-                self.model = None
-        else:
+                self._gemini_init_error = e
+
+        if self._openrouter_configured:
+            logger.info(f"[AIHelper] OpenRouter configured, model={os.environ.get('OPENROUTER_MODEL', 'meta-llama/llama-4-maverick')}")
+
+        # self.enabled = at least one provider is usable right now,
+        # regardless of which one happens to be "active" — an admin
+        # toggling the switch shouldn't need Gemini AND OpenRouter both
+        # configured just for self.enabled to stay true.
+        self.enabled = bool(self._gemini_model_obj) or self._openrouter_configured
+
+        if not self.enabled:
             logger.warning(
-                "[AIHelper] GEMINI_API_KEY not set — running in static fallback mode. "
-                "Retrieval (embedding search) still works; LLM generation disabled."
+                "[AIHelper] No usable AI provider configured (checked GEMINI_API_KEY "
+                "and OPENROUTER_API_KEY) — running in static fallback mode. Retrieval "
+                "(embedding search) still works; LLM generation disabled."
             )
+
+    # ── Live provider switch ─────────────────────────────────────────────────
+
+    @property
+    def provider(self) -> str:
+        """The CURRENTLY ACTIVE provider — re-checked on every access, not cached on self."""
+        from utils import get_ai_provider
+        chosen = get_ai_provider()
+        # If the admin switched to a provider that isn't actually configured
+        # here, fall back to whichever one IS, rather than silently going dark.
+        if chosen == 'gemini' and not self._gemini_model_obj and self._openrouter_configured:
+            return 'openrouter'
+        if chosen == 'openrouter' and not self._openrouter_configured and self._gemini_model_obj:
+            return 'gemini'
+        return chosen
+
+    @property
+    def model(self) -> Optional[Any]:
+        """
+        The active provider's client object for this request. In
+        openrouter mode this is a truthy sentinel (see class docstring on
+        pipeline/stages/agent_actions.py and generation.py's `if model is
+        None: return` gates) — utils.generate() ignores it entirely in
+        that mode, calling OpenRouter directly instead.
+        """
+        if not self.enabled:
+            return None
+        if self.provider == 'openrouter':
+            return AIHelper   # truthy, harmless — never dereferenced as a real client
+        return self._gemini_model_obj
+
+    @property
+    def model_name(self) -> str:
+        if self.provider == 'openrouter':
+            from utils import OPENROUTER_MODEL
+            return OPENROUTER_MODEL
+        return self._gemini_model_name
+
+    @property
+    def _model_name(self) -> str:
+        # Alias — some call sites use the underscored name.
+        return self.model_name
 
     # ── Private helpers ───────────────────────────────────────────────────────
 

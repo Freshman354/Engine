@@ -8,15 +8,30 @@ import json
 from datetime import datetime
 from .db import get_db
 
-# ── Gemini pricing (per-token) ─────────────────────────────────────────────
-_GEMINI_INPUT_PRICE_PER_TOKEN  = 0.075 / 1_000_000
-_GEMINI_OUTPUT_PRICE_PER_TOKEN = 0.300 / 1_000_000
+# ── Per-token pricing, by provider ─────────────────────────────────────────
+# Source: provider list prices. OpenRouter aggregates multiple hosting
+# providers for the same model at potentially different rates — this is
+# their listed default, not a guarantee of the exact rate every request
+# routes to. Verify at openrouter.ai/models if this needs to be precise
+# for billing (not just directional cost tracking).
+_PRICING_PER_TOKEN = {
+    'gemini': {
+        'input':  0.075 / 1_000_000,
+        'output': 0.300 / 1_000_000,
+    },
+    'openrouter': {  # meta-llama/llama-4-maverick, checked 2026-07-02
+        'input':  0.15 / 1_000_000,
+        'output': 0.60 / 1_000_000,
+    },
+}
 
 
 def _calc_cost(input_tokens, output_tokens):
+    from utils import get_ai_provider
+    rates = _PRICING_PER_TOKEN.get(get_ai_provider(), _PRICING_PER_TOKEN['gemini'])
     return (
-        (input_tokens  or 0) * _GEMINI_INPUT_PRICE_PER_TOKEN +
-        (output_tokens or 0) * _GEMINI_OUTPUT_PRICE_PER_TOKEN
+        (input_tokens  or 0) * rates['input'] +
+        (output_tokens or 0) * rates['output']
     )
 
 
@@ -64,8 +79,26 @@ def get_user_growth_by_month(months=6):
     return rows
 
 
-def admin_update_user(user_id, plan_type=None, subscription_status=None, is_admin=None):
-    """Update user plan, subscription_status, or admin flag."""
+def admin_update_user(user_id, plan_type=None, subscription_status=None, is_admin=None, grace_days=None):
+    """
+    Update user plan, subscription_status, or admin flag.
+
+    grace_days: when plan_type is being set to a PAID plan, how many days
+    until it should auto-downgrade if nothing else renews it. This exists
+    because downgrade_expired_users() (the daily cron) only acts on users
+    with a set grace_period_ends_at/subscription_expires_at in the past —
+    without this, a manually-granted plan_type has no expiry at all and
+    silently becomes permanent, regardless of the admin's intent, since
+    neither of the cron's two trigger conditions can ever become true.
+
+    - grace_days=None (default) and plan_type is paid: defaults to 30 days,
+      NOT permanent — permanent-by-default was the bug being fixed here.
+    - grace_days=0: explicitly permanent (no auto-downgrade) — sets both
+      expiry fields to NULL. Use this deliberately, not by omission.
+    - plan_type == 'free' or 'enterprise': both expiry fields are cleared
+      regardless of grace_days (free has nothing to expire from;
+      enterprise is excluded from the downgrade query entirely).
+    """
     conn, cursor = get_db()
     updates = []
     params = []
@@ -73,6 +106,18 @@ def admin_update_user(user_id, plan_type=None, subscription_status=None, is_admi
         updates.append('plan_type = %s')
         params.append(plan_type)
         updates.append('upgraded_at = CURRENT_TIMESTAMP')
+
+        if plan_type in ('free', 'enterprise'):
+            updates.append('grace_period_ends_at = NULL')
+            updates.append('subscription_expires_at = NULL')
+        elif grace_days == 0:
+            # Deliberate, explicit permanent grant.
+            updates.append('grace_period_ends_at = NULL')
+            updates.append('subscription_expires_at = NULL')
+        else:
+            days = grace_days if grace_days is not None else 30
+            updates.append('grace_period_ends_at = CURRENT_TIMESTAMP + make_interval(days => %s)')
+            params.append(int(days))
     if subscription_status is not None:
         updates.append('subscription_status = %s')
         params.append(subscription_status)

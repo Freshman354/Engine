@@ -239,10 +239,12 @@ Return ONLY valid JSON array like:
         if not _ai_helper or not _ai_helper.enabled or not _ai_helper.model:
             return parse_structured_faq_text(text)
 
-        response = _ai_helper.model.generate_content(
-            prompt,
-            request_options={'timeout': 20},
-        )
+        from utils import generate as _generate
+        # Was calling _ai_helper.model.generate_content(prompt, request_options=...)
+        # directly — bypassed the AI_PROVIDER switch entirely, and
+        # request_options is a google.generativeai (old SDK) kwarg that
+        # doesn't exist on google.genai's generate_content signature.
+        response = _generate(_ai_helper.model, prompt, _ai_helper.model_name)
         json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
         if json_match:
             faqs_data = json.loads(json_match.group())

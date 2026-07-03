@@ -314,6 +314,18 @@
         .db-stat .ds-label { font-size:10.5px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px; }
         .db-stat .ds-val { font-size:20px; font-weight:800; color:var(--text); }
 
+        /* ── AI PROVIDER SWITCH ── */
+        .provider-option {
+            flex:1; text-align:left; background:var(--surface2); border:1.5px solid var(--border);
+            border-radius:10px; padding:14px 16px; cursor:pointer; transition:all 0.15s; font-family:inherit;
+        }
+        .provider-option:hover:not(:disabled) { border-color:var(--border-hover); background:var(--surface3); }
+        .provider-option.active { border-color:var(--gold); background:var(--primary-dim); box-shadow:0 0 0 1px var(--gold) inset; }
+        .provider-option:disabled { opacity:0.4; cursor:not-allowed; }
+        .provider-option .provider-name { font-size:13.5px; font-weight:700; color:var(--text); margin-bottom:3px; }
+        .provider-option .provider-sub { font-size:11.5px; color:var(--muted); }
+        .provider-option.active .provider-sub { color:var(--gold); font-weight:600; }
+
         /* ── CODE BLOCK ── */
         .code-block {
             background:var(--surface2); border:1px solid var(--border);
@@ -704,6 +716,15 @@
                     {% endfor %}
                 </select>
             </div>
+            <div class="form-row">
+                <label>Auto-downgrade to Free after</label>
+                <select class="select" id="editGraceDays">
+                    <option value="7">7 days</option>
+                    <option value="30" selected>30 days</option>
+                    <option value="90">90 days</option>
+                    <option value="0">Never (permanent — use deliberately)</option>
+                </select>
+            </div>
             <div class="modal-actions">
                 <button class="btn btn-ghost" onclick="closeModal('editModal')" style="flex:1;justify-content:center;">Cancel</button>
                 <button class="btn btn-primary" onclick="saveUserEdit()" style="flex:1;justify-content:center;">Save Changes</button>
@@ -721,6 +742,21 @@
             <div class="modal-actions">
                 <button class="btn btn-ghost" onclick="closeModal('deleteUserModal')" style="flex:1;justify-content:center;">Cancel</button>
                 <button class="btn btn-danger" id="confirmDeleteBtn" onclick="executeDeleteUser()" style="flex:1;justify-content:center;">Delete Forever</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Generic Confirm Modal — replaces native browser confirm() everywhere,
+         and is the confirmation step for actions (like Grant Admin) that
+         previously had none at all. -->
+    <div class="modal-overlay" id="genericConfirmModal">
+        <div class="modal" style="text-align:center;">
+            <div id="gcIcon" style="font-size:40px;margin-bottom:12px;">⚠️</div>
+            <h2 id="gcTitle">Are you sure?</h2>
+            <p id="gcMessage" style="margin:8px 0 0;"></p>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeModal('genericConfirmModal')" style="flex:1;justify-content:center;">Cancel</button>
+                <button class="btn btn-danger" id="gcConfirmBtn" style="flex:1;justify-content:center;">Confirm</button>
             </div>
         </div>
     </div>
@@ -747,9 +783,13 @@
     async function saveUserEdit() {
         const plan_type = document.getElementById('editPlan').value;
         const subscription_status = document.getElementById('editStatus').value;
-        const res = await fetch(`/admin/api/users/${editingUserId}/update`, {
+        const grace_days = parseInt(document.getElementById('editGraceDays').value, 10);
+        // Was fetching `/admin/api/users/${editingUserId}/update` — no such
+        // route exists (the registered route takes user_id in the JSON body,
+        // not a URL path segment), so Save Changes was silently 404ing.
+        const res = await fetch(`/admin/api/users/update`, {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({plan_type, subscription_status})
+            body: JSON.stringify({user_id: editingUserId, plan_type, subscription_status, grace_days})
         });
         const data = await res.json();
         if (data.success) {
@@ -777,7 +817,15 @@
     async function executeDeleteUser() {
         const btn = document.getElementById('confirmDeleteBtn');
         btn.textContent = 'Deleting…'; btn.disabled = true;
-        const res = await fetch(`/admin/api/users/${deletingUserId}/delete`, {method:'DELETE'});
+        // Was fetching `/admin/api/users/${deletingUserId}/delete` with
+        // method DELETE — the registered route is a flat POST endpoint
+        // taking user_id in the JSON body, so this button was also
+        // silently 404ing (405, technically, since DELETE doesn't match
+        // the registered POST method either).
+        const res = await fetch(`/admin/api/users/delete`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({user_id: deletingUserId})
+        });
         const data = await res.json();
         if (data.success) {
             const row = document.getElementById('userrow-' + deletingUserId);
@@ -1016,9 +1064,20 @@
     </div>
 
     <script>
-    async function deleteLead(id) {
-        if (!confirm('Delete this lead?')) return;
-        const res = await fetch(`/admin/api/leads/${id}/delete`, {method:'DELETE'});
+    function deleteLead(id) {
+        showConfirm({
+            title: 'Delete This Lead?',
+            message: 'This permanently removes the lead record. Cannot be undone.',
+            confirmLabel: 'Delete Lead',
+            onConfirm: () => executeDeleteLead(id),
+        });
+    }
+
+    async function executeDeleteLead(id) {
+        const res = await fetch(`/admin/api/leads/delete`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({lead_id: id})
+        });
         const data = await res.json();
         if (data.success) {
             const row = document.getElementById('leadrow-'+id);
@@ -1518,6 +1577,40 @@
         </div>
     </div>
 
+    <!-- AI Provider Switch -->
+    <div class="table-card" style="margin-bottom:20px;">
+        <div class="table-card-header"><h3>🤖 AI Provider</h3></div>
+        <div style="padding:22px;">
+            <p style="color:var(--muted);font-size:13.5px;margin-bottom:18px;">
+                Which model answers every chat. Takes effect within ~15 seconds across all
+                servers — no redeploy or restart needed.
+            </p>
+            <div style="display:flex;gap:12px;">
+                <button class="provider-option {{ 'active' if ai_provider == 'gemini' }}"
+                        id="providerBtnGemini"
+                        onclick="switchProvider('gemini')"
+                        {{ 'disabled' if not gemini_configured }}>
+                    <div class="provider-name">Gemini</div>
+                    <div class="provider-sub">{{ 'Active' if ai_provider == 'gemini' else ('Not configured' if not gemini_configured else 'Available') }}</div>
+                </button>
+                <button class="provider-option {{ 'active' if ai_provider == 'openrouter' }}"
+                        id="providerBtnOpenrouter"
+                        onclick="switchProvider('openrouter')"
+                        {{ 'disabled' if not openrouter_configured }}>
+                    <div class="provider-name">OpenRouter — Llama 4 Maverick</div>
+                    <div class="provider-sub">{{ 'Active' if ai_provider == 'openrouter' else ('Not configured' if not openrouter_configured else 'Available') }}</div>
+                </button>
+            </div>
+            {% if not gemini_configured or not openrouter_configured %}
+            <p style="color:var(--muted);font-size:12px;margin-top:12px;">
+                {% if not gemini_configured %}GEMINI_API_KEY isn't set — add it in Render to enable Gemini. {% endif %}
+                {% if not openrouter_configured %}OPENROUTER_API_KEY isn't set — add it in Render to enable OpenRouter.{% endif %}
+            </p>
+            {% endif %}
+            <div id="providerSwitchResult" style="margin-top:10px;font-size:13px;"></div>
+        </div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
         <div class="table-card" style="margin-bottom:0;">
             <div class="table-card-header"><h3>🔧 Run Migrations</h3></div>
@@ -1540,62 +1633,6 @@
             </div>
         </div>
 
-        <!-- API Usage Log Migration SQL -->
-        <div class="table-card" style="margin-bottom:0;">
-            <div class="table-card-header"><h3>🧮 API Cost Tracking — Setup SQL</h3></div>
-            <div style="padding:22px;">
-                <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">Create the <strong style="color:var(--gold);">api_usage_log</strong> table to enable AI cost tracking. Run once, then instrument your Gemini calls.</p>
-                <div class="code-block">
-                    <button class="copy-btn" onclick="copyCode('sqlBlock')">Copy</button>
-                    <pre id="sqlBlock">CREATE TABLE IF NOT EXISTS api_usage_log (
-    id          SERIAL PRIMARY KEY,
-    user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    client_id   VARCHAR(100),
-    model       VARCHAR(80) DEFAULT 'gemini-1.5-flash',
-    input_tokens  INTEGER NOT NULL DEFAULT 0,
-    output_tokens INTEGER NOT NULL DEFAULT 0,
-    endpoint    VARCHAR(100),
-    created_at  TIMESTAMP DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_api_usage_user
-    ON api_usage_log(user_id);
-CREATE INDEX IF NOT EXISTS idx_api_usage_created
-    ON api_usage_log(created_at);</pre>
-                </div>
-            </div>
-        </div>
-
-        <!-- Python instrumentation snippet -->
-        <div class="table-card" style="margin-bottom:0;">
-            <div class="table-card-header"><h3>🐍 Instrument Gemini Calls</h3></div>
-            <div style="padding:22px;">
-                <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">Add this after every <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:11px;color:var(--gold);">model.generate_content()</code> call to log token usage.</p>
-                <div class="code-block">
-                    <button class="copy-btn" onclick="copyCode('pyBlock')">Copy</button>
-                    <pre id="pyBlock"># After calling Gemini:
-response = model.generate_content(prompt)
-
-# Log usage (add to models.py)
-def log_api_usage(user_id, client_id, response,
-                  model='gemini-1.5-flash', endpoint=None):
-    try:
-        meta = response.usage_metadata
-        execute_query(
-            """INSERT INTO api_usage_log
-               (user_id, client_id, model,
-                input_tokens, output_tokens, endpoint)
-               VALUES (%s,%s,%s,%s,%s,%s)""",
-            (user_id, client_id, model,
-             meta.prompt_token_count,
-             meta.candidates_token_count,
-             endpoint)
-        )
-    except Exception as e:
-        print(f"[cost log] {e}")</pre>
-                </div>
-            </div>
-        </div>
-
         <!-- Purge old logs -->
         <div class="table-card" style="margin-bottom:0;">
             <div class="table-card-header"><h3>🗑️ Maintenance</h3></div>
@@ -1606,9 +1643,11 @@ def log_api_usage(user_id, client_id, response,
             </div>
         </div>
 
-        <div class="table-card" style="margin-bottom:0;grid-column:1/-1;">
-            <div class="table-card-header"><h3>📖 Quick Reference — track_event()</h3></div>
-            <div style="padding:22px;">
+        <details class="table-card" style="margin-bottom:0;grid-column:1/-1;padding:0;">
+            <summary style="cursor:pointer;padding:16px 22px;font-weight:600;font-size:13.5px;color:var(--light);list-style:none;display:flex;align-items:center;gap:8px;">
+                📖 Developer Reference — track_event() usage
+            </summary>
+            <div style="padding:0 22px 22px;">
                 <p style="color:var(--muted);font-size:13px;margin-bottom:12px;">Add <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;color:var(--gold);">track_event()</code> calls in app.py to log analytics events:</p>
                 <div class="code-block">
                     <pre># At login:
@@ -1626,44 +1665,117 @@ models.track_event('payment', user_id=current_user.id,
                    metadata={'amount': amount, 'provider': 'flutterwave'})</pre>
                 </div>
             </div>
-        </div>
+        </details>
     </div>
 
     <script>
+    function switchProvider(provider) {
+        const label = provider === 'gemini' ? 'Gemini' : 'OpenRouter (Llama 4 Maverick)';
+        showConfirm({
+            title: `Switch to ${label}?`,
+            message: 'Every chatbot on the platform will start answering through this model within about 15 seconds. No restart needed.',
+            confirmLabel: `Switch to ${label}`,
+            icon: '🤖',
+            onConfirm: () => executeSwitchProvider(provider),
+        });
+    }
+
+    async function executeSwitchProvider(provider) {
+        const el = document.getElementById('providerSwitchResult');
+        el.style.color = 'var(--muted)'; el.textContent = 'Switching…';
+        try {
+            const res = await fetch('/admin/api/system/ai-provider', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({provider})
+            });
+            const data = await res.json();
+            if (data.success) {
+                el.style.color = 'var(--success)';
+                el.textContent = `✅ Switched to ${provider === 'gemini' ? 'Gemini' : 'OpenRouter'} — live within ~15s.`;
+                document.getElementById('providerBtnGemini').classList.toggle('active', provider === 'gemini');
+                document.getElementById('providerBtnOpenrouter').classList.toggle('active', provider === 'openrouter');
+                showToast('✅ AI provider switched', 'success');
+            } else {
+                el.style.color = 'var(--danger)'; el.textContent = '❌ ' + (data.error || 'Failed');
+                showToast('❌ Switch failed', 'error');
+            }
+        } catch (e) {
+            el.style.color = 'var(--danger)'; el.textContent = '❌ Request failed — check your connection and try again.';
+        }
+    }
+
     async function runMigrations() {
         const el = document.getElementById('migrationResults');
         el.textContent = 'Running…';
-        const res = await fetch('/admin/api/system/migrate', {method:'POST'});
-        const data = await res.json();
-        if (data.success) {
-            el.innerHTML = data.results.map(r => `<div style="margin-bottom:4px;">✅ ${r}</div>`).join('');
-            showToast('✅ Migrations complete', 'success');
-        } else showToast('❌ Migration failed', 'error');
+        try {
+            const res = await fetch('/admin/api/system/migrate', {method:'POST'});
+            const data = await res.json();
+            if (data.success) {
+                el.innerHTML = data.results.map(r => `<div style="margin-bottom:4px;">✅ ${r}</div>`).join('');
+                showToast('✅ Migrations complete', 'success');
+            } else {
+                el.textContent = '❌ ' + (data.error || 'Migration failed');
+                showToast('❌ Migration failed', 'error');
+            }
+        } catch (e) {
+            el.textContent = '❌ Request failed — check your connection and try again.';
+            showToast('❌ Request failed', 'error');
+        }
     }
 
-    async function grantAdmin() {
+    function grantAdmin() {
         const email = document.getElementById('makeAdminEmail').value.trim();
         if (!email) return;
-        const res = await fetch('/admin/api/system/make-admin', {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({email})
+        // Previously had no confirmation at all — one click on this button
+        // instantly gave the entered email full admin access to everything.
+        showConfirm({
+            title: 'Grant Admin Access?',
+            message: `${email} will get full admin access — every user, payment, and system control. Double-check the email before confirming.`,
+            confirmLabel: 'Grant Admin',
+            icon: '👑',
+            onConfirm: () => executeGrantAdmin(email),
         });
-        const data = await res.json();
-        const el = document.getElementById('makeAdminResult');
-        if (data.success) { el.style.color = 'var(--success)'; el.textContent = '✅ ' + data.message; showToast('✅ Admin granted', 'success'); }
-        else { el.style.color = 'var(--danger)'; el.textContent = '❌ ' + data.error; }
     }
 
-    async function purgeLogs() {
-        if (!confirm('Delete all api_usage_log entries older than 90 days?')) return;
+    async function executeGrantAdmin(email) {
+        const el = document.getElementById('makeAdminResult');
+        el.style.color = 'var(--muted)'; el.textContent = 'Granting…';
+        try {
+            const res = await fetch('/admin/api/system/make-admin', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({email})
+            });
+            const data = await res.json();
+            if (data.success) {
+                el.style.color = 'var(--success)'; el.textContent = '✅ ' + data.message;
+                document.getElementById('makeAdminEmail').value = '';
+                showToast('✅ Admin granted', 'success');
+            } else {
+                el.style.color = 'var(--danger)'; el.textContent = '❌ ' + data.error;
+            }
+        } catch (e) {
+            el.style.color = 'var(--danger)'; el.textContent = '❌ Request failed — check your connection and try again.';
+        }
+    }
+
+    function purgeLogs() {
+        showConfirm({
+            title: 'Purge Old Logs?',
+            message: 'Deletes all api_usage_log entries older than 90 days. Revenue and user data are not affected. Cannot be undone.',
+            confirmLabel: 'Purge Logs',
+            onConfirm: executePurgeLogs,
+        });
+    }
+
+    async function executePurgeLogs() {
         const el = document.getElementById('purgeResult');
-        el.textContent = 'Purging…';
+        el.style.color = 'var(--muted)'; el.textContent = 'Purging…';
         try {
             const res = await fetch('/admin/api/system/purge-logs', {method:'POST'});
             const data = await res.json();
             if (data.success) { el.style.color = 'var(--success)'; el.textContent = `✅ Deleted ${data.deleted} rows`; showToast('✅ Logs purged', 'success'); }
             else { el.style.color = 'var(--danger)'; el.textContent = '❌ ' + (data.error||'Failed'); }
-        } catch(e) { el.textContent = '❌ Request failed'; }
+        } catch(e) { el.style.color = 'var(--danger)'; el.textContent = '❌ Request failed'; }
     }
 
     function copyCode(id) {
@@ -1690,6 +1802,26 @@ function showToast(msg, type='success') {
 
 function closeModal(id) {
     document.getElementById(id).classList.remove('open');
+}
+
+// Replaces native confirm() with the app's own styled modal. Usage:
+//   showConfirm({ title, message, confirmLabel, icon, onConfirm })
+// onConfirm is called only if the user clicks the confirm button.
+function showConfirm({ title, message, confirmLabel = 'Confirm', icon = '⚠️', onConfirm }) {
+    document.getElementById('gcTitle').textContent = title;
+    document.getElementById('gcMessage').textContent = message;
+    document.getElementById('gcIcon').textContent = icon;
+    const btn = document.getElementById('gcConfirmBtn');
+    btn.textContent = confirmLabel;
+    // Replace the button node to clear any previously-bound onclick handler
+    // from the last time this modal was used for something else.
+    const freshBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(freshBtn, btn);
+    freshBtn.onclick = () => {
+        closeModal('genericConfirmModal');
+        onConfirm();
+    };
+    document.getElementById('genericConfirmModal').classList.add('open');
 }
 
 document.addEventListener('keydown', e => {

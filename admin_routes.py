@@ -16,6 +16,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from flask_login import login_required, current_user
 from functools import wraps
 import json
+import os
 import models
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -260,17 +261,72 @@ def costs():
 @admin_bp.route('/system')
 @admin_required
 def system():
+    from utils import get_ai_provider, AI_PROVIDER_ENV
     ctx = _base_context()
     ctx.update({
         'section':  'system',
         'db_stats': _safe(models.get_db_stats, []),
+        'ai_provider': get_ai_provider(),
+        'ai_provider_env_default': AI_PROVIDER_ENV,
+        'gemini_configured': bool(os.environ.get('GEMINI_API_KEY')),
+        'openrouter_configured': bool(os.environ.get('OPENROUTER_API_KEY')),
     })
     return render_template('admin_dashboard.html', **ctx)
+
+
+@admin_bp.route('/api/system/ai-provider', methods=['POST'])
+@admin_required
+def api_set_ai_provider():
+    """Live-switches the AI provider — takes effect within ~15s (utils.py's
+    in-process cache TTL) across every Gunicorn worker, no restart needed."""
+    data = request.get_json() or {}
+    provider = (data.get('provider') or '').strip().lower()
+    if provider not in ('gemini', 'openrouter'):
+        return jsonify({'success': False, 'error': "provider must be 'gemini' or 'openrouter'"}), 400
+
+    if provider == 'openrouter' and not os.environ.get('OPENROUTER_API_KEY'):
+        return jsonify({'success': False, 'error': 'OPENROUTER_API_KEY is not set — add it in Render before switching.'}), 400
+    if provider == 'gemini' and not os.environ.get('GEMINI_API_KEY'):
+        return jsonify({'success': False, 'error': 'GEMINI_API_KEY is not set — add it in Render before switching.'}), 400
+
+    ok = models.set_setting('ai_provider', provider, updated_by=current_user.id)
+    if not ok:
+        return jsonify({'success': False, 'error': 'Could not save setting'}), 500
+    return jsonify({'success': True, 'provider': provider})
 
 
 # =====================================================================
 # API: USER MANAGEMENT
 # =====================================================================
+
+@admin_bp.route('/api/payments/add', methods=['POST'])
+@admin_required
+def api_add_payment():
+    """
+    Manually record an offline/manual payment (wire transfer, invoice,
+    etc.) — the Add Payment modal in the Users/Revenue dashboard has
+    been calling this URL, but the route didn't exist yet.
+    """
+    data = request.get_json() or {}
+    user_id   = data.get('user_id')
+    amount    = data.get('amount')
+    plan_type = data.get('plan_type')
+    if not user_id or not amount or not plan_type:
+        return jsonify({'success': False, 'error': 'user_id, amount, and plan_type are required'}), 400
+    try:
+        payment_id = models.record_payment(
+            user_id=user_id,
+            amount=float(amount),
+            plan_type=plan_type,
+            provider=data.get('provider') or 'manual',
+            notes=data.get('notes'),
+        )
+        return jsonify({'success': True, 'payment_id': payment_id})
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'amount must be a number'}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @admin_bp.route('/api/users/update', methods=['POST'])
 @admin_required
@@ -285,6 +341,7 @@ def api_update_user():
             plan_type=data.get('plan_type'),
             subscription_status=data.get('subscription_status'),
             is_admin=data.get('is_admin'),
+            grace_days=data.get('grace_days'),
         )
         return jsonify({'success': True})
     except Exception as e:
