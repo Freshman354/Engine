@@ -48,6 +48,8 @@ ACTION_KEYWORDS: Dict[str, List[str]] = {
         'contact sales', 'talk to sales', 'speak to sales',
         'reach sales', 'contact someone', 'speak to a person',
         'talk to a human', 'human agent', 'real person',
+        'connect me', 'connect with your team', 'put me through',
+        'get me connected',
     ],
 }
 
@@ -57,6 +59,41 @@ ACTION_LABELS: Dict[str, str] = {
     'pricing_request': 'pricing details',
     'contact_request': 'conversation with our team',
 }
+
+# ── Human-handoff regex patterns ──────────────────────────────────────────────
+# A literal keyword list for "connect me to a human" style requests is a
+# losing game — end users of white-labelled small-business bots phrase this
+# a hundred different ways ("can u put me thru to someone", "i need to talk
+# to an actual person", "get me a rep"), and every new phrasing that slips
+# through becomes a support complaint. These patterns catch whole FAMILIES
+# of phrasing instead of one exact string each:
+#
+#   - verb(connect/put/transfer/patch/link/hook/pass) + me/us + through/over/to
+#   - talk/speak/chat + to/with + human/person/someone/agent/rep/team/staff
+#   - standalone "real/live/actual person" or "human being"
+#   - "get me connected/through"
+#
+# \w* suffixes (e.g. connec\w*) also give free typo/inflection tolerance —
+# "connec", "connects", "connecting" all match "connec\w*" — without a
+# fuzzy-matching library. .{0,N} gaps allow filler words ("can you please
+# connect me over to someone on the team") without needing every
+# combination spelled out.
+#
+# This runs as a SECOND pass in detect_action_intent, after the fast literal
+# ACTION_KEYWORDS check — same tier, same cost profile (pure regex, no model
+# call), just wider coverage. If real conversations still slip past this,
+# add the missing phrasing HERE as a new pattern, not as more literal
+# strings in ACTION_KEYWORDS['contact_request'].
+CONTACT_REQUEST_PATTERNS: List[str] = [
+    r'\bconnec\w*\b.{0,20}\b(me|us)\b',                                  # "connect me", "connec me" (typo), "connecting us"
+    r'\b(put|transfer|forward|patch|link|hook|pass)\w*\b.{0,15}\b(me|us)\b.{0,10}\b(through|thru|over|on)\b',  # "put me through", "put me thru", "transfer me over"
+    r'\b(transfer|forward)\w*\b.{0,15}\b(me|us)\b.{0,15}\b(to|with)\b.{0,20}\b(human|person|someone|somebody|agent|rep|representative|staff|team|support)\b',  # "transfer me to a rep"
+    r'\bget\w*\b.{0,10}\b(me|us)\b.{0,10}\bconnect\w*\b',                # "get me connected"
+    r'\b(talk|speak|chat)\w*\b.{0,15}\b(to|with)\b.{0,20}\b(human|person|someone|somebody|agent|rep|representative|staff|team|support)\b',  # "talk to a human", "speak with someone on the team"
+    r'\b(real|live|actual)\s+(person|human|agent)\b',                   # "real person", "live agent", "actual human"
+    r'\bhuman\s+being\b',                                                # "human being"
+    r'\b(is there|can i talk to)\b.{0,15}\b(a|an)?\s*(human|person|someone|agent)\b',  # "is there a human", "can i talk to a real person"
+]
 
 # ── Tool keywords (Phase 5 — real API dispatch) ───────────────────────────────
 # BUG FIX: 'human agent' and 'real person' were previously in BOTH this dict

@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 from constants import (
     ACTION_KEYWORDS,
     ACTION_LABELS,
+    CONTACT_REQUEST_PATTERNS,
     GLOBAL_PRICING_KW,
     PERSONALITIES,
     PROSPECT_INFO_KEYWORDS,
@@ -27,6 +28,12 @@ from constants import (
 from utils import get_logger, log_crash, generate as _gemini_generate
 
 logger = get_logger('lumvi.intent')
+
+# Compiled once at import time — CONTACT_REQUEST_PATTERNS lives in constants.py
+# so new phrasing families can be added there without touching this file.
+_CONTACT_REQUEST_RE: List[re.Pattern] = [
+    re.compile(p, re.IGNORECASE) for p in CONTACT_REQUEST_PATTERNS
+]
 
 
 # ── Tier 1 — Keyword intent ───────────────────────────────────────────────────
@@ -60,6 +67,12 @@ def detect_action_intent(
     for action_key, keywords in ACTION_KEYWORDS.items():
         if any(kw in msg for kw in keywords):
             return action_key
+    # Regex fallback for human-handoff requests — catches phrasing families
+    # ("connect me...", "put me through...", "talk to a human") that a
+    # literal keyword list can't keep up with. See CONTACT_REQUEST_PATTERNS
+    # in constants.py for the full rationale.
+    if any(pattern.search(msg) for pattern in _CONTACT_REQUEST_RE):
+        return 'contact_request'
     # Agency-defined lead triggers — treat as contact_request
     if lead_triggers:
         if any(t.lower() in msg for t in lead_triggers):
