@@ -880,12 +880,10 @@ a { text-decoration: none; color: inherit; }
 .card-last-event.stale { color: var(--warning); }
 </style>
 <!-- Jinja2 template variables — populated by Flask's render_template() -->
-<!-- In production these are rendered by Flask; in standalone demo they fall back to JS defaults above -->
 <script>
-  /* These vars are set by Flask via render_template('integrations.html', ...) */
-  /* const LUMVI_BASE_URL = "{{ base_url }}"; */
-  /* const LUMVI_CLIENTS  = {{ clients | tojson }}; */
-  /* const LUMVI_PLAN     = "{{ plan_type }}"; */
+  const LUMVI_BASE_URL = "{{ base_url }}";
+  const LUMVI_CLIENTS  = {{ clients | tojson }};
+  const LUMVI_PLAN     = "{{ plan_type }}";
 </script>
 </head>
 
@@ -905,18 +903,6 @@ a { text-decoration: none; color: inherit; }
         <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         Dashboard
       </div>
-      <div class="nav-item" onclick="navigate('clients')">
-        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Clients
-      </div>
-      <div class="nav-item" onclick="navigate('chatbots')">
-        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        Chatbots
-      </div>
-      <div class="nav-item" onclick="navigate('leads')">
-        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-        Leads
-      </div>
       <div class="nav-item" onclick="navigate('analytics')">
         <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         Analytics
@@ -931,11 +917,7 @@ a { text-decoration: none; color: inherit; }
       </div>
       <div class="nav-item" onclick="navigate('settings')">
         <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M16.24 7.76a6 6 0 0 1 0 8.49M4.93 4.93a10 10 0 0 0 0 14.14M7.76 7.76a6 6 0 0 0 0 8.49"/></svg>
-        Branding
-      </div>
-      <div class="nav-item" onclick="navigate('billing')">
-        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-        Billing
+        Account Settings
       </div>
     </nav>
 
