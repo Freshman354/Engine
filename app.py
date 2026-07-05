@@ -1817,8 +1817,8 @@ def create_platform_integration(client_id):
     platform = (data.get('platform') or '').lower().strip()
     secret   = (data.get('webhook_secret') or '').strip()
     config   = data.get('platform_config') or {}
-    if platform not in ('shopify', 'acuity'):
-        return jsonify({'success': False, 'error': 'platform must be shopify or acuity'}), 400
+    if platform not in ('shopify', 'acuity', 'calendly', 'woocommerce', 'square'):
+        return jsonify({'success': False, 'error': 'platform must be shopify, acuity, calendly, woocommerce, or square'}), 400
     if not secret:
         return jsonify({'success': False, 'error': 'webhook_secret is required'}), 400
     ok = _webhooks.upsert_integration(client_id, platform, secret, config)
@@ -1858,7 +1858,7 @@ def delete_platform_integration(client_id, platform):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
         return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
-    if platform not in ('shopify', 'acuity'):
+    if platform not in ('shopify', 'acuity', 'calendly', 'woocommerce', 'square'):
         return jsonify({'success': False, 'error': 'Unknown platform'}), 400
     ok = _webhooks.delete_integration(client_id, platform)
     if not ok:

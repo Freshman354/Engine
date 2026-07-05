@@ -37,6 +37,12 @@
   --shopify-lt:  rgba(90,122,42,0.1);
   --acuity:      #1e6fa0;
   --acuity-lt:   rgba(30,111,160,0.1);
+  --calendly:    #006bff;
+  --calendly-lt: rgba(0,107,255,0.1);
+  --woo:         #7f54b3;
+  --woo-lt:      rgba(127,84,179,0.1);
+  --square:      #1a1a1a;
+  --square-lt:   rgba(26,26,26,0.08);
 
   --radius:      12px;
   --radius-sm:   9px;
@@ -319,6 +325,9 @@ a { text-decoration: none; color: inherit; }
 }
 .platform-icon.shopify { background: var(--shopify-lt); border: 1px solid rgba(90,122,42,0.15); }
 .platform-icon.acuity  { background: var(--acuity-lt);  border: 1px solid rgba(30,111,160,0.15); }
+.platform-icon.calendly { background: var(--calendly-lt); border: 1px solid rgba(0,107,255,0.15); }
+.platform-icon.woocommerce { background: var(--woo-lt); border: 1px solid rgba(127,84,179,0.15); }
+.platform-icon.square { background: var(--square-lt); border: 1px solid rgba(26,26,26,0.15); }
 
 .platform-status {
   display: inline-flex; align-items: center; gap: 5px;
@@ -381,6 +390,9 @@ a { text-decoration: none; color: inherit; }
 }
 .meta-tag.shopify { color: var(--shopify); border-color: rgba(90,122,42,0.2); background: var(--shopify-lt); }
 .meta-tag.acuity  { color: var(--acuity);  border-color: rgba(30,111,160,0.2); background: var(--acuity-lt); }
+.meta-tag.calendly { color: var(--calendly); border-color: rgba(0,107,255,0.2); background: var(--calendly-lt); }
+.meta-tag.woocommerce { color: var(--woo); border-color: rgba(127,84,179,0.2); background: var(--woo-lt); }
+.meta-tag.square { color: var(--square); border-color: rgba(26,26,26,0.2); background: var(--square-lt); }
 
 .platform-webhook-url {
   background: var(--cream);
@@ -1080,6 +1092,66 @@ a { text-decoration: none; color: inherit; }
         </div>
       </div>
 
+      <!-- CALENDLY CARD -->
+      <div class="platform-card calendly" id="calendly-card">
+        <div class="platform-top">
+          <div class="platform-icon calendly">🗓️</div>
+          <div class="platform-status not-connected" id="calendly-status">Not connected</div>
+        </div>
+        <div class="platform-name">Calendly</div>
+        <div class="platform-desc">Booking confirmations and cancellations — synced automatically from your client's Calendly account.</div>
+        <div class="platform-meta">
+          <span class="meta-tag calendly">New bookings</span>
+          <span class="meta-tag calendly">Cancellations</span>
+        </div>
+        <div class="platform-actions" id="calendly-actions">
+          <button class="btn btn-primary btn-sm btn-full" onclick="openModal('calendly')">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Connect Calendly
+          </button>
+        </div>
+      </div>
+
+      <!-- WOOCOMMERCE CARD -->
+      <div class="platform-card woocommerce" id="woocommerce-card">
+        <div class="platform-top">
+          <div class="platform-icon woocommerce">🛒</div>
+          <div class="platform-status not-connected" id="woocommerce-status">Not connected</div>
+        </div>
+        <div class="platform-name">WooCommerce</div>
+        <div class="platform-desc">Order status and updates — answered automatically from your client's WordPress store.</div>
+        <div class="platform-meta">
+          <span class="meta-tag woocommerce">New orders</span>
+          <span class="meta-tag woocommerce">Order updates</span>
+        </div>
+        <div class="platform-actions" id="woocommerce-actions">
+          <button class="btn btn-primary btn-sm btn-full" onclick="openModal('woocommerce')">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Connect WooCommerce
+          </button>
+        </div>
+      </div>
+
+      <!-- SQUARE CARD -->
+      <div class="platform-card square" id="square-card">
+        <div class="platform-top">
+          <div class="platform-icon square">◻️</div>
+          <div class="platform-status not-connected" id="square-status">Not connected</div>
+        </div>
+        <div class="platform-name">Square Appointments</div>
+        <div class="platform-desc">Booking confirmations — synced from your client's Square account. Customer names aren't included in Square's webhook data.</div>
+        <div class="platform-meta">
+          <span class="meta-tag square">New bookings</span>
+          <span class="meta-tag square">Updates</span>
+        </div>
+        <div class="platform-actions" id="square-actions">
+          <button class="btn btn-primary btn-sm btn-full" onclick="openModal('square')">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Connect Square
+          </button>
+        </div>
+      </div>
+
     </div>
 
     <!-- Webhook activity log -->
@@ -1133,6 +1205,27 @@ a { text-decoration: none; color: inherit; }
             <span style="font-size:20px">📅</span>
             <div>
               <div class="platform-tab-name">Acuity</div>
+              <div class="platform-tab-sub">Appointments</div>
+            </div>
+          </div>
+          <div class="platform-tab calendly" id="tab-calendly" onclick="selectPlatform('calendly')">
+            <span style="font-size:20px">🗓️</span>
+            <div>
+              <div class="platform-tab-name">Calendly</div>
+              <div class="platform-tab-sub">Bookings</div>
+            </div>
+          </div>
+          <div class="platform-tab woocommerce" id="tab-woocommerce" onclick="selectPlatform('woocommerce')">
+            <span style="font-size:20px">🛒</span>
+            <div>
+              <div class="platform-tab-name">WooCommerce</div>
+              <div class="platform-tab-sub">Orders</div>
+            </div>
+          </div>
+          <div class="platform-tab square" id="tab-square" onclick="selectPlatform('square')">
+            <span style="font-size:20px">◻️</span>
+            <div>
+              <div class="platform-tab-name">Square</div>
               <div class="platform-tab-sub">Appointments</div>
             </div>
           </div>
@@ -1535,7 +1628,7 @@ function setCardState(platform, connected, clientId, webhookUrl) {
       actions.innerHTML = `
         <button class="btn btn-primary btn-sm btn-full" onclick="openModal('${platform}')">
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Connect ${platform.charAt(0).toUpperCase() + platform.slice(1)}
+          Connect ${displayName(platform)}
         </button>
       `;
     }
@@ -1561,6 +1654,23 @@ function copySuccessUrl() {
   });
 }
 
+const ALL_PLATFORMS = ['shopify', 'acuity', 'calendly', 'woocommerce', 'square'];
+
+const PLATFORM_DISPLAY_NAMES = {
+  shopify: 'Shopify', acuity: 'Acuity', calendly: 'Calendly',
+  woocommerce: 'WooCommerce', square: 'Square',
+};
+function displayName(platform) {
+  return PLATFORM_DISPLAY_NAMES[platform] || (platform.charAt(0).toUpperCase() + platform.slice(1));
+}
+
+function highlightPlatformTab(platform) {
+  ALL_PLATFORMS.forEach(p => {
+    const tab = document.getElementById(`tab-${p}`);
+    if (tab) tab.classList.toggle('active', p === platform);
+  });
+}
+
 /* ── STEPS ───────────────────────────────────────────────────── */
 const STEPS = {
   shopify: [
@@ -1578,6 +1688,30 @@ const STEPS = {
     'Check: appointment.scheduled, rescheduled, cancelled',
     'Save — copy the secret key shown',
     'Paste the secret key in the field above and click Connect',
+  ],
+  calendly: [
+    'In Calendly, go to Integrations → Webhooks (requires a paid Calendly plan)',
+    'Click "Create Webhook Subscription"',
+    'Paste the Lumvi webhook URL shown below',
+    'Subscribe to: invitee.created, invitee.canceled',
+    'Save — copy the signing key shown',
+    'Paste the signing key in the field above and click Connect',
+  ],
+  woocommerce: [
+    'In WordPress admin, go to WooCommerce → Settings → Advanced → Webhooks',
+    'Click "Add webhook"',
+    'Paste the Lumvi webhook URL shown below as the Delivery URL',
+    'Set Topic to "Order created" (add a second webhook for "Order updated" if you want status changes tracked too)',
+    'Choose any secret you like and save',
+    'Paste that same secret in the field above and click Connect',
+  ],
+  square: [
+    'In the Square Developer Dashboard, open your application',
+    'Go to Webhooks → Subscriptions, click "Add Subscription"',
+    'Paste the Lumvi webhook URL shown below as the Notification URL — it must match exactly',
+    'Subscribe to: booking.created, booking.updated',
+    'Save — copy the Signature Key shown',
+    'Paste the signature key in the field above and click Connect',
   ],
 };
 
@@ -1613,11 +1747,10 @@ function openModal(platform) {
   document.getElementById('platform-picker-group').style.display = 'block';
   document.getElementById('modal-setup-flow').style.display      = 'flex';
   selectedPlatform = platform || 'shopify';
-  document.getElementById('tab-shopify').classList.toggle('active', selectedPlatform === 'shopify');
-  document.getElementById('tab-acuity').classList.toggle('active',  selectedPlatform === 'acuity');
+  highlightPlatformTab(selectedPlatform);
   updateSecretHint(selectedPlatform);
   renderSteps(selectedPlatform, 'steps-list');
-  document.getElementById('steps-title').textContent = `Setup steps — ${selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1)}`;
+  document.getElementById('steps-title').textContent = `Setup steps — ${displayName(selectedPlatform)}`;
 
   // Show the webhook URL so the operator can paste it into the platform BEFORE entering the secret
   const previewUrl = `${BASE_URL}/webhooks/${selectedPlatform}/${currentClient}`;
@@ -1629,7 +1762,7 @@ function openModal(platform) {
 function openEditModal(platform) {
   isEditMode = true;
   selectedPlatform = platform;
-  const pName = platform.charAt(0).toUpperCase() + platform.slice(1);
+  const pName = displayName(platform);
   const clientName = CLIENTS.find(c => c.client_id === currentClient)?.company_name || '';
   document.getElementById('modal-title').textContent    = clientName ? `Update ${pName} Key — ${clientName}` : `Update ${pName} Secret`;
   document.getElementById('modal-step-1').style.display = 'flex';
@@ -1657,26 +1790,29 @@ function closeModal() {
 
 function selectPlatform(platform) {
   selectedPlatform = platform;
-  document.getElementById('tab-shopify').classList.toggle('active', platform === 'shopify');
-  document.getElementById('tab-acuity').classList.toggle('active',  platform === 'acuity');
+  highlightPlatformTab(platform);
   updateSecretHint(platform);
   document.getElementById('steps-title').textContent =
-    `Setup steps — ${platform.charAt(0).toUpperCase() + platform.slice(1)}`;
+    `Setup steps — ${displayName(platform)}`;
   renderSteps(platform, 'steps-list');
   const previewUrl = `${BASE_URL}/webhooks/${platform}/${currentClient}`;
   document.getElementById('modal-url-preview').textContent = previewUrl;
 }
 
+const SECRET_HINTS = {
+  shopify:     { label: 'Security key from Shopify',     hint: 'Shopify gives you this key automatically when you create a webhook — copy and paste it here.' },
+  acuity:      { label: 'Security key from Acuity',      hint: 'Acuity gives you this key when you add a webhook endpoint — copy and paste it here.' },
+  calendly:    { label: 'Signing key from Calendly',     hint: 'Calendly gives you this key when you create a webhook subscription — copy and paste it here.' },
+  woocommerce: { label: 'Secret you set in WooCommerce', hint: 'You choose this yourself when creating the webhook in WooCommerce — use the same value here.' },
+  square:      { label: 'Signature key from Square',     hint: 'Square gives you this key when you add a webhook subscription — copy and paste it here.' },
+};
+
 function updateSecretHint(platform) {
   const label = document.getElementById('secret-label');
   const hint  = document.getElementById('secret-hint');
-  if (platform === 'shopify') {
-    if (label) label.textContent = 'Security key from Shopify';
-    if (hint)  hint.textContent  = 'Shopify gives you this key automatically when you create a webhook — copy and paste it here.';
-  } else {
-    if (label) label.textContent = 'Security key from Acuity';
-    if (hint)  hint.textContent  = 'Acuity gives you this key when you add a webhook endpoint — copy and paste it here.';
-  }
+  const cfg   = SECRET_HINTS[platform] || SECRET_HINTS.shopify;
+  if (label) label.textContent = cfg.label;
+  if (hint)  hint.textContent  = cfg.hint;
 }
 
 /* ── SUBMIT (real API) ───────────────────────────────────────── */
@@ -1718,7 +1854,7 @@ async function submitIntegration() {
     document.getElementById('modal-footer').innerHTML =
       `<button class="btn btn-primary" onclick="finishConnect()">Done — I've pasted the URL</button>`;
 
-    showToast(`${selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1)} connected!`, 'success');
+    showToast(`${displayName(selectedPlatform)} connected!`, 'success');
     dismissOnboarding();
 
   } catch (err) {
@@ -1743,7 +1879,7 @@ function finishConnect() {
 /* ── DISCONNECT ──────────────────────────────────────────────── */
 function openDisconnectModal(platform) {
   disconnectTarget = platform;
-  const name = platform.charAt(0).toUpperCase() + platform.slice(1);
+  const name = displayName(platform);
   document.getElementById('disconnect-platform-name').textContent = name;
   document.getElementById('disconnectModal').classList.add('open');
 }
@@ -1764,7 +1900,7 @@ async function confirmDisconnect() {
 
     closeDisconnectModal();
     loadIntegrations(currentClient);
-    showToast(`${disconnectTarget.charAt(0).toUpperCase() + disconnectTarget.slice(1)} disconnected.`, 'success');
+    showToast(`${displayName(disconnectTarget)} disconnected.`, 'success');
 
   } catch (err) {
     showToast(err.message || 'Failed to disconnect. Please try again.', 'error');

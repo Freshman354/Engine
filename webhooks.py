@@ -1,16 +1,19 @@
 """
 webhooks.py — Lumvi Platform Webhook Ingestion Layer
 =====================================================
-Receives inbound webhooks from Shopify and Acuity Scheduling,
-verifies their signatures, normalises the payloads, and upserts
-data into Lumvi's orders / appointment_slots / appointments tables
-so tools.py can serve real answers to end users.
+Receives inbound webhooks from Shopify, Acuity Scheduling, Calendly,
+WooCommerce, and Square, verifies their signatures, normalises the
+payloads, and upserts data into Lumvi's orders / appointment_slots /
+appointments tables so tools.py can serve real answers to end users.
 
 Architecture
 ------------
                   Shopify store ──► POST /webhooks/shopify/<client_id>
+                  WooCommerce store ► POST /webhooks/woocommerce/<client_id>
                                               │
                   Acuity account ──► POST /webhooks/acuity/<client_id>
+                  Calendly account ► POST /webhooks/calendly/<client_id>
+                  Square account ──► POST /webhooks/square/<client_id>
                                               │
                                      webhooks.py (this file)
                                               │
@@ -31,7 +34,18 @@ Each Lumvi client has one row in client_integrations keyed by
 
 The agency sets this up once in the Lumvi dashboard. The small
 business owner then pastes the generated webhook URL into their
-Shopify or Acuity settings. No ongoing maintenance needed.
+platform's settings. No ongoing maintenance needed.
+
+Signature schemes (all verified against each platform's own docs —
+see the module-level comment above each _verify_*_signature function
+for the exact source):
+  • Shopify:     HMAC-SHA256, base64, header X-Shopify-Hmac-Sha256
+  • Acuity:      HMAC-SHA256, hex,    header X-Acuity-Signature
+  • Calendly:    HMAC-SHA256, hex,    header Calendly-Webhook-Signature
+                 (signs "{timestamp}.{body}", not body alone)
+  • WooCommerce: HMAC-SHA256, base64, header X-WC-Webhook-Signature
+  • Square:      HMAC-SHA256, base64, header x-square-hmacsha256-signature
+                 (signs "{notification_url}{body}" — URL matters)
 
 Supported platforms (v1)
   • shopify  — orders/created, orders/updated, orders/cancelled
@@ -359,6 +373,74 @@ def _verify_acuity_signature(raw_body: bytes, sig_header: str, secret: str) -> b
 
 
 # =====================================================================
+# CALENDLY SIGNATURE VERIFICATION
+# Calendly signs webhooks with HMAC-SHA256. The signature header format
+# is "t=<unix_timestamp>,v1=<hex_digest>" and the signed message is
+# "<timestamp>.<raw_body>" (NOT raw_body alone — this is the detail
+# most implementations get wrong).
+# https://developer.calendly.com/api-docs/ZG9jOjM5NjEzOTU3-webhook-signatures
+# =====================================================================
+
+def _verify_calendly_signature(raw_body: bytes, sig_header: str, secret: str) -> bool:
+    """
+    sig_header looks like: "t=1609459200,v1=5257a869e7bcb7fdf..."
+    Returns False (not raises) on any malformed header — a webhook with
+    a broken signature header is indistinguishable from a forged one.
+    """
+    if not sig_header or not secret:
+        return False
+    try:
+        parts = dict(p.split('=', 1) for p in sig_header.split(',') if '=' in p)
+        timestamp, signature = parts['t'], parts['v1']
+    except (KeyError, ValueError):
+        return False
+    signed_payload = f'{timestamp}.'.encode('utf-8') + raw_body
+    expected = hmac.new(secret.encode('utf-8'), signed_payload, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature.strip())
+
+
+# =====================================================================
+# WOOCOMMERCE SIGNATURE VERIFICATION
+# WooCommerce signs webhooks with HMAC-SHA256 over the raw request body,
+# base64-encoded, sent in X-WC-Webhook-Signature. Topic (e.g.
+# "order.created") is sent separately in X-WC-Webhook-Topic.
+# https://woocommerce.github.io/code-reference/classes/WC-Webhook.html
+# =====================================================================
+
+def _verify_woocommerce_signature(raw_body: bytes, sig_header: str, secret: str) -> bool:
+    """Returns True if base64(HMAC-SHA256(raw_body, secret)) matches sig_header."""
+    import base64
+    if not sig_header or not secret:
+        return False
+    digest = hmac.new(secret.encode('utf-8'), raw_body, hashlib.sha256).digest()
+    expected = base64.b64encode(digest).decode('utf-8')
+    return hmac.compare_digest(expected, sig_header.strip())
+
+
+# =====================================================================
+# SQUARE SIGNATURE VERIFICATION
+# Square signs webhooks with HMAC-SHA256, base64-encoded, sent in
+# x-square-hmacsha256-signature — but unlike every other platform here,
+# the signed message is the notification URL CONCATENATED WITH the raw
+# body, not the body alone. The notification_url must exactly match
+# what's registered in the Square dashboard or every signature check
+# fails even with the correct secret.
+# https://developer.squareup.com/docs/webhooks/step3validate
+# =====================================================================
+
+def _verify_square_signature(raw_body: bytes, sig_header: str, secret: str,
+                              notification_url: str) -> bool:
+    """Returns True if base64(HMAC-SHA256(notification_url + raw_body, secret)) matches sig_header."""
+    import base64
+    if not sig_header or not secret or not notification_url:
+        return False
+    message = notification_url.encode('utf-8') + raw_body
+    digest = hmac.new(secret.encode('utf-8'), message, hashlib.sha256).digest()
+    expected = base64.b64encode(digest).decode('utf-8')
+    return hmac.compare_digest(expected, sig_header.strip())
+
+
+# =====================================================================
 # SHOPIFY NORMALISERS
 # Each function accepts the raw Shopify webhook payload dict and
 # upserts into Lumvi's orders table using the pattern from tools.py.
@@ -498,6 +580,77 @@ def _normalise_shopify_order(payload: dict, client_id: str) -> dict:
     }
 
 
+# =====================================================================
+# WOOCOMMERCE NORMALISER
+# WooCommerce's REST Order resource shape (same fields whether the
+# webhook fires for order.created or order.updated).
+# https://woocommerce.github.io/woocommerce-rest-api-docs/#order-properties
+# =====================================================================
+
+_WOOCOMMERCE_STATUS_MAP = {
+    'pending':     'pending',
+    'processing':  'confirmed',
+    'on-hold':     'pending',
+    'completed':   'delivered',
+    'cancelled':   'cancelled',
+    'refunded':    'cancelled',
+    'failed':      'cancelled',
+    'trash':       'cancelled',
+}
+
+
+def _normalise_woocommerce_order(payload: dict, client_id: str) -> dict:
+    """
+    Map a WooCommerce order payload → Lumvi order dict.
+
+    WooCommerce order fields used:
+      id                → order_id
+      status            → status
+      billing            → customer_name, customer_email
+      line_items        → items
+      total             → total_amount
+      currency          → currency
+      date_created      → created_at
+      customer_note     → notes
+    """
+    order_id = str(payload.get('id') or payload.get('number') or '').strip()
+
+    billing    = payload.get('billing') or {}
+    email      = (billing.get('email') or '').lower().strip()
+    first_name = billing.get('first_name') or ''
+    last_name  = billing.get('last_name') or ''
+    name       = f'{first_name} {last_name}'.strip() or email
+
+    status = _WOOCOMMERCE_STATUS_MAP.get((payload.get('status') or 'pending').lower(), 'pending')
+
+    items = []
+    for li in (payload.get('line_items') or []):
+        items.append({
+            'name':     li.get('name', ''),
+            'quantity': li.get('quantity', 1),
+            'price':    li.get('price') or li.get('total', '0.00'),
+            'sku':      li.get('sku', ''),
+        })
+
+    raw_created = payload.get('date_created') or payload.get('date_created_gmt')
+    try:
+        created_at = datetime.fromisoformat(raw_created) if raw_created else datetime.utcnow()
+    except Exception:
+        created_at = datetime.utcnow()
+
+    return {
+        'order_id':       order_id,
+        'customer_email': email,
+        'customer_name':  name,
+        'status':         status,
+        'items':          items,
+        'total_amount':   payload.get('total'),
+        'currency':       payload.get('currency', 'USD'),
+        'notes':          payload.get('customer_note') or '',
+        'created_at':     created_at,
+    }
+
+
 def handle_shopify_webhook(client_id: str, raw_body: bytes,
                            hmac_header: str, topic: str) -> tuple[dict, int]:
     """
@@ -567,6 +720,76 @@ def handle_shopify_webhook(client_id: str, raw_body: bytes,
     except Exception as e:
         logger.error(f'[Shopify] processing error client={client_id} topic={topic}: {e}')
         _log_webhook(client_id, 'shopify', topic, 'error', phash, str(e))
+        return {'error': 'Processing failed'}, 500
+
+
+def handle_woocommerce_webhook(client_id: str, raw_body: bytes,
+                               sig_header: str, topic: str) -> tuple[dict, int]:
+    """
+    Verify and process one inbound WooCommerce webhook.
+
+    Args:
+        client_id:   From the URL path parameter
+        raw_body:    request.get_data()
+        sig_header:  request.headers.get('X-WC-Webhook-Signature')
+        topic:       request.headers.get('X-WC-Webhook-Topic')
+                     e.g. 'order.created', 'order.updated'
+
+    Returns:
+        (response_dict, http_status_code)
+    """
+    phash = _payload_hash(raw_body)
+
+    integration = get_integration(client_id, 'woocommerce')
+    if not integration:
+        logger.warning(f'[WooCommerce] no integration found for client={client_id}')
+        _log_webhook(client_id, 'woocommerce', topic, 'error', phash,
+                     'Integration not configured')
+        return {'error': 'Integration not configured'}, 404
+
+    if not _verify_woocommerce_signature(raw_body, sig_header, integration['webhook_secret']):
+        logger.warning(f'[WooCommerce] signature verification failed client={client_id}')
+        _log_webhook(client_id, 'woocommerce', topic, 'sig_fail', phash,
+                     'HMAC signature mismatch')
+        return {'error': 'Invalid signature'}, 401
+
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError as e:
+        _log_webhook(client_id, 'woocommerce', topic, 'error', phash, f'JSON parse error: {e}')
+        return {'error': 'Invalid JSON'}, 400
+
+    # WooCommerce also sends a "webhook_id" ping with no real order data
+    # when a webhook is first created — accept it without processing.
+    if not payload.get('id') and not payload.get('line_items'):
+        _log_webhook(client_id, 'woocommerce', topic, 'ok', phash, 'ping/test payload')
+        return {'status': 'ok', 'note': 'ping received'}, 200
+
+    topic = (topic or '').lower().strip()
+    supported_topics = {'order.created', 'order.updated', 'order.deleted', 'order.restored'}
+    if topic not in supported_topics:
+        _log_webhook(client_id, 'woocommerce', topic, 'ok', phash, 'topic ignored')
+        return {'status': 'ignored', 'topic': topic}, 200
+
+    try:
+        order_data = _normalise_woocommerce_order(payload, client_id)
+        if not order_data.get('order_id'):
+            raise ValueError('Could not extract order_id from payload')
+
+        success = _upsert_order(client_id, order_data)
+        if not success:
+            raise RuntimeError('DB upsert failed')
+
+        logger.info(
+            f'[WooCommerce] {topic} → order={order_data["order_id"]} '
+            f'status={order_data["status"]} client={client_id}'
+        )
+        _log_webhook(client_id, 'woocommerce', topic, 'ok', phash)
+        return {'status': 'ok', 'order_id': order_data['order_id']}, 200
+
+    except Exception as e:
+        logger.error(f'[WooCommerce] processing error client={client_id} topic={topic}: {e}')
+        _log_webhook(client_id, 'woocommerce', topic, 'error', phash, str(e))
         return {'error': 'Processing failed'}, 500
 
 
@@ -772,6 +995,140 @@ def _normalise_acuity_appointment(payload: dict, client_id: str,
     return slot_data, appt_data
 
 
+# =====================================================================
+# CALENDLY NORMALISER
+# Calendly's v2 webhook payload nests everything under "payload".
+# invitee.created / invitee.canceled are the two events we handle.
+# https://developer.calendly.com/api-docs/b92768854bc06-invitee-payload
+# =====================================================================
+
+def _normalise_calendly_appointment(payload: dict, client_id: str,
+                                    event_type: str) -> tuple[dict, dict]:
+    """
+    Map a Calendly webhook payload → (slot_data, appointment_data).
+
+    Calendly fields used (all under payload['payload']):
+      uri                        → booking_id (last URI path segment)
+      calendar_event.start_time  → slot_datetime
+      calendar_event.end_time    → used to compute duration_minutes
+      event_type.name            → service_type
+      name                       → customer_name
+      email                      → customer_email
+      created_at                 → created_at
+    """
+    inner = payload.get('payload') or {}
+
+    # Calendly resource URIs look like https://api.calendly.com/scheduled_events/{uuid}/invitees/{uuid}
+    invitee_uri = inner.get('uri') or ''
+    invitee_id  = invitee_uri.rstrip('/').split('/')[-1] or _payload_hash(json.dumps(inner).encode())[:16]
+    booking_id  = f'calendly_{invitee_id}'
+    slot_id     = f'calendly_slot_{invitee_id}'
+
+    cal_event = inner.get('calendar_event') or {}
+    raw_start = cal_event.get('start_time') or ''
+    raw_end   = cal_event.get('end_time') or ''
+    try:
+        slot_datetime = datetime.fromisoformat(raw_start.replace('Z', '+00:00')) if raw_start else datetime.utcnow()
+    except Exception:
+        slot_datetime = datetime.utcnow()
+
+    duration_minutes = 30
+    try:
+        if raw_start and raw_end:
+            start_dt = datetime.fromisoformat(raw_start.replace('Z', '+00:00'))
+            end_dt   = datetime.fromisoformat(raw_end.replace('Z', '+00:00'))
+            duration_minutes = max(int((end_dt - start_dt).total_seconds() / 60), 1)
+    except Exception:
+        pass
+
+    raw_created = inner.get('created_at') or ''
+    try:
+        created_at = datetime.fromisoformat(raw_created.replace('Z', '+00:00')) if raw_created else datetime.utcnow()
+    except Exception:
+        created_at = datetime.utcnow()
+
+    name  = (inner.get('name') or '').strip()
+    email = (inner.get('email') or '').lower().strip()
+    service_type = ((inner.get('event_type') or {}).get('name') or 'general').strip().lower()
+
+    status = 'cancelled' if event_type == 'invitee.canceled' else 'confirmed'
+
+    slot_data = {
+        'slot_id':          slot_id,
+        'slot_datetime':    slot_datetime,
+        'service_type':     service_type,
+        'duration_minutes': duration_minutes,
+    }
+    appt_data = {
+        'booking_id':     booking_id,
+        'slot_id':        slot_id,
+        'customer_name':  name,
+        'customer_email': email,
+        'customer_phone': '',   # Calendly's webhook payload doesn't include phone
+        'notes':          '',
+        'status':         status,
+        'created_at':     created_at,
+    }
+    return slot_data, appt_data
+
+
+# =====================================================================
+# SQUARE NORMALISER
+# Square's booking.created/booking.updated events nest the booking under
+# data.object.booking. Square only provides customer_id in the webhook
+# (not name/email/phone) — resolving that to a real name would require a
+# separate Customers API call, which this webhook-only integration
+# deliberately doesn't make. customer_name is left blank rather than
+# guessed; tools.py callers should treat that as "known, but nameless".
+# https://developer.squareup.com/reference/square/bookings-api/webhooks/booking.created
+# =====================================================================
+
+_SQUARE_CANCELLED_STATUSES = {'CANCELLED_BY_SELLER', 'CANCELLED_BY_CUSTOMER', 'DECLINED'}
+
+
+def _normalise_square_booking(payload: dict, client_id: str) -> tuple[dict, dict]:
+    booking = (((payload.get('data') or {}).get('object') or {}).get('booking')) or {}
+
+    booking_id = str(booking.get('id') or '')
+    slot_id    = f'square_slot_{booking_id}'
+
+    raw_start = booking.get('start_at') or ''
+    try:
+        slot_datetime = datetime.fromisoformat(raw_start.replace('Z', '+00:00')) if raw_start else datetime.utcnow()
+    except Exception:
+        slot_datetime = datetime.utcnow()
+
+    segments = booking.get('appointment_segments') or []
+    duration_minutes = int(segments[0].get('duration_minutes', 30)) if segments else 30
+    service_type = 'general'   # service_variation_id is a Catalog API reference, not a readable name
+
+    raw_created = booking.get('created_at') or ''
+    try:
+        created_at = datetime.fromisoformat(raw_created.replace('Z', '+00:00')) if raw_created else datetime.utcnow()
+    except Exception:
+        created_at = datetime.utcnow()
+
+    status = 'cancelled' if (booking.get('status') or '').upper() in _SQUARE_CANCELLED_STATUSES else 'confirmed'
+
+    slot_data = {
+        'slot_id':          slot_id,
+        'slot_datetime':    slot_datetime,
+        'service_type':     service_type,
+        'duration_minutes': duration_minutes,
+    }
+    appt_data = {
+        'booking_id':     f'square_{booking_id}',
+        'slot_id':        slot_id,
+        'customer_name':  '',   # see module note above — Square doesn't send this in the webhook
+        'customer_email': '',
+        'customer_phone': '',
+        'notes':          (booking.get('customer_note') or '').strip(),
+        'status':         status,
+        'created_at':     created_at,
+    }
+    return slot_data, appt_data
+
+
 def handle_acuity_webhook(client_id: str, raw_body: bytes,
                           sig_header: str, event_type: str) -> tuple[dict, int]:
     """
@@ -870,6 +1227,137 @@ def handle_acuity_webhook(client_id: str, raw_body: bytes,
         return {'error': 'Processing failed'}, 500
 
 
+def handle_calendly_webhook(client_id: str, raw_body: bytes,
+                            sig_header: str) -> tuple[dict, int]:
+    """
+    Verify and process one inbound Calendly webhook.
+
+    Args:
+        client_id:   From the URL path parameter
+        raw_body:    request.get_data()
+        sig_header:  request.headers.get('Calendly-Webhook-Signature')
+
+    Returns:
+        (response_dict, http_status_code)
+    """
+    phash = _payload_hash(raw_body)
+
+    integration = get_integration(client_id, 'calendly')
+    if not integration:
+        logger.warning(f'[Calendly] no integration found for client={client_id}')
+        _log_webhook(client_id, 'calendly', None, 'error', phash,
+                     'Integration not configured')
+        return {'error': 'Integration not configured'}, 404
+
+    if not _verify_calendly_signature(raw_body, sig_header, integration['webhook_secret']):
+        logger.warning(f'[Calendly] signature verification failed client={client_id}')
+        _log_webhook(client_id, 'calendly', None, 'sig_fail', phash,
+                     'HMAC signature mismatch')
+        return {'error': 'Invalid signature'}, 401
+
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError as e:
+        _log_webhook(client_id, 'calendly', None, 'error', phash, f'JSON parse error: {e}')
+        return {'error': 'Invalid JSON'}, 400
+
+    event_type = (payload.get('event') or '').strip()
+    supported_events = {'invitee.created', 'invitee.canceled'}
+    if event_type not in supported_events:
+        # routing_form_submission.created and anything else — acknowledge, don't process
+        _log_webhook(client_id, 'calendly', event_type, 'ok', phash, 'event ignored')
+        return {'status': 'ignored', 'event': event_type}, 200
+
+    try:
+        slot_data, appt_data = _normalise_calendly_appointment(payload, client_id, event_type)
+        if not appt_data.get('booking_id'):
+            raise ValueError('Could not extract booking_id from payload')
+
+        _upsert_appointment_slot(client_id, slot_data)
+        success = _upsert_appointment(client_id, appt_data)
+        if not success:
+            raise RuntimeError('DB upsert failed')
+
+        logger.info(
+            f'[Calendly] {event_type} → booking={appt_data["booking_id"]} '
+            f'status={appt_data["status"]} client={client_id}'
+        )
+        _log_webhook(client_id, 'calendly', event_type, 'ok', phash)
+        return {'status': 'ok', 'booking_id': appt_data['booking_id']}, 200
+
+    except Exception as e:
+        logger.error(f'[Calendly] processing error client={client_id} event={event_type}: {e}')
+        _log_webhook(client_id, 'calendly', event_type, 'error', phash, str(e))
+        return {'error': 'Processing failed'}, 500
+
+
+def handle_square_webhook(client_id: str, raw_body: bytes,
+                          sig_header: str, notification_url: str) -> tuple[dict, int]:
+    """
+    Verify and process one inbound Square webhook.
+
+    Args:
+        client_id:          From the URL path parameter
+        raw_body:            request.get_data()
+        sig_header:           request.headers.get('x-square-hmacsha256-signature')
+        notification_url:    the FULL webhook URL exactly as registered in the
+                              Square dashboard — required because Square signs
+                              (url + body), not body alone. See
+                              _verify_square_signature's module note.
+
+    Returns:
+        (response_dict, http_status_code)
+    """
+    phash = _payload_hash(raw_body)
+
+    integration = get_integration(client_id, 'square')
+    if not integration:
+        logger.warning(f'[Square] no integration found for client={client_id}')
+        _log_webhook(client_id, 'square', None, 'error', phash,
+                     'Integration not configured')
+        return {'error': 'Integration not configured'}, 404
+
+    if not _verify_square_signature(raw_body, sig_header, integration['webhook_secret'], notification_url):
+        logger.warning(f'[Square] signature verification failed client={client_id}')
+        _log_webhook(client_id, 'square', None, 'sig_fail', phash,
+                     'HMAC signature mismatch')
+        return {'error': 'Invalid signature'}, 401
+
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError as e:
+        _log_webhook(client_id, 'square', None, 'error', phash, f'JSON parse error: {e}')
+        return {'error': 'Invalid JSON'}, 400
+
+    event_type = (payload.get('type') or '').strip()
+    supported_events = {'booking.created', 'booking.updated'}
+    if event_type not in supported_events:
+        _log_webhook(client_id, 'square', event_type, 'ok', phash, 'event ignored')
+        return {'status': 'ignored', 'event': event_type}, 200
+
+    try:
+        slot_data, appt_data = _normalise_square_booking(payload, client_id)
+        if not appt_data.get('booking_id') or appt_data['booking_id'] == 'square_':
+            raise ValueError('Could not extract booking id from payload')
+
+        _upsert_appointment_slot(client_id, slot_data)
+        success = _upsert_appointment(client_id, appt_data)
+        if not success:
+            raise RuntimeError('DB upsert failed')
+
+        logger.info(
+            f'[Square] {event_type} → booking={appt_data["booking_id"]} '
+            f'status={appt_data["status"]} client={client_id}'
+        )
+        _log_webhook(client_id, 'square', event_type, 'ok', phash)
+        return {'status': 'ok', 'booking_id': appt_data['booking_id']}, 200
+
+    except Exception as e:
+        logger.error(f'[Square] processing error client={client_id} event={event_type}: {e}')
+        _log_webhook(client_id, 'square', event_type, 'error', phash, str(e))
+        return {'error': 'Processing failed'}, 500
+
+
 # =====================================================================
 # FLASK ROUTE REGISTRATION
 # Call register_webhook_routes(app) once in app.py.
@@ -924,76 +1412,59 @@ def register_webhook_routes(app):
         result, status = handle_acuity_webhook(client_id, raw_body, sig_header, event_type)
         return jsonify(result), status
 
+    @app.route('/webhooks/calendly/<client_id>', methods=['POST'])
+    def calendly_webhook(client_id):
+        raw_body   = request.get_data()
+        sig_header = request.headers.get('Calendly-Webhook-Signature', '')
+        result, status = handle_calendly_webhook(client_id, raw_body, sig_header)
+        return jsonify(result), status
+
+    @app.route('/webhooks/woocommerce/<client_id>', methods=['POST'])
+    def woocommerce_webhook(client_id):
+        raw_body   = request.get_data()
+        sig_header = request.headers.get('X-WC-Webhook-Signature', '')
+        topic      = request.headers.get('X-WC-Webhook-Topic', '')
+        result, status = handle_woocommerce_webhook(client_id, raw_body, sig_header, topic)
+        return jsonify(result), status
+
+    @app.route('/webhooks/square/<client_id>', methods=['POST'])
+    def square_webhook(client_id):
+        raw_body   = request.get_data()
+        sig_header = request.headers.get('x-square-hmacsha256-signature', '')
+        # Square signs (notification_url + body) using the exact URL
+        # registered in the Square dashboard. Built from APP_BASE_URL
+        # (same env var used elsewhere for webhook_url) rather than
+        # request.url — this app has no ProxyFix/X-Forwarded-Proto
+        # trust configured, so behind Render's reverse proxy request.url
+        # could report http:// instead of https://, which would silently
+        # fail every signature check even with the correct secret.
+        base_url = os.environ.get('APP_BASE_URL', 'https://app.lumvi.ai').rstrip('/')
+        notification_url = f'{base_url}/webhooks/square/{client_id}'
+        result, status = handle_square_webhook(client_id, raw_body, sig_header, notification_url)
+        return jsonify(result), status
+
     @app.route('/webhooks/health', methods=['GET'])
     def webhook_health():
         return jsonify({'status': 'ok', 'service': 'lumvi-webhooks'}), 200
 
-    # ── Integration management (agency dashboard API) ─────────────────
+    # NOTE: dashboard-management routes (create/list/delete integration) are
+    # NOT registered here. They previously were, at these exact same URLs
+    # (/api/integrations/<client_id> POST/GET, /api/integrations/<client_id>/
+    # <platform> DELETE) — with no @login_required or ownership check at
+    # all. app.py registers its own, properly-secured versions of these
+    # same routes (create_platform_integration, list_platform_integrations,
+    # delete_platform_integration — see app.py) using the exact same
+    # upsert_integration/list_integrations/delete_integration functions
+    # from this file. Because Flask/Werkzeug dispatches to the FIRST
+    # registered matching route for identical URL+method pairs, and this
+    # function used to run before app.py's route definitions, the
+    # unauthenticated versions here were silently shadowing app.py's
+    # secured ones — anyone who knew or guessed a client_id could create,
+    # view, or delete another agency's integration with zero login.
+    # Removed rather than fixed-in-place so there is exactly one
+    # implementation of each route, not two that can drift apart again.
 
-    @app.route('/api/integrations/<client_id>', methods=['POST'])
-    def create_integration(client_id):
-        """
-        Called by the Lumvi dashboard when an agency operator connects
-        a new platform for one of their clients.
-
-        Body:
-        {
-            "platform":        "shopify" | "acuity",
-            "webhook_secret":  "<from platform settings>",
-            "platform_config": { "shop_domain": "mystore.myshopify.com" }
-        }
-
-        Response:
-        {
-            "status":       "ok",
-            "webhook_url":  "https://app.lumvi.ai/webhooks/shopify/<client_id>"
-        }
-        The agency pastes webhook_url into their client's platform settings.
-        """
-        data = request.get_json(force=True) or {}
-
-        platform = (data.get('platform') or '').lower().strip()
-        if platform not in ('shopify', 'acuity'):
-            return jsonify({'error': 'platform must be shopify or acuity'}), 400
-
-        secret = (data.get('webhook_secret') or '').strip()
-        if not secret:
-            return jsonify({'error': 'webhook_secret is required'}), 400
-
-        config = data.get('platform_config') or {}
-
-        ok = upsert_integration(client_id, platform, secret, config)
-        if not ok:
-            return jsonify({'error': 'Failed to save integration'}), 500
-
-        base_url    = os.environ.get('APP_BASE_URL', 'https://app.lumvi.ai')
-        webhook_url = f'{base_url}/webhooks/{platform}/{client_id}'
-
-        return jsonify({
-            'status':      'ok',
-            'platform':    platform,
-            'webhook_url': webhook_url,
-            'instructions': _onboarding_instructions(platform, webhook_url),
-        }), 200
-
-    @app.route('/api/integrations/<client_id>', methods=['GET'])
-    def get_integrations(client_id):
-        """List all integrations for a client (webhook secrets redacted)."""
-        integrations = list_integrations(client_id)
-        base_url     = os.environ.get('APP_BASE_URL', 'https://app.lumvi.ai')
-        for i in integrations:
-            i['webhook_url'] = f'{base_url}/webhooks/{i["platform"]}/{client_id}'
-        return jsonify({'integrations': integrations}), 200
-
-    @app.route('/api/integrations/<client_id>/<platform>', methods=['DELETE'])
-    def remove_integration(client_id, platform):
-        """Deactivate an integration. Webhook events are rejected after this."""
-        ok = delete_integration(client_id, platform)
-        if not ok:
-            return jsonify({'error': 'Failed to deactivate integration'}), 500
-        return jsonify({'status': 'ok', 'platform': platform}), 200
-
-    logger.info('[Webhooks] Routes registered: /webhooks/shopify, /webhooks/acuity, /api/integrations')
+    logger.info('[Webhooks] Routes registered: /webhooks/shopify, /webhooks/acuity, /webhooks/health')
 
 
 # =====================================================================
@@ -1039,6 +1510,62 @@ def _onboarding_instructions(platform: str, webhook_url: str) -> dict:
             'note': (
                 'Lumvi stores appointment time, service type, and customer '
                 'contact details. No payment or personal health info is stored.'
+            ),
+        }
+
+    if platform == 'calendly':
+        return {
+            'title': 'Connect Calendly',
+            'steps': [
+                'In Calendly, go to Integrations → Webhooks (requires a paid Calendly plan)',
+                'Click "Create Webhook Subscription"',
+                f'Paste this URL: {webhook_url}',
+                'Subscribe to: invitee.created, invitee.canceled',
+                'Copy the signing key shown after saving',
+                'Paste the signing key back into the Lumvi dashboard',
+            ],
+            'note': (
+                'Lumvi stores the scheduled time, event type, and the '
+                "invitee's name and email. Calendly's webhook payload does "
+                'not include phone number.'
+            ),
+        }
+
+    if platform == 'woocommerce':
+        return {
+            'title': 'Connect WooCommerce',
+            'steps': [
+                'In WordPress admin, go to WooCommerce → Settings → Advanced → Webhooks',
+                'Click "Add webhook"',
+                f'Set Delivery URL to: {webhook_url}',
+                'Set Topic to: Order created (add a second webhook for Order updated if you want status changes tracked)',
+                'Set Secret to any password you choose',
+                'Paste that same secret into the Lumvi dashboard',
+            ],
+            'note': (
+                'Lumvi only stores order ID, status, customer name/email, '
+                'line items, and total. No payment card details are ever stored.'
+            ),
+        }
+
+    if platform == 'square':
+        return {
+            'title': 'Connect Square',
+            'steps': [
+                'In the Square Developer Dashboard, open your application',
+                'Go to Webhooks → Subscriptions, click "Add Subscription"',
+                f'Set Notification URL to exactly: {webhook_url}',
+                'Subscribe to: booking.created, booking.updated',
+                'Copy the Signature Key shown after saving',
+                'Paste the signature key back into the Lumvi dashboard',
+            ],
+            'note': (
+                'Lumvi stores the appointment time and any note left by the '
+                'customer. Square only sends a customer reference ID in the '
+                "webhook, not their name or email — the customer's identity "
+                "isn't available unless you look them up in Square directly. "
+                'The Notification URL must match exactly (including https://) '
+                'or Square signature checks will fail.'
             ),
         }
 
