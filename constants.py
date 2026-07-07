@@ -131,6 +131,31 @@ TOOL_KEYWORDS: Dict[str, List[str]] = {
     ],
 }
 
+# ── Write-tool confirmation gate ──────────────────────────────────────────────
+# Tools that mutate state (cancel a real order, book a real slot) must never
+# fire on a single keyword match alone. These are proposed first — a
+# confirmation prompt is shown and the actual dispatch args are stashed in
+# session_mem['pending_tool_action'] — and only actually dispatched once the
+# user replies with something in CONFIRMATION_YES_WORDS on a later turn.
+# Tools not listed here (lookup_order, check_availability, escalate_to_human)
+# are read-only/reversible enough to dispatch immediately.
+WRITE_TOOLS: frozenset = frozenset({'cancel_order', 'book_appointment'})
+
+# How long a proposed write action stays valid awaiting confirmation, so a
+# "yes" typed 40 minutes later to an unrelated message can't accidentally
+# trigger a stale cancellation/booking.
+PENDING_TOOL_ACTION_TTL_SECONDS: int = 600  # 10 minutes
+
+CONFIRMATION_YES_WORDS: frozenset = frozenset({
+    'yes', 'yep', 'yeah', 'yup', 'confirm', 'confirmed', 'correct',
+    'do it', 'go ahead', 'please do', "that's right", 'sounds good',
+    'ok', 'okay', 'sure', 'proceed', 'yes please', 'yes confirm',
+})
+CONFIRMATION_NO_WORDS: frozenset = frozenset({
+    'no', 'nope', 'nah', "don't", 'do not', 'stop', 'nevermind',
+    'never mind', 'wait', 'actually no', 'cancel that', 'not yet',
+})
+
 # ── Purchase stage signals ────────────────────────────────────────────────────
 STAGE_SIGNALS: Dict[str, List[str]] = {
     'browsing':   ['just looking', 'exploring', 'checking out', 'curious',

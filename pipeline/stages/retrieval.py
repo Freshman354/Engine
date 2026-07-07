@@ -137,7 +137,6 @@ def rewrite_query(
     vertical: str,
     conversation_history: List[Dict],
     model: Any,
-    model_name: str = '',
 ) -> str:
     """
     Use Gemini to rewrite a user query into a clean retrieval query.
@@ -168,7 +167,7 @@ def rewrite_query(
         "Respond ONLY with the rewritten query text. No explanation, no quotes, no JSON."
     )
     try:
-        resp  = _gemini_generate(model, prompt, model_name)
+        resp  = _gemini_generate(model, prompt)
         query = (resp.text or '').strip().strip('"').strip("'").strip()
         query = query or clean_message
         logger.debug(f"[Retrieval/Rewrite] '{clean_message[:50]}' → '{query[:50]}'")
@@ -231,6 +230,66 @@ def embedding_search(
     return candidates, scores
 
 
+# ── Pure BM25 fallback search (no embeddings required) ────────────────────────
+
+def bm25_only_search(
+    query: str,
+    faqs: List[Dict],
+    poor_kb_ids: Optional[set] = None,
+    top_k: int = MAX_CANDIDATES,
+) -> Tuple[List[Dict], List[float]]:
+    """
+    Pure keyword (BM25) search over the full FAQ corpus — no embeddings
+    required.
+
+    FIX: previously, if embedding_search() came back empty because the
+    embedding provider was unavailable (rather than because no FAQ was a
+    good match), the pipeline fell straight to the generic fallback
+    response for EVERY query — a full outage of the "smart answer" path
+    triggered by a purely external, often transient dependency. This gives
+    the pipeline a way to keep answering from keyword overlap alone while
+    embeddings are down.
+
+    Returns (candidates, bm25_scores) in the same shape as
+    embedding_search(), but the scores are raw BM25 scores, NOT cosine
+    similarities — they are on a different scale and must not be compared
+    directly against vector_threshold. See _BM25_FALLBACK_MIN_SCORE in
+    ai_helper.py, which gates qualification separately for this path.
+    """
+    if not faqs:
+        return [], []
+
+    poor_kb_ids = poor_kb_ids or set()
+    corpus_size, avg_doc_len, doc_freq, tokenized_docs = build_bm25_corpus(faqs)
+    query_tokens = tokenize(query)
+
+    scored: List[Tuple[float, Dict]] = []
+    for i, faq in enumerate(faqs):
+        if i < len(tokenized_docs):
+            doc_tokens = tokenized_docs[i]
+        else:
+            text = f"{faq.get('question','')} {faq.get('answer','')} {faq.get('tags','')}"
+            doc_tokens = tokenize(text)
+        bm25 = bm25_score(query_tokens, doc_tokens, corpus_size, avg_doc_len, doc_freq)
+        kb_id = str(faq.get('kb_id', faq.get('id', '')))
+        if kb_id in poor_kb_ids:
+            bm25 *= 0.5
+        if bm25 > 0:
+            scored.append((bm25, faq))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = scored[:top_k]
+    candidates = [f for _, f in top]
+    scores     = [s for s, _ in top]
+
+    if candidates:
+        logger.warning(
+            f"[Retrieval/BM25Fallback] query='{query[:40]}' "
+            f"candidates={len(candidates)} top_score={scores[0]:.3f}"
+        )
+    return candidates, scores
+
+
 # ── Hybrid rerank (RRF) ───────────────────────────────────────────────────────
 
 def hybrid_rerank(
@@ -238,6 +297,7 @@ def hybrid_rerank(
     candidates: List[Dict],
     vector_scores: List[float],
     faqs: List[Dict],
+    poor_kb_ids: Optional[set] = None,
     top_n: int = 10,
 ) -> Tuple[List[Dict], List[float]]:
     """
@@ -245,6 +305,12 @@ def hybrid_rerank(
 
     vector_scores: cosine scores from embedding_search (same order as candidates).
     faqs: full FAQ list (needed to build BM25 corpus statistics).
+    poor_kb_ids: FIX — embedding_search() already halves the cosine score for
+    KB entries flagged with poor-answer feedback, but that penalty never
+    reached this function's BM25 side. A poor-flagged FAQ with strong
+    keyword overlap could still rank #1 after RRF fusion, since BM25 had
+    no idea it was ever penalized. Applying the same penalty here keeps
+    the feedback loop intact through reranking, not just at the first stage.
     top_n: how many results to keep after reranking.
 
     Returns (reranked_candidates, rrf_scores).
@@ -253,6 +319,8 @@ def hybrid_rerank(
         return [], []
     if len(candidates) == 1:
         return candidates, vector_scores[:1]
+
+    poor_kb_ids = poor_kb_ids or set()
 
     # Build BM25 corpus from the full FAQ set (not just top candidates)
     corpus_size, avg_doc_len, doc_freq, tokenized_docs = build_bm25_corpus(faqs)
@@ -274,6 +342,8 @@ def hybrid_rerank(
             text = f"{cand.get('question','')} {cand.get('answer','')} {cand.get('tags','')}"
             doc_tokens = tokenize(text)
         bm25 = bm25_score(query_tokens, doc_tokens, corpus_size, avg_doc_len, doc_freq)
+        if cand_id in poor_kb_ids:
+            bm25 *= 0.5
         bm25_scored.append((bm25, cand))
 
     bm25_scored.sort(key=lambda x: x[0], reverse=True)
@@ -304,7 +374,6 @@ def cross_encoder_rerank(
     candidates: List[Dict],
     model: Any,
     top_n: int = 5,
-    model_name: str = '',
 ) -> List[Dict]:
     """
     Use Gemini as a cross-encoder to reorder the top-N candidates by
@@ -337,19 +406,17 @@ def cross_encoder_rerank(
         f"relevance order, e.g. [2,1,3]. No explanation."
     )
     try:
-        resp  = _gemini_generate(model, prompt, model_name)
+        resp  = _gemini_generate(model, prompt)
         text  = (resp.text or '').strip()
         match = re.search(r'\[[\d,\s]+\]', text)
         if not match:
             return candidates
         order = __import__('json').loads(match.group(0))
         reordered = []
-        seen_idx: set = set()
         for rank in order:
             idx = int(rank) - 1
-            if 0 <= idx < len(pool) and idx not in seen_idx:
+            if 0 <= idx < len(pool):
                 reordered.append(pool[idx])
-                seen_idx.add(idx)
         # Append any remaining candidates not in the reordered list
         reordered_ids = {id(c) for c in reordered}
         for c in candidates[top_n:]:

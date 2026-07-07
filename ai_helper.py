@@ -41,19 +41,14 @@ from constants import (
     GLOBAL_PRICING_KW,
     IDK_METHODS_ALL,
     INFERENCE_EXPANSION_ENABLED,
+    PENDING_TOOL_ACTION_TTL_SECONDS,
     PERSONALITIES,
     STAGE_SIGNALS,
     STAGE_ORDER,
-    LEAD_NUDGE_MAX_PER_SESSION,
-    LEAD_NUDGE_COOLDOWN_TURNS,
 )
 from pipeline.context import PipelineRequest, PipelineResult
 from pipeline.stages.escalation  import check_escalation
-from pipeline.stages.agent_actions import (
-    client_has_active_actions,
-    handle_pending_confirmation,
-    try_dispatch_external_action,
-)
+from pipeline.stages.math_helpers import topic_overlap
 from pipeline.stages.generation  import (
     build_context,
     dynamic_fallback,
@@ -68,9 +63,16 @@ from pipeline.stages.intent import (
     detect_action_intent,
     detect_simple_intent,
     dispatch_tool,
+    extract_tool_args,
     handle_detected_action,
+    build_confirmation_prompt,
+    build_missing_args_prompt,
+    detect_confirmation,
+    is_write_tool,
+    missing_required_args,
 )
 from pipeline.stages.retrieval   import (
+    bm25_only_search,
     cross_encoder_rerank,
     decompose_intents,
     embedding_search,
@@ -103,6 +105,37 @@ _BG_EXECUTOR: concurrent.futures.ThreadPoolExecutor = (
     concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix='lumvi_bg')
 )
 
+
+def _log_bg_exception(future: 'concurrent.futures.Future') -> None:
+    """
+    FIX: every _bg_submit() call in this file was fire-and-forget —
+    if the submitted function raised, the exception sat in the Future
+    object and was never retrieved (nothing ever called .result() on these
+    futures), so it was never logged anywhere. A failed session persist, a
+    failed lead notification, a failed cache write — all silent. This
+    callback surfaces any background-task exception to the logs.
+    """
+    exc = future.exception()
+    if exc is not None:
+        logger.error(f"[Background] task failed: {exc!r}", exc_info=exc)
+
+
+def _bg_submit(fn, *args, **kwargs) -> 'concurrent.futures.Future':
+    """
+    Drop-in replacement for _BG_EXECUTOR.submit() that also logs failures.
+
+    FIX (critical): this called itself — `_bg_submit(fn, *args, **kwargs)`
+    inside the body of `_bg_submit` — instead of `_BG_EXECUTOR.submit(...)`.
+    Every one of the ~25 call sites in this file (session persistence,
+    lead notification, cache writes, summarisation) would hit
+    RecursionError the instant it ran. This is not a degraded-path bug —
+    it's a guaranteed crash on essentially every conversation turn that
+    reaches any background task.
+    """
+    future = _BG_EXECUTOR.submit(fn, *args, **kwargs)
+    future.add_done_callback(_log_bg_exception)
+    return future
+
 # ── Response-level Redis cache ────────────────────────────────────────────────
 _REDIS_RESP_PREFIX  = 'lumvi:resp:v1:'
 _REDIS_RESP_TTL_SEC = 3600  # 1 hour
@@ -127,16 +160,35 @@ _ai_helper_instance: Optional['AIHelper'] = None
 _ai_helper_lock     = threading.Lock()
 
 # ── Lead extraction — regex (no Gemini call) ──────────────────────────────────
-_EMAIL_RE   = re.compile(r'\b[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}\b')
+_EMAIL_RE   = re.compile(
+    # FIX: was r'\b[\w.+-]+@[\w-]+\.[a-zA-Z]{2,}\b' — the domain part only
+    # allowed ONE label before the TLD, so it silently truncated any
+    # compound-TLD address: john@business.co.uk was captured as
+    # "john@business.co", sarah@company.com.au as "sarah@company.com" —
+    # both undeliverable. (?:[\w-]+\.)+ now allows one or more dotted
+    # labels before the final all-letter TLD.
+    r'\b[\w.+-]+@(?:[\w-]+\.)+[a-zA-Z]{2,}\b'
+)
 _PHONE_RE   = re.compile(r'\b(?:\+?\d[\d\s\-().]{7,14}\d)\b')
 _NAME_RE    = re.compile(
-    r"(?:i'?m|my name is|this is|call me)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
+    # FIX: was anchored to [A-Z][a-z]+, so lowercase chat input like
+    # "hi i'm sarah" silently failed to capture a name. Now case-insensitive;
+    # callers should .title() the captured group if they need display casing.
+    r"(?:i'?m|my name is|this is|call me)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)",
     re.IGNORECASE,
 )
 _URGENT_KW  = frozenset({'urgent', 'asap', 'immediately', 'today', 'right now', 'right away'})
 
 # ── IDK response cache TTL ────────────────────────────────────────────────────
 _REDIS_IDK_TTL_SEC = 900   # 15 minutes
+
+# Minimum BM25 score to "qualify" for generation when running in the
+# embeddings-unavailable fallback path (see bm25_only_search in
+# retrieval.py). BM25 scores are NOT on the same 0-1 scale as cosine
+# similarity, so this is intentionally a separate, low bar — the goal of
+# this path is "don't go fully dark", not "match RAG's normal precision".
+# Tune once real score distributions from this corpus are visible.
+_BM25_FALLBACK_MIN_SCORE = 0.5
 
 # ── Lead nudge — vertical-specific capture prompts ────────────────────────────
 _VERTICAL_NUDGES: Dict[str, str] = {
@@ -200,12 +252,8 @@ def get_ai_helper(
     if _ai_helper_instance is None:
         with _ai_helper_lock:
             if _ai_helper_instance is None:
-                # Both providers get built if their keys are present,
-                # regardless of which one is "active" right now — that's
-                # what makes the admin dashboard's live switch actually
-                # work without a restart. See AIHelper.__init__.
                 _ai_helper_instance = AIHelper(
-                    api_key    = api_key or os.environ.get('GEMINI_API_KEY', ''),
+                    api_key    = api_key    or os.environ.get('GEMINI_API_KEY', ''),
                     model_name = model_name or os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash'),
                 )
     return _ai_helper_instance
@@ -216,99 +264,32 @@ def get_ai_helper(
 # ═════════════════════════════════════════════════════════════════════════════
 
 class AIHelper:
-    """
-    Live AI-provider switch lives here. self.model, self.model_name,
-    self._model_name, and self.provider are all @property — they check
-    utils.get_ai_provider() FRESH on every access, not once at
-    construction. This is deliberate: AIHelper is a process-lifetime
-    singleton (see get_ai_helper() above), so if the choice of provider
-    were baked into plain instance attributes set in __init__, toggling
-    the switch in the admin dashboard would silently do nothing until
-    the next deploy/restart. Building both clients up front (whichever
-    are configured) and deciding which to use per-access is what makes
-    the switch actually live.
-    """
 
     def __init__(
         self,
         api_key:    str = '',
         model_name: str = 'gemini-2.0-flash',
     ) -> None:
-        self.api_key           = api_key
-        self._gemini_model_name = model_name
-        self._genai_client      = None
-        self._gemini_model_obj  = None   # client.models, or None if unavailable
-        self._gemini_init_error = None
+        self.api_key    = api_key
+        self.model_name = model_name
+        self.enabled    = bool(api_key)
+        self.model: Optional[Any] = None
 
-        openrouter_key = os.environ.get('OPENROUTER_API_KEY', '').strip()
-        self._openrouter_configured = bool(openrouter_key)
-
-        if api_key:
+        if self.enabled:
             try:
                 self._genai_client = genai.Client(api_key=api_key)
-                self._gemini_model_obj = self._genai_client.models
+                self.model = self._genai_client.models
+                self._model_name = model_name
                 logger.info(f"[AIHelper] google.genai ready model={model_name}")
             except Exception as e:
                 log_crash(logger, 'AIHelper/init', e, model=model_name)
-                self._gemini_init_error = e
-
-        if self._openrouter_configured:
-            logger.info(f"[AIHelper] OpenRouter configured, model={os.environ.get('OPENROUTER_MODEL', 'meta-llama/llama-4-maverick')}")
-
-        # self.enabled = at least one provider is usable right now,
-        # regardless of which one happens to be "active" — an admin
-        # toggling the switch shouldn't need Gemini AND OpenRouter both
-        # configured just for self.enabled to stay true.
-        self.enabled = bool(self._gemini_model_obj) or self._openrouter_configured
-
-        if not self.enabled:
+                self.enabled = False
+                self.model = None
+        else:
             logger.warning(
-                "[AIHelper] No usable AI provider configured (checked GEMINI_API_KEY "
-                "and OPENROUTER_API_KEY) — running in static fallback mode. Retrieval "
-                "(embedding search) still works; LLM generation disabled."
+                "[AIHelper] GEMINI_API_KEY not set — running in static fallback mode. "
+                "Retrieval (embedding search) still works; LLM generation disabled."
             )
-
-    # ── Live provider switch ─────────────────────────────────────────────────
-
-    @property
-    def provider(self) -> str:
-        """The CURRENTLY ACTIVE provider — re-checked on every access, not cached on self."""
-        from utils import get_ai_provider
-        chosen = get_ai_provider()
-        # If the admin switched to a provider that isn't actually configured
-        # here, fall back to whichever one IS, rather than silently going dark.
-        if chosen == 'gemini' and not self._gemini_model_obj and self._openrouter_configured:
-            return 'openrouter'
-        if chosen == 'openrouter' and not self._openrouter_configured and self._gemini_model_obj:
-            return 'gemini'
-        return chosen
-
-    @property
-    def model(self) -> Optional[Any]:
-        """
-        The active provider's client object for this request. In
-        openrouter mode this is a truthy sentinel (see class docstring on
-        pipeline/stages/agent_actions.py and generation.py's `if model is
-        None: return` gates) — utils.generate() ignores it entirely in
-        that mode, calling OpenRouter directly instead.
-        """
-        if not self.enabled:
-            return None
-        if self.provider == 'openrouter':
-            return AIHelper   # truthy, harmless — never dereferenced as a real client
-        return self._gemini_model_obj
-
-    @property
-    def model_name(self) -> str:
-        if self.provider == 'openrouter':
-            from utils import OPENROUTER_MODEL
-            return OPENROUTER_MODEL
-        return self._gemini_model_name
-
-    @property
-    def _model_name(self) -> str:
-        # Alias — some call sites use the underscored name.
-        return self.model_name
 
     # ── Private helpers ───────────────────────────────────────────────────────
 
@@ -391,7 +372,7 @@ class AIHelper:
         m = _PHONE_RE.search(message)
         result['phone'] = m.group(0).strip() if m else session_mem.get('phone')
         m = _NAME_RE.search(message)
-        result['name'] = m.group(1).strip() if m else session_mem.get('name')
+        result['name'] = m.group(1).strip().title() if m else session_mem.get('name')
         msg_lower = message.lower()
         result['urgency'] = 'high' if any(kw in msg_lower for kw in _URGENT_KW) else 'medium'
         result['purchase_stage'] = session_mem.get('purchase_stage')
@@ -481,8 +462,18 @@ class AIHelper:
             return
 
         email = payload.get('email')
-        if not email:
-            logger.debug(f"[LeadPersist] no email in payload, skipping client={client_id}")
+        phone = payload.get('phone')
+        # FIX: was `if not email: return` — silently dropped every lead
+        # who gave a phone number but no email ("just call me at ..."),
+        # with no saved record and no notification to the business at all.
+        # A lead is persistable if we have EITHER way to reach them; the
+        # SMS notification path below already exists specifically for
+        # phone-first businesses, so this was leaving that capability
+        # unreachable in practice.
+        if not email and not phone:
+            logger.debug(
+                f"[LeadPersist] no email or phone in payload, skipping client={client_id}"
+            )
             return
 
         try:
@@ -491,8 +482,8 @@ class AIHelper:
 
             lead_data = {
                 'name':    payload.get('name') or '',
-                'email':   email,
-                'phone':   payload.get('phone') or '',
+                'email':   email or '',
+                'phone':   phone or '',
                 'message': payload.get('last_question') or '',
                 'conversation_snippet': '',
                 'intent_summary': '',
@@ -506,7 +497,7 @@ class AIHelper:
 
             logger.info(
                 f"[LeadPersist] saved client={client_id} "
-                f"email={email} stage={payload.get('purchase_stage')}"
+                f"contact={email or phone} stage={payload.get('purchase_stage')}"
             )
 
             # ── Fetch delivery settings ───────────────────────────────
@@ -570,6 +561,20 @@ class AIHelper:
             phone   = lead_data.get('phone') or '—'
             message = lead_data.get('message') or '—'
 
+            # FIX: phone-only leads (no email) previously produced a broken
+            # empty mailto: link and an empty Reply-To header. Build the
+            # email row and the "how to follow up" line so a phone-only
+            # lead reads cleanly instead of pointing at a dead link.
+            has_email    = bool(email)
+            email_display = (
+                f'<a href="mailto:{email}" style="color:#B8924A;">{email}</a>'
+                if has_email else '—'
+            )
+            follow_up_line = (
+                f"Reply directly to {email} to follow up." if has_email
+                else f"No email on file — follow up by phone at {phone}."
+            )
+
             subject = f"New lead from your chatbot — {name}"
 
             html = f"""
@@ -583,7 +588,7 @@ class AIHelper:
     <tr><td style="padding:8px 0;color:#78716C;font-size:13px;width:90px;">Name</td>
         <td style="padding:8px 0;font-weight:600;">{name}</td></tr>
     <tr><td style="padding:8px 0;color:#78716C;font-size:13px;">Email</td>
-        <td style="padding:8px 0;"><a href="mailto:{email}" style="color:#B8924A;">{email}</a></td></tr>
+        <td style="padding:8px 0;">{email_display}</td></tr>
     <tr><td style="padding:8px 0;color:#78716C;font-size:13px;">Phone</td>
         <td style="padding:8px 0;">{phone}</td></tr>
     <tr><td style="padding:8px 0;color:#78716C;font-size:13px;vertical-align:top;">Message</td>
@@ -591,8 +596,7 @@ class AIHelper:
   </table>
   <hr style="border:none;border-top:1px solid #E7E2DA;margin:20px 0;">
   <p style="font-size:13px;color:#78716C;">
-    Reply directly to <a href="mailto:{email}" style="color:#B8924A;">{email}</a>
-    to follow up.
+    {follow_up_line}
   </p>
 </body>
 </html>"""
@@ -600,10 +604,10 @@ class AIHelper:
             text = (
                 f"New lead from your chatbot\n\n"
                 f"Name:    {name}\n"
-                f"Email:   {email}\n"
+                f"Email:   {email or '—'}\n"
                 f"Phone:   {phone}\n"
                 f"Message: {message[:300]}\n\n"
-                f"Reply to {email} to follow up."
+                f"{follow_up_line}"
             )
 
             # ── SMTP delivery (Brevo via Flask-Mail env vars) ────────────
@@ -634,7 +638,11 @@ class AIHelper:
             msg['Subject']  = subject
             msg['From']     = f'{from_name} <{_smtp_from_addr}>'
             msg['To']       = to_email
-            msg['Reply-To'] = email          # reply goes to the lead, not Lumvi
+            # FIX: was unconditionally `msg['Reply-To'] = email` — for a
+            # phone-only lead (email='') this set an empty/invalid header.
+            # Only set Reply-To when there's an actual email to reply to.
+            if has_email:
+                msg['Reply-To'] = email
             msg.attach(_MIMEText(text, 'plain'))
             msg.attach(_MIMEText(html,  'html'))
 
@@ -802,17 +810,23 @@ class AIHelper:
             session_id=session_id,
         )
 
-        # ── Response cache check ──────────────────────────────────────
+        # ── Response cache key ─────────────────────────────────────────
+        # FIX: the cache READ used to happen right here, before session
+        # state was even loaded. That meant a state-dependent reply like
+        # "yes" or "no" — which means something completely different
+        # depending on whether a handoff/email-capture was just offered —
+        # could be served a stale cached answer from a totally unrelated
+        # conversation, silently bypassing the state machine below. The key
+        # is still computed here (cheap), but the actual read is deferred
+        # until after the email-capture / handoff / escalation checks have
+        # had a chance to run — see "Response cache read" further down.
         ctx.resp_cache_key = self._cache_key(
             user_message.lower().strip(),
             client_id or '',
             vertical,
             str(kb_version or ''),
         )
-        cached = self._read_resp_cache(ctx.resp_cache_key)
-        if cached:
-            logger.debug(f"[Pipeline] cache hit trace={ctx.trace_id}")
-            return cached
+        _top_cached: Optional[Dict] = None
 
         try:
             # ── Preprocess ────────────────────────────────────────────
@@ -834,24 +848,6 @@ class AIHelper:
             if _new_stage:
                 ctx.session_mem['purchase_stage'] = _new_stage
 
-            # ── Pending external integration action (yes/no confirmation) ──
-            # Checked BEFORE email_capture_pending / handoff_offered — a stray
-            # "yes" while a Buy-Seat-style action confirmation is pending must
-            # resolve the action, not get misrouted into the handoff flow.
-            _pending_result = handle_pending_confirmation(
-                client_id, session_id, ctx.session_mem, ctx.clean_message
-            )
-            if _pending_result is not None:
-                if _pending_result.pop('clear_pending', False):
-                    ctx.session_mem['pending_integration_action'] = None
-                _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
-                return PipelineResult(
-                    response=_pending_result['response'],
-                    method=_pending_result['method'],
-                    confidence=1.0,
-                    action=_pending_result.get('action'),
-                ).to_dict()
-
             # ── Email capture (waiting for email after handoff acceptance) ──
             # Checked BEFORE handoff_offered — a user replying "sure, sarah@email.com"
             # contains both an affirmative and an email. Without this guard the
@@ -859,6 +855,7 @@ class AIHelper:
             if ctx.session_mem.get('email_capture_pending'):
                 msg_lower   = ctx.clean_message.lower()
                 email_match = _EMAIL_RE.search(ctx.clean_message)
+                phone_match = _PHONE_RE.search(ctx.clean_message)
 
                 # User changed their mind
                 if any(k in msg_lower for k in [
@@ -866,7 +863,8 @@ class AIHelper:
                 ]):
                     ctx.session_mem['email_capture_pending'] = False
                     ctx.session_mem['handoff_offered']       = False
-                    _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
+                    ctx.session_mem['email_capture_retries']  = 0
+                    _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
                     return PipelineResult.declined_handoff().to_dict()
 
                 if email_match:
@@ -874,12 +872,13 @@ class AIHelper:
                     ctx.session_mem['email']                 = email_match.group(0)
                     ctx.session_mem['email_capture_pending'] = False
                     ctx.session_mem['handoff_offered']       = False
+                    ctx.session_mem['email_capture_retries']  = 0
                     handoff_payload = self._build_handoff_payload(
                         conversation_history, ctx.session_mem,
                         ctx.clean_message, session_id, 'accepted'
                     )
-                    _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
-                    _BG_EXECUTOR.submit(
+                    _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                    _bg_submit(
                         self._persist_lead_and_notify,
                         client_id, handoff_payload, vertical
                     )
@@ -893,9 +892,66 @@ class AIHelper:
                         handoff=handoff_payload,
                     ).to_dict()
 
-                # Couldn't parse email — re-ask once, stay in capture state
+                # FIX: previously any reply here that wasn't an email or a
+                # "cancel" word fell straight to the re-ask below — so a
+                # customer who replied with a phone number instead (a
+                # completely reasonable thing to offer) just got asked for
+                # an email again. Accept a phone number as a valid
+                # alternative way to complete the handoff.
+                if phone_match:
+                    ctx.session_mem['phone']                 = phone_match.group(0).strip()
+                    ctx.session_mem['email_capture_pending'] = False
+                    ctx.session_mem['handoff_offered']       = False
+                    ctx.session_mem['email_capture_retries']  = 0
+                    handoff_payload = self._build_handoff_payload(
+                        conversation_history, ctx.session_mem,
+                        ctx.clean_message, session_id, 'accepted'
+                    )
+                    _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                    _bg_submit(
+                        self._persist_lead_and_notify,
+                        client_id, handoff_payload, vertical
+                    )
+                    return PipelineResult(
+                        response=(
+                            f"Got it — someone from the team will give you a call "
+                            f"at {ctx.session_mem['phone']} shortly."
+                        ),
+                        method='handoff_accepted',
+                        confidence=1.0,
+                        handoff=handoff_payload,
+                    ).to_dict()
+
+                # FIX: added a retry cap. Previously there was no counter at
+                # all, so a customer who kept replying with something that
+                # wasn't an email or a phone number could be re-asked for an
+                # email indefinitely, forever, with no way out except the
+                # exact words checked above. After 2 failed attempts, back
+                # off gracefully instead of looping.
+                _retries = ctx.session_mem.get('email_capture_retries', 0) + 1
+                if _retries >= 2:
+                    ctx.session_mem['email_capture_pending'] = False
+                    ctx.session_mem['handoff_offered']       = False
+                    ctx.session_mem['email_capture_retries']  = 0
+                    _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                    return PipelineResult(
+                        response=(
+                            "No worries — I'll pass along that you'd like to connect, "
+                            "and the team will look for the best way to follow up. "
+                            "Anything else I can help with?"
+                        ),
+                        method='email_capture_gaveup',
+                        confidence=1.0,
+                    ).to_dict()
+
+                ctx.session_mem['email_capture_retries'] = _retries
+                _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                # Couldn't parse email or phone — re-ask once more, stay in capture state
                 return PipelineResult(
-                    response="I didn't quite catch that — could you type out your email address?",
+                    response=(
+                        "I didn't quite catch that — could you type out your email "
+                        "address, or a phone number if that's easier?"
+                    ),
                     method='email_capture_retry',
                     confidence=1.0,
                 ).to_dict()
@@ -911,24 +967,33 @@ class AIHelper:
                     if email_in_msg:
                         ctx.session_mem['email'] = email_in_msg.group(0)
 
+                    # FIX: was email-only (`_have_email = bool(session_mem
+                    # .get('email'))`), so a lead who'd already given a
+                    # phone number in an earlier turn still got pivoted into
+                    # an email-capture prompt here, asking for contact info
+                    # we already had — the same email-only assumption fixed
+                    # at the other two persistence gates in this file, just
+                    # missed at this third, structurally separate one.
                     _have_email = bool(ctx.session_mem.get('email'))
+                    _have_phone = bool(ctx.session_mem.get('phone'))
 
-                    if _have_email:
-                        # Email already in session — confirm and close
+                    if _have_email or _have_phone:
+                        # Contact info already in session — confirm and close
                         handoff_payload = self._build_handoff_payload(
                             conversation_history, ctx.session_mem,
                             ctx.clean_message, session_id, 'accepted'
                         )
                         ctx.session_mem['handoff_offered'] = False
-                        _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
-                        _BG_EXECUTOR.submit(
+                        _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                        _bg_submit(
                             self._persist_lead_and_notify,
                             client_id, handoff_payload, vertical
                         )
+                        contact = ctx.session_mem.get('email') or ctx.session_mem.get('phone')
                         return PipelineResult(
                             response=(
                                 f"Perfect — someone from the team will be in touch "
-                                f"at {ctx.session_mem['email']} shortly."
+                                f"at {contact} shortly."
                             ),
                             method='handoff_accepted',
                             confidence=1.0,
@@ -937,7 +1002,7 @@ class AIHelper:
 
                     # No email yet — pivot to capture before confirming
                     ctx.session_mem['email_capture_pending'] = True
-                    _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
+                    _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
                     return PipelineResult(
                         response=self._build_email_request(vertical),
                         method='email_capture_prompt',
@@ -948,7 +1013,7 @@ class AIHelper:
                     'no', 'nope', 'not now', 'no thanks', "don't", "i'm fine", 'im fine'
                 ]):
                     ctx.session_mem['handoff_offered'] = False
-                    _BG_EXECUTOR.submit(
+                    _bg_submit(
                         persist_session, client_id, session_id, ctx.session_mem
                     )
                     return PipelineResult.declined_handoff().to_dict()
@@ -963,9 +1028,12 @@ class AIHelper:
                     ctx.clean_message, session_id, 'escalation'
                 )
                 ctx.session_mem['handoff_offered'] = True
-                _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
-                if ctx.session_mem.get('email'):
-                    _BG_EXECUTOR.submit(
+                _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                # FIX: was `if ctx.session_mem.get('email')` only — phone-only
+                # leads never triggered persistence even though
+                # _persist_lead_and_notify now supports them.
+                if ctx.session_mem.get('email') or ctx.session_mem.get('phone'):
+                    _bg_submit(
                         self._persist_lead_and_notify,
                         client_id, handoff_payload, vertical
                     )
@@ -976,6 +1044,32 @@ class AIHelper:
                     handoff=handoff_payload,
                 ).to_dict()
 
+            # ── Response cache read (deferred — see comment above) ─────
+            # Now that email-capture / handoff / escalation have all had
+            # their chance to intercept this turn, it's safe to consult the
+            # cache. Still not consumed here though — see "Query resolution"
+            # further down, where it's used to skip retrieval + generation
+            # while still letting intent detection and lead capture run
+            # fresh for THIS turn (fixes the FAQ-cache PII leak below too).
+            #
+            # FIX: the cache key is exact-message-text based and doesn't
+            # capture conversation history at all. A context-dependent
+            # follow-up ("what about the second option") means something
+            # different in every conversation it appears in — if two
+            # different users' conversations both happen to produce that
+            # exact literal text, one could get served the other's cached
+            # answer even though the underlying question was completely
+            # different. is_followup() already exists as exactly the
+            # signal needed to detect this, so skip the cache entirely
+            # (read and, at the write site below, write) for messages it
+            # flags — safer to regenerate than to risk serving an answer
+            # to the wrong "it"/"that"/"the second one".
+            _is_followup_msg = is_followup(ctx.clean_message)
+            _top_cached = (
+                None if _is_followup_msg
+                else self._read_resp_cache(ctx.resp_cache_key)
+            )
+
             # ── Load poor KB IDs ──────────────────────────────────────
             try:
                 poor = get_poor_answers(client_id or '', limit=100)
@@ -985,17 +1079,69 @@ class AIHelper:
             except Exception:
                 ctx.poor_kb_ids = set()
 
+            # ── Pending write-tool confirmation ────────────────────────
+            # Checked BEFORE intent detection: a bare "yes"/"no" replying
+            # to a previously-proposed cancel_order/book_appointment won't
+            # match any keyword tier and would otherwise fall through to a
+            # wasted Tier-3 Gemini call. See WRITE_TOOLS/detect_confirmation
+            # in intent.py and the proposal side of this gate further down.
+            _pending = ctx.session_mem.get('pending_tool_action')
+            if _pending and (time.time() - _pending.get('created_at', 0)) < PENDING_TOOL_ACTION_TTL_SECONDS:
+                _confirmed = detect_confirmation(ctx.clean_message)
+                if _confirmed is True:
+                    ctx.session_mem['pending_tool_action'] = None
+                    tool_result = dispatch_tool(
+                        _pending['tool'], ctx.clean_message, client_id, ctx.session_mem,
+                        override_args=_pending['args'],
+                    )
+                    _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                    return PipelineResult(
+                        response=tool_result.get('response', make_fallback(vertical)),
+                        method='tool_confirmed',
+                        confidence=0.9 if tool_result.get('success') else 0.0,
+                        action={'tool': _pending['tool'], **tool_result},
+                    ).to_dict()
+                elif _confirmed is False:
+                    ctx.session_mem['pending_tool_action'] = None
+                    _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                    return PipelineResult(
+                        response=(
+                            "No problem — I haven't made any changes. "
+                            "Is there anything else I can help with?"
+                        ),
+                        method='tool_confirmation_declined',
+                        confidence=1.0,
+                    ).to_dict()
+                # else: not a yes/no reply — leave pending_tool_action in
+                # place (still within TTL) and fall through to normal
+                # handling; this turn might be an unrelated new message.
+            elif _pending:
+                # Expired — clear it so a stray "yes" long afterward can't
+                # trigger a stale action.
+                ctx.session_mem['pending_tool_action'] = None
+
             # ── Intent detection ──────────────────────────────────────
-            # Tier 3 (Gemini/OpenRouter classification) only fires when Tier 1/2
-            # keyword checks above found nothing — self.model is the live
-            # provider's client (or the OpenRouter sentinel; utils.generate()
-            # routes to the correct provider internally either way).
+            # FIX: was hardcoded model=None, skip_gemini=True — meaning
+            # Tier 3 (the Gemini fallback for messages no keyword list
+            # catches) never ran in production, full stop. Any lead/sales
+            # signal that didn't match a hardcoded keyword was silently
+            # lost with zero AI fallback. Now passes the real model and
+            # only skips when Gemini genuinely isn't configured. Tier 3
+            # only calls Gemini when the free keyword tiers left is_lead
+            # or is_sales unresolved (see intent.py), so this stays rare.
             intent = detect_intent(
                 ctx.clean_message, vertical, lead_triggers,
                 model=self.model,
-                skip_gemini=not self.enabled,
-                model_name=self._model_name,
+                skip_gemini=not (self.enabled and self.model is not None),
             )
+            # Tier 3 spent a real Gemini call this turn — charge it against
+            # the same shared budget as query-rewrite/cross-encoder rerank
+            # so a single turn can't rack up 3 Gemini calls (classification
+            # + rewrite/cross-encoder + RAG generation). See call1_used
+            # usage further down and the matching guard added to the
+            # query-rewrite trigger below.
+            if intent.get('gemini_used'):
+                ctx.call1_used = True
 
             # ── Stage → is_lead coercion ──────────────────────────────
             # STAGE_SIGNALS already scanned this message above. Promote
@@ -1020,7 +1166,7 @@ class AIHelper:
                     ctx.clean_message, ctx.session_mem, vertical, lead_triggers
                 )
                 ctx.session_mem['handoff_offered'] = True
-                _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
+                _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
                 return PipelineResult(
                     response=action_data['response'],
                     method='action',
@@ -1032,34 +1178,46 @@ class AIHelper:
 
             # ── Tool dispatch exit ────────────────────────────────────
             if intent['intent'] == 'tool' and intent.get('tool'):
+                tool_name = intent['tool']
+
+                if is_write_tool(tool_name):
+                    # FIX: cancel_order/book_appointment mutate real state
+                    # (an actual order, an actual calendar slot) and must
+                    # never fire on a single keyword match. Propose first —
+                    # extract what we can, ask for anything still missing,
+                    # and stash the args for confirmation on a later turn
+                    # (see the pending-confirmation check above). Only
+                    # dispatches once the user replies "yes".
+                    _args = extract_tool_args(tool_name, ctx.clean_message, ctx.session_mem)
+                    _missing = missing_required_args(tool_name, _args)
+                    if _missing:
+                        response_text = build_missing_args_prompt(tool_name, _missing)
+                        method = 'tool_missing_info'
+                    else:
+                        ctx.session_mem['pending_tool_action'] = {
+                            'tool':       tool_name,
+                            'args':       _args,
+                            'created_at': time.time(),
+                        }
+                        response_text = build_confirmation_prompt(tool_name, _args)
+                        method = 'tool_confirmation_requested'
+                    _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                    return PipelineResult(
+                        response=response_text,
+                        method=method,
+                        confidence=0.9,
+                    ).to_dict()
+
+                # Read-only / reversible tools — safe to dispatch immediately.
                 tool_result = dispatch_tool(
-                    intent['tool'], ctx.clean_message, client_id, ctx.session_mem
+                    tool_name, ctx.clean_message, client_id, ctx.session_mem
                 )
                 return PipelineResult(
                     response=tool_result.get('response', make_fallback(vertical)),
                     method='tool',
                     confidence=0.9 if tool_result.get('success') else 0.0,
-                    action={'tool': intent['tool'], **tool_result},
+                    action={'tool': tool_name, **tool_result},
                 ).to_dict()
-
-            # ── External integration dispatch (agency-configured client systems) ──
-            # Cheap gate first — only clients with at least one configured
-            # client_ext_integration_actions row pay for the Gemini tools call.
-            if self.enabled and client_id and client_has_active_actions(client_id):
-                _ext_result = try_dispatch_external_action(
-                    self.model, self._model_name, client_id, session_id,
-                    ctx.clean_message, conversation_history,
-                )
-                if _ext_result is not None:
-                    if _ext_result.get('method') == 'external_action_confirm':
-                        ctx.session_mem['pending_integration_action'] = _ext_result['pending']
-                    _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
-                    return PipelineResult(
-                        response=_ext_result['response'],
-                        method=_ext_result['method'],
-                        confidence=0.9,
-                        action=_ext_result.get('action'),
-                    ).to_dict()
 
             # ── Confidence thresholds (sales queries get lower floor) ──
             ctx.is_sales_query = intent.get('is_sales', False)
@@ -1097,135 +1255,357 @@ class AIHelper:
                     confidence=1.0,
                 ).to_dict()
 
-            # ── Query resolution ──────────────────────────────────────
-            ctx.search_query = resolve_query(ctx.clean_message, conversation_history)
-
-            # ── Multi-intent decomposition ────────────────────────────
-            sub_queries = decompose_intents(ctx.search_query)
-
-            # ── Helper: run embedding search across sub-queries ───────
-            def _do_embedding_search(query: str, sq_list: List[str]) -> tuple:
-                if len(sq_list) > 1:
-                    merged_c: List[Dict] = []
-                    merged_s: List[float] = []
-                    seen: set = set()
-                    for sq in sq_list[:3]:
-                        cands, scores = embedding_search(sq, faqs, client_id, ctx.poor_kb_ids)
-                        for c, s in zip(cands, scores):
-                            cid = str(c.get('kb_id', c.get('id', id(c))))
-                            if cid not in seen:
-                                merged_c.append(c)
-                                merged_s.append(s)
-                                seen.add(cid)
-                    return merged_c, merged_s
-                return embedding_search(query, faqs, client_id, ctx.poor_kb_ids)
-
-            # ── Preflight embedding search ────────────────────────────
-            ctx.candidates, ctx.vector_scores = _do_embedding_search(
-                ctx.search_query, sub_queries
-            )
-            ctx.top_cosine = ctx.vector_scores[0] if ctx.vector_scores else 0.0
-
-            # ── Query rewriting (Call 1) ──────────────────────────────
-            if (self.enabled and self.model
-                    and len(ctx.search_query.split()) >= 4
-                    and ctx.top_cosine < ctx.confidence_high):
-                rewritten = rewrite_query(
-                    ctx.search_query, vertical, conversation_history,
-                    self.model, self._model_name,
-                )
-                if rewritten != ctx.search_query:
-                    ctx.search_query = rewritten
-                    ctx.call1_used   = True
-                    sub_queries      = decompose_intents(rewritten)
-                    ctx.candidates, ctx.vector_scores = _do_embedding_search(
-                        ctx.search_query, sub_queries
-                    )
-                    ctx.top_cosine = ctx.vector_scores[0] if ctx.vector_scores else 0.0
-
-            # ── Hybrid rerank (RRF) ───────────────────────────────────
-            ctx.hybrid_ranked, ctx.hybrid_scores = hybrid_rerank(
-                ctx.search_query, ctx.candidates, ctx.vector_scores, faqs
-            )
-            ctx.top_hybrid = ctx.hybrid_scores[0] if ctx.hybrid_scores else 0.0
-
-            # ── Cross-encoder rerank ──────────────────────────────────
-            if (self.enabled and self.model
-                    and not ctx.call1_used
-                    and ctx.top_cosine < 0.35
-                    and len(ctx.hybrid_ranked) >= 2):
-                ctx.hybrid_ranked = cross_encoder_rerank(
-                    ctx.search_query, ctx.hybrid_ranked, self.model,
-                    model_name=self._model_name,
-                )
-                ctx.call1_used = True
-
-            # ── Context building + summarisation ──────────────────────
-            _BG_EXECUTOR.submit(
-                maybe_summarise, client_id, conversation_history, self.model,
-                trigger_length=12, model_name=self._model_name,
-            )
-            ctx.context_str = build_context(conversation_history, client_id, ctx.clean_message)
-
-            # ── RAG qualification gate ─────────────────────────────────
-            ctx.rag_qualified = ctx.top_cosine >= ctx.vector_threshold
-
-            # ── Topic mismatch gate ───────────────────────────────────
-            if ctx.rag_qualified and ctx.hybrid_ranked:
-                top_faq = ctx.hybrid_ranked[0]
-                overlap = topic_overlap = __import__(
-                    'pipeline.stages.math_helpers', fromlist=['topic_overlap']
-                ).topic_overlap
-                if overlap(ctx.clean_message, top_faq.get('question', '')) < 0.05:
-                    ctx.rag_qualified = False
-                    logger.debug(
-                        f"[Pipeline] topic mismatch gate fired trace={ctx.trace_id}"
-                    )
-
-            # ── FAQ-keyed semantic cache ───────────────────────────────
+            # ── Query resolution + retrieval + generation ──────────────
+            # FIX: a top-level cache hit no longer returns immediately (see
+            # the deferred read above). Retrieval/generation is skipped
+            # here instead — preserving the speed benefit — but the result
+            # still flows through the normal post-processing below
+            # (guardrails, lead nudge, session persistence, handoff, KB gap
+            # recording) using THIS turn's freshly-computed is_lead /
+            # lead_metadata, not whatever was true when the cached answer
+            # was first generated. Combined with stripping is_lead /
+            # lead_metadata out of what gets cached (see cache-write
+            # further down), a cache hit can no longer replay one
+            # customer's captured contact info into another customer's
+            # conversation, and no longer silently drops this turn's own
+            # lead signal just because the answer text was reusable.
+            #
+            # _faq_cache_key/_faq_cached are initialized here — outside the
+            # if/else — rather than inside the "else" branch below. They
+            # were previously first assigned only inside that branch, so a
+            # top-level cache hit (which takes the "if" branch and skips
+            # "else" entirely) would leave them undefined, and the
+            # cache-write section further down would raise a NameError on
+            # every single cache-hit turn.
             _faq_cache_key: Optional[str] = None
-            if ctx.rag_qualified and ctx.hybrid_ranked:
-                _top_faq_id = str(
-                    ctx.hybrid_ranked[0].get('kb_id',
-                    ctx.hybrid_ranked[0].get('id', ''))
-                )
-                if _top_faq_id:
-                    _faq_cache_key = self._cache_key(
-                        _top_faq_id, client_id or '', vertical
-                    )
-                    _faq_cached = self._read_resp_cache(_faq_cache_key)
-                    if _faq_cached:
-                        logger.debug(
-                            f"[Pipeline] FAQ-keyed cache hit trace={ctx.trace_id}"
-                        )
-                        return _faq_cached
+            _faq_cached: Optional[Dict] = None
 
-            # ── Generation ────────────────────────────────────────────
-            if ctx.rag_qualified and self.enabled and self.model:
-                final, confidence, method = rag_generate_and_polish(
-                    ctx.search_query,
-                    ctx.context_str,
-                    ctx.hybrid_ranked,
-                    vertical,
-                    ctx.session_mem,
-                    ctx.is_sales_query,
-                    self.model,
-                    model_name=self._model_name,
-                    client_id=client_id,
-                )
-            elif self.enabled and self.model:
-                final = dynamic_fallback(
-                    ctx.search_query, vertical, ctx.session_mem,
-                    self.model, self._model_name, client_id=client_id,
-                )
-                confidence = 0.0
-                method     = 'dynamic_fallback_idk'
+            if _top_cached and _top_cached.get('response'):
+                final      = _top_cached['response']
+                confidence = _top_cached.get('confidence', 0.75)
+                method     = _top_cached.get('method', 'cache')
+                logger.debug(f"[Pipeline] cache hit trace={ctx.trace_id}")
             else:
-                final      = dynamic_fallback(
-                    ctx.search_query, vertical, ctx.session_mem, None
+                ctx.search_query = resolve_query(ctx.clean_message, conversation_history)
+
+                # ── Multi-intent decomposition ──────────────────────────
+                sub_queries = decompose_intents(ctx.search_query)
+
+                # ── Helper: run embedding search across sub-queries ─────
+                def _do_embedding_search(query: str, sq_list: List[str]) -> tuple:
+                    if len(sq_list) > 1:
+                        merged_c: List[Dict] = []
+                        merged_s: List[float] = []
+                        seen: set = set()
+                        for sq in sq_list[:3]:
+                            cands, scores = embedding_search(sq, faqs, client_id, ctx.poor_kb_ids)
+                            for c, s in zip(cands, scores):
+                                cid = str(c.get('kb_id', c.get('id', id(c))))
+                                if cid not in seen:
+                                    merged_c.append(c)
+                                    merged_s.append(s)
+                                    seen.add(cid)
+                        # FIX: results were appended sub-query-by-sub-query
+                        # (all of sub_queries[0]'s hits, then sub_queries[1]'s
+                        # new ones, ...), so merged_s[0] was only ever
+                        # sub_queries[0]'s top score — never the true best
+                        # score across the whole compound question. Every
+                        # downstream consumer assumes index 0 is the best
+                        # match: ctx.top_cosine (confidence gating, and the
+                        # query-rewrite/cross-encoder trigger conditions) and
+                        # hybrid_rerank's RRF vector-rank component both read
+                        # this list assuming it's sorted. Sort once, by
+                        # score, before returning.
+                        if merged_s:
+                            order = sorted(
+                                range(len(merged_s)),
+                                key=lambda i: merged_s[i],
+                                reverse=True,
+                            )
+                            merged_c = [merged_c[i] for i in order]
+                            merged_s = [merged_s[i] for i in order]
+                        return merged_c, merged_s
+                    return embedding_search(query, faqs, client_id, ctx.poor_kb_ids)
+
+                # ── Preflight embedding search ───────────────────────────
+                ctx.candidates, ctx.vector_scores = _do_embedding_search(
+                    ctx.search_query, sub_queries
                 )
-                confidence = 0.0
-                method     = 'static_fallback'
+                ctx.top_cosine = ctx.vector_scores[0] if ctx.vector_scores else 0.0
+
+                # ── BM25-only fallback (embeddings unavailable) ──────────
+                # FIX: embedding_search() returns [], [] both when nothing
+                # matches well AND when the embedding provider itself is
+                # down / every FAQ lacks a usable embedding. Previously
+                # both cases fell straight through to the generic
+                # dynamic_fallback for every single query — a full outage
+                # of the smart-answer path triggered by what might be a
+                # transient external dependency issue. If the FAQ corpus
+                # itself is non-empty but preflight search found nothing,
+                # fall back to pure keyword search instead of going dark.
+                _bm25_fallback_active = False
+                if not ctx.candidates and faqs:
+                    _bm25_c, _bm25_s = bm25_only_search(
+                        ctx.search_query, faqs, ctx.poor_kb_ids
+                    )
+                    if _bm25_c:
+                        ctx.candidates        = _bm25_c
+                        ctx.vector_scores     = _bm25_s
+                        _bm25_fallback_active = True
+                        logger.warning(
+                            f"[Pipeline] embeddings unavailable — BM25-only "
+                            f"fallback active trace={ctx.trace_id}"
+                        )
+
+                # ── Query rewriting (Call 1) ─────────────────────────────
+                # FIX: skipped entirely in BM25-fallback mode — its trigger
+                # condition (ctx.top_cosine < ctx.confidence_high) compares
+                # a BM25 score against a cosine-scale threshold when
+                # embeddings are down, and rewriting via Gemini won't
+                # recover an embedding call that isn't happening anyway.
+                if (not _bm25_fallback_active
+                        and self.enabled and self.model
+                        and not ctx.call1_used
+                        and len(ctx.search_query.split()) >= 4
+                        and ctx.top_cosine < ctx.confidence_high):
+                    rewritten = rewrite_query(
+                        ctx.search_query, vertical, conversation_history, self.model
+                    )
+                    if rewritten != ctx.search_query:
+                        ctx.search_query = rewritten
+                        ctx.call1_used   = True
+                        sub_queries      = decompose_intents(rewritten)
+                        ctx.candidates, ctx.vector_scores = _do_embedding_search(
+                            ctx.search_query, sub_queries
+                        )
+                        ctx.top_cosine = ctx.vector_scores[0] if ctx.vector_scores else 0.0
+
+                # ── Hybrid rerank (RRF) ──────────────────────────────────
+                # FIX: now passes poor_kb_ids through — see hybrid_rerank()
+                # docstring for why the penalty needs to reach the BM25 side
+                # too, not just the vector-search stage. Skipped entirely in
+                # BM25-fallback mode: vector_scores already holds raw BM25
+                # scores there (no real vector signal to fuse), so calling
+                # hybrid_rerank would just re-score BM25 against itself.
+                if _bm25_fallback_active:
+                    ctx.hybrid_ranked, ctx.hybrid_scores = ctx.candidates, ctx.vector_scores
+                else:
+                    ctx.hybrid_ranked, ctx.hybrid_scores = hybrid_rerank(
+                        ctx.search_query, ctx.candidates, ctx.vector_scores, faqs,
+                        poor_kb_ids=ctx.poor_kb_ids,
+                    )
+                ctx.top_hybrid = ctx.hybrid_scores[0] if ctx.hybrid_scores else 0.0
+
+                # ── Cross-encoder rerank ─────────────────────────────────
+                # FIX: also skipped in BM25-fallback mode — ctx.top_cosine
+                # is a BM25 score there, not a cosine similarity, so
+                # comparing it against the 0.35 cosine-scale trigger
+                # wouldn't mean what it's supposed to mean.
+                if (not _bm25_fallback_active
+                        and self.enabled and self.model
+                        and not ctx.call1_used
+                        and ctx.top_cosine < 0.35
+                        and len(ctx.hybrid_ranked) >= 2):
+                    ctx.hybrid_ranked = cross_encoder_rerank(
+                        ctx.search_query, ctx.hybrid_ranked, self.model
+                    )
+                    ctx.call1_used = True
+
+                # FIX: cross-encoder rerank is Gemini judging text relevance —
+                # it has no idea a candidate was ever flagged as a poor
+                # answer, so it can promote one straight back to #1. This is
+                # the last reranking stage before generation, so it doubles
+                # as a final safety net regardless of which reranking paths
+                # actually ran. Doesn't remove the poor entry (it may still
+                # be the best available option) — just won't let it win the
+                # top slot over a non-poor alternative if one exists.
+                if ctx.poor_kb_ids and ctx.hybrid_ranked:
+                    _top_c  = ctx.hybrid_ranked[0]
+                    _top_id = str(_top_c.get('kb_id', _top_c.get('id', '')))
+                    if _top_id in ctx.poor_kb_ids:
+                        _better_idx = next(
+                            (i for i, c in enumerate(ctx.hybrid_ranked[1:], start=1)
+                             if str(c.get('kb_id', c.get('id', ''))) not in ctx.poor_kb_ids),
+                            None
+                        )
+                        if _better_idx is not None:
+                            ctx.hybrid_ranked.insert(0, ctx.hybrid_ranked.pop(_better_idx))
+
+                # ── RAG qualification gate ───────────────────────────────
+                # FIX: previously gated on ctx.top_cosine alone — the
+                # *preflight* cosine score computed before hybrid (BM25+RRF)
+                # rerank ran. That meant reranking could never rescue a
+                # query: if the raw vector search's top hit scored below
+                # threshold, generation was skipped even when BM25/keyword
+                # rerank surfaced a strong match afterward. We now also
+                # check the cosine score of whichever candidate ended up on
+                # top *after* rerank, and qualify on whichever is higher.
+                _vec_score_by_id = {
+                    str(c.get('kb_id', c.get('id', ''))): s
+                    for c, s in zip(ctx.candidates, ctx.vector_scores)
+                }
+                _top_reranked_cosine = 0.0
+                if ctx.hybrid_ranked:
+                    _top_id = str(
+                        ctx.hybrid_ranked[0].get('kb_id', ctx.hybrid_ranked[0].get('id', ''))
+                    )
+                    _top_reranked_cosine = _vec_score_by_id.get(_top_id, 0.0)
+
+                if _bm25_fallback_active:
+                    # FIX: BM25 scores are a different scale than cosine
+                    # similarity and must never be compared against
+                    # vector_threshold directly — that threshold is
+                    # calibrated for cosine. Uses its own, intentionally
+                    # permissive bar (_BM25_FALLBACK_MIN_SCORE) since this
+                    # path's whole purpose is avoiding a full outage, not
+                    # matching normal RAG precision.
+                    ctx.rag_qualified = (
+                        bool(ctx.hybrid_ranked)
+                        and ctx.vector_scores[0] > _BM25_FALLBACK_MIN_SCORE
+                    )
+                    # BM25 scores are an unbounded, different scale from
+                    # cosine similarity — never let this degraded path's
+                    # generation confidence exceed a conservative cap,
+                    # regardless of how high the raw BM25 score runs. This
+                    # path exists to avoid a full outage, not to match
+                    # normal RAG precision, and confidence should reflect
+                    # that.
+                    _gate_score = (
+                        min(0.5, ctx.vector_scores[0] / 4.0) if ctx.vector_scores else 0.0
+                    )
+                else:
+                    ctx.rag_qualified = (
+                        max(ctx.top_cosine, _top_reranked_cosine) >= ctx.vector_threshold
+                    )
+                    # This is also the score handed to rag_generate_and_polish
+                    # below so confidence reflects the actual retrieval match
+                    # quality instead of a flat heuristic (see generation.py).
+                    _gate_score = max(ctx.top_cosine, _top_reranked_cosine)
+
+                # ── Topic mismatch gate ───────────────────────────────────
+                if ctx.rag_qualified and ctx.hybrid_ranked:
+                    top_faq = ctx.hybrid_ranked[0]
+                    # FIX: was a dynamic __import__('pipeline.stages.math_helpers',
+                    # fromlist=['topic_overlap']) done inline on every qualified
+                    # turn — the only place in this file NOT using a clean
+                    # top-level import, for no real benefit (the module is a
+                    # stable leaf with no circular-import risk). Now uses the
+                    # top-level import like everything else.
+                    # FIX: was 0.05 — close to a no-op, since almost any two
+                    # related sentences clear 5% word overlap. 0.15 actually
+                    # catches genuine topic mismatches without being so
+                    # strict it flags legitimate paraphrased matches.
+                    #
+                    # FIX: was topic_overlap(ctx.clean_message, ...) — the
+                    # raw, un-resolved message. For short follow-ups
+                    # ("what about the Enterprise plan?"), resolve_query()
+                    # already expanded ctx.search_query with the topic from
+                    # the previous turn specifically so retrieval has
+                    # something concrete to match against. Checking this
+                    # gate against the un-resolved clean_message threw that
+                    # context away and could reject a genuinely correct
+                    # follow-up match for sharing almost no literal words
+                    # with the FAQ question.
+                    if topic_overlap(ctx.search_query, top_faq.get('question', '')) < 0.15:
+                        ctx.rag_qualified = False
+                        logger.debug(
+                            f"[Pipeline] topic mismatch gate fired trace={ctx.trace_id}"
+                        )
+
+                # ── FAQ-keyed semantic cache ──────────────────────────────
+                # FIX: previously `return _faq_cached` here — an early
+                # return that (a) discarded this turn's freshly-extracted
+                # is_lead/lead_metadata entirely, and (b) replayed whatever
+                # is_lead/lead_metadata was cached from a PREVIOUS, different
+                # customer's turn that happened to match the same FAQ — a
+                # real cross-customer PII leak. Now only the safe, universal
+                # answer text is taken from the cache; everything else
+                # (lead nudge, persistence, handoff) continues normally
+                # below using this turn's real data. Also skipped entirely
+                # in BM25-fallback mode — a keyword-matched top pick is less
+                # trustworthy than a semantic one, and caching it under the
+                # FAQ key would keep serving that weaker match even after
+                # embeddings come back online.
+                if ctx.rag_qualified and ctx.hybrid_ranked and not _bm25_fallback_active:
+                    _top_faq_id = str(
+                        ctx.hybrid_ranked[0].get('kb_id',
+                        ctx.hybrid_ranked[0].get('id', ''))
+                    )
+                    if _top_faq_id:
+                        _faq_cache_key = self._cache_key(
+                            _top_faq_id, client_id or '', vertical
+                        )
+                        # FIX: this cache is keyed on (top_faq_id, client_id,
+                        # vertical) alone — not on the query text. Without a
+                        # similarity check, ANY future message that happens
+                        # to rank this same FAQ as its top hit would replay
+                        # the exact same generated answer verbatim, even if
+                        # it's asking about a genuinely different angle of
+                        # that FAQ (e.g. "what's the price" vs "does that
+                        # price include support"). The cached entry now also
+                        # stores the query it was generated for, and a hit
+                        # is only trusted when the current query still has
+                        # meaningful topical overlap with it — otherwise we
+                        # fall through and regenerate fresh.
+                        _candidate_faq_cached = self._read_resp_cache(_faq_cache_key)
+                        if _candidate_faq_cached and _candidate_faq_cached.get('response'):
+                            _cached_query = _candidate_faq_cached.get('query', '')
+                            if not _cached_query or topic_overlap(
+                                ctx.search_query, _cached_query
+                            ) >= 0.3:
+                                _faq_cached = _candidate_faq_cached
+                            else:
+                                logger.debug(
+                                    f"[Pipeline] FAQ-cache skipped — query "
+                                    f"drift trace={ctx.trace_id}"
+                                )
+
+                # ── Generation ────────────────────────────────────────────
+                if _faq_cached and _faq_cached.get('response'):
+                    final      = _faq_cached['response']
+                    confidence = _faq_cached.get('confidence', 0.75)
+                    method     = _faq_cached.get('method', 'rag_cached')
+                    logger.debug(f"[Pipeline] FAQ-keyed cache hit trace={ctx.trace_id}")
+                elif ctx.rag_qualified and self.enabled and self.model:
+                    # FIX: context building (+ its DB summary lookup) used to
+                    # run unconditionally for every turn, even ones that
+                    # would end up in dynamic_fallback — which doesn't even
+                    # take context_str as a parameter, so that work was
+                    # wasted on every fallback turn. Now only built right
+                    # before it's actually consumed, i.e. right here.
+                    # session_id is passed through so the stored-summary
+                    # lookup stays scoped per-session (see generation.py).
+                    _bg_submit(
+                        maybe_summarise, client_id, conversation_history, self.model,
+                        session_id=session_id,
+                    )
+                    ctx.context_str = build_context(
+                        conversation_history, client_id, ctx.clean_message,
+                        session_id=session_id,
+                    )
+                    final, confidence, method = rag_generate_and_polish(
+                        ctx.search_query,
+                        ctx.context_str,
+                        ctx.hybrid_ranked,
+                        vertical,
+                        ctx.session_mem,
+                        ctx.is_sales_query,
+                        self.model,
+                        retrieval_score=_gate_score,
+                    )
+                elif self.enabled and self.model:
+                    final = dynamic_fallback(
+                        ctx.search_query, vertical, ctx.session_mem,
+                        self.model, self._model_name,
+                    )
+                    confidence = 0.0
+                    method     = 'dynamic_fallback_idk'
+                else:
+                    final      = dynamic_fallback(
+                        ctx.search_query, vertical, ctx.session_mem, None
+                    )
+                    confidence = 0.0
+                    method     = 'static_fallback'
 
             # ── CLARIFY handling ──────────────────────────────────────
             clarify_q = parse_clarify_response(final)
@@ -1240,20 +1620,38 @@ class AIHelper:
             final = guardrails(final, ctx.hybrid_ranked)
 
             # ── Cache write ────────────────────────────────────────────
-            _result_to_cache = PipelineResult(
-                response=final,
-                method=method,
-                confidence=confidence,
-                is_lead=is_lead,
-                lead_metadata=lead_metadata,
-            ).to_dict()
+            # FIX: previously bundled is_lead/lead_metadata (name, email,
+            # phone) into the cached object at BOTH cache keys. Since
+            # neither cache key is scoped by session, a later cache hit —
+            # especially the FAQ-keyed one, which matches on semantic
+            # similarity rather than exact text — would replay one
+            # customer's captured contact info onto a completely different
+            # customer's turn. Only the safe, universal part (the answer
+            # text itself) is cacheable; is_lead/lead_metadata must always
+            # be computed fresh per turn, which they now are (see the
+            # retrieval/generation restructure above).
+            _result_to_cache = {
+                'response':   final,
+                'method':     method,
+                'confidence': confidence,
+                # FIX: stored so a future FAQ-keyed cache read (see above)
+                # can check the new query still overlaps topically with
+                # this one before trusting the cached answer.
+                'query':      ctx.search_query[:200],
+            }
 
+            # FIX: don't write the raw-message cache entry for follow-ups
+            # either — see the read-side comment above. The FAQ-keyed write
+            # is unaffected: it's keyed by the matched FAQ's own stable id,
+            # not by this message's ambiguous literal text, so it's safe to
+            # keep caching there regardless.
             if confidence >= ctx.confidence_high and ctx.resp_cache_key:
-                _BG_EXECUTOR.submit(self._write_resp_cache, ctx.resp_cache_key, _result_to_cache)
+                if not _is_followup_msg:
+                    _bg_submit(self._write_resp_cache, ctx.resp_cache_key, _result_to_cache)
                 if _faq_cache_key:
-                    _BG_EXECUTOR.submit(self._write_resp_cache, _faq_cache_key, _result_to_cache)
-            elif method == 'dynamic_fallback_idk' and ctx.resp_cache_key:
-                _BG_EXECUTOR.submit(
+                    _bg_submit(self._write_resp_cache, _faq_cache_key, _result_to_cache)
+            elif method == 'dynamic_fallback_idk' and ctx.resp_cache_key and not _is_followup_msg:
+                _bg_submit(
                     self._write_resp_cache_ttl,
                     ctx.resp_cache_key,
                     _result_to_cache,
@@ -1262,42 +1660,46 @@ class AIHelper:
 
             # ── KB gap recording ──────────────────────────────────────
             if method in IDK_METHODS_ALL:
-                _BG_EXECUTOR.submit(
+                _bg_submit(
                     record_kb_gap, client_id or '', ctx.clean_message,
                     method, confidence, session_id
                 )
                 ctx.session_mem['handoff_offered'] = True
 
             # ── Lead nudge ────────────────────────────────────────────
-            # Gated by count + cooldown (constants.py) — without this,
-            # purchase_stage's one-way ratchet keeps is_lead True for the
-            # rest of the session and this would fire on every single turn.
+            # FIX: previously fired regardless of method, so an IDK/fallback
+            # response (which already ends with its own handoff CTA, e.g.
+            # "want me to connect you?") would get a second, differently
+            # worded ask appended ("what's the best email..."). Two CTAs in
+            # one bubble reads as confused/scripted. IDK methods already
+            # request a handoff via the fallback text itself, so we skip the
+            # nudge there and let the existing CTA stand alone.
             trigger_lead_collection = False
             _have_email = bool(
                 (lead_metadata or {}).get('email') or ctx.session_mem.get('email')
             )
-            if is_lead and not _have_email:
-                _nudge_count     = ctx.session_mem.get('lead_nudge_count', 0)
-                _current_turn    = len(conversation_history)
-                _last_nudge_turn = ctx.session_mem.get('lead_nudge_last_turn', -LEAD_NUDGE_COOLDOWN_TURNS)
-                _cooldown_ok     = (_current_turn - _last_nudge_turn) >= LEAD_NUDGE_COOLDOWN_TURNS
-
-                if _nudge_count < LEAD_NUDGE_MAX_PER_SESSION and _cooldown_ok:
-                    nudge = self._build_lead_nudge(
-                        lead_info=ctx.session_mem,
-                        vertical=vertical,
-                        purchase_stage=ctx.session_mem.get('purchase_stage'),
-                        is_sales=ctx.is_sales_query,
-                        lead_q3=lead_q3,
-                    )
-                    final += '\n\n' + nudge
-                    trigger_lead_collection = True
-                    ctx.session_mem['lead_nudge_count']     = _nudge_count + 1
-                    ctx.session_mem['lead_nudge_last_turn'] = _current_turn
+            if is_lead and not _have_email and method not in IDK_METHODS_ALL:
+                nudge = self._build_lead_nudge(
+                    lead_info=ctx.session_mem,
+                    vertical=vertical,
+                    purchase_stage=ctx.session_mem.get('purchase_stage'),
+                    is_sales=ctx.is_sales_query,
+                    lead_q3=lead_q3,
+                )
+                # FIX: was appended straight onto `final` after guardrails()
+                # had already run on the generated answer — meaning the
+                # nudge itself (which can be a per-client custom question,
+                # lead_q3, configured outside this code) never passed the
+                # same legal/medical/financial-advice safety check. Any
+                # text that ends up in the customer-facing message should
+                # get the same check, regardless of where it came from.
+                nudge = guardrails(nudge, ctx.hybrid_ranked)
+                final += '\n\n' + nudge
+                trigger_lead_collection = True
 
             # ── Session persistence ───────────────────────────────────
             if client_id and session_id:
-                _BG_EXECUTOR.submit(persist_session, client_id, session_id, ctx.session_mem)
+                _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
 
             # ── Handoff payload for IDK paths ─────────────────────────
             handoff = None
@@ -1306,10 +1708,11 @@ class AIHelper:
                     conversation_history, ctx.session_mem,
                     ctx.clean_message, session_id, method
                 )
-                # Persist lead if we already have their email (e.g. captured
+                # Persist lead if we already have contact info (e.g. captured
                 # in a prior turn and IDK fires later in the conversation).
-                if ctx.session_mem.get('email'):
-                    _BG_EXECUTOR.submit(
+                # FIX: was email-only — phone-only leads never persisted here.
+                if ctx.session_mem.get('email') or ctx.session_mem.get('phone'):
+                    _bg_submit(
                         self._persist_lead_and_notify,
                         client_id, handoff, vertical
                     )
@@ -1512,6 +1915,22 @@ class AIHelper:
                                 setattr(existing, k, v)
                         else:
                             _m.db.session.add(_m.KbEntry(kb_id=kb_id, **chunk_data))
+
+                    # FIX: this loop only upserts chunk_index 0..len(chunks)-1
+                    # for the answer as it stands right now. If a previous
+                    # index of this same FAQ produced MORE chunks (longer
+                    # answer) than this one, the old trailing chunk rows
+                    # were never touched — they just sat in the KB forever,
+                    # still fully retrievable, still carrying whatever
+                    # stale/incorrect content the answer used to have before
+                    # it was edited. Delete anything left over beyond the
+                    # current chunk count.
+                    _m.KbEntry.query.filter(
+                        _m.KbEntry.client_id == client_id,
+                        _m.KbEntry.kb_id == kb_id,
+                        _m.KbEntry.chunk_index >= len(chunks),
+                    ).delete(synchronize_session=False)
+
                     indexed += 1
                 except Exception as e:
                     log_crash(logger, 'IndexFAQ', e, faq_id=faq.get('kb_id'))
@@ -1571,8 +1990,7 @@ class AIHelper:
             "Acknowledge any uncertainty. Do not make up specific numbers or policies."
         )
         try:
-            resp = _gemini_call(self.model, prompt, self._model_name,
-                                 client_id=client_id, endpoint='draft_gap_response')
+            resp = _gemini_call(self.model, prompt, self._model_name)
             return (resp.text or '').strip() or None
         except Exception as e:
             log_crash(logger, 'DraftGap', e, client_id=client_id)
@@ -1584,7 +2002,11 @@ class AIHelper:
         conversation_snippet: str = '',
         vertical: str = 'general',
     ) -> Dict:
-        fallback = {'summary': '', 'priority': 'high'}
+        # NOTE: priority defaults to 'med' on any failure path (no model,
+        # empty context, parse failure) — never 'high'. A lead we couldn't
+        # actually score should not silently outrank leads we genuinely
+        # classified as high-priority.
+        fallback = {'summary': '', 'priority': 'med'}
         if not self.enabled or not self.model:
             return fallback
         context = (conversation_snippet or message or '').strip()
@@ -1606,9 +2028,9 @@ class AIHelper:
             parsed   = self._parse_json(resp.text or '')
             if not parsed or not parsed.get('summary'):
                 return fallback
-            priority = str(parsed.get('priority', 'high')).strip().lower()
+            priority = str(parsed.get('priority', 'med')).strip().lower()
             if priority not in ('high', 'med', 'low'):
-                priority = 'high'
+                priority = 'med'
             return {'summary': str(parsed['summary'])[:500], 'priority': priority}
         except Exception as e:
             log_crash(logger, 'ExtractLeadIntent', e)
@@ -1625,7 +2047,30 @@ class AIHelper:
                     entries = _m.KbEntry.query.filter_by(client_id=cid).all()
                     count = 0
                     for entry in entries:
-                        text = f"{entry.question} {entry.answer}"
+                        # FIX: was f"{entry.question} {entry.answer}" — dropped
+                        # the paraphrase expansion that index_faqs()/
+                        # enrich_and_chunk() bake into the embed text at
+                        # initial indexing time (Phase 6 accuracy work). Any
+                        # full reindex (post-incident recovery, model
+                        # migration) was silently regressing every client's
+                        # retrieval quality back to bare question+answer
+                        # matching. Reusing the already-stored
+                        # entry.paraphrases costs no extra Gemini call. Note:
+                        # the enrichment 'summary' isn't persisted as its own
+                        # column today, so it still can't be recovered here —
+                        # only a full re-index via index_faqs() restores that
+                        # part too.
+                        paraphrases = getattr(entry, 'paraphrases', None)
+                        if isinstance(paraphrases, str):
+                            try:
+                                paraphrases = __import__('json').loads(paraphrases) if paraphrases else []
+                            except Exception:
+                                paraphrases = []
+                        paraphrases = paraphrases or []
+                        paraphrase_str = (
+                            ' '.join(paraphrases[:3]) if isinstance(paraphrases, list) else ''
+                        )
+                        text = f"{entry.question} {paraphrase_str} {entry.answer}".strip()
                         vec  = _embed(text, task='retrieval_document')
                         if vec:
                             entry.embedding = vec

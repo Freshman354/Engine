@@ -134,19 +134,38 @@ def reciprocal_rank_fusion(
     k=60 is the standard RRF constant (Cormack et al., 2009).
     Higher k gives more weight to items consistently ranked well;
     lower k amplifies single-ranking leaders.
+
+    NOTE on chunked documents: multiple physical rows can share the same
+    id_key value (e.g. a long FAQ answer split into several KbEntry
+    chunks, which all carry the same kb_id). When that happens, this
+    function merges their scores under one id — but must not just keep
+    whichever chunk it happened to see last. The representative doc kept
+    for each id is the one with the single best (lowest) rank seen across
+    either ranking, so a well-matched chunk can never be silently
+    replaced by a worse-ranked duplicate of the same document.
+
+    FIX: previously `doc_map[doc_id] = doc` was unconditional on every
+    iteration, so for a doc_id that appeared more than once (chunked
+    FAQs), the surviving entry was whichever occurrence was processed
+    *last* — the worst-ranked chunk in the BM25 pass, since that loop ran
+    second and walked best-to-worst. That could hand generation a
+    fragment of an FAQ's answer instead of the best-matching chunk, even
+    though the best chunk ranked #1.
     """
     scores: Dict[str, float] = {}
     doc_map: Dict[str, Dict] = {}
+    best_rank: Dict[str, int] = {}
 
-    for rank, doc in enumerate(vector_ranked):
-        doc_id = str(doc.get(id_key, id(doc)))
-        scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)
-        doc_map[doc_id] = doc
+    def _accumulate(ranked_list: List[Dict]) -> None:
+        for rank, doc in enumerate(ranked_list):
+            doc_id = str(doc.get(id_key, id(doc)))
+            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)
+            if doc_id not in best_rank or rank < best_rank[doc_id]:
+                best_rank[doc_id] = rank
+                doc_map[doc_id] = doc
 
-    for rank, doc in enumerate(bm25_ranked):
-        doc_id = str(doc.get(id_key, id(doc)))
-        scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank + 1)
-        doc_map[doc_id] = doc
+    _accumulate(vector_ranked)
+    _accumulate(bm25_ranked)
 
     ranked = sorted(scores.items(), key=lambda x: x[1], reverse=True)
     return [(doc_map[doc_id], score) for doc_id, score in ranked]

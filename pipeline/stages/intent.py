@@ -3,7 +3,7 @@ pipeline/stages/intent.py
 ==========================
 Intent detection (3 tiers), action detection, and tool dispatch.
 Previously: detect_intent, detect_action_intent, handle_detected_action,
-_dispatch_tool, _extract_tool_args, _format_tool_response on AIHelper.
+_dispatch_tool, extract_tool_args, _format_tool_response on AIHelper.
 
 Tier 1 (keyword) and Tier 2 (action/tool) are pure functions.
 Tier 3 (Gemini classification) takes `model` as an explicit parameter
@@ -17,23 +17,19 @@ from typing import Any, Dict, List, Optional
 from constants import (
     ACTION_KEYWORDS,
     ACTION_LABELS,
-    CONTACT_REQUEST_PATTERNS,
+    CONFIRMATION_NO_WORDS,
+    CONFIRMATION_YES_WORDS,
     GLOBAL_PRICING_KW,
     PERSONALITIES,
     PROSPECT_INFO_KEYWORDS,
     SIMPLE_INTENTS,
     TOOL_KEYWORDS,
+    WRITE_TOOLS,
 )
 
 from utils import get_logger, log_crash, generate as _gemini_generate
 
 logger = get_logger('lumvi.intent')
-
-# Compiled once at import time — CONTACT_REQUEST_PATTERNS lives in constants.py
-# so new phrasing families can be added there without touching this file.
-_CONTACT_REQUEST_RE: List[re.Pattern] = [
-    re.compile(p, re.IGNORECASE) for p in CONTACT_REQUEST_PATTERNS
-]
 
 
 # ── Tier 1 — Keyword intent ───────────────────────────────────────────────────
@@ -67,12 +63,6 @@ def detect_action_intent(
     for action_key, keywords in ACTION_KEYWORDS.items():
         if any(kw in msg for kw in keywords):
             return action_key
-    # Regex fallback for human-handoff requests — catches phrasing families
-    # ("connect me...", "put me through...", "talk to a human") that a
-    # literal keyword list can't keep up with. See CONTACT_REQUEST_PATTERNS
-    # in constants.py for the full rationale.
-    if any(pattern.search(msg) for pattern in _CONTACT_REQUEST_RE):
-        return 'contact_request'
     # Agency-defined lead triggers — treat as contact_request
     if lead_triggers:
         if any(t.lower() in msg for t in lead_triggers):
@@ -107,12 +97,26 @@ def detect_tool_intent(clean_message: str) -> Optional[str]:
     Keyword scan for transactional tool calls (order lookup, booking, etc.).
     Returns a tool key from TOOL_KEYWORDS, or None.
     Pure — no model calls.
+
+    FIX: this used to return the first tool (in TOOL_KEYWORDS dict
+    insertion order) with ANY matching keyword. lookup_order's generic
+    'my order' is a substring of cancel_order's own 'cancel my order' —
+    and since lookup_order is checked first, "cancel my order ORD-12345"
+    matched lookup_order before cancel_order was ever considered,
+    misrouting every natural cancellation phrasing into a lookup. Now
+    every tool is scanned and the LONGEST matching keyword wins, so a
+    more specific phrase (always the longer match) beats a generic one
+    regardless of dict order.
     """
     msg = clean_message.lower()
+    best_tool: Optional[str] = None
+    best_len = 0
     for tool_key, keywords in TOOL_KEYWORDS.items():
-        if any(kw in msg for kw in keywords):
-            return tool_key
-    return None
+        for kw in keywords:
+            if kw in msg and len(kw) > best_len:
+                best_tool = tool_key
+                best_len = len(kw)
+    return best_tool
 
 
 def dispatch_tool(
@@ -120,10 +124,17 @@ def dispatch_tool(
     user_message: str,
     client_id: Optional[str],
     session_mem: Dict,
+    override_args: Optional[Dict] = None,
 ) -> Dict:
     """
     Route to the correct tool function from tools.py.
     Returns a standardised tool result dict.
+
+    override_args: when set, used instead of re-extracting from
+    user_message. Needed for write-tool confirmations — the confirming
+    message is just "yes", which contains none of the original order_id /
+    slot_id / etc., so the args captured when the action was first
+    proposed must be replayed here instead of re-extracted.
     """
     try:
         import tools as _t
@@ -134,7 +145,10 @@ def dispatch_tool(
                 'success': False,
                 'error': f"Tool '{tool_name}' is not available.",
             }
-        args = _extract_tool_args(tool_name, user_message, session_mem)
+        args = (
+            override_args if override_args is not None
+            else extract_tool_args(tool_name, user_message, session_mem)
+        )
         result = tool_fn(client_id=client_id, **args)
         return _format_tool_response(tool_name, result)
     except Exception as e:
@@ -145,7 +159,7 @@ def dispatch_tool(
         }
 
 
-def _extract_tool_args(
+def extract_tool_args(
     tool_name: str,
     user_message: str,
     session_mem: Dict,
@@ -158,20 +172,45 @@ def _extract_tool_args(
 
     if tool_name in ('lookup_order', 'cancel_order'):
         # Try to find an order/reference number
-        order_match = re.search(r'\b([A-Z]{2,4}[-–]?\d{4,10})\b', user_message)
+        order_match = re.search(r'\b([A-Z]{2,4}[-–]?\d{4,10})\b', user_message, re.IGNORECASE)
         if order_match:
             args['order_id'] = order_match.group(1)
         elif session_mem.get('order_id'):
             args['order_id'] = session_mem['order_id']
 
-    elif tool_name in ('book_appointment', 'check_availability'):
-        # Pass session contact info if we have it
+        # FIX: cancel_order() in tools.py requires customer_email — it's a
+        # required arg with no default, used as an ownership check. This
+        # was never extracted, so every cancel_order dispatch raised a
+        # TypeError and silently failed with a generic error message
+        # instead of ever actually cancelling anything.
+        if tool_name == 'cancel_order' and session_mem.get('email'):
+            args['customer_email'] = session_mem['email']
+
+    elif tool_name == 'check_availability':
+        # FIX: was passing email/name/phone — check_availability(client_id,
+        # date="", service_type="") doesn't accept any of those, so this
+        # guaranteed a TypeError the moment session_mem had contact info on
+        # file (i.e. broke for exactly the customers we already knew).
+        # Neither date nor service_type is reliably extractable from free
+        # text yet, so this intentionally leaves args empty for now — the
+        # tool's own defaults (all slots, any service) apply.
+        pass
+
+    elif tool_name == 'book_appointment':
+        # FIX: was writing 'email'/'name'/'phone' — book_appointment()
+        # actually takes customer_email/customer_name/customer_phone, so
+        # every call TypeError'd regardless of session state. Also: slot_id
+        # is required with no default and was never populated at all (see
+        # the missing_required_args gate below, which now catches this and
+        # asks the user to pick a slot instead of silently failing).
         if session_mem.get('email'):
-            args['email'] = session_mem['email']
+            args['customer_email'] = session_mem['email']
         if session_mem.get('name'):
-            args['name'] = session_mem['name']
+            args['customer_name'] = session_mem['name']
         if session_mem.get('phone'):
-            args['phone'] = session_mem['phone']
+            args['customer_phone'] = session_mem['phone']
+        if session_mem.get('pending_slot_id'):
+            args['slot_id'] = session_mem['pending_slot_id']
 
     elif tool_name == 'escalate_to_human':
         args['reason'] = user_message[:200]
@@ -202,6 +241,78 @@ def _format_tool_response(tool_name: str, raw_result: Any) -> Dict:
     }
 
 
+# ── Write-tool confirmation gate ──────────────────────────────────────────────
+# cancel_order and book_appointment mutate real state (an actual order, an
+# actual calendar slot) and must never fire on a single keyword match. The
+# flow is: propose (this turn) → confirm (a later turn) → dispatch. See
+# WRITE_TOOLS / CONFIRMATION_YES_WORDS / CONFIRMATION_NO_WORDS in
+# constants.py and the orchestration in ai_helper.py's tool-dispatch block.
+
+_REQUIRED_TOOL_ARGS: Dict[str, List[str]] = {
+    'cancel_order':     ['order_id', 'customer_email'],
+    'book_appointment': ['slot_id', 'customer_name', 'customer_email'],
+}
+
+_MISSING_ARG_PHRASES: Dict[str, str] = {
+    'order_id':       'your order number',
+    'customer_email': 'the email address on the order',
+    'customer_name':  'your name',
+    'slot_id':        "which time slot you'd like — I can check availability first if that helps",
+}
+
+
+def is_write_tool(tool_name: str) -> bool:
+    """True for tools that must go through the confirm-then-dispatch gate."""
+    return tool_name in WRITE_TOOLS
+
+
+def missing_required_args(tool_name: str, args: Dict) -> List[str]:
+    """Which required args for this tool are still unfilled."""
+    return [a for a in _REQUIRED_TOOL_ARGS.get(tool_name, []) if not args.get(a)]
+
+
+def build_missing_args_prompt(tool_name: str, missing: List[str]) -> str:
+    """A natural-language ask for whatever's still missing before we can propose the action."""
+    phrases = [_MISSING_ARG_PHRASES.get(m, m) for m in missing]
+    if len(phrases) == 1:
+        needed = phrases[0]
+    else:
+        needed = ', '.join(phrases[:-1]) + f' and {phrases[-1]}'
+    return f"I can help with that — could you let me know {needed}?"
+
+
+def build_confirmation_prompt(tool_name: str, args: Dict) -> str:
+    """The explicit confirmation ask shown before a write tool actually dispatches."""
+    if tool_name == 'cancel_order':
+        return (
+            f"Just to confirm — you'd like to cancel order {args.get('order_id', '')}? "
+            f"This can't be undone. Reply \"yes\" to confirm, or \"no\" to leave it as is."
+        )
+    if tool_name == 'book_appointment':
+        return (
+            f"Just to confirm — book this slot for {args.get('customer_name', 'you')} "
+            f"({args.get('customer_email', '')})? Reply \"yes\" to confirm."
+        )
+    return 'Shall I go ahead with that? Reply "yes" to confirm.'
+
+
+def detect_confirmation(clean_message: str) -> Optional[bool]:
+    """
+    Detect whether a message is confirming or declining a PENDING write-tool
+    action. Only meaningful when the caller already knows a pending action
+    exists — a bare "yes" means nothing on its own. Returns True/False/None
+    (None = not a yes/no reply at all, e.g. an unrelated new question).
+    """
+    msg = clean_message.lower().strip().strip('.!?')
+    if not msg:
+        return None
+    if any(msg == w or msg.startswith(w + ' ') or msg.endswith(' ' + w) for w in CONFIRMATION_NO_WORDS):
+        return False
+    if any(msg == w or msg.startswith(w + ' ') or msg.endswith(' ' + w) for w in CONFIRMATION_YES_WORDS):
+        return True
+    return None
+
+
 # ── Tier 3 — Gemini intent classification ────────────────────────────────────
 
 def classify_intent_gemini(
@@ -209,7 +320,6 @@ def classify_intent_gemini(
     vertical: str,
     lead_triggers: List[str],
     model: Any,
-    model_name: str = '',
 ) -> Dict:
     """
     Use Gemini to classify intent when Tier 1 and Tier 2 return nothing.
@@ -232,7 +342,7 @@ def classify_intent_gemini(
         '"confidence": 0.0-1.0}'
     )
     try:
-        resp = _gemini_generate(model, prompt, model_name)
+        resp = _gemini_generate(model, prompt)
         text = (resp.text or '').strip().strip('`')
         if text.startswith('json'):
             text = text[4:].strip()
@@ -259,7 +369,6 @@ def detect_intent(
     lead_triggers: List[str],
     model: Any,
     skip_gemini: bool = False,
-    model_name: str = '',
 ) -> Dict:
     """
     Run the five-tier intent pipeline and return a unified intent dict.
@@ -287,12 +396,17 @@ def detect_intent(
     Returns dict with: intent, is_sales, is_lead, action, tool, confidence
     """
     result: Dict = {
-        'intent':     'question',
-        'is_sales':   False,
-        'is_lead':    False,
-        'action':     None,
-        'tool':       None,
-        'confidence': 0.5,
+        'intent':      'question',
+        'is_sales':    False,
+        'is_lead':     False,
+        'action':      None,
+        'tool':        None,
+        'confidence':  0.5,
+        # FIX: new, additive key — lets the caller know whether Tier 3 spent
+        # a real Gemini call this turn, so it can charge that against the
+        # same shared budget as query-rewrite/cross-encoder rerank (see
+        # ai_helper.py generate_response and PipelineRequest.call1_used).
+        'gemini_used': False,
     }
 
     # ── Tier 1 — simple intent ────────────────────────────────────────────────
@@ -373,13 +487,27 @@ def detect_intent(
     # returns is_lead=False for the same message — common for prospect info
     # questions that look like generic questions without vertical context.
     # Keyword signals are definitive; Gemini cannot override them.
+    #
+    # FIX: previously Tier 3 ran unconditionally whenever a model was
+    # available, even when the free keyword tiers had already resolved
+    # BOTH is_lead and is_sales (e.g. a pricing-keyword hit). In that case
+    # the only thing Tier 3 could still contribute is a generic intent
+    # label, which isn't worth a Gemini call on every message — this adds
+    # up fast across many client bots. We only call Tier 3 when at least
+    # one of is_lead/is_sales is still undetermined.
     if not skip_gemini and model is not None:
-        _is_lead_pre_t3 = result['is_lead']
-        gemini_result   = classify_intent_gemini(
-            clean_message, vertical, lead_triggers, model, model_name
-        )
-        result.update(gemini_result)
-        if _is_lead_pre_t3:
-            result['is_lead'] = True
+        _is_lead_pre_t3  = result['is_lead']
+        _is_sales_pre_t3 = result['is_sales']
+        if _is_lead_pre_t3 and _is_sales_pre_t3:
+            logger.debug(
+                "[Intent/T3] skipped — is_lead and is_sales already "
+                "resolved by free-path keyword tiers"
+            )
+        else:
+            gemini_result = classify_intent_gemini(clean_message, vertical, lead_triggers, model)
+            result.update(gemini_result)
+            result['gemini_used'] = True
+            if _is_lead_pre_t3:
+                result['is_lead'] = True
 
     return result

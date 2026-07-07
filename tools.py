@@ -41,7 +41,13 @@ def _sanitize(text, max_length=200):
 
 
 def _is_valid_email(text):
-    return bool(re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', text))
+    # FIX: was r'...[A-Z|a-z]{2,}\b' — a character class containing a
+    # literal pipe character. Inside [...] the '|' isn't an OR operator,
+    # so this was three alternatives (A-Z, the '|' character itself, a-z)
+    # rather than the intended case-insensitive letter match. Harmless in
+    # practice since this is a presence check, not extraction, but worth
+    # fixing since it's a tell for the same copy-paste regex elsewhere.
+    return bool(re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', text))
 
 
 # =====================================================================
@@ -598,30 +604,47 @@ def search_knowledge_base(client_id: str, query: str, limit: int = 5) -> dict:
     try:
         conn, cursor = models.get_db()
 
-        # Use PostgreSQL ILIKE for case-insensitive partial matching.
-        # This is intentionally simple — ai_helper's embedding search is the
-        # primary relevance engine. This tool is the agent's explicit action.
-        like_pattern = f'%{query}%'
+        # FIX: was a single ILIKE '%<entire query>%', which required the
+        # WHOLE query string to appear verbatim in the question/answer —
+        # almost never true for natural-language phrasing. "do you have a
+        # refund policy for returns" will never literally appear in
+        # "What is your refund policy?", so this tool rarely matched
+        # anything real. Tokenize into significant words and match on ANY
+        # of them via LIKE ANY(), scoring by whether question or answer hit.
+        # Still intentionally simple — ai_helper's embedding search is the
+        # primary relevance engine; this tool is the agent's explicit action.
+        _stopwords = {
+            'the', 'a', 'an', 'is', 'are', 'was', 'were', 'do', 'does', 'did',
+            'have', 'has', 'had', 'you', 'your', 'my', 'me', 'to', 'of', 'in',
+            'on', 'at', 'for', 'with', 'and', 'or', 'if', 'it', 'this', 'that',
+            'can', 'will', 'would', 'could', 'should', 'what', 'when', 'where',
+            'how', 'why', 'about',
+        }
+        words = [w for w in re.findall(r"[a-zA-Z']{3,}", query.lower()) if w not in _stopwords]
+        if not words:
+            words = [query.lower()]
+        words    = words[:8]  # cap — a very long query shouldn't build an unbounded clause
+        patterns = [f'%{w}%' for w in words]
 
         cursor.execute(
             '''
             SELECT id, question, answer, category,
                    CASE
-                       WHEN LOWER(question) LIKE LOWER(%s) THEN 2
-                       WHEN LOWER(answer)   LIKE LOWER(%s) THEN 1
+                       WHEN LOWER(question) LIKE ANY(%s) THEN 2
+                       WHEN LOWER(answer)   LIKE ANY(%s) THEN 1
                        ELSE 0
                    END AS relevance_score
             FROM knowledge_base
             WHERE client_id = %s
               AND is_active = TRUE
               AND (
-                  LOWER(question) LIKE LOWER(%s)
-                  OR LOWER(answer)   LIKE LOWER(%s)
+                  LOWER(question) LIKE ANY(%s)
+                  OR LOWER(answer)   LIKE ANY(%s)
               )
             ORDER BY relevance_score DESC, question ASC
             LIMIT %s
             ''',
-            (like_pattern, like_pattern, client_id, like_pattern, like_pattern, limit)
+            (patterns, patterns, client_id, patterns, patterns, limit)
         )
         rows = cursor.fetchall()
 

@@ -111,7 +111,6 @@ def dynamic_fallback(
     session_mem: Dict,
     model: Any,
     model_name: str = '',
-    client_id: str = '',
 ) -> str:
     """
     Generate a natural, contextual IDK response using Gemini.
@@ -142,7 +141,7 @@ def dynamic_fallback(
         "Write the response only. No quotes, no explanation."
     )
     try:
-        resp = _gemini_generate(model, prompt, model_name, client_id=client_id, endpoint='dynamic_fallback')
+        resp = _gemini_generate(model, prompt, model_name)
         text = (resp.text or '').strip()
         # Sanity check: must be a real sentence, not an empty or very short response
         if text and len(text) > 25 and len(text) < 400:
@@ -190,6 +189,7 @@ def build_context(
     conversation_history: List[Dict],
     client_id: Optional[str],
     current_message: str,
+    session_id: Optional[str] = None,
 ) -> str:
     """
     Build the conversation context string passed to the RAG prompt.
@@ -199,12 +199,24 @@ def build_context(
     Returns a formatted string.
     """
     # Try to load a stored summary for long conversations
+    #
+    # FIX: previously queried ConversationSummary filtered on client_id
+    # ALONE, taking the most-recently-created row for that client. Any
+    # business with two concurrent conversations would have one customer's
+    # summary — potentially including their name, symptoms, case details —
+    # silently injected into a completely different customer's prompt the
+    # moment either conversation crossed the summarisation trigger length.
+    # Requires a `session_id` column on ConversationSummary; if that column
+    # doesn't exist yet, add it the same way tools.py's migrate_agent_tables()
+    # adds conversations.session_id (ALTER TABLE ... ADD COLUMN IF NOT EXISTS).
+    # Without a session_id we skip the lookup entirely rather than fall back
+    # to the unscoped (leaky) query.
     db_summary = ''
-    if client_id and len(conversation_history) > 10:
+    if client_id and session_id and len(conversation_history) > 10:
         try:
             import models as _m
             summary_rec = _m.ConversationSummary.query.filter_by(
-                client_id=client_id
+                client_id=client_id, session_id=session_id
             ).order_by(_m.ConversationSummary.created_at.desc()).first()
             if summary_rec:
                 db_summary = f"[Earlier conversation summary: {summary_rec.summary}]\n\n"
@@ -233,8 +245,7 @@ def rag_generate_and_polish(
     session_mem: Dict,
     is_sales_query: bool,
     model: Any,
-    model_name: str = '',
-    client_id: str = '',
+    retrieval_score: float = 0.0,
 ) -> Tuple[str, float, str]:
     """
     Generate a polished answer from the top-ranked FAQ candidates.
@@ -244,7 +255,22 @@ def rag_generate_and_polish(
 
     confidence is a float 0.0–1.0 reflecting how well the retrieved
     context maps to the question. Derived from the generation response
-    or falls back to a static heuristic.
+    blended with the actual retrieval score (see retrieval_score below),
+    not a static heuristic alone.
+
+    retrieval_score: the cosine/qualifying score that got this candidate
+    set past the RAG qualification gate (0.0–1.0). Callers should pass
+    the same score used to set ctx.rag_qualified.
+
+    FIX: confidence used to be a flat 0.75 (no IDK phrase) or 0.45 (IDK
+    phrase) with zero regard for how good the retrieval match actually
+    was. A borderline match that just barely cleared vector_threshold
+    could still get phrased confidently by the model and would score
+    identically to a rock-solid match — and since callers cache whenever
+    confidence >= confidence_high, a weak/marginal match got cached and
+    replayed as if it were high-confidence. Confidence is now blended
+    with the real retrieval score so a weak match can no longer
+    masquerade as a strong one.
     """
     if not candidates or model is None:
         return make_fallback(vertical, session_mem.get('is_frustrated', False)), 0.0, 'no_candidates'
@@ -272,18 +298,24 @@ def rag_generate_and_polish(
     )
 
     try:
-        resp  = _gemini_generate(model, prompt, model_name, client_id=client_id, endpoint='rag_generate_and_polish')
+        resp  = _gemini_generate(model, prompt)
         text  = (resp.text or '').strip()
         if not text:
             return make_fallback(vertical, session_mem.get('is_frustrated', False)), 0.0, 'empty_generation'
 
-        # Confidence heuristic: longer, more specific answers score higher
+        # Confidence heuristic: longer, more specific answers score higher,
+        # blended with how good the underlying retrieval match actually was.
         has_idk_signal = any(p in text.lower() for p in [
             "i don't have", "i'm not sure", "not in my knowledge",
             "i can't find", "don't know", "connect you",
         ])
-        confidence = 0.45 if has_idk_signal else 0.75
-        method     = 'idk_fallback' if has_idk_signal else 'rag'
+        _score = max(0.0, min(1.0, retrieval_score))
+        if has_idk_signal:
+            confidence = round(min(0.45, 0.2 + 0.3 * _score), 4)
+            method     = 'idk_fallback'
+        else:
+            confidence = round(min(0.95, 0.35 + 0.6 * _score), 4)
+            method     = 'rag'
 
         logger.debug(
             f"[Generation/RAG] method={method} conf={confidence:.2f} "
@@ -303,7 +335,6 @@ def vertical_fallback(
     vertical: str,
     session_mem: Dict,
     model: Any,
-    model_name: str = '',
 ) -> Tuple[str, float, str]:
     """
     When RAG confidence is too low, attempt a vertical-aware Gemini fallback
@@ -325,7 +356,7 @@ def vertical_fallback(
         "Respond with ONLY the answer text."
     )
     try:
-        resp = _gemini_generate(model, prompt, model_name)
+        resp = _gemini_generate(model, prompt)
         text = (resp.text or '').strip()
         if not text:
             return make_fallback(vertical, session_mem.get('is_frustrated', False)), 0.0, 'vertical_fallback_empty'
@@ -388,15 +419,19 @@ def maybe_summarise(
     client_id: str,
     conversation_history: List[Dict],
     model: Any,
+    session_id: Optional[str] = None,
     trigger_length: int = 12,
-    model_name: str = '',
 ) -> None:
     """
     If the conversation has grown long, summarise it and store in the DB.
     Called as a background task — never blocks the pipeline.
     Summarisation fires once per 12-turn boundary to avoid redundant calls.
+
+    FIX: now requires session_id and scopes the stored row by
+    (client_id, session_id) instead of client_id alone — see build_context()
+    for why an unscoped row leaks one customer's conversation into another's.
     """
-    if not client_id or not conversation_history:
+    if not client_id or not session_id or not conversation_history:
         return
     if len(conversation_history) < trigger_length:
         return
@@ -418,24 +453,27 @@ def maybe_summarise(
             f"Conversation:\n{history_txt}\n\n"
             "Summary:"
         )
-        resp    = _gemini_generate(model, prompt, model_name)
+        resp    = _gemini_generate(model, prompt)
         summary = (resp.text or '').strip()
         if not summary:
             return
 
-        existing = _m.ConversationSummary.query.filter_by(client_id=client_id).first()
+        existing = _m.ConversationSummary.query.filter_by(
+            client_id=client_id, session_id=session_id
+        ).first()
         if existing:
             existing.summary    = summary
             existing.created_at = __import__('datetime').datetime.utcnow()
         else:
             rec = _m.ConversationSummary(
                 client_id=client_id,
+                session_id=session_id,
                 summary=summary,
                 created_at=__import__('datetime', fromlist=['datetime']).datetime.utcnow(),
             )
             _m.db.session.add(rec)
         _m.db.session.commit()
-        logger.debug(f"[Generation/Summary] stored summary for client={client_id}")
+        logger.debug(f"[Generation/Summary] stored summary for client={client_id} session={session_id}")
 
     except Exception as e:
         log_crash(logger, 'Generation/Summary', e, client_id=client_id)
