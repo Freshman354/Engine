@@ -12,6 +12,7 @@ so this module has no reference to AIHelper.
 
 import json
 import re
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from constants import (
@@ -125,6 +126,7 @@ def dispatch_tool(
     client_id: Optional[str],
     session_mem: Dict,
     override_args: Optional[Dict] = None,
+    session_id: Optional[str] = None,
 ) -> Dict:
     """
     Route to the correct tool function from tools.py.
@@ -135,6 +137,8 @@ def dispatch_tool(
     message is just "yes", which contains none of the original order_id /
     slot_id / etc., so the args captured when the action was first
     proposed must be replayed here instead of re-extracted.
+
+    session_id: needed for escalate_to_human, which requires it.
     """
     try:
         import tools as _t
@@ -147,7 +151,7 @@ def dispatch_tool(
             }
         args = (
             override_args if override_args is not None
-            else extract_tool_args(tool_name, user_message, session_mem)
+            else extract_tool_args(tool_name, user_message, session_mem, session_id=session_id)
         )
         result = tool_fn(client_id=client_id, **args)
         return _format_tool_response(tool_name, result)
@@ -163,6 +167,7 @@ def extract_tool_args(
     tool_name: str,
     user_message: str,
     session_mem: Dict,
+    session_id: Optional[str] = None,
 ) -> Dict:
     """
     Extract named arguments from user_message + session_mem for a given tool.
@@ -213,11 +218,23 @@ def extract_tool_args(
             args['slot_id'] = session_mem['pending_slot_id']
 
     elif tool_name == 'escalate_to_human':
-        args['reason'] = user_message[:200]
-        args['session_data'] = {
-            k: v for k, v in session_mem.items()
-            if k in ('name', 'email', 'phone', 'purchase_stage')
-        }
+        # FIX: tools.escalate_to_human()'s real signature is
+        # (client_id, session_id, reason, customer_email="", customer_name="",
+        # summary="", urgency="normal") — this was building a 'session_data'
+        # dict that doesn't match any parameter of that function at all,
+        # and never provided the required `session_id` either. Both would
+        # raise a TypeError on every dispatch, regardless of session state.
+        args['session_id']     = session_id or ''
+        args['reason']         = user_message[:200]
+        args['customer_email'] = session_mem.get('email', '')
+        args['customer_name']  = session_mem.get('name', '')
+        args['urgency']        = session_mem.get('urgency', 'normal')
+
+    elif tool_name == 'search_knowledge_base':
+        # FIX: had no case at all — query is a required arg with no
+        # default, so every search_knowledge_base dispatch TypeError'd
+        # before this was added.
+        args['query'] = user_message[:500]
 
     return args
 
@@ -225,20 +242,76 @@ def extract_tool_args(
 def _format_tool_response(tool_name: str, raw_result: Any) -> Dict:
     """
     Normalise a raw tool result into { success, response, data }.
+
+    FIX: this used to be `raw_result.get('message', 'Done!')` — but only
+    cancel_order and escalate_to_human actually return a 'message' key.
+    lookup_order returns a structured 'order' dict, check_availability
+    returns a 'slots' list, book_appointment uses 'confirmation_message'
+    (a different key), and search_knowledge_base returns a 'results'
+    list. None of those have a 'message' key, so all four surfaced a bare
+    "Done!" to the user on success while the actual data sat unused in
+    'data'. Each tool's real shape is now formatted into readable text.
     """
-    if isinstance(raw_result, dict):
-        if 'error' in raw_result:
-            return {'success': False, 'error': raw_result['error']}
-        return {
-            'success':  True,
-            'response': raw_result.get('message', 'Done!'),
-            'data':     raw_result,
-        }
+    if not isinstance(raw_result, dict):
+        return {'success': True, 'response': str(raw_result), 'data': raw_result}
+
+    if 'error' in raw_result:
+        return {'success': False, 'error': raw_result['error']}
+
     return {
         'success':  True,
-        'response': str(raw_result),
+        'response': _build_tool_response_text(tool_name, raw_result),
         'data':     raw_result,
     }
+
+
+def _build_tool_response_text(tool_name: str, result: Dict) -> str:
+    """Turn a tool's structured success payload into a natural-language reply."""
+    if tool_name == 'lookup_order':
+        order = result.get('order', {})
+        parts = [
+            f"Order {order.get('id', '')} is currently '{order.get('status', 'unknown')}'."
+        ]
+        if order.get('total_amount') is not None:
+            parts.append(f"Total: {order['total_amount']} {order.get('currency', 'USD')}.")
+        if order.get('updated_at'):
+            parts.append(f"Last updated {order['updated_at']}.")
+        return ' '.join(parts)
+
+    if tool_name == 'check_availability':
+        # A client on Acuity/Calendly/Square gets redirected to their real
+        # booking page instead of a slots list — see
+        # get_external_booking_info() in tools.py. That response has no
+        # 'slots' key at all, so it falls straight through to 'message'.
+        slots = result.get('slots', [])
+        if not slots:
+            return result.get(
+                'message',
+                f"No available slots found for {result.get('date', 'that date')}. "
+                f"Try a different date."
+            )
+        lines = [f"Here's what's open on {result.get('date', '')}:"]
+        for i, s in enumerate(slots[:10], start=1):
+            lines.append(
+                f"{i}. {s.get('datetime', '')} — {s.get('service_type', 'general')}"
+            )
+        lines.append("Let me know which one works (e.g. \"the 2nd one\" or the time) and I can book it.")
+        return '\n'.join(lines)
+
+    if tool_name == 'book_appointment':
+        return result.get(
+            'confirmation_message',
+            f"Your appointment has been booked (ref: {result.get('booking_id', '')})."
+        )
+
+    if tool_name == 'search_knowledge_base':
+        results = result.get('results', [])
+        if not results:
+            return "I couldn't find anything matching that in our knowledge base."
+        return results[0].get('answer', '') or "I found something but couldn't format it — let me try again."
+
+    # cancel_order, escalate_to_human, and anything else already using 'message'
+    return result.get('message', 'Done!')
 
 
 # ── Write-tool confirmation gate ──────────────────────────────────────────────
@@ -259,6 +332,117 @@ _MISSING_ARG_PHRASES: Dict[str, str] = {
     'customer_name':  'your name',
     'slot_id':        "which time slot you'd like — I can check availability first if that helps",
 }
+
+
+def resolve_slot_selection(clean_message: str, available_slots: List[Dict]) -> Optional[str]:
+    """
+    Resolve a natural reply ("the 2nd one", "option 2", "2pm") against the
+    slot list shown by check_availability (stored in
+    session_mem['available_slots'], numbered 1..N in the order shown).
+    Returns the matched slot_id, or None if nothing matches.
+
+    This is what actually lets book_appointment complete — without it,
+    there's no way to turn "the 2pm one" into the slot_id book_appointment
+    requires, and every booking attempt dead-ends asking which slot,
+    forever.
+    """
+    if not available_slots:
+        return None
+    msg = clean_message.lower().strip()
+
+    # Position-based: "first"/"1st"/"the second one"/bare "2"/"option 2"
+    ordinal_words = {
+        'first': 1, '1st': 1, 'second': 2, '2nd': 2, 'third': 3, '3rd': 3,
+        'fourth': 4, '4th': 4, 'fifth': 5, '5th': 5,
+    }
+    position: Optional[int] = None
+    for word, n in ordinal_words.items():
+        if word in msg:
+            position = n
+            break
+    if position is None and len(msg.split()) <= 6:
+        num_match = re.search(r'\b(\d{1,2})\b', msg)
+        if num_match:
+            position = int(num_match.group(1))
+    if position and 1 <= position <= len(available_slots):
+        slot_id = available_slots[position - 1].get('slot_id')
+        if slot_id:
+            return str(slot_id)
+
+    # Time-of-day based: "2pm", "2:30pm", "14:00" matched against each
+    # slot's stored datetime.
+    time_match = re.search(r'\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b', msg)
+    if time_match:
+        hour = int(time_match.group(1))
+        ampm = time_match.group(3)
+        if ampm == 'pm' and hour != 12:
+            hour += 12
+        elif ampm == 'am' and hour == 12:
+            hour = 0
+        if 0 <= hour <= 23:
+            for slot in available_slots:
+                dt_str = str(slot.get('datetime', ''))
+                try:
+                    slot_dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+                    if slot_dt.hour == hour:
+                        slot_id = slot.get('slot_id')
+                        if slot_id:
+                            return str(slot_id)
+                except Exception:
+                    continue
+
+    return None
+
+
+def booking_redirect_message(client_id: Optional[str]) -> Optional[str]:
+    """
+    If this client has a real booking page configured for Acuity/Calendly/
+    Square, return the message pointing the customer there. Returns None
+    otherwise (no such integration, or one exists with no booking_url set).
+
+    Checked before proposing a book_appointment confirmation — without
+    this, a client on one of these platforms would never have
+    session_mem['available_slots'] populated (check_availability redirects
+    instead of listing slots for them), so slot_id could never be
+    resolved and the bot would ask "which slot?" forever with no way for
+    the user to ever answer it.
+    """
+    if not client_id:
+        return None
+    try:
+        import tools as _t
+        info = _t.get_external_booking_info(client_id)
+    except Exception:
+        return None
+    if not info:
+        return None
+    return f"You can book directly here: {info['booking_url']}"
+
+
+def order_cancellation_redirect_message(client_id: Optional[str]) -> Optional[str]:
+    """
+    If this client has a real self-service order management page
+    configured, return the message pointing the customer there. Returns
+    None otherwise.
+
+    Checked before proposing a cancel_order confirmation — cancellation
+    and refunds are redirected to the client's real store rather than
+    executed by the chatbot, the same design as book_appointment's
+    redirect for Acuity/Calendly/Square. Without this check, cancel_order
+    would go through the full propose/confirm/dispatch dance for an
+    outcome that's just a link — no actual mutation happens in that case,
+    so there's nothing to confirm.
+    """
+    if not client_id:
+        return None
+    try:
+        import tools as _t
+        url = _t.get_order_management_url(client_id)
+    except Exception:
+        return None
+    if not url:
+        return None
+    return f"You can cancel your order and see refund options directly here: {url}"
 
 
 def is_write_tool(tool_name: str) -> bool:
@@ -283,15 +467,23 @@ def build_missing_args_prompt(tool_name: str, missing: List[str]) -> str:
 
 def build_confirmation_prompt(tool_name: str, args: Dict) -> str:
     """The explicit confirmation ask shown before a write tool actually dispatches."""
+    # FIX: wording updated to match tools.py — cancel_order/book_appointment
+    # now submit a REQUEST (staff confirm it against the real Shopify/Acuity/
+    # Calendly/etc. account) rather than completing the action outright, since
+    # neither tool makes an outbound call to the client's actual platform.
+    # "This can't be undone" was accurate when confirming meant an immediate,
+    # final cancellation; it no longer is.
     if tool_name == 'cancel_order':
         return (
-            f"Just to confirm — you'd like to cancel order {args.get('order_id', '')}? "
-            f"This can't be undone. Reply \"yes\" to confirm, or \"no\" to leave it as is."
+            f"Just to confirm — you'd like to request cancellation of order "
+            f"{args.get('order_id', '')}? I'll submit this for our team to "
+            f"confirm. Reply \"yes\" to confirm, or \"no\" to leave it as is."
         )
     if tool_name == 'book_appointment':
         return (
-            f"Just to confirm — book this slot for {args.get('customer_name', 'you')} "
-            f"({args.get('customer_email', '')})? Reply \"yes\" to confirm."
+            f"Just to confirm — request this slot for {args.get('customer_name', 'you')} "
+            f"({args.get('customer_email', '')})? Our team will confirm it's "
+            f"available before it's final. Reply \"yes\" to confirm."
         )
     return 'Shall I go ahead with that? Reply "yes" to confirm.'
 

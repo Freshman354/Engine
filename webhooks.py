@@ -48,9 +48,12 @@ for the exact source):
                  (signs "{notification_url}{body}" — URL matters)
 
 Supported platforms (v1)
-  • shopify  — orders/created, orders/updated, orders/cancelled
-  • acuity   — appointment.scheduled, appointment.rescheduled,
-               appointment.cancelled
+  • shopify      — orders/created, orders/updated, orders/cancelled
+  • woocommerce  — order.created, order.updated, order.deleted, order.restored
+  • acuity       — appointment.scheduled, appointment.rescheduled,
+                   appointment.cancelled
+  • calendly     — invitee.created, invitee.canceled
+  • square       — booking.created, booking.updated
 
 How to add a new platform
   1. Add a verify_<platform>_signature() function

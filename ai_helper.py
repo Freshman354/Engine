@@ -65,11 +65,14 @@ from pipeline.stages.intent import (
     dispatch_tool,
     extract_tool_args,
     handle_detected_action,
+    booking_redirect_message,
+    order_cancellation_redirect_message,
     build_confirmation_prompt,
     build_missing_args_prompt,
     detect_confirmation,
     is_write_tool,
     missing_required_args,
+    resolve_slot_selection,
 )
 from pipeline.stages.retrieval   import (
     bm25_only_search,
@@ -1080,41 +1083,127 @@ class AIHelper:
                 ctx.poor_kb_ids = set()
 
             # ── Pending write-tool confirmation ────────────────────────
-            # Checked BEFORE intent detection: a bare "yes"/"no" replying
-            # to a previously-proposed cancel_order/book_appointment won't
-            # match any keyword tier and would otherwise fall through to a
-            # wasted Tier-3 Gemini call. See WRITE_TOOLS/detect_confirmation
-            # in intent.py and the proposal side of this gate further down.
+            # Checked BEFORE intent detection: a bare "yes"/"no", or a
+            # message that's just an email/slot selection, won't match any
+            # keyword tier and would otherwise fall through to a wasted
+            # Tier-3 Gemini call or a completely unrelated FAQ answer.
+            # Two states, tracked via pending_tool_action['status']:
+            #   'awaiting_info'         — still missing required args
+            #   'awaiting_confirmation' — ready, waiting on yes/no
             _pending = ctx.session_mem.get('pending_tool_action')
             if _pending and (time.time() - _pending.get('created_at', 0)) < PENDING_TOOL_ACTION_TTL_SECONDS:
-                _confirmed = detect_confirmation(ctx.clean_message)
-                if _confirmed is True:
-                    ctx.session_mem['pending_tool_action'] = None
-                    tool_result = dispatch_tool(
-                        _pending['tool'], ctx.clean_message, client_id, ctx.session_mem,
-                        override_args=_pending['args'],
-                    )
-                    _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
-                    return PipelineResult(
-                        response=tool_result.get('response', make_fallback(vertical)),
-                        method='tool_confirmed',
-                        confidence=0.9 if tool_result.get('success') else 0.0,
-                        action={'tool': _pending['tool'], **tool_result},
-                    ).to_dict()
-                elif _confirmed is False:
-                    ctx.session_mem['pending_tool_action'] = None
-                    _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
-                    return PipelineResult(
-                        response=(
-                            "No problem — I haven't made any changes. "
-                            "Is there anything else I can help with?"
-                        ),
-                        method='tool_confirmation_declined',
-                        confidence=1.0,
-                    ).to_dict()
-                # else: not a yes/no reply — leave pending_tool_action in
-                # place (still within TTL) and fall through to normal
-                # handling; this turn might be an unrelated new message.
+                _tool_name = _pending['tool']
+
+                if _pending.get('status') == 'awaiting_info':
+                    # FIX: this state didn't used to exist at all — a write
+                    # tool missing a required arg (e.g. cancel_order without
+                    # a known email) just asked the question and threw away
+                    # everything already extracted (the order_id). The next
+                    # message ("it's jane@x.com") contains no tool keywords,
+                    # so intent detection wouldn't even recognise it as
+                    # continuing the same request — the whole attempt
+                    # silently died. Now the partial args persist and this
+                    # turn's message is used to fill in what's missing.
+                    _email_m = _EMAIL_RE.search(ctx.clean_message)
+                    if _email_m:
+                        ctx.session_mem['email'] = _email_m.group(0)
+                    _phone_m = _PHONE_RE.search(ctx.clean_message)
+                    if _phone_m:
+                        ctx.session_mem['phone'] = _phone_m.group(0).strip()
+
+                    _merged_args = {
+                        **_pending['args'],
+                        **extract_tool_args(_tool_name, ctx.clean_message, ctx.session_mem),
+                    }
+                    if _tool_name == 'book_appointment' and not _merged_args.get('slot_id'):
+                        _slot_id = resolve_slot_selection(
+                            ctx.clean_message, ctx.session_mem.get('available_slots', [])
+                        )
+                        if _slot_id:
+                            _merged_args['slot_id'] = _slot_id
+
+                    _still_missing = missing_required_args(_tool_name, _merged_args)
+                    if not _still_missing:
+                        ctx.session_mem['pending_tool_action'] = {
+                            'tool': _tool_name, 'args': _merged_args,
+                            'created_at': time.time(), 'status': 'awaiting_confirmation',
+                        }
+                        _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                        return PipelineResult(
+                            response=build_confirmation_prompt(_tool_name, _merged_args),
+                            method='tool_confirmation_requested',
+                            confidence=0.9,
+                        ).to_dict()
+
+                    _retries = _pending.get('retries', 0) + 1
+                    if _retries > 2:
+                        # Gave it 2 tries — don't keep pestering. Drop the
+                        # pending action and let this message fall through
+                        # to normal handling; they may have moved on.
+                        ctx.session_mem['pending_tool_action'] = None
+                        _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                    else:
+                        ctx.session_mem['pending_tool_action'] = {
+                            'tool': _tool_name, 'args': _merged_args,
+                            'created_at': _pending['created_at'],
+                            'status': 'awaiting_info', 'retries': _retries,
+                        }
+                        _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                        return PipelineResult(
+                            response=build_missing_args_prompt(_tool_name, _still_missing),
+                            method='tool_missing_info',
+                            confidence=0.9,
+                        ).to_dict()
+
+                else:  # 'awaiting_confirmation'
+                    _confirmed = detect_confirmation(ctx.clean_message)
+                    if _confirmed is True:
+                        ctx.session_mem['pending_tool_action'] = None
+                        tool_result = dispatch_tool(
+                            _tool_name, ctx.clean_message, client_id, ctx.session_mem,
+                            override_args=_pending['args'], session_id=session_id,
+                        )
+                        # FIX: cancel_order/book_appointment only update
+                        # Lumvi's own synced tables — there's no outbound
+                        # call to the client's real Shopify/Acuity/Calendly/
+                        # etc. account, so nothing happens there unless a
+                        # human actually does it. Fire an internal ticket so
+                        # staff see the request and can execute it for real;
+                        # this is what makes "our team will confirm this"
+                        # (the wording tools.py now uses) actually true
+                        # rather than just a nicer-sounding false promise.
+                        if _tool_name in ('cancel_order', 'book_appointment') and tool_result.get('success'):
+                            _detail = ', '.join(f"{k}={v}" for k, v in _pending['args'].items())
+                            _reason = (
+                                f"[Action needed] {_tool_name} requested via chatbot "
+                                f"({_detail}). Only recorded in Lumvi — please action on "
+                                f"the real platform and confirm with the customer."
+                            )
+                            _bg_submit(
+                                dispatch_tool, 'escalate_to_human', _reason, client_id,
+                                ctx.session_mem, session_id=session_id,
+                            )
+                        _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                        return PipelineResult(
+                            response=tool_result.get('response', make_fallback(vertical)),
+                            method='tool_confirmed',
+                            confidence=0.9 if tool_result.get('success') else 0.0,
+                            action={'tool': _tool_name, **tool_result},
+                        ).to_dict()
+                    elif _confirmed is False:
+                        ctx.session_mem['pending_tool_action'] = None
+                        _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+                        return PipelineResult(
+                            response=(
+                                "No problem — I haven't made any changes. "
+                                "Is there anything else I can help with?"
+                            ),
+                            method='tool_confirmation_declined',
+                            confidence=1.0,
+                        ).to_dict()
+                    # else: not a yes/no reply — leave pending_tool_action in
+                    # place (still within TTL) and fall through to normal
+                    # handling; this turn might be an unrelated new message.
             elif _pending:
                 # Expired — clear it so a stray "yes" long afterward can't
                 # trigger a stale action.
@@ -1181,6 +1270,43 @@ class AIHelper:
                 tool_name = intent['tool']
 
                 if is_write_tool(tool_name):
+                    # DESIGN: cancellation/refunds and appointment booking
+                    # are both redirected to the client's real platform
+                    # rather than executed by the chatbot, when a real
+                    # connection is configured — cancel_order to their
+                    # order-management page, book_appointment to their
+                    # real Acuity/Calendly/Square booking page. Order
+                    # *lookup* (read-only) is the one thing this stays
+                    # fully chatbot-handled for, via commerce_adapters.py's
+                    # live Shopify/WooCommerce read, with Lumvi's
+                    # webhook-synced table as fallback — see tools.py.
+                    #
+                    # Checked here, before any propose/confirm machinery
+                    # runs: when a redirect applies, the outcome is just a
+                    # link, not a mutation — there's nothing to confirm,
+                    # and for book_appointment specifically, skipping this
+                    # check would mean session_mem['available_slots'] is
+                    # never populated (check_availability redirects
+                    # instead of listing slots), so slot_id could never be
+                    # resolved and the bot would loop asking "which slot?"
+                    # forever with no way to answer.
+                    if tool_name == 'book_appointment':
+                        _redirect = booking_redirect_message(client_id)
+                        if _redirect:
+                            return PipelineResult(
+                                response=_redirect,
+                                method='booking_redirect',
+                                confidence=0.9,
+                            ).to_dict()
+                    elif tool_name == 'cancel_order':
+                        _redirect = order_cancellation_redirect_message(client_id)
+                        if _redirect:
+                            return PipelineResult(
+                                response=_redirect,
+                                method='cancellation_redirect',
+                                confidence=0.9,
+                            ).to_dict()
+
                     # FIX: cancel_order/book_appointment mutate real state
                     # (an actual order, an actual calendar slot) and must
                     # never fire on a single keyword match. Propose first —
@@ -1189,8 +1315,27 @@ class AIHelper:
                     # (see the pending-confirmation check above). Only
                     # dispatches once the user replies "yes".
                     _args = extract_tool_args(tool_name, ctx.clean_message, ctx.session_mem)
+
+                    # FIX: slot_id has no way to come from free text on its
+                    # own — it only means anything relative to a slot list
+                    # we already showed via check_availability. Try to
+                    # resolve it against whatever's remembered in session.
+                    if tool_name == 'book_appointment' and not _args.get('slot_id'):
+                        _slot_id = resolve_slot_selection(
+                            ctx.clean_message, ctx.session_mem.get('available_slots', [])
+                        )
+                        if _slot_id:
+                            _args['slot_id'] = _slot_id
+
                     _missing = missing_required_args(tool_name, _args)
                     if _missing:
+                        ctx.session_mem['pending_tool_action'] = {
+                            'tool':       tool_name,
+                            'args':       _args,
+                            'created_at': time.time(),
+                            'status':     'awaiting_info',
+                            'retries':    0,
+                        }
                         response_text = build_missing_args_prompt(tool_name, _missing)
                         method = 'tool_missing_info'
                     else:
@@ -1198,6 +1343,7 @@ class AIHelper:
                             'tool':       tool_name,
                             'args':       _args,
                             'created_at': time.time(),
+                            'status':     'awaiting_confirmation',
                         }
                         response_text = build_confirmation_prompt(tool_name, _args)
                         method = 'tool_confirmation_requested'
@@ -1210,8 +1356,21 @@ class AIHelper:
 
                 # Read-only / reversible tools — safe to dispatch immediately.
                 tool_result = dispatch_tool(
-                    tool_name, ctx.clean_message, client_id, ctx.session_mem
+                    tool_name, ctx.clean_message, client_id, ctx.session_mem,
+                    session_id=session_id,
                 )
+
+                # FIX: check_availability's slots were shown to the user as
+                # text but never remembered anywhere — a follow-up booking
+                # attempt had no slot list to resolve "the 2pm one" against.
+                # Store it (numbered in the same order shown) so
+                # resolve_slot_selection above can use it on the next turn.
+                if tool_name == 'check_availability' and tool_result.get('success'):
+                    _slots = tool_result.get('data', {}).get('slots', [])
+                    if _slots:
+                        ctx.session_mem['available_slots'] = _slots
+                        _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
+
                 return PipelineResult(
                     response=tool_result.get('response', make_fallback(vertical)),
                     method='tool',

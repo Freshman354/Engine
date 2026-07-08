@@ -50,6 +50,24 @@ def _is_valid_email(text):
     return bool(re.search(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b', text))
 
 
+def get_order_management_url(client_id: str) -> str | None:
+    """
+    Thin wrapper around commerce_adapters.get_order_management_url — see
+    that function for the actual client_integrations lookup. Kept as a
+    separate function here (rather than calling commerce_adapters
+    directly inline) so the import-failure fallback lives in one place.
+    Public (no leading underscore) since intent.py's
+    order_cancellation_redirect_message() calls this directly, matching
+    how get_external_booking_info() is called for book_appointment.
+    """
+    try:
+        from commerce_adapters import get_order_management_url as _get_url
+        return _get_url(client_id)
+    except Exception as e:
+        logger.error(f'[Tool] could not check order_management_url: {e}')
+        return None
+
+
 # =====================================================================
 # TOOL 1 — lookup_order
 # Looks up an order by order_id (and optionally email) for a given client.
@@ -77,6 +95,60 @@ def lookup_order(client_id: str, order_id: str, customer_email: str = "") -> dic
     if not order_id:
         return {'success': False, 'error': 'order_id is required'}
 
+    # FIX: this used to query Lumvi's own `orders` table exclusively —
+    # which is only ever as fresh as the last inbound webhook (see
+    # webhooks.py) and can't see anything that happened before the
+    # integration was configured. For a white-label SaaS, "accurate" has
+    # to mean the client's actual store, not our copy of it. Try their
+    # live Shopify/WooCommerce connection first, via commerce_adapters.py.
+    try:
+        from commerce_adapters import lookup_order_live
+        live = lookup_order_live(client_id, order_id, customer_email)
+    except Exception as e:
+        logger.error(f'[Tool:lookup_order] commerce_adapters import/call failed: {e}')
+        live = None
+
+    if live is not None and live.resolved:
+        # A resolved live lookup is authoritative either way — a genuine
+        # "not found" from the client's real store is more accurate than
+        # anything Lumvi's own copy could say, so this does NOT fall
+        # through to the internal table below.
+        if live.order is None:
+            return {
+                'success': False,
+                'error': f'Order {order_id} not found.',
+                'order_id': order_id,
+            }
+        o = live.order
+        return {
+            'success': True,
+            'order': {
+                'id':                 o.id,
+                'status':             o.status,
+                'total_amount':       o.total_amount,
+                'currency':           o.currency,
+                'updated_at':         o.updated_at,
+                'financial_status':   o.financial_status,
+                'fulfillment_status': o.fulfillment_status,
+            },
+        }
+
+    if live is not None and not live.resolved and live.error != 'no_adapter_connected':
+        # A live adapter IS configured but the call itself failed
+        # (timeout/auth/rate-limit) — don't silently fall back to a
+        # possibly-stale internal copy and risk presenting wrong data as
+        # if it were current; that would quietly reintroduce the exact
+        # inaccuracy this whole change is meant to fix. Say so honestly.
+        logger.warning(f'[Tool:lookup_order] live lookup failed client={client_id} error={live.error}')
+        return {
+            'success': False,
+            'error': "I'm having trouble checking that right now — please try again in a moment.",
+        }
+
+    # No live order-read connection for this client (live is None, or
+    # live.error == 'no_adapter_connected') — fall back to Lumvi's own
+    # webhook-synced copy. Still useful, just not guaranteed current for
+    # anything that happened before the integration was configured.
     conn = cursor = None
     try:
         conn, cursor = models.get_db()
@@ -170,6 +242,27 @@ def cancel_order(client_id: str, order_id: str, customer_email: str, reason: str
     if not customer_email or not _is_valid_email(customer_email):
         return {'success': False, 'error': 'A valid customer email is required to cancel an order.'}
 
+    # FIX / DESIGN CHANGE: cancel_order used to either write straight to
+    # Lumvi's internal orders table, or (as of the last pass) submit a
+    # cancellation *request* with staff notification. Cancellation and
+    # refunds are now redirected instead — the same pattern already used
+    # for book_appointment when a client's on Acuity/Calendly/Square:
+    # point the customer at the business's real self-service page rather
+    # than have Lumvi attempt the mutation itself. This sidesteps real
+    # money/inventory risk from an autonomous chatbot action entirely, and
+    # keeps order tracking/lookup (read-only, via commerce_adapters.py
+    # above) as the one thing the chat widget actually executes directly.
+    redirect_url = get_order_management_url(client_id)
+    if redirect_url:
+        return {
+            'success': True,
+            'redirect_url': redirect_url,
+            'message': (
+                f"You can cancel order {order_id} and see refund options directly "
+                f"here: {redirect_url}"
+            ),
+        }
+
     conn = cursor = None
     try:
         conn, cursor = models.get_db()
@@ -202,7 +295,17 @@ def cancel_order(client_id: str, order_id: str, customer_email: str, reason: str
                 'current_status': current_status
             }
 
-        # Update to cancelled
+        # FIX: this used to set status straight to 'cancelled' and tell the
+        # customer it was done. But cancel_order only writes to Lumvi's own
+        # synced copy of the order — there is no outbound call to Shopify/
+        # WooCommerce's API here, so the REAL order on the business's actual
+        # platform is untouched. Telling a customer "cancelled" when the
+        # business's system of record still shows it active/shipping is a
+        # false confirmation that can cause real harm (e.g. it still ships).
+        # Recording it as a *request* is honest about what actually
+        # happened, and it won't fight the next inbound webhook sync either
+        # — if Shopify pushes a status update before staff act on this, that
+        # update correctly overwrites it (see _upsert_order in webhooks.py).
         now = datetime.utcnow()
         cursor.execute(
             '''
@@ -211,9 +314,9 @@ def cancel_order(client_id: str, order_id: str, customer_email: str, reason: str
             WHERE client_id = %s AND order_id = %s
             ''',
             (
-                'cancelled',
-                f'Cancelled via chatbot at {now.isoformat()}. Reason: {reason}' if reason
-                    else f'Cancelled via chatbot at {now.isoformat()}.',
+                'cancellation_requested',
+                f'Cancellation requested via chatbot at {now.isoformat()}. Reason: {reason}' if reason
+                    else f'Cancellation requested via chatbot at {now.isoformat()}.',
                 now,
                 client_id,
                 order_id
@@ -221,16 +324,17 @@ def cancel_order(client_id: str, order_id: str, customer_email: str, reason: str
         )
         conn.commit()
 
-        logger.info(f'[Tool:cancel_order] client={client_id} order={order_id} cancelled by {customer_email}')
+        logger.info(f'[Tool:cancel_order] client={client_id} order={order_id} cancellation requested by {customer_email}')
         return {
             'success': True,
             'message': (
-                f'Order {order_id} has been successfully cancelled. '
-                'A confirmation will be sent to your email shortly.'
+                f"I've submitted a cancellation request for order {order_id}. "
+                f"Our team will confirm this with you by email shortly — it "
+                f"isn't final until they do."
             ),
             'order_id':         order_id,
             'previous_status':  current_status,
-            'new_status':       'cancelled'
+            'new_status':       'cancellation_requested'
         }
 
     except Exception as e:
@@ -249,6 +353,44 @@ def cancel_order(client_id: str, order_id: str, customer_email: str, reason: str
 
 
 # =====================================================================
+# EXTERNAL BOOKING REDIRECT
+# Acuity/Calendly/Square only push CONFIRMED/CANCELLED booking events via
+# webhook — none of them push "here's my open availability". That means
+# Lumvi's own appointment_slots table can never reflect real availability
+# for a client on one of these platforms; the only slots it ever contains
+# for them are synthesized from confirmed bookings, and those are born
+# already at capacity. For those clients, the accurate thing to do is
+# point the customer at the business's real booking page rather than
+# pretend to check or reserve availability Lumvi doesn't actually have.
+# =====================================================================
+
+_CALENDAR_PLATFORMS = ('calendly', 'acuity', 'square')
+
+
+def get_external_booking_info(client_id: str) -> dict | None:
+    """
+    Return {'booking_url', 'platform'} for the client's active Acuity/
+    Calendly/Square integration, if one is configured with a booking_url
+    in its platform_config. Returns None if not applicable — e.g. no
+    integration on any of these platforms, or one exists but the agency
+    hasn't entered a public booking page URL for it (platform_config is a
+    free-form JSON blob set from the Lumvi dashboard; booking_url isn't
+    guaranteed to be present).
+    """
+    try:
+        from webhooks import get_integration
+    except Exception:
+        return None
+    for platform in _CALENDAR_PLATFORMS:
+        integration = get_integration(client_id, platform)
+        if integration:
+            url = (integration.get('platform_config') or {}).get('booking_url')
+            if url:
+                return {'booking_url': url, 'platform': platform}
+    return None
+
+
+# =====================================================================
 # TOOL 3 — check_availability
 # Checks open appointment/booking slots for a client.
 # =====================================================================
@@ -257,6 +399,13 @@ def check_availability(client_id: str, date: str = "", service_type: str = "") -
     """
     Check available appointment slots for a client.
 
+    If the client has a real booking page configured for Acuity/Calendly/
+    Square, that's returned directly instead of querying Lumvi's internal
+    slots — see get_external_booking_info() above for why. Falls back to
+    Lumvi's own appointment_slots table for clients with no such
+    integration (e.g. businesses managing slots directly through the
+    Lumvi dashboard with no external scheduling tool).
+
     Args:
         client_id:    Lumvi client identifier
         date:         ISO date string YYYY-MM-DD. Defaults to today if empty.
@@ -264,10 +413,23 @@ def check_availability(client_id: str, date: str = "", service_type: str = "") -
 
     Returns:
         {success, slots: [{slot_id, datetime, service_type, duration_minutes}], date}
+        or {success, booking_url, platform, message} when redirecting.
     """
     client_id    = _sanitize(client_id, 50)
     date         = _sanitize(date, 20)
     service_type = _sanitize(service_type, 100)
+
+    redirect = get_external_booking_info(client_id)
+    if redirect:
+        return {
+            'success':     True,
+            'booking_url': redirect['booking_url'],
+            'platform':    redirect['platform'],
+            'message': (
+                f"You can see live availability and book directly here: "
+                f"{redirect['booking_url']}"
+            ),
+        }
 
     # Validate / default date
     if date:
@@ -387,6 +549,21 @@ def book_appointment(
     if not customer_email or not _is_valid_email(customer_email):
         return {'success': False, 'error': 'A valid customer email is required to book an appointment.'}
 
+    # Defense in depth: check_availability redirects clients on Acuity/
+    # Calendly/Square to their real booking page instead of ever handing
+    # out a slot_id from this system, so this shouldn't normally be
+    # reachable for them — but refuse outright rather than create a
+    # booking that exists only in Lumvi and nowhere on their real calendar.
+    redirect = get_external_booking_info(client_id)
+    if redirect:
+        return {
+            'success': False,
+            'error': (
+                f"Please book directly here to make sure it's reflected on "
+                f"our real calendar: {redirect['booking_url']}"
+            ),
+        }
+
     conn = cursor = None
     try:
         conn, cursor = models.get_db()
@@ -419,6 +596,17 @@ def book_appointment(
         booking_id = f'bk_{uuid.uuid4().hex[:10]}'
         now        = datetime.utcnow()
 
+        # FIX: this used to insert with status='confirmed' and tell the
+        # customer it was booked. But book_appointment only writes to
+        # Lumvi's own shadow copy — there's no outbound call to Acuity's/
+        # Calendly's/Square's API here, so nothing actually appears on the
+        # business's real calendar. A customer told "you're booked" when
+        # the business has no idea the appointment exists is a false
+        # confirmation risk (no-shows, double-booking, missed appointments).
+        # 'pending_confirmation' is honest about what actually happened.
+        # booked_count is still incremented — that's just a soft hold so
+        # this slot isn't offered to two chat customers at once while staff
+        # process the request, independent of the status wording.
         cursor.execute(
             '''
             INSERT INTO appointments
@@ -427,7 +615,7 @@ def book_appointment(
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ''',
             (booking_id, client_id, slot_id, customer_name, customer_email,
-             customer_phone, notes, 'confirmed', now)
+             customer_phone, notes, 'pending_confirmation', now)
         )
 
         # Atomically increment booked_count
@@ -443,7 +631,7 @@ def book_appointment(
 
         logger.info(
             f'[Tool:book_appointment] client={client_id} booking={booking_id} '
-            f'slot={slot_id} customer={customer_email}'
+            f'slot={slot_id} customer={customer_email} status=pending_confirmation'
         )
 
         return {
@@ -453,9 +641,10 @@ def book_appointment(
             'service_type':         service_type,
             'duration_minutes':     slot.get('duration_minutes', 30),
             'confirmation_message': (
-                f"Your {service_type} has been booked for {slot_dt}. "
-                f"Booking reference: {booking_id}. "
-                f"A confirmation will be sent to {customer_email}."
+                f"I've requested a {service_type} for {slot_dt} "
+                f"(reference: {booking_id}). Our team will confirm this "
+                f"with you at {customer_email} shortly — it isn't final "
+                f"until they do."
             )
         }
 
