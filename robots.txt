@@ -1,0 +1,40 @@
+# robots.txt
+# =============================================================================
+# Honor-system layer only — legitimate crawlers (including search engines)
+# respect this file, but it does NOT actually block anything. Spam bots,
+# scrapers, and content thieves ignore robots.txt by design; real enforcement
+# happens server-side (see bot_protection.py) and at the edge (Cloudflare Bot
+# Fight Mode — see the notes shared alongside this file).
+#
+# Default: block everyone.
+User-agent: *
+Disallow: /
+
+# Explicitly re-allow the major legitimate search engine crawlers.
+# Add more here only for engines you actually want indexing this site.
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: YandexBot
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+Sitemap: https://lumvi.net/sitemap.xml
