@@ -55,6 +55,14 @@ _actions_cache: Dict[str, tuple] = {}   # client_id -> (actions_list, expires_at
 _actions_cache_lock = threading.Lock()
 _ACTIONS_CACHE_TTL_SECONDS = 60
 
+# How long a proposed external action stays valid awaiting the customer's
+# yes/no, before a stale reply can no longer confirm it. Mirrors
+# tools.py's PENDING_TOOL_ACTION_TTL_SECONDS for the same reason: without
+# this, a "yes" typed much later for an unrelated reason could silently
+# execute a real action (a refund, a cancellation) against the client's
+# actual external system that the customer had long since forgotten about.
+_PENDING_ACTION_TTL_SECONDS = 600  # 10 minutes
+
 
 def _get_cached_actions(client_id: str) -> List[Dict]:
     if not client_id:
@@ -320,6 +328,12 @@ def try_dispatch_external_action(genai_client: Any, model_name: str, client_id: 
                 'action_id': action['action_id'],
                 'action_name': action['action_name'],
                 'params': matched['args'],
+                # FIX: this dict is what gets stored into
+                # session_mem['pending_integration_action'] — without a
+                # timestamp, handle_pending_confirmation() below had no way
+                # to tell a fresh "yes" from a stale one. See
+                # _PENDING_ACTION_TTL_SECONDS.
+                'created_at': time.time(),
             },
             'action': {'action_name': action['action_name'], 'status': 'pending_confirmation'},
         }
@@ -344,6 +358,17 @@ def handle_pending_confirmation(client_id: str, session_id: str, session_mem: Di
     pending = session_mem.get('pending_integration_action')
     if not pending:
         return None
+
+    # FIX: no expiry check existed at all — a pending action from hours or
+    # days ago could be silently confirmed and EXECUTED against the
+    # client's real external system by an unrelated later "yes", since the
+    # word-set match in _matches_confirm_set() has no way to know the
+    # difference. Mirrors tools.py's PENDING_TOOL_ACTION_TTL_SECONDS
+    # pattern for the identical write-tool-confirmation risk.
+    created_at = pending.get('created_at', 0)
+    if time.time() - created_at > _PENDING_ACTION_TTL_SECONDS:
+        session_mem['pending_integration_action'] = None
+        return None  # expired — fall through to normal handling this turn
 
     msg = clean_message.strip().lower()
     label = pending.get('action_name', 'that').replace('_', ' ')

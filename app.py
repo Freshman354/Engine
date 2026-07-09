@@ -52,6 +52,7 @@ import models
 import webhooks as _webhooks
 from ai_helper import get_ai_helper
 from app_utils import sanitize_input
+from bot_protection import register_bot_protection
 from config import Config
 
 load_dotenv()
@@ -203,6 +204,14 @@ CORS(app, resources={
         'max_age': 3600,
     },
 })
+
+# ── Bot protection ───────────────────────────────────────────────────────────
+# Real browsers (including the embeddable widget's own JS running in an end
+# customer's browser) pass through untouched. Only requests that
+# self-identify as a bot are checked further — see bot_protection.py for the
+# full design and why this is a secondary layer, not the primary one
+# (Cloudflare Bot Fight Mode, enabled in the dashboard, is).
+register_bot_protection(app)
 
 # ── Flask-Limiter ─────────────────────────────────────────────────────────────
 
@@ -2032,11 +2041,30 @@ def create_agent_action(client_id, integration_id):
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
         return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
     data = request.get_json(force=True) or {}
-    max_auto_amount = data.get('max_auto_amount')
-    try:
-        max_auto_amount = float(max_auto_amount) if max_auto_amount not in (None, '') else None
-    except (TypeError, ValueError):
-        return jsonify({'success': False, 'error': 'max_auto_amount must be a number'}), 400
+
+    # CORRECTION to the fix I made here last time: I had this backwards.
+    # Having now seen pipeline/stages/agent_actions.py's _check_spend_cap(),
+    # max_auto_amount is NOT an auto-approval bypass — it's the opposite: a
+    # ceiling that forces escalation to a human when an amount exceeds it
+    # ("a confirmation prompt is not real oversight for an above-cap
+    # amount; only a human is" — that's the actual code comment). Nulling
+    # it out, as I did before, doesn't reduce risk — it just removes that
+    # ceiling, which only matters at all once requires_confirmation=False.
+    #
+    # The real lever for "nothing executes without a human/agent process
+    # ready to back it up" is requires_confirmation — that's what gates
+    # whether execute_client_action() ever fires with zero interaction.
+    # It already defaults to True, but nothing stopped an agency (or a
+    # future dashboard change) from setting it False. Forcing it here
+    # closes that regardless of amount or cap — every external action now
+    # unconditionally asks the live customer before doing anything.
+    #
+    # max_auto_amount/amount_param stay disabled too, but for a different,
+    # more specific reason now: even the escalate-to-human path this
+    # enables (_escalation_result in agent_actions.py) promises "someone
+    # from the team will take care of this" — which isn't true yet if
+    # there's no one actually watching the agent-actions log for these.
+    # Re-enable both once that process exists; each is a one-line change.
     result = models.add_action(
         integration_id=integration_id,
         action_name=data.get('action_name', ''),
@@ -2044,10 +2072,10 @@ def create_agent_action(client_id, integration_id):
         endpoint_path=data.get('endpoint_path', ''),
         param_mapping=data.get('param_mapping') or {},
         response_mapping=data.get('response_mapping') or {},
-        requires_confirmation=data.get('requires_confirmation', True),
+        requires_confirmation=True,
         description=data.get('description', ''),
-        amount_param=(data.get('amount_param') or None),
-        max_auto_amount=max_auto_amount,
+        amount_param=None,
+        max_auto_amount=None,
     )
     if not result.get('success'):
         return jsonify(result), 400
@@ -2130,6 +2158,14 @@ def get_agent_actions_overview():
 
 
 
+# FIX: this route had no @app.route(...) decorator at all — Flask never
+# registered it, so any request to it (whatever URL the frontend's
+# "choose a template" UI calls) returned a 404. Every sibling route in
+# this section follows /api/agent-actions/... ; this one's docstring says
+# "No client_id needed", matching the pattern already used by
+# get_agent_actions_overview() just above it (/api/agent-actions/overview
+# — also no client_id). Named consistently with that.
+@app.route('/api/agent-actions/templates', methods=['GET'])
 @login_required
 def list_agent_action_templates():
     """No client_id needed — templates are generic, same list for every agency."""
@@ -2182,10 +2218,13 @@ def apply_agent_action_template(client_id):
             endpoint_path=action['endpoint_path'],
             param_mapping=action['param_mapping'],
             response_mapping=action.get('response_mapping') or {},
-            requires_confirmation=action.get('requires_confirmation', True),
+            # Same correction as create_agent_action() above — forced True
+            # regardless of what the template suggests, until there's a
+            # real process behind either confirmation path.
+            requires_confirmation=True,
             description=action.get('description', ''),
-            amount_param=action.get('suggested_amount_param'),
-            max_auto_amount=None,  # template never guesses a dollar limit — agency sets one deliberately
+            amount_param=None,
+            max_auto_amount=None,  # see create_agent_action() for why both stay disabled
         )
         if result.get('success'):
             created.append(action['action_name'])
