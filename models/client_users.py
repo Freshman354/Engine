@@ -84,7 +84,8 @@ def get_client_users(client_id):
     """Get all users for a client."""
     conn, cursor = get_db()
     cursor.execute(
-        '''SELECT id, client_id, email, name, role, created_at, last_login
+        '''SELECT id, client_id, email, name, role, is_primary_contact,
+                  created_at, last_login
            FROM client_users WHERE client_id = %s ORDER BY created_at DESC''',
         (client_id,)
     )
@@ -96,6 +97,79 @@ def get_client_users(client_id):
             if r.get(col):
                 r[col] = r[col].isoformat()
     return rows
+
+
+def get_primary_contact(client_id):
+    """
+    Returns the client_user marked as this client's primary contact, or
+    None if none has been designated. Used to source clients.notification_
+    email from a business-owned account instead of agency-entered text —
+    see set_primary_contact() and the write guard in
+    blueprints/client_settings.py.
+    """
+    conn, cursor = get_db()
+    cursor.execute(
+        '''SELECT id, client_id, email, name, role, created_at, last_login
+           FROM client_users WHERE client_id = %s AND is_primary_contact = TRUE
+           LIMIT 1''',
+        (client_id,)
+    )
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return dict(row) if row else None
+
+
+def set_primary_contact(client_id, client_user_id):
+    """
+    Marks one client_user as this client's primary contact, unsetting any
+    previous one first — at most one primary per client_id. Also copies
+    their email into clients.notification_email in the same transaction,
+    which is what notify_handoff() (inbox.py) and the lead-notification
+    path (leads.py) actually read — see client_settings.py for why the
+    agency can no longer overwrite that column directly once this is set.
+
+    Sync-not-live-lookup is a deliberate choice: there's currently no
+    self-service "change my own email" for client_users, so drift isn't a
+    live risk. If that's added later, it needs to also re-sync
+    notification_email here, or this should switch to a live lookup in
+    inbox.py/leads.py instead.
+
+    All three updates run in one transaction so a failure partway through
+    can't leave the primary-contact flag and notification_email
+    disagreeing with each other.
+
+    Returns True on success, False if client_user_id doesn't belong to
+    client_id (no matching row to set — the unset still commits, which is
+    harmless: clearing a primary that may not have existed is a no-op).
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            'UPDATE client_users SET is_primary_contact = FALSE WHERE client_id = %s',
+            (client_id,)
+        )
+        cursor.execute(
+            '''UPDATE client_users SET is_primary_contact = TRUE
+               WHERE id = %s AND client_id = %s''',
+            (client_user_id, client_id)
+        )
+        updated = cursor.rowcount > 0
+        if updated:
+            cursor.execute(
+                '''UPDATE clients SET notification_email = (
+                       SELECT email FROM client_users WHERE id = %s
+                   ) WHERE client_id = %s''',
+                (client_user_id, client_id)
+            )
+        conn.commit()
+        return updated
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def get_client_user_by_id(user_id):

@@ -1311,6 +1311,38 @@ def reset_client_user_password():
             except Exception: pass
 
 
+@agency_bp.route('/api/client-users/set-primary', methods=['POST'])
+@login_required
+def set_primary_client_user():
+    """
+    Designate one client portal login as this client's primary contact.
+    Once set, clients.notification_email is sourced from that person's own
+    account instead of agency-entered text, and client_settings.py refuses
+    to let the agency overwrite it directly — see get_primary_contact()/
+    set_primary_contact() in models/client_users.py for what this actually
+    protects, and its limits (the agency still sets/knows the client_user's
+    initial password today — this raises the bar, it doesn't fully close it).
+    """
+    data      = request.get_json() or {}
+    client_id = data.get('client_id', '')
+    user_id   = data.get('user_id')
+
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+    if not user_id:
+        return jsonify({'success': False, 'error': 'user_id is required'}), 400
+
+    updated = models.set_primary_contact(client_id, user_id)
+    if not updated:
+        return jsonify({'success': False, 'error': 'Client user not found'}), 404
+
+    current_app.logger.info(
+        f"[ClientUsers] primary contact set to user {user_id} for client {client_id} "
+        f"by agency user {current_user.id}"
+    )
+    return jsonify({'success': True})
+
+
 @agency_bp.route('/manage-client-users')
 @login_required
 def manage_client_users_page():

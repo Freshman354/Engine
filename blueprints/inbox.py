@@ -59,8 +59,15 @@ def notify_handoff(client_id, client, config, ticket_id, reason,
     """
     def _send():
         try:
+            # FIX: this read the agency-inherited branding_settings.contact
+            # blob exclusively — clients.notification_email (the dedicated,
+            # validated column that manage_client_users.html actually saves
+            # to) was never consulted at all. Whatever an agency configured
+            # there had zero effect on where handoff emails went. Falls back
+            # to the old contact.email for any client who's never touched
+            # notification_email, so nothing breaks for existing clients.
             contact_info  = config.get('contact', {})
-            notify_email  = contact_info.get('email')
+            notify_email  = (client or {}).get('notification_email') or contact_info.get('email')
             company_name  = (client or {}).get('company_name', 'your chatbot')
             urgency_label = '🔴 High' if urgency == 'high' else '🟡 Normal'
             customer_label = name or email or 'Unknown visitor'

@@ -203,8 +203,14 @@ def submit_lead():
         current_app.logger.info(f'Lead captured for client: {client_id}')
 
         # Send branded lead notification — supports comma-separated recipients
+        # FIX: same bug as inbox.py's notify_handoff — notification_email
+        # (the dedicated column, actually saved by manage_client_users.html)
+        # was never read; only the agency-inherited contact.email blob was.
+        # Falls back to contact.email for clients who've never set
+        # notification_email, so nothing breaks for existing clients.
+        notify_email_raw = client.get('notification_email') or contact_info.get('email') or ''
         notify_recipients = [
-            e.strip() for e in (contact_info.get('email') or '').split(',')
+            e.strip() for e in notify_email_raw.split(',')
             if e.strip()
         ]
         if notify_recipients and _mail:

@@ -241,6 +241,7 @@ def init_db():
 
     # ── Gap 3: lead delivery columns (new) ──────────────────────────────────
     migrate_lead_delivery()             # notification_email, notification_phone, notification_name
+    migrate_primary_contact()           # client_users.is_primary_contact
     migrate_agency_email_domains()      # white-label custom email domain per agency
     migrate_seat_subscriptions()        # agency per-seat purchase subscriptions
 
@@ -1660,6 +1661,48 @@ def migrate_lead_delivery():
             try: conn.rollback()
             except Exception: pass
         print(f"⚠️  migrate_lead_delivery: {e}")
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+
+def migrate_primary_contact():
+    """
+    Add is_primary_contact to client_users.
+
+    Marks which (if any) client_user is the business's designated primary
+    contact. Once set, clients.notification_email should be sourced from
+    that client_user's own email rather than agency-entered text — see
+    client_users.get_primary_contact()/set_primary_contact() and the write
+    guard in blueprints/client_settings.py.
+
+    At most one primary contact per client_id — enforced in
+    set_primary_contact(), not at the DB level (a partial unique index would
+    be the stricter option; not added here since set_primary_contact()
+    already unsets any prior primary transactionally before setting a new
+    one, and adding a DB constraint on top would need a migration-time check
+    for any pre-existing bad data first).
+
+    Idempotent — ADD COLUMN IF NOT EXISTS is safe on every startup.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "ALTER TABLE client_users ADD COLUMN IF NOT EXISTS "
+            "is_primary_contact BOOLEAN DEFAULT FALSE"
+        )
+        conn.commit()
+        print("✅ migrate_primary_contact complete")
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        print(f"⚠️  migrate_primary_contact: {e}")
     finally:
         if cursor:
             try: cursor.close()

@@ -160,75 +160,210 @@ def _bg_enrich_and_save(client_id: str, valid_faqs: list):
 
 # ── File parsing helpers ─────────────────────────────────────────────────────
 
+# Character budget for AI-based extraction (PDF text, URL page text, or a
+# rendered spreadsheet table). Chunked rather than a single hard truncation —
+# see extract_faqs_from_text() below for why.
+_EXTRACTION_CHUNK_SIZE   = 12000
+_MAX_EXTRACTION_CHUNKS   = 8   # bounds worst case at ~8 sequential Gemini
+                               # calls (~96,000 chars, roughly a 40-60 page
+                               # document) so this stays a synchronous, fast
+                               # request path rather than reintroducing the
+                               # multi-minute hang enrich_and_chunk() was
+                               # already backgrounded to avoid (see
+                               # upload_faqs()'s docstring). A document
+                               # longer than that still gets truncated, but
+                               # honestly — see the `truncated` flag threaded
+                               # through every caller below.
+
+_QUESTION_COL_ALIASES = {'question', 'q', 'faq_question', 'title', 'topic'}
+_ANSWER_COL_ALIASES   = {'answer', 'a', 'response', 'description', 'details', 'content', 'body'}
+
+
+def _find_column(columns, aliases):
+    """Case-insensitive match of a dataframe's columns against a set of
+    acceptable aliases. Returns the real column name (original case
+    preserved, needed to index the dataframe) or None."""
+    lower_map = {str(c).lower().strip(): c for c in columns}
+    for alias in aliases:
+        if alias in lower_map:
+            return lower_map[alias]
+    return None
+
+
+def _dataframe_to_faqs(df):
+    """
+    Try to build FAQs directly from recognisable question/answer-shaped
+    columns (case-insensitive, common aliases — not just an exact
+    'question'/'answer' match). Returns (faqs, matched) — matched=False
+    means no recognisable columns were found and the caller should fall
+    back to AI extraction on the rendered table instead.
+    """
+    q_col = _find_column(df.columns, _QUESTION_COL_ALIASES)
+    a_col = _find_column(df.columns, _ANSWER_COL_ALIASES)
+    if not q_col or not a_col:
+        return [], False
+
+    faqs = []
+    for _, row in df.iterrows():
+        question = str(row[q_col]).strip()
+        answer   = str(row[a_col]).strip()
+        if question and answer and question.lower() != 'nan' and answer.lower() != 'nan':
+            faqs.append({
+                'question': question,
+                'answer':   answer,
+                'category': str(row.get('category', 'General')).strip(),
+                'triggers': _extract_keywords(question),
+            })
+    return faqs, True
+
+
+def _dataframe_to_text(df, max_rows=200):
+    """
+    Render a dataframe as plain text for AI-based FAQ extraction when it
+    doesn't have recognisable question/answer columns — e.g. a pricing
+    sheet (Service, Price) or product catalog (SKU, Name, Description).
+    Capped at max_rows to keep the rendered text (and therefore the
+    chunking/extraction cost below) bounded for very large spreadsheets.
+    """
+    rows = df.head(max_rows)
+    lines = []
+    for _, row in rows.iterrows():
+        parts = [
+            f"{col}: {row[col]}" for col in df.columns
+            if str(row[col]).strip().lower() != 'nan'
+        ]
+        if parts:
+            lines.append(', '.join(parts))
+    return '\n'.join(lines)
+
+
+def _process_dataframe(df):
+    """
+    Shared CSV/Excel processing. Returns (faqs, truncated).
+
+    FIX: previously required columns named EXACTLY 'question' and 'answer'
+    (case-sensitive) — any other shape (a pricing sheet with 'Service'/
+    'Price', a catalog with 'SKU'/'Description') silently produced zero
+    rows, surfacing only a generic "check the format" error with no
+    indication of what was actually expected. Now: (1) tries flexible,
+    case-insensitive column matching against common aliases first — fast,
+    no AI call needed; (2) if that finds nothing and AI is available,
+    renders the table as text and runs it through the same AI extraction
+    used for PDFs, so a spreadsheet that isn't already shaped as Q&A can
+    still produce sensible FAQs instead of an empty result.
+    """
+    faqs, matched = _dataframe_to_faqs(df)
+    if matched:
+        return faqs, False
+
+    if _ai_helper and _ai_helper.enabled and _ai_helper.model:
+        table_text = _dataframe_to_text(df)
+        if table_text.strip():
+            return extract_faqs_from_text(table_text)
+
+    return [], False
+
+
 def process_csv_upload(file):
     import pandas as pd
     try:
         df = pd.read_csv(io.StringIO(file.stream.read().decode('utf-8')))
-        if 'question' not in df.columns or 'answer' not in df.columns:
-            return []
-        faqs = []
-        for _, row in df.iterrows():
-            triggers = _extract_keywords(row['question'])
-            faq = {
-                'question': str(row['question']).strip(),
-                'answer':   str(row['answer']).strip(),
-                'category': str(row.get('category', 'General')).strip(),
-                'triggers': triggers,
-            }
-            if faq['question'] and faq['answer']:
-                faqs.append(faq)
-        return faqs
+        return _process_dataframe(df)
     except Exception as e:
         current_app.logger.error(f'Error processing CSV: {e}')
-        return []
+        return [], False
 
 
 def process_excel_upload(file):
     import pandas as pd
     try:
         df = pd.read_excel(file)
-        if 'question' not in df.columns or 'answer' not in df.columns:
-            return []
-        faqs = []
-        for _, row in df.iterrows():
-            triggers = _extract_keywords(row['question'])
-            faq = {
-                'question': str(row['question']).strip(),
-                'answer':   str(row['answer']).strip(),
-                'category': str(row.get('category', 'General')).strip(),
-                'triggers': triggers,
-            }
-            if faq['question'] and faq['answer']:
-                faqs.append(faq)
-        return faqs
+        return _process_dataframe(df)
     except Exception as e:
         current_app.logger.error(f'Error processing Excel: {e}')
-        return []
+        return [], False
 
 
 def process_pdf_upload(file):
+    """Returns (faqs, truncated) — see extract_faqs_from_text()."""
     import PyPDF2
     try:
         pdf_reader = PyPDF2.PdfReader(io.BytesIO(file.read()))
         text = ""
         for page in pdf_reader.pages:
             text += page.extract_text() + "\n"
-
         if _ai_helper and _ai_helper.enabled:
             return extract_faqs_from_text(text)
         else:
-            return parse_structured_faq_text(text)
+            return parse_structured_faq_text(text), False
     except Exception as e:
         current_app.logger.error(f'Error processing PDF: {e}')
-        return []
+        return [], False
+
+
+def _chunk_text(text, chunk_size=_EXTRACTION_CHUNK_SIZE, max_chunks=_MAX_EXTRACTION_CHUNKS):
+    """
+    Split text into up to max_chunks pieces of at most chunk_size
+    characters, breaking on a paragraph or sentence boundary near each cut
+    point where possible rather than mid-sentence — a question/answer pair
+    split across two chunks is much more likely to extract correctly if
+    the cut lands between sentences.
+    """
+    if len(text) <= chunk_size:
+        return [text]
+    chunks = []
+    start = 0
+    while start < len(text) and len(chunks) < max_chunks:
+        end = start + chunk_size
+        if end >= len(text):
+            chunks.append(text[start:])
+            break
+        break_point = text.rfind('\n\n', start, end)
+        if break_point <= start:
+            break_point = text.rfind('. ', start, end)
+        if break_point <= start:
+            break_point = end
+        else:
+            break_point += 1  # keep the newline/period with the preceding chunk
+        chunks.append(text[start:break_point])
+        start = break_point
+    return chunks
 
 
 def extract_faqs_from_text(text):
-    try:
-        prompt = f"""Extract FAQ pairs from this text. Return a JSON array of objects with 'question' and 'answer' fields.
+    """
+    Extract FAQ pairs from arbitrary text using AI. Returns (faqs, truncated).
+
+    FIX: this used to make a single call on text[:3000] — roughly one
+    page. Anything longer (a multi-page policy document, a full product
+    catalog, a real FAQ page with 20+ questions) had the majority of its
+    content silently dropped, with zero indication to the user that only
+    a fraction was ever processed. Now chunks the text and extracts from
+    each chunk, merging and deduplicating results — covers up to
+    _MAX_EXTRACTION_CHUNKS * _EXTRACTION_CHUNK_SIZE characters (~96,000,
+    roughly a 40-60 page document) instead of ~3,000. Still bounded, not
+    unlimited/backgrounded — see the constants above for why — so a
+    document long enough to exceed even that gets `truncated=True` back,
+    which every caller now threads through to the user instead of staying
+    silent about it.
+    """
+    if not _ai_helper or not _ai_helper.enabled or not _ai_helper.model:
+        return parse_structured_faq_text(text), False
+
+    chunks    = _chunk_text(text)
+    truncated = len(text) > _EXTRACTION_CHUNK_SIZE * _MAX_EXTRACTION_CHUNKS
+
+    from utils import generate as _generate
+    all_faqs = []
+    seen_questions = set()
+
+    for chunk in chunks:
+        try:
+            prompt = f"""Extract FAQ pairs from this text. Return a JSON array of objects with 'question' and 'answer' fields.
+Only extract genuine question/answer content — skip navigation text, headers, or unrelated boilerplate.
 
 Text:
-{text[:3000]}
+{chunk}
 
 Return ONLY valid JSON array like:
 [
@@ -236,26 +371,31 @@ Return ONLY valid JSON array like:
   {{"question": "How much does it cost?", "answer": "$49 per month"}}
 ]
 """
-        if not _ai_helper or not _ai_helper.enabled or not _ai_helper.model:
-            return parse_structured_faq_text(text)
-
-        from utils import generate as _generate
-        # Was calling _ai_helper.model.generate_content(prompt, request_options=...)
-        # directly — bypassed the AI_PROVIDER switch entirely, and
-        # request_options is a google.generativeai (old SDK) kwarg that
-        # doesn't exist on google.genai's generate_content signature.
-        response = _generate(_ai_helper.model, prompt, _ai_helper.model_name)
-        json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
-        if json_match:
+            response = _generate(_ai_helper.model, prompt, _ai_helper.model_name)
+            json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
+            if not json_match:
+                continue
             faqs_data = json.loads(json_match.group())
             for faq in faqs_data:
-                faq['triggers'] = _extract_keywords(faq['question'])
-                faq['category'] = 'Imported'
-            return faqs_data
-        return []
-    except Exception as e:
-        current_app.logger.error(f'Error extracting FAQs with AI: {e}')
-        return []
+                question = str(faq.get('question', '')).strip()
+                answer   = str(faq.get('answer', '')).strip()
+                if not question or not answer:
+                    continue
+                dedup_key = question.lower()
+                if dedup_key in seen_questions:
+                    continue  # a question can legitimately repeat right at a chunk boundary
+                seen_questions.add(dedup_key)
+                all_faqs.append({
+                    'question': question,
+                    'answer':   answer,
+                    'category': 'Imported',
+                    'triggers': _extract_keywords(question),
+                })
+        except Exception as e:
+            current_app.logger.error(f'Error extracting FAQs with AI (chunk): {e}')
+            continue  # one bad chunk shouldn't take down the whole extraction
+
+    return all_faqs, truncated
 
 
 def parse_structured_faq_text(text):
@@ -547,11 +687,11 @@ def upload_faqs():
         filename = file.filename.lower()
 
         if filename.endswith('.csv'):
-            raw_items = process_csv_upload(file)
+            raw_items, truncated = process_csv_upload(file)
         elif filename.endswith(('.xlsx', '.xls')):
-            raw_items = process_excel_upload(file)
+            raw_items, truncated = process_excel_upload(file)
         elif filename.endswith('.pdf'):
-            raw_items = process_pdf_upload(file)
+            raw_items, truncated = process_pdf_upload(file)
         else:
             return jsonify({
                 'success': False,
@@ -566,6 +706,7 @@ def upload_faqs():
 
         current_app.logger.info(
             f"[Upload] client={client_id} raw_items={len(raw_items)} file={filename}"
+            + (" truncated=True" if truncated else "")
         )
 
         valid_faqs, errors = models.validate_and_enrich_faqs(raw_items, client_id)
@@ -599,6 +740,18 @@ def upload_faqs():
             'count':      len(valid_faqs),
             'processing': True,
         }
+        # FIX: extraction used to hard-truncate to ~3,000 characters with
+        # zero indication to the user — "count" just quietly reflected
+        # whatever fraction of a large file got processed. Now honest
+        # about it when a file was big enough to actually hit the (much
+        # higher) chunking cap.
+        if truncated:
+            response['truncated'] = True
+            response['warning'] = (
+                'This file is large — only the first part was processed '
+                f'({len(valid_faqs)} items found so far). For complete '
+                'coverage, consider splitting it into smaller files.'
+            )
         if errors:
             response['skipped']           = len(errors)
             response['validation_errors'] = errors[:10]
@@ -669,7 +822,14 @@ def import_faqs_from_url():
                 'error': 'Page had no readable text content.',
             }), 400
 
-        raw_items = extract_faqs_from_text(html_text[:6000])
+        # FIX: was extract_faqs_from_text(html_text[:6000]) — redundant AND
+        # counterproductive now that extract_faqs_from_text() does its own
+        # chunking internally (it used to re-truncate to 3,000 chars
+        # regardless of what was passed in, making this pre-truncation
+        # pointless; now it would just needlessly cut off content before
+        # chunking ever got a chance to cover more of it). Pass the full
+        # page text through.
+        raw_items, truncated = extract_faqs_from_text(html_text)
 
         if not raw_items:
             return jsonify({
@@ -679,6 +839,7 @@ def import_faqs_from_url():
 
         current_app.logger.info(
             f"[ImportURL] client={client_id} url={url} raw={len(raw_items)}"
+            + (" truncated=True" if truncated else "")
         )
 
         valid_faqs, errors = models.validate_and_enrich_faqs(raw_items, client_id)
@@ -706,6 +867,14 @@ def import_faqs_from_url():
             'count':      len(valid_faqs),
             'processing': True,
         }
+        # FIX: same honesty fix as upload_faqs() — a large FAQ page used to
+        # silently lose most of its content to the old 3,000-char cap.
+        if truncated:
+            response['truncated'] = True
+            response['warning'] = (
+                'This page has a lot of content — only the first part was '
+                f'processed ({len(valid_faqs)} items found so far).'
+            )
         if errors:
             response['skipped']           = len(errors)
             response['validation_errors'] = errors[:10]

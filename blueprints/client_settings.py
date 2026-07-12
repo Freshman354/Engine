@@ -110,6 +110,29 @@ def update_client_settings():
     if not updates and webhook_url is None:
         return jsonify({'success': False, 'error': 'No valid fields provided'}), 400
 
+    # FIX: notification_email used to be freely agency-editable text with no
+    # ownership guarantee at all — any string, no verification. If this
+    # client has a designated primary contact (a client_user who holds their
+    # own portal login — see models.get_primary_contact), that person's
+    # email is the source of truth going forward and the agency can no
+    # longer overwrite it directly here. Change who the primary contact is
+    # via /api/client-users/set-primary instead.
+    if 'notification_email' in updates:
+        primary = models.get_primary_contact(client_id)
+        if primary:
+            return jsonify({
+                'success': False,
+                'error': (
+                    "This client has a designated primary contact — "
+                    "notification email is managed from Client Users, "
+                    "not set directly."
+                ),
+            }), 409
+            # 409 Conflict: the request is well-formed, but this field is no
+            # longer agency-owned — distinct from a 400 (bad input) or a 403
+            # (route in general is unauthorized), since neither describes
+            # "this specific field has moved out of your control."
+
     # ── Write notification columns to clients table ────────────────────────────
     if updates:
         if not _write_client_columns(client_id, updates):

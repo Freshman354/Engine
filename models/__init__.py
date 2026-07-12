@@ -268,6 +268,8 @@ from .client_users import (
     get_client_user_by_id,
     delete_client_user,
     update_client_user_password,
+    get_primary_contact,
+    set_primary_contact,
 )
 
 # ── Affiliate programme ───────────────────────────────────────────────────────
