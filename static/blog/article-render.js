@@ -15,11 +15,11 @@ const GENERIC_INTROS = {
   "white-label": "White-labeling isn't a single decision, it's a set of smaller ones that compound. This piece looks at one of them in detail.",
   agents: "Understanding how an agent behaves under the hood makes it much easier to explain, sell, and troubleshoot for a client.",
   agency: "Turning any capability into a service line is mostly an operations problem, not a technical one. Here's how it plays out for this one.",
-  automation: "Automation earns its keep when it removes a step a human was doing manually — not when it adds a new one to monitor.",
+  automation: "Automation earns its keep when it removes a step a human was doing manually. It shouldn't add a new one to monitor.",
   support: "Support metrics only mean something once you know what a client actually expects the number to change.",
   leadgen: "A chat conversation is a strange place to qualify a lead, but it turns out to work better than most teams expect.",
-  ecommerce: "Shoppers ask a small, predictable set of questions — the trick is grounding the agent in the answers, not guessing at them.",
-  integrations: "Most integration headaches show up at the edges — auth, retries, and what happens when the other system is down.",
+  ecommerce: "Shoppers ask a small, predictable set of questions. The trick is grounding the agent in the answers, not guessing at them.",
+  integrations: "Most integration headaches show up at the edges: auth, retries, and what happens when the other system is down.",
   "case-studies": "Numbers without context don't tell an agency much. Here's the context behind one.",
   pricing: "Pricing AI work is still new enough that most agencies are guessing. This is one place to start instead.",
 };
@@ -57,7 +57,7 @@ function generateGenericArticle(article) {
     updatedRecently: article.updatedRecently,
     quickSummary: article.excerpt + " Here's the practical version, without the fluff.",
     keyTakeaways: [
-      `${article.categoryName} decisions compound — get the default right early.`,
+      `${article.categoryName} decisions compound, so get the default right early.`,
       "Ship the smallest version to one real client before customizing further.",
       "Document the decision so it's not re-litigated with the next client.",
     ],
@@ -68,7 +68,7 @@ function generateGenericArticle(article) {
     ],
     bodyHTML,
     faqs: [
-      { q: `Does this apply to every client, regardless of vertical?`, a: `Mostly, yes — the underlying pattern holds across verticals, though the specific numbers or copy will differ by client.` },
+      { q: `Does this apply to every client, regardless of vertical?`, a: `Mostly, yes. The underlying pattern holds across verticals, though the specific numbers or copy will differ by client.` },
       { q: `Is this something the platform handles automatically?`, a: `Often partially. It's worth checking your platform's defaults before building a custom process around it.` },
     ],
   };
@@ -81,8 +81,8 @@ const view = isCornerstone
   : generateGenericArticle(ARTICLES[0]);
 
 /* ---------- Populate header ---------- */
-document.title = view.title + " — Lumvi Knowledge Hub";
-document.getElementById("page-title").textContent = view.title + " — Lumvi Knowledge Hub";
+document.title = view.title + " | Lumvi Knowledge Hub";
+document.getElementById("page-title").textContent = view.title + " | Lumvi Knowledge Hub";
 document.getElementById("breadcrumbs").innerHTML = `
   <a href="${hubUrl()}" class="hover:text-signal transition-colors">Hub</a>
   <span>/</span>

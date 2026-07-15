@@ -20,7 +20,7 @@ const CATEGORIES = [
 ];
 
 const AUTHORS = [
-  { name: "Dana Whitfield", role: "Founder, Lumvi" },
+  { name: "Victor Bernard", role: "Founder, Lumvi" },
   { name: "Marcus Oyelaran", role: "Head of Partnerships" },
   { name: "Priya Nair", role: "Solutions Engineer" },
   { name: "Tom Reyes", role: "Agency Success Lead" },
@@ -202,15 +202,6 @@ function buildArticles() {
 }
 
 const ARTICLES = buildArticles();
-
-const CORNERSTONE = {
-  title: "The Complete Guide to White-Label AI Agents",
-  category: "White-Label AI",
-  readTime: 22,
-  updated: "Updated July 2026",
-  summary:
-    "Everything an agency needs to evaluate, price, and launch AI chatbots under its own brand — from the first client demo to the tenth renewal.",
-};
 
 function formatDate(d) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
