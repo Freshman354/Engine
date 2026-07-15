@@ -1,0 +1,277 @@
+/* ===================================================================
+   LUMVI KNOWLEDGE HUB — DESIGN SYSTEM
+
+   Palette
+   --ink       #10131A  primary dark background
+   --graphite  #1B1E27  dark surface / card
+   --paper     #F5F5F2  primary light background
+   --paper-2   #FFFFFF  card surface on light bg
+   --slate     #62687A  muted text, borders (light mode)
+   --slate-d   #8B92A6  muted text (dark mode)
+   --signal    #C9962A  warm amber — action, emphasis, the "brand swap" accent
+   --cobalt    #3457D5  secondary accent — links, data, informational badges
+
+   Type
+   Display : "Fraunces"      — editorial serif, used with restraint on headings
+   Body    : "Inter"          — UI + long-form body
+   Mono    : "IBM Plex Mono"  — metadata, labels, counters
+=================================================================== */
+
+:root {
+  --ink: #10131a;
+  --graphite: #1b1e27;
+  --graphite-2: #23273233;
+  --paper: #f5f5f2;
+  --paper-2: #ffffff;
+  --slate: #62687a;
+  --slate-d: #8b92a6;
+  --signal: #c9962a;
+  --signal-dim: #c9962a1a;
+  --cobalt: #3457d5;
+  --cobalt-dim: #3457d51a;
+  --line: #e3e2dc;
+  --line-dark: #2a2e39;
+}
+
+* { -webkit-font-smoothing: antialiased; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+.font-display { font-family: "Fraunces", ui-serif, Georgia, serif; }
+.font-mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+
+/* ---------- Dark mode ---------- */
+html.dark body { background: var(--ink); color: #ECEBE6; }
+html.dark .surface { background: var(--graphite); border-color: var(--line-dark); }
+html.dark .border-line { border-color: var(--line-dark) !important; }
+html.dark .text-muted { color: var(--slate-d) !important; }
+html.dark .bg-paper2 { background: var(--graphite) !important; }
+html.dark .hub-nav { background: rgba(16,19,26,0.75); border-color: var(--line-dark); }
+html.dark .hero-grain { opacity: 0.5; }
+
+/* ---------- Utility tokens as classes ---------- */
+.text-ink { color: var(--ink); }
+.text-muted { color: var(--slate); }
+.text-signal { color: var(--signal); }
+.text-cobalt { color: var(--cobalt); }
+.bg-ink { background: var(--ink); }
+.bg-paper { background: var(--paper); }
+.bg-paper2 { background: var(--paper-2); }
+.bg-signal { background: var(--signal); }
+.bg-signal-dim { background: var(--signal-dim); }
+.bg-cobalt { background: var(--cobalt); }
+.bg-cobalt-dim { background: var(--cobalt-dim); }
+.border-line { border-color: var(--line); }
+
+/* ---------- Nav ---------- */
+.hub-nav {
+  background: rgba(245,245,242,0.75);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border-bottom: 1px solid var(--line);
+}
+
+/* ---------- Buttons ---------- */
+.btn-primary {
+  background: var(--ink);
+  color: var(--paper);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.btn-primary:hover { background: var(--signal); transform: translateY(-1px); }
+html.dark .btn-primary { background: var(--signal); color: var(--ink); }
+html.dark .btn-primary:hover { background: #dcab45; }
+
+.btn-ghost {
+  border: 1px solid var(--line);
+  color: var(--ink);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.btn-ghost:hover { border-color: var(--ink); background: var(--paper-2); }
+html.dark .btn-ghost { color: #ECEBE6; }
+html.dark .btn-ghost:hover { background: var(--graphite); border-color: var(--slate-d); }
+
+/* ---------- Cards ---------- */
+.card {
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 32px -12px rgba(16,19,26,0.16);
+  border-color: #d4d3cb;
+}
+html.dark .card { background: var(--graphite); border-color: var(--line-dark); }
+html.dark .card:hover { box-shadow: 0 12px 32px -12px rgba(0,0,0,0.5); border-color: #363b48; }
+
+/* ---------- Badges / tags ---------- */
+.badge {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- Search ---------- */
+.search-bar {
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.search-bar:focus-within {
+  border-color: var(--signal);
+  box-shadow: 0 0 0 4px var(--signal-dim);
+}
+html.dark .search-bar { background: var(--graphite); }
+
+/* ---------- Signature element: Rebrand Preview ---------- */
+.rebrand-shell {
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0)),
+    var(--paper-2);
+  overflow: hidden;
+}
+html.dark .rebrand-shell {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0)),
+    var(--graphite);
+}
+.rebrand-swatch {
+  width: 40px; height: 40px; border-radius: 999px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.rebrand-swatch:hover { transform: translateY(-2px) scale(1.06); }
+.rebrand-swatch[data-active="true"] {
+  border-color: var(--ink);
+}
+html.dark .rebrand-swatch[data-active="true"] { border-color: #ECEBE6; }
+
+.rebrand-widget {
+  transition: background 0.35s ease, box-shadow 0.35s ease;
+}
+.rebrand-dot { transition: background 0.35s ease; }
+.rebrand-bubble { transition: background 0.35s ease, color 0.35s ease; }
+
+/* ---------- Learning path ---------- */
+.path-line {
+  background: repeating-linear-gradient(180deg, var(--line) 0 6px, transparent 6px 12px);
+  width: 2px;
+}
+html.dark .path-line { background: repeating-linear-gradient(180deg, var(--line-dark) 0 6px, transparent 6px 12px); }
+
+.path-node {
+  width: 40px; height: 40px; border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+  font-family: "IBM Plex Mono", monospace;
+}
+html.dark .path-node { background: var(--graphite); border-color: var(--line-dark); }
+
+/* ---------- Category card hover icon ---------- */
+.cat-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--signal-dim);
+  color: var(--signal);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+.card:hover .cat-icon { transform: scale(1.08) rotate(-4deg); }
+
+/* ---------- Reading progress (article page) ---------- */
+#reading-progress {
+  position: fixed; top: 0; left: 0; height: 3px;
+  background: var(--signal);
+  z-index: 60; width: 0%;
+  transition: width 0.1s linear;
+}
+
+/* ---------- TOC ---------- */
+.toc-link {
+  display: block; padding: 6px 0 6px 14px;
+  border-left: 2px solid var(--line);
+  color: var(--slate);
+  font-size: 13.5px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.toc-link:hover { color: var(--ink); }
+.toc-link.active { color: var(--signal); border-color: var(--signal); font-weight: 600; }
+html.dark .toc-link { border-color: var(--line-dark); }
+
+/* ---------- Callouts ---------- */
+.callout {
+  border-left: 3px solid var(--cobalt);
+  background: var(--cobalt-dim);
+  border-radius: 0 12px 12px 0;
+}
+.callout-warn {
+  border-left: 3px solid #C15A3B;
+  background: #C15A3B14;
+  border-radius: 0 12px 12px 0;
+}
+.callout-tip {
+  border-left: 3px solid var(--signal);
+  background: var(--signal-dim);
+  border-radius: 0 12px 12px 0;
+}
+
+/* ---------- FAQ accordion ---------- */
+.faq-item { border-bottom: 1px solid var(--line); }
+html.dark .faq-item { border-color: var(--line-dark); }
+.faq-chevron { transition: transform 0.2s ease; }
+.faq-item[data-open="true"] .faq-chevron { transform: rotate(180deg); }
+.faq-answer { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.25s ease; }
+.faq-item[data-open="true"] .faq-answer { grid-template-rows: 1fr; }
+.faq-answer > div { overflow: hidden; }
+
+/* ---------- Fade-in on scroll ---------- */
+.reveal { opacity: 0; transform: translateY(16px); transition: opacity 0.6s ease, transform 0.6s ease; }
+.reveal.in { opacity: 1; transform: translateY(0); }
+
+/* ---------- Table ---------- */
+.comparison-table th { font-family: "IBM Plex Mono", monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+.comparison-table td, .comparison-table th { border: 1px solid var(--line); padding: 12px 16px; }
+html.dark .comparison-table td, html.dark .comparison-table th { border-color: var(--line-dark); }
+
+/* ---------- Scrollbar (subtle) ---------- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; }
+html.dark ::-webkit-scrollbar-thumb { background: var(--line-dark); }
+
+/* ---------- Focus states (accessibility) ---------- */
+a:focus-visible, button:focus-visible, input:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* ---------- Marquee for "most popular" rank numbers ---------- */
+.rank-num {
+  font-family: "Fraunces", serif;
+  font-optical-sizing: auto;
+  font-weight: 600;
+  font-size: 44px;
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1.4px var(--line);
+}
+html.dark .rank-num { -webkit-text-stroke: 1.4px var(--line-dark); }

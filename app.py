@@ -1036,6 +1036,10 @@ app.register_blueprint(email_domains_bp)
 from blueprints.client_settings import client_settings_bp
 app.register_blueprint(client_settings_bp)
 
+# Blog (Knowledge Hub) — no dependencies, same shape as account_bp
+from blueprints.blog import blog_bp
+app.register_blueprint(blog_bp)
+
 # Platform webhook routes (Shopify, Acuity)
 _webhooks.register_webhook_routes(app)
 

@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lumvi Knowledge Hub — The AI Agent Knowledge Hub for Agencies</title>
+<meta name="description" content="Practical, no-fluff guides on white-label AI agents, agency growth, and automation — written for agencies building an AI service line." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          ink: '#10131A', graphite: '#1B1E27', paper: '#F5F5F2',
+          signal: '#C9962A', cobalt: '#3457D5', slate: '#62687A'
+        },
+        fontFamily: {
+          display: ['Fraunces','serif'], sans: ['Inter','sans-serif'], mono: ['"IBM Plex Mono"','monospace']
+        }
+      }
+    }
+  }
+</script>
+<link rel="stylesheet" href="{{ url_for('static', filename='blog/styles.css') }}">
+</head>
+<body class="bg-paper text-ink antialiased">
+<script>
+  // Injected so static/blog/app.js and article-render.js can build links
+  // through the Flask blueprint's routes instead of hardcoded filenames.
+  window.BLOG_URLS = {
+    index: "{{ url_for('blog.index') }}",
+    articleBase: "{{ url_for('blog.article', slug='__SLUG__') }}"
+  };
+</script>
+
+<!-- ============ NAV ============ -->
+<header class="hub-nav fixed top-0 inset-x-0 z-50">
+  <nav class="max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+    <a href="{{ url_for('blog.index') }}" class="flex items-center gap-2.5">
+      <span class="w-8 h-8 rounded-lg bg-ink dark:bg-signal flex items-center justify-center">
+        <svg class="w-4 h-4 text-signal dark:text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+      </span>
+      <span class="font-display font-semibold text-[18px] tracking-tight">Lumvi</span>
+    </a>
+
+    <div class="hidden lg:flex items-center gap-8 text-[14px] font-medium text-ink/80 dark:text-white/80">
+      <a href="#" class="hover:text-signal transition-colors">Product</a>
+      <a href="#" class="hover:text-signal transition-colors">Solutions</a>
+      <a href="#" class="hover:text-signal transition-colors">Pricing</a>
+      <a href="#" class="hover:text-signal transition-colors">Documentation</a>
+      <a href="{{ url_for('blog.index') }}" class="text-signal">Blog</a>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button data-theme-toggle class="w-9 h-9 rounded-full border border-line flex items-center justify-center hover:border-signal transition-colors" aria-label="Toggle dark mode"></button>
+      <a href="#" class="hidden sm:inline-flex btn-ghost rounded-full px-4 py-2 text-[13.5px] font-medium">Log in</a>
+      <a href="#" class="btn-primary rounded-full px-4 py-2 text-[13.5px] font-medium">Start free</a>
+      <button id="mobile-nav-btn" class="lg:hidden w-9 h-9 rounded-full border border-line flex items-center justify-center ml-1"></button>
+    </div>
+  </nav>
+  <div id="mobile-nav-panel" class="hidden lg:hidden border-t border-line bg-paper2 dark:bg-graphite px-5 py-4 flex flex-col gap-3 text-[14.5px] font-medium">
+    <a href="#" class="py-1.5">Product</a>
+    <a href="#" class="py-1.5">Solutions</a>
+    <a href="#" class="py-1.5">Pricing</a>
+    <a href="#" class="py-1.5">Documentation</a>
+    <a href="#" class="py-1.5 text-signal">Blog</a>
+  </div>
+</header>
+
+<main class="pt-16">
+
+  <!-- ============ HERO ============ -->
+  <section class="relative overflow-hidden border-b border-line">
+    <div class="hero-grain absolute inset-0 opacity-30 pointer-events-none" style="background: radial-gradient(circle at 15% 0%, var(--signal-dim), transparent 45%), radial-gradient(circle at 90% 20%, var(--cobalt-dim), transparent 40%);"></div>
+
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 pt-16 pb-20 relative">
+      <div class="max-w-3xl">
+        <p class="font-mono text-[12px] uppercase tracking-widest text-signal mb-4">Lumvi Knowledge Hub</p>
+        <h1 class="font-display text-[40px] sm:text-[56px] leading-[1.05] font-semibold tracking-tight">
+          The AI Agent<br class="hidden sm:block"> Knowledge Hub
+        </h1>
+        <p class="text-muted text-[17px] sm:text-[18px] leading-relaxed mt-6 max-w-xl">
+          Practical resources on white-label AI, agency growth, and automation — written by people who build the agents, not just market them.
+        </p>
+
+        <div class="mt-9 max-w-xl">
+          <div class="search-bar flex items-center gap-3 px-4 py-3.5 relative">
+            <span class="text-muted"><svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
+            <input id="hero-search" type="text" placeholder="Search 100+ guides — try “pricing” or “webhooks”"
+              class="bg-transparent flex-1 outline-none text-[14.5px] placeholder:text-muted" />
+            <kbd class="hidden sm:inline font-mono text-[11px] text-muted border border-line rounded px-1.5 py-0.5">/</kbd>
+            <div id="hero-search-results" class="hidden absolute left-0 right-0 top-[calc(100%+8px)] bg-paper2 border border-line rounded-2xl shadow-xl overflow-hidden z-20"></div>
+          </div>
+          <div class="flex flex-wrap gap-2 mt-3.5">
+            <span class="text-[12.5px] text-muted mr-1 mt-1">Popular:</span>
+            <a href="#" class="badge bg-paper2 border border-line hover:border-signal transition-colors">white-label pricing</a>
+            <a href="#" class="badge bg-paper2 border border-line hover:border-signal transition-colors">agent vs chatbot</a>
+            <a href="#" class="badge bg-paper2 border border-line hover:border-signal transition-colors">webhooks</a>
+            <a href="#" class="badge bg-paper2 border border-line hover:border-signal transition-colors">deflection rate</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Signature element: Rebrand Preview -->
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 pb-20 relative">
+      <div id="rebrand-preview" class="rebrand-shell p-6 sm:p-8 grid sm:grid-cols-[1fr_auto] gap-8 items-center">
+        <div>
+          <p class="font-mono text-[11px] uppercase tracking-widest text-muted mb-2">One platform, every brand</p>
+          <h2 class="font-display text-[22px] font-medium mb-2">This is the same agent. Only the label changed.</h2>
+          <p class="text-muted text-[14.5px] leading-relaxed max-w-md mb-5">Tap a client to see the exact widget your agency would ship — same intelligence underneath, different name on the glass.</p>
+          <div data-swatches class="flex items-center gap-3"></div>
+          <p class="font-mono text-[12px] text-muted mt-4">Currently previewing: <span data-brand-name class="text-ink dark:text-white font-medium"></span></p>
+        </div>
+
+        <div class="w-full sm:w-[280px] rebrand-widget rounded-2xl p-4" style="background: var(--paper-2); border:1px solid var(--line);">
+          <div class="flex items-center gap-2.5 pb-3 mb-3 border-b border-line">
+            <span data-widget-dot class="rebrand-dot w-2.5 h-2.5 rounded-full"></span>
+            <span class="text-[13px] font-medium">Chat with us</span>
+          </div>
+          <div class="flex items-start gap-2 mb-2">
+            <span data-widget-initials class="rebrand-bubble w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-mono font-semibold shrink-0"></span>
+            <div data-widget-bubble class="rebrand-bubble rounded-xl rounded-tl-sm px-3 py-2 text-[12.5px] max-w-[200px]">Hi! Looking for pricing, or need help with an order?</div>
+          </div>
+          <div class="flex justify-end">
+            <div class="rounded-xl rounded-tr-sm px-3 py-2 text-[12.5px] max-w-[180px]" style="background:var(--paper); border:1px solid var(--line);">Just browsing, thanks</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FEATURED GUIDE ============ -->
+  <section class="max-w-7xl mx-auto px-5 sm:px-8 py-16 sm:py-20 border-b border-line reveal">
+    <p class="font-mono text-[12px] uppercase tracking-widest text-muted mb-6">The cornerstone guide</p>
+    <a href="{{ url_for('blog.article', slug='complete-guide-white-label-ai-agents') }}" class="group grid lg:grid-cols-[1.1fr_1fr] gap-0 rounded-3xl overflow-hidden border border-line card !p-0">
+      <div class="relative p-8 sm:p-12 flex flex-col justify-center" style="background: var(--ink);">
+        <div class="absolute inset-0 opacity-40" style="background: radial-gradient(circle at 20% 20%, var(--signal-dim), transparent 55%), radial-gradient(circle at 80% 90%, var(--cobalt-dim), transparent 45%);"></div>
+        <div class="relative">
+          <span class="badge bg-white/10 text-signal mb-5">White-Label AI · Updated July 2026</span>
+          <h3 class="font-display text-[30px] sm:text-[36px] leading-tight font-semibold text-white mb-4">
+            The Complete Guide to White-Label AI Agents
+          </h3>
+          <p class="text-white/70 text-[15px] leading-relaxed max-w-md mb-7">
+            Everything an agency needs to evaluate, price, and launch AI chatbots under its own brand — from the first client demo to the tenth renewal.
+          </p>
+          <span class="inline-flex items-center gap-2 text-signal font-medium text-[14.5px] group-hover:gap-3 transition-all">
+            Read the guide
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          </span>
+        </div>
+      </div>
+      <div class="p-8 sm:p-12 flex flex-col justify-center gap-6" style="background: var(--paper-2);">
+        <div class="flex items-center gap-4 text-[13px] font-mono text-muted">
+          <span class="flex items-center gap-1.5"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg> 22 min read</span>
+          <span>·</span>
+          <span>7 sections</span>
+        </div>
+        <div class="space-y-3">
+          <p class="text-[14px] font-medium text-muted">What's inside</p>
+          <ul class="space-y-2.5 text-[14.5px]">
+            <li class="flex items-start gap-2.5"><span class="text-signal mt-0.5"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>What white-label AI actually means for an agency</li>
+            <li class="flex items-start gap-2.5"><span class="text-signal mt-0.5"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Pricing models that hold their margin</li>
+            <li class="flex items-start gap-2.5"><span class="text-signal mt-0.5"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>A client-ready launch checklist</li>
+          </ul>
+        </div>
+        <div class="flex -space-x-2 items-center pt-2">
+          <span class="w-8 h-8 rounded-full bg-cobalt/20 border-2 border-paper2 flex items-center justify-center font-mono text-[10px] text-cobalt">DW</span>
+          <span class="w-8 h-8 rounded-full bg-signal/20 border-2 border-paper2 flex items-center justify-center font-mono text-[10px] text-signal">MO</span>
+          <span class="text-[12.5px] text-muted ml-3">Written by the Lumvi founding team</span>
+        </div>
+      </div>
+    </a>
+  </section>
+
+  <!-- ============ BROWSE BY TOPIC ============ -->
+  <section class="max-w-7xl mx-auto px-5 sm:px-8 py-16 sm:py-20 border-b border-line reveal">
+    <div class="flex items-end justify-between mb-10">
+      <div>
+        <p class="font-mono text-[12px] uppercase tracking-widest text-muted mb-3">Browse by topic</p>
+        <h2 class="font-display text-[28px] sm:text-[32px] font-semibold">Find the shelf you need</h2>
+      </div>
+      <span class="hidden sm:block font-mono text-[13px] text-muted"><span id="total-count"></span> articles and counting</span>
+    </div>
+    <div id="category-grid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+  </section>
+
+  <!-- ============ START HERE ============ -->
+  <section class="max-w-7xl mx-auto px-5 sm:px-8 py-16 sm:py-20 border-b border-line reveal">
+    <p class="font-mono text-[12px] uppercase tracking-widest text-muted mb-3">New to this?</p>
+    <h2 class="font-display text-[28px] sm:text-[32px] font-semibold mb-2">Start here</h2>
+    <p class="text-muted text-[15px] max-w-xl mb-12">Five guides, in order, that take you from "what is an AI agent" to a live client widget. Skip around later — but read these first, in this order.</p>
+
+    <div id="learning-path" class="relative"></div>
+  </section>
+
+  <!-- ============ LATEST ARTICLES ============ -->
+  <section class="max-w-7xl mx-auto px-5 sm:px-8 py-16 sm:py-20 border-b border-line reveal">
+    <div class="flex flex-wrap items-end justify-between gap-4 mb-10">
+      <div>
+        <p class="font-mono text-[12px] uppercase tracking-widest text-muted mb-3">Fresh off the desk</p>
+        <h2 class="font-display text-[28px] sm:text-[32px] font-semibold">Latest articles</h2>
+      </div>
+      <div id="filter-pills" class="flex flex-wrap gap-2"></div>
+    </div>
+    <div id="latest-grid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+    <div class="flex justify-center mt-10">
+      <button id="load-more" class="btn-ghost rounded-full px-6 py-3 text-[14px] font-medium">Load more articles</button>
+    </div>
+  </section>
+
+  <!-- ============ MOST POPULAR ============ -->
+  <section class="max-w-5xl mx-auto px-5 sm:px-8 py-16 sm:py-20 border-b border-line reveal">
+    <p class="font-mono text-[12px] uppercase tracking-widest text-muted mb-3">Read the most</p>
+    <h2 class="font-display text-[28px] sm:text-[32px] font-semibold mb-8">Most popular this quarter</h2>
+    <div id="popular-list" class="border-t border-line"></div>
+  </section>
+
+  <!-- ============ FREE RESOURCES ============ -->
+  <section class="max-w-7xl mx-auto px-5 sm:px-8 py-16 sm:py-20 border-b border-line reveal">
+    <p class="font-mono text-[12px] uppercase tracking-widest text-muted mb-3">No email drip, just the file</p>
+    <h2 class="font-display text-[28px] sm:text-[32px] font-semibold mb-10">Free resources</h2>
+    <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5" id="resource-grid"></div>
+  </section>
+
+  <!-- ============ NEWSLETTER ============ -->
+  <section class="border-b border-line" style="background: var(--ink);">
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-16 sm:py-20 grid lg:grid-cols-2 gap-10 items-center reveal">
+      <div>
+        <p class="font-mono text-[12px] uppercase tracking-widest text-signal mb-3">One email, twice a month</p>
+        <h2 class="font-display text-[28px] sm:text-[32px] font-semibold text-white mb-4">The margin memo</h2>
+        <p class="text-white/65 text-[15px] leading-relaxed max-w-md">
+          A short note on what's actually working for agencies reselling AI right now — new pricing patterns, integrations worth building, and the mistakes we're seeing on support tickets. No fluff, unsubscribe in one click.
+        </p>
+      </div>
+      <form class="flex flex-col sm:flex-row gap-3" onsubmit="event.preventDefault(); this.querySelector('button').textContent='You\'re in.';">
+        <input type="email" required placeholder="you@youragency.com" class="flex-1 rounded-full px-5 py-3.5 text-[14.5px] outline-none bg-white/5 border border-white/15 text-white placeholder:text-white/40 focus:border-signal transition-colors" />
+        <button class="btn-primary rounded-full px-6 py-3.5 text-[14.5px] font-medium whitespace-nowrap">Subscribe</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============ CTA ============ -->
+  <section class="max-w-7xl mx-auto px-5 sm:px-8 py-20 sm:py-28 text-center reveal">
+    <h2 class="font-display text-[32px] sm:text-[42px] font-semibold max-w-2xl mx-auto leading-tight">
+      Read enough. See what your first client widget would look like.
+    </h2>
+    <p class="text-muted text-[15.5px] mt-5 max-w-md mx-auto">Fourteen-day free trial. No card required. Cancel from the dashboard in two clicks.</p>
+    <div class="mt-8 flex items-center justify-center gap-3">
+      <a href="#" class="btn-primary rounded-full px-7 py-3.5 text-[14.5px] font-medium">Start free trial</a>
+      <a href="#" class="btn-ghost rounded-full px-7 py-3.5 text-[14.5px] font-medium">Talk to sales</a>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ FOOTER ============ -->
+<footer class="border-t border-line bg-paper2 dark:bg-graphite">
+  <div class="max-w-7xl mx-auto px-5 sm:px-8 py-14 grid sm:grid-cols-2 lg:grid-cols-6 gap-10">
+    <div class="lg:col-span-2">
+      <a href="{{ url_for('blog.index') }}" class="flex items-center gap-2.5 mb-4">
+        <span class="w-8 h-8 rounded-lg bg-ink dark:bg-signal flex items-center justify-center">
+          <svg class="w-4 h-4 text-signal dark:text-ink" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+        </span>
+        <span class="font-display font-semibold text-[18px]">Lumvi</span>
+      </a>
+      <p class="text-muted text-[13.5px] leading-relaxed max-w-xs">The white-label AI chatbot platform agencies use to run their own AI service line.</p>
+    </div>
+    <div>
+      <p class="font-mono text-[11px] uppercase tracking-widest text-muted mb-4">Product</p>
+      <ul class="space-y-2.5 text-[13.5px]">
+        <li><a href="#" class="hover:text-signal transition-colors">Overview</a></li>
+        <li><a href="#" class="hover:text-signal transition-colors">Pricing</a></li>
+        <li><a href="#" class="hover:text-signal transition-colors">Integrations</a></li>
+        <li><a href="#" class="hover:text-signal transition-colors">Changelog</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="font-mono text-[11px] uppercase tracking-widest text-muted mb-4">Resources</p>
+      <ul class="space-y-2.5 text-[13.5px]">
+        <li><a href="{{ url_for('blog.index') }}" class="hover:text-signal transition-colors">Knowledge Hub</a></li>
+        <li><a href="#" class="hover:text-signal transition-colors">Documentation</a></li>
+        <li><a href="#" class="hover:text-signal transition-colors">Case Studies</a></li>
+        <li><a href="#" class="hover:text-signal transition-colors">Free Tools</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="font-mono text-[11px] uppercase tracking-widest text-muted mb-4">Company</p>
+      <ul class="space-y-2.5 text-[13.5px]">
+        <li><a href="#" class="hover:text-signal transition-colors">About</a></li>
+        <li><a href="#" class="hover:text-signal transition-colors">Careers</a></li>
+        <li><a href="#" class="hover:text-signal transition-colors">Contact</a></li>
+      </ul>
+    </div>
+    <div>
+      <p class="font-mono text-[11px] uppercase tracking-widest text-muted mb-4">Legal</p>
+      <ul class="space-y-2.5 text-[13.5px]">
+        <li><a href="#" class="hover:text-signal transition-colors">Privacy</a></li>
+        <li><a href="#" class="hover:text-signal transition-colors">Terms</a></li>
+        <li><a href="#" class="hover:text-signal transition-colors">Security</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t border-line">
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-[12.5px] text-muted">
+      <span>© 2026 Lumvi. All rights reserved.</span>
+      <span class="font-mono">Built for agencies, one widget at a time.</span>
+    </div>
+  </div>
+</footer>
+
+<script src="{{ url_for('static', filename='blog/data.js') }}"></script>
+<script src="{{ url_for('static', filename='blog/app.js') }}"></script>
+<script>
+  initDarkMode();
+  initMobileNav();
+  initReveal();
+  initSearch("#hero-search", "#hero-search-results");
+  initRebrandPreview();
+
+  document.getElementById("total-count").textContent = totalArticleCount() + "+";
+
+  // Category grid
+  document.getElementById("category-grid").innerHTML = CATEGORIES.map(categoryCardHTML).join("");
+
+  // Filter pills
+  const filterPills = document.getElementById("filter-pills");
+  const pillDefs = [{ key: "all", name: "All" }, ...CATEGORIES.map(c => ({ key: c.key, name: c.name }))];
+  let activeFilter = "all";
+  let visibleCount = 9;
+
+  function renderLatest() {
+    const filtered = activeFilter === "all" ? ARTICLES : ARTICLES.filter(a => a.category === activeFilter);
+    document.getElementById("latest-grid").innerHTML = filtered.slice(0, visibleCount).map(a => articleCardHTML(a)).join("");
+    document.getElementById("load-more").style.display = filtered.length > visibleCount ? "inline-flex" : "none";
+  }
+
+  filterPills.innerHTML = pillDefs.slice(0, 6).map(p =>
+    `<button data-pill="${p.key}" class="badge border transition-colors ${p.key==='all' ? 'bg-ink text-paper border-ink' : 'bg-paper2 border-line hover:border-signal'}">${p.name}</button>`
+  ).join("");
+
+  filterPills.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-pill]");
+    if (!btn) return;
+    activeFilter = btn.dataset.pill;
+    visibleCount = 9;
+    filterPills.querySelectorAll("[data-pill]").forEach(b => {
+      const active = b.dataset.pill === activeFilter;
+      b.className = `badge border transition-colors ${active ? 'bg-ink text-paper border-ink' : 'bg-paper2 border-line hover:border-signal'}`;
+    });
+    renderLatest();
+  });
+
+  document.getElementById("load-more").addEventListener("click", () => {
+    visibleCount += 6;
+    renderLatest();
+  });
+
+  // Category card clicks also filter latest + scroll down
+  document.getElementById("category-grid").addEventListener("click", (e) => {
+    const link = e.target.closest("[data-filter]");
+    if (!link) return;
+    e.preventDefault();
+    activeFilter = link.dataset.filter;
+    visibleCount = 9;
+    filterPills.querySelectorAll("[data-pill]").forEach(b => {
+      const active = b.dataset.pill === activeFilter;
+      b.className = `badge border transition-colors ${active ? 'bg-ink text-paper border-ink' : 'bg-paper2 border-line hover:border-signal'}`;
+    });
+    renderLatest();
+    document.getElementById("latest-grid").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  renderLatest();
+
+  // Most popular (top 6 by popularity score)
+  const popular = [...ARTICLES].sort((a, b) => b.popularity - a.popularity).slice(0, 6);
+  document.getElementById("popular-list").innerHTML = popular.map((a, i) => popularRowHTML(a, i + 1)).join("");
+
+  // Learning path
+  const pathTitles = [
+    "What Is an AI Agent? A Plain-English Definition",
+    "AI Agent vs. Chatbot: The Difference That Actually Matters",
+    "What Is White-Label AI, Really?",
+    "How Agencies Price AI Services Without a Race to the Bottom",
+    "How to Demo White-Label AI Without Revealing the Platform Behind It",
+  ];
+  const pathDescs = [
+    "Start with the concept before the platform.",
+    "The distinction clients will ask about first.",
+    "Understand what you're actually reselling.",
+    "Package it before you pitch it.",
+    "From demo to a client's first live widget.",
+  ];
+  const pathHTML = pathTitles.map((t, i) => {
+    const a = ARTICLES.find(x => x.title === t) || ARTICLES[0];
+    const last = i === pathTitles.length - 1;
+    return `
+    <div class="flex gap-5">
+      <div class="flex flex-col items-center">
+        <div class="path-node flex items-center justify-center text-[13px]">${i + 1}</div>
+        ${last ? "" : '<div class="path-line flex-1 my-1"></div>'}
+      </div>
+      <a href="${articleUrl(a.slug)}" class="group flex-1 pb-10 -mt-1">
+        <p class="font-mono text-[11px] text-muted mb-1">Step ${i + 1} of ${pathTitles.length}</p>
+        <h3 class="font-display text-[18px] font-medium group-hover:text-signal transition-colors">${t}</h3>
+        <p class="text-muted text-[14px] mt-1">${pathDescs[i]}</p>
+      </a>
+    </div>`;
+  }).join("");
+  document.getElementById("learning-path").innerHTML = pathHTML;
+
+  // Free resources
+  const RESOURCES = [
+    { name: "AI Pricing Calculator", desc: "Model per-seat vs. usage pricing before you quote a client.", icon: "tag" },
+    { name: "ROI Calculator", desc: "Show a prospect the payback period in their own numbers.", icon: "chart" },
+    { name: "Proposal Template", desc: "A scoped, priced proposal doc ready to duplicate.", icon: "layers" },
+    { name: "Client Discovery Questions", desc: "The exact questions to ask before scoping any AI work.", icon: "target" },
+    { name: "Agency Sales Scripts", desc: "Talk tracks for the demo, the objection, and the close.", icon: "headset" },
+    { name: "Implementation Checklist", desc: "Every step from kickoff to a live, tested widget.", icon: "check" },
+  ];
+  document.getElementById("resource-grid").innerHTML = RESOURCES.map(r => `
+    <div class="card p-6 flex flex-col gap-4">
+      <div class="cat-icon">${icon(r.icon, "w-5 h-5")}</div>
+      <div>
+        <h3 class="font-display text-[16.5px] font-medium">${r.name}</h3>
+        <p class="text-muted text-[13.5px] mt-1.5 leading-relaxed">${r.desc}</p>
+      </div>
+      <a href="#" class="mt-auto pt-3 border-t border-line flex items-center gap-2 text-[13px] font-medium text-signal">Download free ${icon("arrow","w-3.5 h-3.5")}</a>
+    </div>
+  `).join("");
+</script>
+</body>
+</html>
