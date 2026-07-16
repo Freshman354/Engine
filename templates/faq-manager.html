@@ -583,7 +583,7 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
 
       <div class="tab-panel active" id="upanel-file">
         <div class="format-row">
-          <div class="format-card"><strong>CSV / Excel</strong>Column 1: <code>question</code><br>Column 2: <code>answer</code><br>Column 3: <code>category</code></div>
+          <div class="format-card"><strong>CSV / Excel</strong>Works best with <code>question</code> / <code>answer</code> columns<br>Other headers (e.g. <code>Q</code>/<code>A</code>) are matched automatically<br>Pricing sheets, catalogs, etc. — AI extracts it</div>
           <div class="format-card"><strong>PDF Document</strong>Use <code>Q:</code> before questions<br>Use <code>A:</code> before answers<br>Or any doc — AI extracts it</div>
         </div>
         <span class="template-link" onclick="downloadCSVTemplate()">
@@ -941,16 +941,41 @@ function handleFileSelect(e) {
 }
 
 async function _validateFile(f) {
-  const ext=f.name.split('.').pop().toLowerCase(), text=await f.text();
+  const ext=f.name.split('.').pop().toLowerCase();
   if (ext==='csv') {
+    const text=await f.text();
     const lines=text.split(/\r?\n/).filter(l=>l.trim());
     if (lines.length<2) return{ok:false,error:'CSV has no data rows.'};
-    const h=lines[0].split(',').map(x=>x.trim().toLowerCase().replace(/^"|"$/g,''));
-    if (!h.find(x=>x==='question')) return{ok:false,error:'CSV missing "question" column.'};
-    if (!h.find(x=>x==='answer'))   return{ok:false,error:'CSV missing "answer" column.'};
+    // FIX: this used to also require literal 'question'/'answer' columns
+    // in the header row — duplicating, and being stricter than, the
+    // server's own validation. The server now accepts common column
+    // aliases (Q/A, Title/Description, etc.) and, for a spreadsheet with
+    // no Q&A-shaped columns at all (a pricing sheet, a product catalog),
+    // generates FAQs from the table content via AI. None of that was
+    // reachable through this UI because this check rejected the file
+    // before it was ever uploaded. The server is the single source of
+    // truth for whether a file's content is usable — this only keeps the
+    // one check worth doing client-side for free: reject an empty file.
     return{ok:true,count:lines.length-1};
   }
   return{ok:true};
+}
+
+function _buildUploadResultMessage(d) {
+  // FIX: the server sends truncated/warning (a large file only got
+  // partially processed) and skipped/validation_errors (some rows failed
+  // validation) — all four used to be computed correctly on the backend
+  // and then silently dropped here, so the plain success toast gave no
+  // indication anything was incomplete. validation_errors' per-row detail
+  // goes to the console rather than the toast — useful for debugging
+  // without making the toast unreadable.
+  const parts = [d.message];
+  if (d.truncated && d.warning) parts.push(d.warning);
+  if (d.skipped) parts.push(`${d.skipped} row${d.skipped===1?'':'s'} skipped.`);
+  if (d.validation_errors && d.validation_errors.length) {
+    console.warn('[FAQ Upload] validation errors:', d.validation_errors);
+  }
+  return parts.join(' ');
 }
 
 async function startUpload() {
@@ -967,7 +992,15 @@ async function startUpload() {
     const res=await fetch('/api/faq/upload',{method:'POST',body:fd});
     fill.style.width='100%';
     const d=await res.json();
-    if (d.success){st.textContent=d.message;st.style.color='var(--green)';setTimeout(()=>{closeUploadModal();loadFAQs();showSuccess(d.message);},1200);}
+    if (d.success){
+      const needsWarning = !!(d.truncated || d.skipped);
+      const msg = _buildUploadResultMessage(d);
+      st.textContent=d.message; st.style.color=needsWarning?'var(--amber)':'var(--green)';
+      setTimeout(()=>{
+        closeUploadModal();loadFAQs();
+        needsWarning ? showWarning(msg) : showSuccess(msg);
+      }, needsWarning?2200:1200);
+    }
     else{const e=d.error||'Upload failed.';fill.style.background='var(--red)';st.textContent='❌ '+e;st.style.color='var(--red)';btn.disabled=false;showError(e);}
   } catch{const e='Network error.';fill.style.background='var(--red)';st.textContent=e;st.style.color='var(--red)';btn.disabled=false;showError(e);}
 }
@@ -982,7 +1015,15 @@ async function startUrlImport() {
     const res=await fetch('/api/faq/import-url',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,client_id:CLIENT_ID})});
     fill.style.width='100%';
     const d=await res.json();
-    if (d.success){st.textContent=d.message;st.style.color='var(--green)';setTimeout(()=>{closeUploadModal();loadFAQs();showSuccess(d.message);},1400);}
+    if (d.success){
+      const needsWarning = !!(d.truncated || d.skipped);
+      const msg = _buildUploadResultMessage(d);
+      st.textContent=d.message; st.style.color=needsWarning?'var(--amber)':'var(--green)';
+      setTimeout(()=>{
+        closeUploadModal();loadFAQs();
+        needsWarning ? showWarning(msg) : showSuccess(msg);
+      }, needsWarning?2200:1400);
+    }
     else{const e=d.error||'Import failed.';fill.style.background='var(--red)';st.textContent='❌ '+e;st.style.color='var(--red)';btn.disabled=false;showError(e);}
   } catch{const e='Network error.';fill.style.background='var(--red)';st.textContent=e;st.style.color='var(--red)';btn.disabled=false;showError(e);}
 }
@@ -1007,14 +1048,23 @@ function downloadCSVTemplate() {
 function showToast(msg,type) {
   const t=document.getElementById('toast');
   t.textContent=msg;
-  t.style.background=type==='success'?'#052e16':'#450a0a';
-  t.style.color=type==='success'?'#4ade80':'#fca5a5';
-  t.style.border=type==='success'?'1px solid #16a34a':'1px solid #dc2626';
+  if (type==='warning') {
+    t.style.background='var(--amber-lt)';
+    t.style.color='var(--amber)';
+    t.style.border='1px solid var(--amber)';
+  } else {
+    t.style.background=type==='success'?'#052e16':'#450a0a';
+    t.style.color=type==='success'?'#4ade80':'#fca5a5';
+    t.style.border=type==='success'?'1px solid #16a34a':'1px solid #dc2626';
+  }
   t.style.display='block'; clearTimeout(t._t);
-  t._t=setTimeout(()=>t.style.display='none',3500);
+  // Warnings stay up longer than a plain success toast — there's more to
+  // read (what got skipped/truncated, not just "it worked").
+  t._t=setTimeout(()=>t.style.display='none', type==='warning'?6000:3500);
 }
 function showSuccess(m){showToast(m||'Changes saved.','success');}
 function showError(m){showToast(m||'An error occurred.','error');}
+function showWarning(m){showToast(m||'Completed with warnings.','warning');}
 
 function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 function sanitizeInput(s){if(typeof s!=='string')return'';return s.replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim();}
