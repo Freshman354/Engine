@@ -1292,7 +1292,7 @@ a { text-decoration: none; color: inherit; }
           <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
           Integration connected!
         </div>
-        <div style="font-size:13px;color:var(--green);opacity:0.8">
+        <div style="font-size:13px;color:var(--success);opacity:0.8">
           Copy the webhook URL below and paste it into your client's platform settings to start receiving events.
         </div>
         <div class="success-url-row">
@@ -1307,11 +1307,7 @@ a { text-decoration: none; color: inherit; }
     </div>
 
     <div class="modal-footer" id="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" id="modal-submit-btn" onclick="submitIntegration()">
-        <span id="submit-label">Connect Platform</span>
-        <div class="spinner" id="submit-spinner" style="display:none"></div>
-      </button>
+      <!-- Populated by openModal() / openEditModal() before the modal is shown -->
     </div>
   </div>
 </div>
@@ -1332,7 +1328,7 @@ a { text-decoration: none; color: inherit; }
           </div>
         </div>
       </div>
-      <p style="font-size:13px;color:var(--ink-2);line-height:1.6">
+      <p style="font-size:13px;color:var(--mid);line-height:1.6">
         Are you sure you want to disconnect <strong id="disconnect-platform-name" style="color:var(--dark)"></strong> for this client? You can reconnect at any time.
       </p>
     </div>
@@ -1369,6 +1365,18 @@ let integrationCache = {};   // { client_id: { shopify: bool, acuity: bool } }
 /* ── INIT ────────────────────────────────────────────────────────*/
 window.addEventListener('DOMContentLoaded', () => {
   populateClientSelect();
+
+  // Deep-link support: /integrations?client_id=xxx (e.g. from the dashboard's
+  // per-client "Integrations" button) preselects that client instead of
+  // defaulting to the first one in the list.
+  const params = new URLSearchParams(window.location.search);
+  const linkedId = params.get('client_id');
+  if (linkedId && CLIENTS.some(c => c.client_id === linkedId)) {
+    currentClient = linkedId;
+    const sel = document.getElementById('clientSelect');
+    if (sel) sel.value = linkedId;
+  }
+
   if (!currentClient) { showEmptyState(); return; }
   loadIntegrations(currentClient);
   loadLog(currentClient);
@@ -1451,7 +1459,7 @@ async function loadIntegrations(clientId) {
     const data = await res.json();
     if (!data.success) throw new Error(data.error);
 
-    const state = { shopify: false, acuity: false };
+    const state = Object.fromEntries(ALL_PLATFORMS.map(p => [p, false]));
     const urlMap = {};
 
     for (const i of (data.integrations || [])) {
@@ -1468,14 +1476,12 @@ async function loadIntegrations(clientId) {
     document.getElementById('clientBadge').textContent =
       `${count} integration${count !== 1 ? 's' : ''}`;
 
-    setCardState('shopify', state.shopify, clientId, urlMap.shopify);
-    setCardState('acuity',  state.acuity,  clientId, urlMap.acuity);
+    ALL_PLATFORMS.forEach(p => setCardState(p, state[p], clientId, urlMap[p]));
     updateOnboardingSteps();
 
   } catch (err) {
     showToast('Could not load integrations: ' + err.message, 'error');
-    setCardState('shopify', false, clientId);
-    setCardState('acuity',  false, clientId);
+    ALL_PLATFORMS.forEach(p => setCardState(p, false, clientId));
   }
 }
 
@@ -1546,7 +1552,7 @@ function renderLog(logs) {
       <td>
         <div class="log-platform">
           <div class="log-dot ${l.platform}"></div>
-          <span style="font-weight:500;color:var(--dark)">${l.platform === 'shopify' ? 'Shopify' : 'Acuity'}</span>
+          <span style="font-weight:500;color:var(--dark)">${displayName(l.platform)}</span>
         </div>
       </td>
       <td>${friendlyEvent(l.event_type)}</td>
@@ -1732,7 +1738,6 @@ function openModal(platform) {
   isEditMode = false;
   const clientName = CLIENTS.find(c => c.client_id === currentClient)?.company_name || '';
   document.getElementById('modal-title').textContent    = clientName ? `Connect a Platform — ${clientName}` : 'Connect a Platform';
-  document.getElementById('submit-label').textContent   = 'Connect Platform';
   document.getElementById('modal-step-1').style.display = 'flex';
   document.getElementById('modal-step-2').style.display = 'none';
   document.getElementById('modal-footer').style.display = 'flex';
@@ -1928,7 +1933,7 @@ function showToast(message, type = 'success') {
 
 function showEmptyState() {
   document.getElementById('platformsGrid').innerHTML = `
-    <div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--ink-3)">
+    <div style="grid-column:1/-1;text-align:center;padding:48px;color:var(--sub)">
       No clients found. Create a client first from the dashboard.
     </div>`;
 }

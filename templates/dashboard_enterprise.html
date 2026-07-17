@@ -10,7 +10,7 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
     --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
-    --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
+    --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;--gold-glow:rgba(184,146,74,0.3);
     --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#FFFFFF;
     --success:#16A34A;--success-lt:#F0FDF4;
     --danger:#EF4444;--danger-lt:#FEF2F2;
@@ -105,6 +105,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .btn-xs-embed:hover{background:#fce7f3;}
 .btn-xs-logins{background:rgba(184,146,74,0.1);color:var(--gold-dk);}
 .btn-xs-logins:hover{background:rgba(184,146,74,0.2);}
+.btn-xs-integrations{background:rgba(99,102,241,0.1);color:#4338ca;}
+.btn-xs-integrations:hover{background:rgba(99,102,241,0.2);}
+.card-menu{position:relative;display:inline-flex;}
+.card-menu-btn{background:var(--panel);color:var(--mid);padding:5px 9px;}
+.card-menu-btn svg{width:14px;height:14px;}
+.card-menu-btn:hover{background:var(--border);}
+.card-menu-dropdown{display:none;flex-direction:column;gap:2px;position:fixed;background:var(--white);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.14);min-width:150px;padding:6px;z-index:600;}
+.card-menu-dropdown.show{display:flex;}
+.card-menu-item{display:block;width:100%;text-align:left;padding:8px 10px;border-radius:7px;border:none;background:none;font-size:13px;font-weight:500;color:var(--dark);cursor:pointer;text-decoration:none;font-family:'DM Sans',sans-serif;}
+.card-menu-item:hover{background:var(--cream);}
+.card-menu-item-danger{color:var(--danger);}
+.card-menu-item-danger:hover{background:var(--danger-lt);}
 .btn-xs-locked{background:var(--panel);color:var(--sub);cursor:not-allowed;}
 .btn-xs-delete{background:var(--danger-lt);color:var(--danger);}
 .btn-xs-delete:hover{background:#fecaca;}
@@ -449,6 +461,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                                 <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>FAQs</a>
                                 <a href="/article-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>Articles</a>
                                 {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<button onclick="openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="btn-xs btn-xs-logins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</button>{% endif %}
+                                {% if plan_type in ('pro', 'agency', 'enterprise') or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="btn-xs btn-xs-integrations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Integrations</a>{% endif %}
                                 <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Embed</button>
                                 {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Analytics</a><a href="/client-report?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics" style="margin-left:2px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Report</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Analytics</button>{% endif %}
                                 {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>Theme</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Theme</button>{% endif %}
@@ -469,12 +482,20 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                     </div>
                     <div class="client-card-actions">
                         <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">FAQs</a>
-                        <a href="/article-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">Articles</a>
-                        {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<button onclick="openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="btn-xs btn-xs-logins">Dashboard</button>{% endif %}
-                        <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed">Embed</button>
-                        {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics">Analytics</a>{% endif %}
-                        {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme">Theme</a>{% endif %}
-                        <button class="btn-xs btn-xs-delete" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="confirmDelete(this.dataset.clientId, this.dataset.clientName)">Delete</button>
+                        {% if plan_type in ('pro', 'agency', 'enterprise') or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="btn-xs btn-xs-integrations">Integrations</a>{% endif %}
+                        {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics">Analytics</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Analytics</button>{% endif %}
+                        <div class="card-menu">
+                            <button class="btn-xs card-menu-btn" onclick="toggleCardMenu(event, '{{ client.client_id }}')" aria-label="More actions">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+                            </button>
+                            <div class="card-menu-dropdown" id="cardMenu-{{ client.client_id }}">
+                                <a href="/article-manager?client_id={{ client.client_id }}" class="card-menu-item">Articles</a>
+                                {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<button onclick="closeAllCardMenus();openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="card-menu-item">Dashboard</button>{% endif %}
+                                <button onclick="closeAllCardMenus();showEmbedCode('{{ client.client_id }}')" class="card-menu-item">Embed</button>
+                                {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="card-menu-item">Theme</a>{% endif %}
+                                <button class="card-menu-item card-menu-item-danger" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="closeAllCardMenus();confirmDelete(this.dataset.clientId, this.dataset.clientName)">Delete</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 {% endfor %}
@@ -829,6 +850,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 <script>
 let _cdashCid = null;
 
+function toggleCardMenu(e, cid) {
+  e.stopPropagation();
+  const dd = document.getElementById('cardMenu-' + cid);
+  const wasOpen = dd.classList.contains('show');
+  closeAllCardMenus();
+  if (!wasOpen) {
+    const btnRect = e.currentTarget.getBoundingClientRect();
+    dd.style.top   = (btnRect.bottom + 6) + 'px';
+    dd.style.right = (window.innerWidth - btnRect.right) + 'px';
+    dd.classList.add('show');
+  }
+}
+
+function closeAllCardMenus() {
+  document.querySelectorAll('.card-menu-dropdown.show').forEach(el => el.classList.remove('show'));
+}
+
+document.addEventListener('click', closeAllCardMenus);
+window.addEventListener('scroll', closeAllCardMenus, true);
+window.addEventListener('resize', closeAllCardMenus);
+
 function openClientDashPanel(cid, name) {
   _cdashCid = cid;
   document.getElementById('cdashAv').textContent   = (name || '?')[0].toUpperCase();
@@ -850,7 +892,7 @@ function closeClientDashPanel() {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeClientDashPanel();
+  if (e.key === 'Escape') { closeClientDashPanel(); closeAllCardMenus(); }
 });
 
 async function loadCdashData(cid, name) {
