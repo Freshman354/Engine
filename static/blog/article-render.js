@@ -7,7 +7,15 @@ initDarkMode();
 const params = new URLSearchParams(window.location.search);
 const routeSlug = document.body.dataset.slug;
 const slug = routeSlug || params.get("slug") || CORNERSTONE_SLUG;
-const isCornerstone = slug === CORNERSTONE_SLUG;
+
+// Every fully authored guide (not generated from data.js) gets an entry
+// here, keyed by slug. Add new hand-written articles by pushing their
+// content object onto this map, not by special-casing the slug below.
+const AUTHORED_ARTICLES = {
+  [CORNERSTONE_SLUG]: CORNERSTONE_ARTICLE,
+  [INTEGRATION_GUIDE_SLUG]: INTEGRATION_GUIDE_ARTICLE,
+};
+const authoredArticle = AUTHORED_ARTICLES[slug];
 const dataArticle = ARTICLES.find((a) => a.slug === slug);
 
 /* ---------- Generic article generator (for the 99 other slugs) ---------- */
@@ -74,8 +82,8 @@ function generateGenericArticle(article) {
   };
 }
 
-const view = isCornerstone
-  ? { ...CORNERSTONE_ARTICLE }
+const view = authoredArticle
+  ? { ...authoredArticle }
   : dataArticle
   ? generateGenericArticle(dataArticle)
   : generateGenericArticle(ARTICLES[0]);

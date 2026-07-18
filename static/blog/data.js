@@ -198,6 +198,25 @@ function buildArticles() {
     });
   });
 
+  // Hand-authored guides (real content, not generated placeholders).
+  // Keep this list in sync with the *_ARTICLE objects in
+  // static/blog/cornerstone-content.js and integrations-guide-content.js.
+  articles.push({
+    id: id++,
+    slug: "how-to-connect-a-platform-integration",
+    title: "How to Connect Your First Platform Integration",
+    category: "integrations",
+    categoryName: "Integrations",
+    excerpt: "The exact steps to connect Shopify, WooCommerce, Acuity, Calendly, and Square, plus how to test a connection before it goes live.",
+    author: "Priya Nair",
+    authorRole: "Solutions Engineer",
+    date: new Date("2026-07-16"),
+    readTime: 9,
+    popularity: 940,
+    difficulty: "Beginner",
+    updatedRecently: true,
+  });
+
   return articles.sort((a, b) => b.date - a.date);
 }
 

@@ -19,6 +19,7 @@
             --sub:     #A8A29E;
             --border:  #E7E2DA;
             --white:   #FFFFFF;
+            --active:  #4C9A6A;
         }
 
         html, body { height: 100%; }
@@ -70,18 +71,7 @@
             text-decoration: none;
         }
 
-        .brand-mark {
-            width: 36px; height: 36px;
-            background: var(--dark);
-            border-radius: 10px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 16px; color: #fff;
-            font-family: 'Fraunces', serif;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-        }
-
-        .brand-name {
+        .logo-text {
             font-family: 'Fraunces', serif;
             font-size: 18px; font-weight: 600;
             color: var(--dark); letter-spacing: -0.3px;
@@ -89,12 +79,9 @@
 
         .illustration-wrap {
             width: 100%; max-width: 340px;
-            margin-bottom: 32px; position: relative; z-index: 1;
+            margin-bottom: 30px; position: relative; z-index: 1;
         }
-
-        .illustration-wrap svg {
-            width: 100%; height: auto;
-        }
+        .illustration-wrap svg { width: 100%; height: auto; }
 
         .left-copy { text-align: center; position: relative; z-index: 1; }
 
@@ -114,12 +101,7 @@
             display: flex; gap: 7px; justify-content: center;
             margin-top: 24px;
         }
-
-        .dot {
-            width: 8px; height: 8px; border-radius: 999px;
-            background: var(--sub); transition: all 0.3s;
-        }
-
+        .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--sub); }
         .dot.active { width: 22px; background: var(--gold); }
 
         /* ── RIGHT PANEL ── */
@@ -135,16 +117,16 @@
 
         .form-box { width: 100%; max-width: 380px; }
 
-        .form-header { margin-bottom: 32px; }
+        .form-header { margin-bottom: 28px; }
 
         .form-header h1 {
             font-family: 'Fraunces', serif;
             font-size: 30px; font-weight: 700;
             color: var(--dark); letter-spacing: -0.5px;
-            margin-bottom: 6px;
+            margin-bottom: 7px;
         }
 
-        .form-header p { font-size: 14px; color: var(--sub); font-weight: 300; }
+        .form-header p { font-size: 14px; color: var(--sub); font-weight: 300; line-height: 1.5; }
 
         .form-group { margin-bottom: 18px; }
 
@@ -184,12 +166,10 @@
             display: flex; justify-content: flex-end;
             margin-top: -10px; margin-bottom: 20px;
         }
-
         .forgot-row a {
             font-size: 12px; color: var(--gold); font-weight: 500;
             text-decoration: none;
         }
-
         .forgot-row a:hover { text-decoration: underline; }
 
         .btn-submit {
@@ -201,7 +181,6 @@
             cursor: pointer; transition: all 0.25s;
             letter-spacing: 0.01em;
         }
-
         .btn-submit:hover {
             background: var(--gold-dk);
             transform: translateY(-1px);
@@ -212,7 +191,6 @@
             display: flex; align-items: center; gap: 12px;
             margin: 22px 0; color: var(--sub); font-size: 12px;
         }
-
         .divider::before, .divider::after {
             content: ''; flex: 1; height: 1px; background: var(--border);
         }
@@ -226,7 +204,6 @@
             display: flex; align-items: center; justify-content: center; gap: 9px;
             margin-bottom: 10px; text-decoration: none;
         }
-
         .btn-social:hover { border-color: var(--gold); background: #fff; }
 
         .error-box {
@@ -239,7 +216,6 @@
             text-align: center; margin-top: 24px;
             font-size: 13px; color: var(--sub);
         }
-
         .signup-link a { color: var(--gold); font-weight: 600; text-decoration: none; }
         .signup-link a:hover { text-decoration: underline; }
 
@@ -251,6 +227,8 @@
         @media (max-width: 768px) {
             .left-panel { display: none; }
             .right-panel { padding: 32px 20px; }
+            .form-group input { font-size: 16px; } /* prevents iOS Safari auto-zoom on focus */
+            .pw-toggle { padding: 10px; right: 4px; }
         }
     </style>
 </head>
@@ -258,85 +236,65 @@
 
     <!-- LEFT PANEL -->
     <div class="left-panel">
-        <a href="/" class="logo">
-            <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi Logo" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid rgb(184, 146, 74);;box-shadow:0 0 16px rgba(217, 171, 85, 0.414);">
+        <a href="/" class="brand-top">
+            <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi Logo" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid rgb(184, 146, 74);box-shadow:0 0 16px rgba(217, 171, 85, 0.414);">
             <span class="logo-text">Lumvi</span>
         </a>
 
         <div class="illustration-wrap">
-            <!-- Inline SVG illustration -->
-            <svg viewBox="0 0 400 320" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <!-- Background shape -->
-                <ellipse cx="200" cy="280" rx="160" ry="20" fill="rgba(184,146,74,0.08)"/>
+            <svg viewBox="0 0 340 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="170" cy="280" rx="150" ry="16" fill="rgba(184,146,74,0.08)"/>
 
-                <!-- Desk surface -->
-                <rect x="60" y="220" width="280" height="12" rx="6" fill="#D4C4A8"/>
+                <!-- Console frame -->
+                <rect x="40" y="24" width="260" height="200" rx="16" fill="#fff" filter="url(#sh3)"/>
+                <rect x="40" y="24" width="260" height="34" rx="16" fill="#1C1917"/>
+                <rect x="40" y="46" width="260" height="12" fill="#1C1917"/>
+                <circle cx="60" cy="41" r="9" fill="#B8924A"/>
+                <text x="60" y="45" font-family="'Fraunces', serif" font-size="10" font-weight="700" fill="#1C1917" text-anchor="middle">A</text>
+                <rect x="76" y="34" width="50" height="6" rx="3" fill="#E7E2DA"/>
+                <!-- Client label — reinforces this console belongs to one of many managed clients -->
+                <rect x="200" y="32" width="86" height="14" rx="7" fill="rgba(255,255,255,0.12)"/>
+                <text x="207" y="42" font-family="'DM Sans', sans-serif" font-size="7" fill="#E7E2DA">Client: Riverside Co.</text>
 
-                <!-- Monitor -->
-                <rect x="120" y="100" width="160" height="110" rx="8" fill="#1C1917"/>
-                <rect x="128" y="108" width="144" height="86" rx="4" fill="#2D2A26"/>
-                <!-- Screen content -->
-                <rect x="136" y="116" width="60" height="8" rx="3" fill="#B8924A" opacity="0.8"/>
-                <rect x="136" y="130" width="128" height="5" rx="2.5" fill="#57534E" opacity="0.5"/>
-                <rect x="136" y="140" width="100" height="5" rx="2.5" fill="#57534E" opacity="0.5"/>
-                <!-- Chart bars on screen -->
-                <rect x="136" y="165" width="14" height="22" rx="3" fill="#B8924A"/>
-                <rect x="154" y="158" width="14" height="29" rx="3" fill="#B8924A" opacity="0.7"/>
-                <rect x="172" y="152" width="14" height="35" rx="3" fill="#B8924A" opacity="0.9"/>
-                <rect x="190" y="162" width="14" height="25" rx="3" fill="#B8924A" opacity="0.6"/>
-                <rect x="208" y="155" width="14" height="32" rx="3" fill="#B8924A" opacity="0.8"/>
-                <rect x="226" y="148" width="14" height="39" rx="3" fill="#B8924A"/>
-                <!-- Monitor stand -->
-                <rect x="192" y="210" width="16" height="14" rx="2" fill="#D4C4A8"/>
-                <rect x="178" y="222" width="44" height="6" rx="3" fill="#C4B49A"/>
+                <!-- Live rows while user was away -->
+                <g>
+                    <rect x="56" y="72" width="228" height="34" rx="10" fill="#F7F4EF"/>
+                    <circle cx="74" cy="89" r="9" fill="rgba(184,146,74,0.18)"/>
+                    <path d="M70 89l3 3 6-6" stroke="#B8924A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                    <rect x="92" y="82" width="120" height="6" rx="3" fill="#57534E"/>
+                    <rect x="92" y="92" width="80" height="5" rx="2.5" fill="#A8A29E"/>
 
-                <!-- Person sitting -->
-                <!-- Body -->
-                <ellipse cx="110" cy="195" rx="22" ry="28" fill="#B8924A"/>
-                <!-- Head -->
-                <circle cx="110" cy="155" r="18" fill="#F5CBA7"/>
-                <!-- Hair -->
-                <ellipse cx="110" cy="145" rx="18" ry="10" fill="#3D2B1F"/>
-                <ellipse cx="94" cy="155" rx="5" ry="8" fill="#3D2B1F"/>
-                <!-- Arm pointing at screen -->
-                <path d="M125 185 Q160 175 175 168" stroke="#F5CBA7" stroke-width="8" stroke-linecap="round"/>
-                <!-- Legs -->
-                <rect x="96" y="218" width="14" height="24" rx="7" fill="#4A3728" transform="rotate(-5 96 218)"/>
-                <rect x="114" y="218" width="14" height="24" rx="7" fill="#4A3728" transform="rotate(5 114 218)"/>
-                <!-- Shoes -->
-                <ellipse cx="93" cy="241" rx="11" ry="5" fill="#2D2010"/>
-                <ellipse cx="121" cy="241" rx="11" ry="5" fill="#2D2010"/>
+                    <rect x="56" y="112" width="228" height="34" rx="10" fill="#F7F4EF"/>
+                    <circle cx="74" cy="129" r="9" fill="rgba(76,154,106,0.18)"/>
+                    <path d="M70 129l3 3 6-6" stroke="#4C9A6A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                    <rect x="92" y="122" width="130" height="6" rx="3" fill="#57534E"/>
+                    <rect x="92" y="132" width="90" height="5" rx="2.5" fill="#A8A29E"/>
 
-                <!-- Floating card 1 -->
-                <g transform="translate(280, 120)">
-                    <rect width="90" height="56" rx="10" fill="white" filter="url(#shadow)"/>
-                    <rect x="10" y="12" width="30" height="5" rx="2.5" fill="#B8924A"/>
-                    <rect x="10" y="22" width="70" height="4" rx="2" fill="#E7E2DA"/>
-                    <rect x="10" y="30" width="50" height="4" rx="2" fill="#E7E2DA"/>
-                    <rect x="10" y="42" width="24" height="8" rx="4" fill="#B8924A"/>
+                    <rect x="56" y="152" width="228" height="34" rx="10" fill="rgba(184,146,74,0.1)"/>
+                    <circle cx="74" cy="169" r="9" fill="rgba(184,146,74,0.25)"/>
+                    <path d="M70 169l3 3 6-6" stroke="#9A7A3A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                    <rect x="92" y="162" width="110" height="6" rx="3" fill="#57534E"/>
+                    <rect x="92" y="172" width="70" height="5" rx="2.5" fill="#A8A29E"/>
                 </g>
 
-                <!-- Floating card 2 -->
-                <g transform="translate(30, 110)">
-                    <rect width="76" height="50" rx="10" fill="white" filter="url(#shadow)"/>
-                    <circle cx="20" cy="20" r="10" fill="rgba(184,146,74,0.15)"/>
-                    <text x="16" y="25" font-size="12" fill="#B8924A">✓</text>
-                    <rect x="36" y="14" width="30" height="4" rx="2" fill="#1C1917"/>
-                    <rect x="36" y="22" width="24" height="4" rx="2" fill="#A8A29E"/>
-                    <rect x="10" y="36" width="56" height="6" rx="3" fill="#E7E2DA"/>
+                <!-- Active status pill -->
+                <g transform="translate(120, 196)">
+                    <rect width="100" height="16" rx="8" fill="#1C1917"/>
+                    <circle cx="14" cy="8" r="3.5" fill="#4C9A6A"/>
+                    <text x="24" y="12" font-family="'DM Sans', sans-serif" font-size="8.5" font-weight="500" fill="#fff">Active now</text>
                 </g>
 
                 <defs>
-                    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-                        <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="rgba(0,0,0,0.1)"/>
+                    <filter id="sh3" x="-10%" y="-10%" width="120%" height="120%">
+                        <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="rgba(0,0,0,0.1)"/>
                     </filter>
                 </defs>
             </svg>
         </div>
 
         <div class="left-copy">
-            <h2>Manage your chatbots<br>and grow your clients</h2>
-            <p>The white-label AI chatbot platform built<br>for agencies and growing businesses.</p>
+            <h2>Your clients' AI Employees never clocked out.</h2>
+            <p>Sign back in to see what's been handled across your clients while you were away.</p>
             <div class="dots">
                 <div class="dot active"></div>
                 <div class="dot"></div>
@@ -349,17 +307,29 @@
     <div class="right-panel">
         <div class="form-box">
             <div class="form-header">
-                <h1>Welcome Back!</h1>
-                <p>Please sign in to continue</p>
+                <h1>Good to see you</h1>
+                <p>Sign in to check in on your clients' AI Employees.</p>
             </div>
 
             {% if error %}
             <div class="error-box">⚠️ {{ error }}</div>
             {% endif %}
 
+            <a href="/auth/google" class="btn-social">
+                <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+                    <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+                    <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+                    <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+                </svg>
+                Continue with Google
+            </a>
+
+            <div class="divider">or sign in with email</div>
+
             <form method="POST">
                 <div class="form-group">
-                    <label>Email Address</label>
+                    <label>Work Email</label>
                     <input type="email" name="email" placeholder="you@company.com" required autofocus>
                 </div>
 
@@ -375,26 +345,14 @@
                     <a href="/forgot-password">Forgot password?</a>
                 </div>
 
-                <button type="submit" class="btn-submit">Sign In</button>
+                <button type="submit" class="btn-submit">Sign In →</button>
             </form>
 
-            <div class="divider">or</div>
-
-            <a href="/auth/google" class="btn-social">
-                <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
-                    <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
-                    <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
-                    <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
-                </svg>
-                Continue with Google
-            </a>
-
             <div class="signup-link">
-                Don't have an account? <a href="/signup">Go to Registration</a>
+                New here? <a href="/signup">Launch your first AI Employee</a>
             </div>
 
-            <div class="copyright">© 2026 Lumvi Platform</div>
+            <div class="copyright">© 2026 Lumvi — White-Label AI Employees for Agencies</div>
         </div>
     </div>
 
