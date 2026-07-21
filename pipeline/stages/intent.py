@@ -236,6 +236,13 @@ def extract_tool_args(
         # before this was added.
         args['query'] = user_message[:500]
 
+    elif tool_name == 'search_products':
+        # Same pattern as search_knowledge_base above — query is a
+        # required arg with no default. tools.search_products truncates
+        # to 300 chars itself; capped a bit tighter here since product
+        # search queries are short phrases, not full questions.
+        args['query'] = user_message[:300]
+
     return args
 
 
@@ -309,6 +316,18 @@ def _build_tool_response_text(tool_name: str, result: Dict) -> str:
         if not results:
             return "I couldn't find anything matching that in our knowledge base."
         return results[0].get('answer', '') or "I found something but couldn't format it — let me try again."
+
+    if tool_name == 'search_products':
+        products = result.get('products', [])
+        if not products:
+            return result.get('message', "I couldn't find anything matching that.")
+        lines = ["Here's what I found:"]
+        for p in products[:5]:
+            status = 'in stock' if p.get('available') else 'out of stock'
+            variant_part = f" ({p['variant']})" if p.get('variant') else ''
+            price_part = f" — {p['price']}" if p.get('price') else ''
+            lines.append(f"• {p.get('title', '')}{variant_part}{price_part} — {status}")
+        return '\n'.join(lines)
 
     # cancel_order, escalate_to_human, and anything else already using 'message'
     return result.get('message', 'Done!')

@@ -353,4 +353,16 @@ from .migrations import (
     migrate_lead_delivery,          # Gap 3 — notification_email/phone/name on clients
     migrate_agency_email_domains,   # white-label custom email domain per agency
     migrate_seat_subscriptions,     # agency per-seat purchase subscriptions
+    migrate_ai_employee_plan_rename,  # Shopify/WooCommerce pivot: agency -> ai_scale
+    migrate_cart_recovery,          # abandoned_carts table + clients.cart_recovery_enabled
+)
+
+# ── Cart recovery ─────────────────────────────────────────────────────────────
+from .cart_recovery import (
+    upsert_abandoned_cart,
+    mark_cart_recovered,
+    get_carts_due_for_recovery_email,
+    mark_recovery_email_sent,
+    get_cart_by_reply_local_part,
+    increment_reply_forwarded,
 )

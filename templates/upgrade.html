@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Upgrade Plan — Lumvi</title>
+<title>Upgrade Plan — Lumvi for Shopify &amp; WooCommerce</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
 <style>
@@ -62,10 +62,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .save-badge.visible{opacity:1;transform:translateX(0);}
 
 /* ── PRICING GRID ── */
-.pricing-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:28px;align-items:start;}
-@media(max-width:1280px){.pricing-grid{grid-template-columns:repeat(3,1fr);}}
-@media(max-width:860px){.pricing-grid{grid-template-columns:repeat(2,1fr);}}
-@media(max-width:560px){.pricing-grid{grid-template-columns:1fr;}}
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:28px;align-items:start;max-width:920px;margin-left:auto;margin-right:auto;}
+@media(max-width:860px){.pricing-grid{grid-template-columns:1fr;}}
 
 /* ── CARD ── */
 .pricing-card{background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);
@@ -201,8 +199,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 
   <!-- HEADER -->
   <div class="page-header">
-    <h1>Simple, transparent pricing</h1>
-    <p>Every plan includes the full AI chatbot — upgrade for more clients, white-labelling, and agency features.</p>
+    <h1>Choose your AI Employee</h1>
+    <p>Deploy an AI employee that answers customer questions, recommends products, tracks orders, and supports your customers 24/7.</p>
   </div>
 
   <!-- BILLING TOGGLE -->
@@ -223,146 +221,97 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
   <!-- PRICING GRID -->
   <div class="pricing-grid">
 
-    <!-- SOLO -->
-    <div class="pricing-card">
-      <div class="plan-name">Solo</div>
-      <div class="price-row">
-        <span class="price-sym">$</span>
-        <span class="price-amt" id="solo-price">19</span>
-      </div>
-      <div class="price-per">/month</div>
-      <div class="price-annual-note" id="solo-annual"></div>
-      <p class="plan-desc">Perfect for a single business website. Unlimited AI responses, no message caps.</p>
-      <ul class="feat-list">
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>1 chatbot</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited AI messages</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Full branding & customisation</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Lead capture forms</li>
-        <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">Webhooks / Zapier</span></li>
-        <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">White-label</span></li>
-      </ul>
-      {% if user and user.plan_type == 'solo' %}
-      <button class="btn-upgrade btn-current">Current Plan</button>
-      {% else %}
-      <button class="btn-upgrade btn-outline" onclick="startPayment('solo')">
-        Get Solo
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-      </button>
-      {% endif %}
-    </div>
-
     <!-- STARTER -->
     <div class="pricing-card">
       <div class="plan-name">Starter</div>
       <div class="price-row">
         <span class="price-sym">$</span>
-        <span class="price-amt" id="starter-price">49</span>
+        <span class="price-amt" id="ai_starter-price">29</span>
       </div>
       <div class="price-per">/month</div>
-      <div class="price-annual-note" id="starter-annual"></div>
-      <p class="plan-desc">Run up to 3 client chatbots. Great for small agencies just getting started.</p>
+      <div class="price-annual-note" id="ai_starter-annual"></div>
+      <p class="plan-desc">Perfect for small stores getting started.</p>
       <ul class="feat-list">
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>3 chatbots</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>2,000 messages / day</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Full customisation</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Lead capture forms</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Basic analytics <span style="font-size:11px;background:rgba(22,163,74,0.1);color:var(--success);border-radius:4px;padding:1px 5px;font-weight:600;">New</span></li>
-        <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">Webhooks / Zapier</span></li>
-        <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">White-label</span></li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>1 store</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>1,000 AI conversations/month</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Shopify OR WooCommerce integration</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Website AI employee</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>AI product recommendations</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Product Q&amp;A</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Order tracking</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Basic analytics</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Email support</li>
       </ul>
-      {% if user and user.plan_type == 'starter' %}
+      <p style="font-size:11.5px;color:var(--sub);line-height:1.45;margin-top:-10px;margin-bottom:14px;">Conversation overages — coming soon.</p>
+      {% if user and user.plan_type == 'ai_starter' %}
       <button class="btn-upgrade btn-current">Current Plan</button>
       {% else %}
-      <button class="btn-upgrade btn-outline" onclick="startPayment('starter')">
+      <button class="btn-upgrade btn-outline" onclick="startPayment('ai_starter')">
         Get Starter
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </button>
       {% endif %}
     </div>
 
-    <!-- PRO — FEATURED -->
+    <!-- GROWTH — FEATURED -->
     <div class="pricing-card featured">
       <div class="popular-badge">Most Popular</div>
-      <div class="plan-name">Pro</div>
+      <div class="plan-name">Growth</div>
       <div class="price-row">
         <span class="price-sym" style="color:var(--gold);">$</span>
-        <span class="price-amt" id="pro-price">99</span>
+        <span class="price-amt" id="ai_growth-price">79</span>
       </div>
       <div class="price-per">/month</div>
-      <div class="price-annual-note" id="pro-annual"></div>
-      <p class="plan-desc">The full toolkit. 10 clients, unlimited messages, webhooks, and priority support.</p>
+      <div class="price-annual-note" id="ai_growth-annual"></div>
+      <p class="plan-desc">Perfect for growing e-commerce brands.</p>
       <ul class="feat-list">
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>10 chatbots</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited messages</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Webhooks + <strong>Zapier &amp; Make</strong> ready</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Advanced analytics</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Priority email support</li>
-        <li><span class="feat-cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><span style="color:var(--sub);">White-label / reseller</span></li>
-      </ul>
-      {% if user and user.plan_type == 'pro' %}
-      <button class="btn-upgrade btn-current">Current Plan</button>
-      {% else %}
-      <button class="btn-upgrade btn-gold" onclick="startPayment('pro')">
-        Upgrade to Pro
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-      </button>
-      {% endif %}
-    </div>
-
-    <!-- GROWTH -->
-    <div class="pricing-card" style="border-color:rgba(99,102,241,0.35);">
-      <div class="popular-badge" style="background:linear-gradient(135deg,#6366f1,#7c3aed);">Best for Agencies</div>
-      <div class="plan-name" style="color:#6366f1;margin-top:18px;">Growth</div>
-      <div class="price-row">
-        <span class="price-sym" style="color:#6366f1;">$</span>
-        <span class="price-amt" style="color:#6366f1;" id="growth-price">149</span>
-      </div>
-      <div class="price-per">/month</div>
-      <div class="price-annual-note" id="growth-annual"></div>
-      <p class="plan-desc">20 clients + full white-label. Resell under your own brand and keep 100% margin.</p>
-      <ul class="feat-list">
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>20 chatbots</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited messages</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Webhooks + Zapier &amp; Make</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><strong>Full white-label</strong> — your brand</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><strong>Reseller rights</strong> — 100% margin</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>1 store</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>5,000 AI conversations/month</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Shopify + WooCommerce + additional integrations</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>AI product recommendations</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Cart recovery automation</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Lead capture</li>
         <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Advanced analytics</li>
         <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Priority support</li>
       </ul>
-      {% if user and user.plan_type == 'growth' %}
+      <p style="font-size:11.5px;color:var(--sub);line-height:1.45;margin-top:-10px;margin-bottom:14px;">Conversation overages — coming soon.</p>
+      {% if user and user.plan_type == 'ai_growth' %}
       <button class="btn-upgrade btn-current">Current Plan</button>
       {% else %}
-      <button class="btn-upgrade" style="background:linear-gradient(135deg,#6366f1,#7c3aed);color:#fff;box-shadow:0 2px 12px rgba(99,102,241,0.35);" onclick="startPayment('growth')">
-        Get Growth
+      <button class="btn-upgrade btn-gold" onclick="startPayment('ai_growth')">
+        Upgrade to Growth
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </button>
       {% endif %}
     </div>
 
-    <!-- AGENCY -->
-    <div class="pricing-card" style="border-color:rgba(184,146,74,0.25);">
-      <div class="plan-name" style="color:var(--gold);">Agency</div>
+    <!-- SCALE -->
+    <div class="pricing-card">
+      <div class="plan-name">Scale</div>
       <div class="price-row">
-        <span class="price-sym" style="color:var(--gold);">$</span>
-        <span class="price-amt" style="color:var(--gold);" id="agency-price">299</span>
+        <span class="price-sym">$</span>
+        <span class="price-amt" id="ai_scale-price">199</span>
       </div>
       <div class="price-per">/month</div>
-      <div class="price-annual-note" id="agency-annual"></div>
-      <p class="plan-desc">Unlimited clients, full white-label, and reseller rights. Includes 20 chatbots — $15/mo per extra seat.</p>
+      <div class="price-annual-note" id="ai_scale-annual"></div>
+      <p class="plan-desc">Built for high-volume e-commerce brands.</p>
       <ul class="feat-list">
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>20 chatbots included</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span><span>+$15/mo per extra chatbot <span style="font-size:11px;color:var(--sub);">(no hard cap)</span></span></li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Unlimited messages</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Full white-label — your brand</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Custom domain per widget</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Reseller rights — 100% margin</li>
-        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Onboarding call included</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>1 store</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>20,000 AI conversations/month</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Shopify + WooCommerce + all available integrations</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Custom AI automations</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>API access</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Multiple AI employees</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Advanced reporting</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Dedicated onboarding</li>
+        <li><span class="feat-check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>Highest priority support</li>
       </ul>
-      {% if user and user.plan_type == 'agency' %}
+      <p style="font-size:11.5px;color:var(--sub);line-height:1.45;margin-top:-10px;margin-bottom:14px;">Conversation overages — coming soon.</p>
+      {% if user and user.plan_type == 'ai_scale' %}
       <button class="btn-upgrade btn-current">Current Plan</button>
       {% else %}
-      <button class="btn-upgrade btn-gold" onclick="startPayment('agency')">
-        Upgrade to Agency
+      <button class="btn-upgrade btn-outline" onclick="startPayment('ai_scale')">
+        Get Scale
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
       </button>
       {% endif %}
@@ -370,107 +319,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 
   </div><!-- /pricing-grid -->
 
-  <!-- ── AGENCY MARGIN CALCULATOR ── -->
-  <div id="agency-calc" style="background:var(--dark);border-radius:var(--radius);padding:36px;margin-bottom:20px;">
-    <div style="text-align:center;margin-bottom:28px;">
-      <div style="display:inline-block;background:rgba(184,146,74,0.15);border:1px solid rgba(184,146,74,0.3);border-radius:20px;padding:4px 14px;font-size:11px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;">For Agencies</div>
-      <h3 style="font-family:'Fraunces',serif;font-size:24px;font-weight:800;color:#fff;margin-bottom:8px;">Your profit margin calculator</h3>
-      <p style="font-size:14px;color:rgba(255,255,255,0.5);max-width:460px;margin:0 auto;">
-        Agencies reselling Lumvi typically charge clients $200–$500/mo per chatbot.
-        See exactly how much you pocket.
-      </p>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;max-width:680px;margin:0 auto 28px;">
-      <div>
-        <label style="display:block;font-size:12px;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Your clients</label>
-        <div style="display:flex;align-items:center;gap:12px;">
-          <input type="range" id="calc-clients" min="3" max="50" value="10"
-            style="flex:1;accent-color:var(--gold);cursor:pointer;" oninput="updateCalc()" onchange="updateCalc()">
-          <span id="calc-clients-val" style="font-family:'Fraunces',serif;font-size:24px;font-weight:800;color:var(--gold);min-width:40px;text-align:right;">10</span>
-        </div>
-      </div>
-      <div>
-        <label style="display:block;font-size:12px;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">You charge per client / mo</label>
-        <div style="display:flex;align-items:center;gap:12px;">
-          <input type="range" id="calc-price" min="99" max="500" step="1" value="249"
-            style="flex:1;accent-color:var(--gold);cursor:pointer;" oninput="updateCalc()" onchange="updateCalc()">
-          <span id="calc-price-display" style="font-family:'Fraunces',serif;font-size:24px;font-weight:800;color:var(--gold);">$<span id="calc-price-val">249</span></span>
-        </div>
-      </div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;max-width:680px;margin:0 auto 24px;">
-      <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:18px;text-align:center;">
-        <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:6px;">Your revenue</div>
-        <div id="calc-revenue" style="font-family:'Fraunces',serif;font-size:28px;font-weight:800;color:#fff;">$2,490</div>
-        <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:2px;">/month</div>
-      </div>
-      <div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:18px;text-align:center;">
-        <div style="font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:6px;">Lumvi costs you</div>
-        <div id="calc-lumvi-cost" style="font-family:'Fraunces',serif;font-size:28px;font-weight:800;color:rgba(255,255,255,0.5);">$299</div>
-        <div id="calc-lumvi-note" style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:2px;">/mo (incl. 20 seats)</div>
-      </div>
-      <div style="background:rgba(184,146,74,0.12);border:1px solid rgba(184,146,74,0.3);border-radius:12px;padding:18px;text-align:center;">
-        <div style="font-size:11px;color:var(--gold);text-transform:uppercase;font-weight:700;letter-spacing:0.05em;margin-bottom:6px;">Your profit</div>
-        <div id="calc-profit" style="font-family:'Fraunces',serif;font-size:28px;font-weight:800;color:var(--gold);">$2,191</div>
-        <div style="font-size:11px;color:rgba(184,146,74,0.6);margin-top:2px;">/month</div>
-      </div>
-    </div>
-
-    <div style="text-align:center;">
-      <p id="calc-margin-line" style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:16px;">
-        That's an <strong style="color:var(--gold);">87.9% margin</strong> — you keep $<span id="calc-per-client">219.10</span> of every $249 you charge.
-      </p>
-      <button class="btn-upgrade btn-gold" style="width:auto;padding:12px 32px;display:inline-flex;"
-        onclick="startPayment('agency')">
-        Start with Agency — $299/mo →
-      </button>
-    </div>
-  </div>
-
-  <!-- ── ZAPIER / MAKE INTEGRATION CALLOUT ── -->
-  <div style="background:var(--white);border:1.5px solid var(--border);border-radius:var(--radius);padding:28px 32px;margin-bottom:20px;display:flex;align-items:center;gap:28px;flex-wrap:wrap;">
-    <div style="flex:1;min-width:200px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-        <div style="width:32px;height:32px;border-radius:8px;background:rgba(255,79,0,0.1);display:flex;align-items:center;justify-content:center;">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M13 10V3L4 14h7v7l9-11h-7z" stroke="#FF4F00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <span style="font-size:15px;font-weight:700;color:var(--dark);">Connect to 7,000+ apps with Zapier &amp; Make</span>
-      </div>
-      <p style="font-size:13px;color:var(--mid);line-height:1.6;margin:0;">
-        On Pro and Agency, every new lead your chatbot captures can automatically
-        flow into HubSpot, Pipedrive, Notion, Google Sheets, Slack, or any tool
-        your clients already use — no code required.
-      </p>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:8px;flex-shrink:0;">
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <span style="padding:4px 10px;background:var(--cream2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--mid);">HubSpot</span>
-        <span style="padding:4px 10px;background:var(--cream2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--mid);">Pipedrive</span>
-        <span style="padding:4px 10px;background:var(--cream2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--mid);">Google Sheets</span>
-        <span style="padding:4px 10px;background:var(--cream2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--mid);">Slack</span>
-        <span style="padding:4px 10px;background:var(--cream2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--mid);">Notion</span>
-        <span style="padding:4px 10px;background:var(--cream2);border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:600;color:var(--mid);">+ 7,000 more</span>
-      </div>
-      <button class="btn-upgrade btn-gold" style="width:auto;display:inline-flex;padding:10px 20px;font-size:13px;"
-        onclick="startPayment('pro')">
-        Get Pro with Webhooks →
-      </button>
-    </div>
-  </div>
-
   <!-- ENTERPRISE STRIP -->
   <div class="enterprise-strip">
     <div class="ent-left">
-      <h4>Need something bigger?</h4>
-      <p>Custom contracts, dedicated infrastructure, SLA guarantees, and volume pricing.</p>
+      <h4>Running a large e-commerce brand?</h4>
+      <p>Custom integrations, dedicated infrastructure, SLA guarantees, high-volume AI conversations, and custom onboarding.</p>
     </div>
     <div class="ent-feats">
-      <span class="ent-feat">Dedicated instance</span>
-      <span class="ent-feat">SLA guarantee</span>
       <span class="ent-feat">Custom integrations</span>
-      <span class="ent-feat">Volume pricing</span>
+      <span class="ent-feat">Dedicated infrastructure</span>
+      <span class="ent-feat">SLA guarantee</span>
+      <span class="ent-feat">High-volume AI conversations</span>
+      <span class="ent-feat">Custom onboarding</span>
     </div>
     <a href="mailto:support@lumvi.net" class="btn-ent">Talk to us →</a>
   </div>
@@ -533,7 +393,11 @@ const CURRENT_USER_NAME   = '{{ (user.name or user.email) | e }}';
 
 // Flutterwave Payment Plan IDs — created in your FLW dashboard.
 // Set env vars FLW_PLAN_IDS_MONTHLY and FLW_PLAN_IDS_ANNUAL as
-//   solo:<id>,starter:<id>,pro:<id>,growth:<id>,agency:<id>
+//   ai_starter:<id>,ai_growth:<id>,ai_scale:<id>
+// These are brand-new plan_type keys (ai_starter=Starter $29,
+// ai_growth=Growth $79, ai_scale=Scale $199) — NOT reused from the old
+// solo/pro/growth keys, which stay grandfathered for existing
+// subscribers at their old price/features and are no longer sold here.
 const FLW_PLAN_IDS = {
   monthly: {{ FLW_PLAN_IDS_MONTHLY | tojson }},
   annual:  {{ FLW_PLAN_IDS_ANNUAL  | tojson }}
@@ -543,17 +407,15 @@ let selectedPlan = '';
 let isAnnual     = false;
 
 const prices = {
-  solo:    { monthly: 19,  annual: Math.round(19  * 10 / 12), label: 'Solo'    },
-  starter: { monthly: 49,  annual: Math.round(49  * 10 / 12), label: 'Starter' },
-  pro:     { monthly: 99,  annual: Math.round(99  * 10 / 12), label: 'Pro'     },
-  growth:  { monthly: 149, annual: Math.round(149 * 10 / 12), label: 'Growth'  },
-  agency:  { monthly: 299, annual: Math.round(299 * 10 / 12), label: 'Agency'  },
+  ai_starter: { monthly: 29,  annual: Math.round(29  * 10 / 12), label: 'Starter' },
+  ai_growth:  { monthly: 79,  annual: Math.round(79  * 10 / 12), label: 'Growth'  },
+  ai_scale:   { monthly: 199, annual: Math.round(199 * 10 / 12), label: 'Scale'   },
 };
 
 function toggleBilling() {
   isAnnual = document.getElementById('billingToggle').checked;
   document.getElementById('saveBadge').classList.toggle('visible', isAnnual);
-  ['solo','starter','pro','growth','agency'].forEach(function(plan) {
+  ['ai_starter','ai_growth','ai_scale'].forEach(function(plan) {
     const el  = document.getElementById(plan + '-price');
     const aEl = document.getElementById(plan + '-annual');
     el.style.opacity   = '0';
@@ -650,55 +512,6 @@ function initiateFlutterwavePayment() {
   const plan = new URLSearchParams(window.location.search).get('plan');
   if (plan && prices[plan]) startPayment(plan);
 })();
-
-// ── Agency margin calculator ──────────────────────────────────────
-function updateCalc() {
-  var clients    = parseInt(document.getElementById('calc-clients').value, 10) || 10;
-  var price      = parseInt(document.getElementById('calc-price').value, 10) || 249;
-  var INCLUDED   = 20;
-  var SEAT_PRICE = 15;
-  var lumviBase  = 299;
-  var extraSeats = Math.max(0, clients - INCLUDED);
-  var lumviTotal = lumviBase + (extraSeats * SEAT_PRICE);
-  var revenue    = clients * price;
-  var profit     = revenue - lumviTotal;
-  var margin     = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : '0.0';
-  var perClient  = clients > 0 ? Math.round(profit / clients) : 0;
-
-  document.getElementById('calc-clients-val').textContent = clients;
-  document.getElementById('calc-price-val').textContent   = price;
-  document.getElementById('calc-revenue').textContent     = '$' + revenue.toLocaleString();
-  document.getElementById('calc-lumvi-cost').textContent  = '$' + lumviTotal.toLocaleString();
-  document.getElementById('calc-lumvi-note').textContent  = extraSeats > 0
-    ? '/mo (20 seats + ' + extraSeats + ' extra)'
-    : '/mo (incl. 20 seats)';
-
-  var profitEl = document.getElementById('calc-profit');
-  profitEl.textContent = profit >= 0
-    ? '$' + profit.toLocaleString()
-    : '-$' + Math.abs(profit).toLocaleString();
-  profitEl.style.color = profit >= 0 ? 'var(--gold)' : 'var(--danger)';
-
-  var seatNote = extraSeats > 0
-    ? ' (incl. ' + extraSeats + ' extra seat' + (extraSeats > 1 ? 's' : '') + ' \u00d7 $' + SEAT_PRICE + ' = $' + (extraSeats * SEAT_PRICE) + '/mo)'
-    : '';
-  document.getElementById('calc-margin-line').innerHTML =
-    "That's a <strong style=\"color:var(--gold);\">" + margin + "% margin</strong>" +
-    " \u2014 Lumvi costs you $" + lumviTotal + "/mo" + seatNote +
-    ". You keep <strong style=\"color:var(--gold);\">$" + perClient + "</strong> of every $" + price + " you charge.";
-
-  var perClientEl = document.getElementById('calc-per-client');
-  if (perClientEl) perClientEl.textContent = perClient;
-}
-updateCalc();
-
-document.addEventListener('DOMContentLoaded', function() {
-  var c = document.getElementById('calc-clients');
-  var p = document.getElementById('calc-price');
-  if (c) { c.addEventListener('input', updateCalc); c.addEventListener('change', updateCalc); }
-  if (p) { p.addEventListener('input', updateCalc); p.addEventListener('change', updateCalc); }
-  updateCalc();
-});
 </script>
 </body>
 </html>

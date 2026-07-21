@@ -3,252 +3,1002 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard — Lumvi Agency</title>
+    <title>Dashboard — Lumvi</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,800&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
-        :root{
-            --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
-            --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;
-            --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#FFFFFF;
-            --success:#16A34A;--success-lt:#F0FDF4;
-            --danger:#EF4444;--danger-lt:#FEF2F2;
-            --warning:#D97706;--warning-lt:#FFFBEB;
-            --sidebar-w:224px;
-        }
-        body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;display:flex;}
-        
-        /* Sidebar Styles */
-        .sidebar{width:var(--sidebar-w);background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:50;transition:transform 0.3s ease;}
-        .sidebar-logo{padding:20px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
-        .logo-img{width:34px;height:34px;border-radius:9px;object-fit:cover;flex-shrink:0;}
-        .logo-text{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
-        .sidebar-nav{flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
-        .nav-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--sub);padding:10px 10px 4px;margin-top:6px;}
-        .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;text-decoration:none;color:var(--mid);font-size:13.5px;font-weight:500;transition:all 0.15s;cursor:pointer;}
-        .nav-item:hover{background:var(--cream);color:var(--dark);}
-        .nav-item.active{background:var(--gold-lt);color:var(--gold-dk);font-weight:600;}
-        .nav-item svg{width:16px;height:16px;flex-shrink:0;opacity:0.65;}
-        .nav-badge{margin-left:auto;background:var(--gold);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;}
-        .sidebar-footer{padding:14px 12px;border-top:1px solid var(--border);}
-        .user-profile{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;cursor:pointer;transition:background 0.15s;}
-        .user-avatar{width:32px;height:32px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;}
-        .user-info{flex:1;min-width:0;}
-        .user-name{font-size:13px;font-weight:600;color:var(--dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-
-        /* Layout & Main Content */
-        .main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh;}
-        .topbar{background:var(--white);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40;}
-        .page-content{padding:28px;}
-        
-        /* AGENCY HIERARCHY STYLES */
-        .client-info-stack { display: flex; flex-direction: column; }
-        .staff-hierarchy { margin-top: 6px; padding-left: 12px; }
-        .staff-node { font-family: 'DM Mono', monospace; font-size: 11px; display: flex; align-items: center; gap: 6px; color: var(--mid); margin-bottom: 2px; }
-        .node-line { color: var(--border); font-weight: bold; }
-        .node-role { text-transform: uppercase; font-weight: 700; color: var(--gold); font-size: 9px; background: var(--gold-lt); padding: 1px 4px; border-radius: 4px; }
-        .staff-node.empty { opacity: 0.5; font-style: italic; }
-
-        /* Stats & Cards */
-        .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px;}
-        .stat-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px 22px;}
-        .stat-label{font-size:12px;color:var(--sub);font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
-        .stat-value{font-size:26px;font-weight:700;font-family:'Fraunces',serif;}
-        
-        /* Tables */
-        .clients-table-wrap{background:var(--white);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
-        .clients-table{width:100%;border-collapse:collapse;}
-        .clients-table th{padding:12px 20px;text-align:left;font-size:11px;color:var(--sub);text-transform:uppercase;background:var(--cream);}
-        .clients-table td{padding:16px 20px;border-bottom:1px solid var(--border);vertical-align:top;}
-        .client-avatar-sm{width:36px;height:36px;border-radius:10px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-weight:700;color:var(--gold-dk);flex-shrink:0;}
-        
-        /* Buttons */
-        .btn{padding:9px 16px;border-radius:9px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:13px;border:none;font-family:'DM Sans',sans-serif;}
-        .btn-primary{background:var(--gold);color:#fff;}
-        .btn-xs{padding:5px 10px;font-size:11.5px;border-radius:7px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:4px;border:none;font-family:'DM Sans',sans-serif;}
-        .btn-xs-manage{background:var(--gold-lt);color:var(--gold-dk);}
-        .btn-xs-logins{background:rgba(184,146,74,0.1);color:var(--gold-dk);}
-        .btn-xs-embed{background:#fdf2f8;color:#9d174d;}
-        .btn-xs-delete{background:var(--danger-lt);color:var(--danger);}
-
-        /* Modals */
-        .modal{display:none;position:fixed;inset:0;background:rgba(28,25,23,0.5);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center;padding:16px;}
-        .modal-content{background:var(--white);border-radius:20px;padding:28px;max-width:500px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.1);}
-        .modal-header{display:flex;justify-content:space-between;margin-bottom:20px;}
-        .form-group{margin-bottom:18px;}
-        .form-group label{display:block;font-size:11px;font-weight:600;color:var(--mid);margin-bottom:6px;text-transform:uppercase;}
-        .form-group input, .form-group select{width:100%;padding:11px 14px;background:var(--cream);border:1.5px solid var(--border);border-radius:9px;outline:none;}
-        
-        .vertical-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:10px;}
-        .vertical-card{background:var(--cream);border:1.5px solid var(--border);border-radius:10px;padding:12px;text-align:center;cursor:pointer;transition:0.2s;}
-        .vertical-card.selected{border-color:var(--gold);background:var(--gold-lt);}
-
-        /* Toast */
-        .toast{position:fixed;bottom:20px;right:20px;padding:12px 18px;border-radius:10px;font-size:14px;font-weight:600;color:#fff;z-index:9999;opacity:0;transition:0.3s;}
-        .toast.show{opacity:1;}
-        .toast.success{background:var(--success);}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+    --cream:#F7F4EF;--cream2:#F0EBE1;--panel:#EDEAE3;
+    --gold:#B8924A;--gold-lt:rgba(184,146,74,0.12);--gold-dk:#9A7A3A;--gold-glow:rgba(184,146,74,0.3);
+    --dark:#1C1917;--mid:#57534E;--sub:#A8A29E;--border:#E7E2DA;--white:#FFFFFF;
+    --success:#16A34A;--success-lt:#F0FDF4;
+    --danger:#EF4444;--danger-lt:#FEF2F2;
+    --warning:#D97706;--warning-lt:#FFFBEB;
+    --sidebar-w:224px;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;display:flex;}
+.sidebar{width:var(--sidebar-w);background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:50;transition:transform 0.3s ease;}
+.sidebar-logo{padding:20px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.logo-img{width:34px;height:34px;border-radius:9px;object-fit:cover;flex-shrink:0;}
+.logo-text{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
+.sidebar-nav{flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
+.nav-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:var(--sub);padding:10px 10px 4px;margin-top:6px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;text-decoration:none;color:var(--mid);font-size:13.5px;font-weight:500;transition:all 0.15s;cursor:pointer;}
+.nav-item:hover{background:var(--cream);color:var(--dark);}
+.nav-item.active{background:var(--gold-lt);color:var(--gold-dk);font-weight:600;}
+.nav-item svg{width:16px;height:16px;flex-shrink:0;opacity:0.65;}
+.nav-item.active svg{opacity:1;}
+.nav-badge{margin-left:auto;background:var(--gold);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;}
+.sidebar-footer{padding:14px 12px;border-top:1px solid var(--border);}
+.user-profile{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;cursor:pointer;transition:background 0.15s;}
+.user-profile:hover{background:var(--cream);}
+.user-avatar{width:32px;height:32px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;}
+.user-info{flex:1;min-width:0;}
+.user-name{font-size:13px;font-weight:600;color:var(--dark);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.user-plan{font-size:11px;color:var(--sub);text-transform:capitalize;}
+.main{margin-left:var(--sidebar-w);flex:1;display:flex;flex-direction:column;min-height:100vh;}
+.topbar{background:var(--white);border-bottom:1px solid var(--border);padding:0 28px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:40;}
+.topbar-left{display:flex;align-items:center;gap:12px;}
+.hamburger{display:none;background:none;border:none;cursor:pointer;padding:6px;border-radius:8px;color:var(--mid);}
+.hamburger:hover{background:var(--cream);}
+.topbar-title{font-family:'Fraunces',serif;font-size:15px;font-weight:600;color:var(--dark);}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.plan-chip{padding:4px 12px;background:var(--gold-lt);color:var(--gold-dk);border-radius:20px;font-size:12px;font-weight:600;text-transform:capitalize;border:1px solid rgba(184,146,74,0.2);}
+.btn-logout{padding:7px 14px;background:transparent;color:var(--sub);border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;transition:all 0.15s;font-family:'DM Sans',sans-serif;}
+.btn-logout:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-lt);}
+.page-content{padding:28px;}
+.page-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:14px;}
+.page-header-left h1{font-family:'Fraunces',serif;font-size:24px;font-weight:700;letter-spacing:-0.3px;margin-bottom:2px;}
+.page-header-left p{font-size:13px;color:var(--sub);}
+.page-header-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.btn{padding:9px 16px;border-radius:9px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:13px;transition:all 0.2s;border:none;font-family:'DM Sans',sans-serif;white-space:nowrap;}
+.btn svg{width:14px;height:14px;flex-shrink:0;}
+.btn-primary{background:var(--gold);color:#fff;box-shadow:0 2px 8px rgba(184,146,74,0.3);}
+.btn-primary:hover{background:var(--gold-dk);transform:translateY(-1px);}
+.btn-secondary{background:var(--white);color:var(--dark);border:1px solid var(--border);}
+.btn-secondary:hover{background:var(--cream);}
+.btn-upgrade{background:linear-gradient(135deg,var(--warning),#b45309);color:#fff;}
+.btn-upgrade:hover{transform:translateY(-1px);}
+.btn-affiliate{background:var(--success-lt);color:var(--success);border:1px solid #bbf7d0;}
+.btn-affiliate:hover{background:#dcfce7;}
+.btn-danger{background:var(--danger);color:#fff;flex:1;justify-content:center;}
+.btn-danger:hover{background:#dc2626;}
+.btn-cancel{background:var(--white);color:var(--mid);border:1px solid var(--border);flex:1;justify-content:center;}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px;}
+.stat-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px 22px;transition:all 0.2s;}
+.stat-card:hover{box-shadow:0 4px 20px rgba(0,0,0,0.06);border-color:rgba(184,146,74,0.2);}
+.stat-label{font-size:12px;color:var(--sub);font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.stat-icon-box{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.stat-icon-box svg{width:12px;height:12px;}
+.stat-value-row{display:flex;align-items:baseline;gap:6px;}
+.stat-value{font-size:26px;font-weight:700;letter-spacing:-0.5px;color:var(--dark);font-family:'Fraunces',serif;}
+.stat-trend{font-size:12px;font-weight:600;}
+.stat-trend.up{color:var(--success);}
+.stat-trend.neutral{color:var(--sub);}
+.stat-sub{font-size:11px;color:var(--sub);margin-top:4px;}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.section-title{font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--dark);}
+.clients-table-wrap{background:var(--white);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+.clients-table{width:100%;border-collapse:collapse;}
+.clients-table thead tr{background:var(--cream);border-bottom:1px solid var(--border);}
+.clients-table th{padding:11px 20px;text-align:left;font-size:11px;font-weight:600;color:var(--sub);text-transform:uppercase;letter-spacing:0.06em;}
+.clients-table td{padding:14px 20px;font-size:13.5px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.clients-table tbody tr:last-child td{border-bottom:none;}
+.clients-table tbody tr:hover{background:#FDFCFA;}
+.client-cell{display:flex;align-items:center;gap:12px;}
+.client-avatar-sm{width:36px;height:36px;border-radius:10px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:var(--gold-dk);flex-shrink:0;}
+.client-cell-name{font-weight:600;color:var(--dark);font-size:14px;}
+.status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+.status-badge.active{background:var(--success-lt);color:var(--success);}
+.status-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;}
+.platform-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;font-size:11.5px;font-weight:700;}
+.platform-badge.shopify{background:rgba(149,191,71,0.14);color:#5C7A2E;}
+.platform-badge.woocommerce{background:rgba(127,84,179,0.12);color:#7F54B3;}
+.platform-badge-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.table-actions{display:flex;gap:5px;flex-wrap:wrap;}
+.btn-xs{padding:5px 10px;font-size:11.5px;border-radius:7px;border:none;cursor:pointer;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:all 0.15s;font-family:'DM Sans',sans-serif;white-space:nowrap;}
+.btn-xs svg{width:11px;height:11px;flex-shrink:0;}
+.btn-xs-manage{background:var(--gold-lt);color:var(--gold-dk);}
+.btn-xs-manage:hover{background:rgba(184,146,74,0.2);}
+.btn-xs-analytics{background:var(--success-lt);color:var(--success);}
+.btn-xs-analytics:hover{background:#dcfce7;}
+.btn-xs-theme{background:var(--warning-lt);color:var(--warning);}
+.btn-xs-theme:hover{background:#fef3c7;}
+.btn-xs-embed{background:#fdf2f8;color:#9d174d;}
+.btn-xs-embed:hover{background:#fce7f3;}
+.btn-xs-logins{background:rgba(184,146,74,0.1);color:var(--gold-dk);}
+.btn-xs-logins:hover{background:rgba(184,146,74,0.2);}
+.btn-xs-integrations{background:rgba(99,102,241,0.1);color:#4338ca;}
+.btn-xs-integrations:hover{background:rgba(99,102,241,0.2);}
+.card-menu{position:relative;display:inline-flex;}
+.card-menu-btn{background:var(--panel);color:var(--mid);padding:5px 9px;}
+.card-menu-btn svg{width:14px;height:14px;}
+.card-menu-btn:hover{background:var(--border);}
+.card-menu-dropdown{display:none;flex-direction:column;gap:2px;position:fixed;background:var(--white);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,0.14);min-width:150px;padding:6px;z-index:600;}
+.card-menu-dropdown.show{display:flex;}
+.card-menu-item{display:block;width:100%;text-align:left;padding:8px 10px;border-radius:7px;border:none;background:none;font-size:13px;font-weight:500;color:var(--dark);cursor:pointer;text-decoration:none;font-family:'DM Sans',sans-serif;}
+.card-menu-item:hover{background:var(--cream);}
+.card-menu-item-danger{color:var(--danger);}
+.card-menu-item-danger:hover{background:var(--danger-lt);}
+.btn-xs-locked{background:var(--panel);color:var(--sub);cursor:not-allowed;}
+.btn-xs-delete{background:var(--danger-lt);color:var(--danger);}
+.btn-xs-delete:hover{background:#fecaca;}
+/* ── CLIENT DASHBOARD PANEL ── */
+.cdash-overlay{display:none;position:fixed;inset:0;background:rgba(28,25,23,0.45);backdrop-filter:blur(3px);z-index:300;}
+.cdash-overlay.show{display:block;}
+.cdash-panel{position:fixed;top:0;right:0;bottom:0;width:min(520px,100vw);background:var(--white);
+  border-left:1px solid var(--border);box-shadow:-12px 0 40px rgba(0,0,0,0.1);z-index:301;
+  display:flex;flex-direction:column;transform:translateX(100%);transition:transform 0.28s cubic-bezier(0.4,0,0.2,1);}
+.cdash-panel.show{transform:translateX(0);}
+.cdash-head{padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.cdash-head-left{display:flex;align-items:center;gap:10px;}
+.cdash-client-av{width:38px;height:38px;border-radius:10px;background:var(--gold-lt);border:1px solid rgba(184,146,74,0.2);display:flex;align-items:center;justify-content:center;font-family:'Fraunces',serif;font-size:15px;font-weight:700;color:var(--gold-dk);}
+.cdash-client-name{font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--dark);}
+.cdash-client-id{font-family:'DM Mono',monospace;font-size:11px;color:var(--sub);margin-top:1px;}
+.cdash-close{width:28px;height:28px;border-radius:7px;background:var(--panel);border:none;font-size:16px;cursor:pointer;color:var(--sub);display:flex;align-items:center;justify-content:center;transition:all 0.15s;}
+.cdash-close:hover{background:var(--cream2);color:var(--dark);}
+.cdash-body{flex:1;overflow-y:auto;padding:20px 24px;}
+.cdash-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:20px;}
+.cdash-stat{background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:12px 14px;text-align:center;}
+.cdash-stat-val{font-family:'Fraunces',serif;font-size:24px;font-weight:700;color:var(--dark);line-height:1;}
+.cdash-stat-lbl{font-size:10.5px;color:var(--sub);margin-top:3px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;}
+.cdash-section{margin-bottom:20px;}
+.cdash-section-title{font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:10px;}
+.cdash-links{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.cdash-link{display:flex;align-items:center;gap:8px;padding:10px 13px;background:var(--cream);border:1px solid var(--border);border-radius:10px;font-size:13px;font-weight:600;color:var(--mid);text-decoration:none;transition:all 0.15s;}
+.cdash-link:hover{border-color:var(--gold);color:var(--gold-dk);background:var(--gold-lt);}
+.cdash-link svg{width:14px;height:14px;flex-shrink:0;}
+.cdash-footer{padding:16px 24px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:8px;}
+.cdash-footer-btn{flex:1;padding:10px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;border:none;transition:all 0.15s;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px;}
+.cdash-footer-btn.gold{background:var(--gold);color:#fff;box-shadow:0 2px 8px var(--gold-glow);}
+.cdash-footer-btn.gold:hover{background:var(--gold-dk);}
+.cdash-footer-btn.outline{background:var(--white);color:var(--mid);border:1.5px solid var(--border);}
+.cdash-footer-btn.outline:hover{border-color:var(--gold);color:var(--gold-dk);}
+.cdash-footer-btn svg{width:13px;height:13px;}
+.cdash-leads-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;}
+.cdash-lead-row{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--cream);border:1px solid var(--border);border-radius:8px;font-size:12.5px;}
+.cdash-lead-name{font-weight:600;color:var(--dark);}
+.cdash-lead-email{color:var(--sub);font-family:'DM Mono',monospace;font-size:11px;}
+.cdash-lead-date{font-size:11px;color:var(--sub);}
+.cdash-loading{text-align:center;padding:40px;color:var(--sub);font-size:13px;}
+.cdash-spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin 0.7s linear infinite;display:inline-block;margin-bottom:8px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.empty-state{text-align:center;padding:60px 20px;}
+.empty-icon-box{width:60px;height:60px;background:var(--gold-lt);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+.empty-icon-box svg{width:26px;height:26px;color:var(--gold);}
+.empty-state h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:6px;}
+.empty-state p{color:var(--sub);font-size:14px;margin-bottom:20px;font-weight:300;}
+/* Mobile client cards */
+.client-cards-mobile{display:none;padding:12px;}
+.client-card{background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;}
+.client-card:last-child{margin-bottom:0;}
+.client-card-top{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
+.client-card-name{font-weight:600;color:var(--dark);font-size:14px;}
+.client-card-id{font-size:11px;color:var(--sub);font-family:'DM Mono',monospace;margin-top:2px;}
+.client-card-actions{display:flex;gap:6px;flex-wrap:wrap;}
+/* Modals */
+.modal,.delete-modal,.embed-modal{display:none;position:fixed;inset:0;background:rgba(28,25,23,0.5);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center;padding:16px;}
+.modal-content,.embed-modal-content{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:28px;max-width:460px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.1);animation:slideUp 0.25s ease;max-height:90vh;overflow-y:auto;}
+.delete-modal-content{background:var(--white);border:1px solid var(--border);border-radius:20px;padding:28px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.12);animation:slideUp 0.25s ease;text-align:center;}
+.modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px;}
+.modal-header h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;}
+.modal-close{background:var(--cream);border:1px solid var(--border);font-size:18px;cursor:pointer;color:var(--mid);width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;transition:all 0.15s;line-height:1;}
+.modal-close:hover{background:var(--panel);color:var(--dark);}
+.form-group{margin-bottom:18px;}
+.form-group label{display:block;font-size:11px;font-weight:600;color:var(--mid);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.06em;}
+.form-group input{width:100%;padding:11px 14px;background:var(--cream);border:1.5px solid var(--border);border-radius:9px;font-size:14px;color:var(--dark);font-family:'DM Sans',sans-serif;transition:all 0.2s;outline:none;}
+.form-group input:focus{border-color:var(--gold);background:var(--white);box-shadow:0 0 0 3px var(--gold-lt);}
+.delete-icon-box{width:52px;height:52px;border-radius:14px;background:var(--danger-lt);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
+.delete-icon-box svg{width:22px;height:22px;color:var(--danger);}
+.delete-modal-content h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:8px;}
+.delete-modal-content p{color:var(--sub);font-size:14px;line-height:1.6;margin-bottom:6px;}
+.delete-client-name{font-weight:700;color:var(--danger);background:var(--danger-lt);padding:5px 12px;border-radius:7px;display:inline-block;margin:8px 0 16px;font-size:14px;}
+.delete-modal-actions{display:flex;gap:10px;margin-top:4px;}
+.embed-modal-content{max-width:600px;}
+.embed-modal-content h2{font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:6px;}
+.embed-modal-content>p{color:var(--sub);font-size:13px;margin-bottom:16px;line-height:1.6;}
+.embed-modal-content>p code{background:var(--cream);padding:1px 6px;border-radius:4px;color:var(--gold-dk);font-family:'DM Mono',monospace;font-size:12px;}
+.embed-textarea-wrapper{position:relative;}
+#embedCodeText{width:100%;height:175px;padding:14px;background:#1C1917;border:1px solid #3D3530;border-radius:12px;font-family:'DM Mono',monospace;font-size:12px;color:#D4C4A8;resize:none;line-height:1.7;outline:none;}
+.embed-lang-tag{position:absolute;top:10px;right:10px;background:var(--gold);color:#fff;padding:2px 9px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:0.5px;}
+.embed-actions{margin-top:14px;display:flex;gap:10px;}
+.embed-tip{margin-top:14px;padding:12px 14px;background:var(--warning-lt);border-left:3px solid var(--warning);border-radius:8px;font-size:12px;color:#92400e;line-height:1.6;}
+.dash-platform-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.dash-platform-card{border:2px solid var(--border);border-radius:12px;padding:18px 14px;text-align:center;cursor:pointer;transition:all 0.18s;background:var(--cream);}
+.dash-platform-card:hover{border-color:var(--sub);}
+.dash-platform-card.selected[data-platform="shopify"]{border-color:#95BF47;background:rgba(149,191,71,0.1);}
+.dash-platform-card.selected[data-platform="woocommerce"]{border-color:#7F54B3;background:rgba(127,84,179,0.08);}
+.dash-platform-logo{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-size:18px;}
+.dash-platform-logo.shopify{background:#95BF47;}
+.dash-platform-logo.woo{background:#7F54B3;}
+.dash-platform-name{font-size:13.5px;font-weight:700;color:var(--dark);}
+.toast{position:fixed;bottom:20px;right:20px;padding:12px 18px;border-radius:10px;font-size:14px;font-weight:600;color:#fff;z-index:9999;opacity:0;transform:translateY(10px);transition:all 0.3s;pointer-events:none;max-width:300px;}
+.toast.show{opacity:1;transform:translateY(0);}
+.toast.success{background:var(--success);}
+.toast.error{background:var(--danger);}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(28,25,23,0.5);z-index:49;}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+@media(max-width:1100px){.stats-row{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:768px){
+    .sidebar{transform:translateX(-100%);}
+    .sidebar.open{transform:translateX(0);}
+    .sidebar-overlay.open{display:block;}
+    .main{margin-left:0;}
+    .topbar{padding:0 16px;}
+    .hamburger{display:flex;}
+    .page-content{padding:16px;}
+    .stats-row{grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px;}
+    .stat-card{padding:16px;}
+    .stat-value{font-size:22px;}
+    .page-header{margin-bottom:20px;}
+    .clients-table{display:none;}
+    .client-cards-mobile{display:block;}
+    .section-header{flex-direction:column;align-items:flex-start;gap:10px;}
+    .section-header .btn{width:100%;justify-content:center;}
+    .page-header-actions{width:100%;}
+    .page-header-actions .btn{flex:1;justify-content:center;}
+    .plan-chip{display:none;}
+}
+@media(max-width:480px){
+    .stats-row{grid-template-columns:1fr 1fr;}
+    .modal-content,.embed-modal-content,.delete-modal-content{padding:20px;}
+    .dash-platform-grid{grid-template-columns:1fr;}
+}
     </style>
 </head>
 <body>
-
-<aside class="sidebar">
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
     <div class="sidebar-logo">
-        <span class="logo-text">Lumvi Agency</span>
+        <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi" class="logo-img">
+        <span class="logo-text">Lumvi</span>
     </div>
     <nav class="sidebar-nav">
         <div class="nav-label">Main</div>
-        <a href="#" class="nav-item active">Dashboard <span class="nav-badge">3</span></a>
-        <a href="#" class="nav-item">Settings</a>
+        <a href="/dashboard" class="nav-item active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Your Stores
+            {% if clients %}<span class="nav-badge">{{ clients|length }}</span>{% endif %}
+        </a>
+        <a href="/sales" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            Sales Page
+        </a>
+        <a href="/affiliate-dashboard" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            Affiliate
+        </a>
+        {% if plan_type in ('agency', 'enterprise') or user.is_admin %}
+        <a href="/client-portal" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Store Portal
+        </a>
+        {% endif %}
+        {% if plan_type in ('pro', 'agency', 'enterprise') or user.is_admin %}
+        <a href="/integrations" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Integrations
+        </a>
+        {% endif %}
+        <div class="nav-label">Account</div>
+        <a href="/upgrade" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            Upgrade Plan
+        </a>
+        <a href="/support" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Support
+        </a>
+        <a href="{{ url_for('account.settings_page') }}" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+            Account Settings
+        </a>
+        <a href="/logout" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+            Logout
+        </a>
     </nav>
+    <div class="sidebar-footer">
+        <a href="{{ url_for('account.settings_page') }}" class="user-profile" style="text-decoration:none;">
+            <div class="user-avatar">{{ user.email[0]|upper }}</div>
+            <div class="user-info">
+                <div class="user-name">{{ user.email }}</div>
+                <div class="user-plan">{{ (plan_type or user.plan_type)|title }} Plan</div>
+            </div>
+        </a>
+    </div>
 </aside>
-
 <div class="main">
     <div class="topbar">
-        <span style="font-family:'Fraunces'; font-weight:600;">Agency Control Panel</span>
-        <button class="btn btn-primary" onclick="openNewClientModal()">+ New Client Business</button>
+        <div class="topbar-left">
+            <button class="hamburger" onclick="openSidebar()" aria-label="Open menu">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <span class="topbar-title">Your Stores</span>
+        </div>
+        <div class="topbar-right">
+            <span class="plan-chip">{{ plan_type or user.plan_type }}</span>
+            <a href="/logout" class="btn-logout">Logout</a>
+        </div>
     </div>
-
     <div class="page-content">
+        <div class="page-header">
+            <div class="page-header-left">
+                <h1>Overview</h1>
+                <p>Manage your connected stores and see how your AI employees are performing</p>
+            </div>
+            <div class="page-header-actions">
+                <a href="/affiliate-dashboard" class="btn btn-affiliate">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>Affiliate
+                </a>
+                <a href="/sales" class="btn btn-secondary">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Sales Page
+                </a>
+                {% if limit_reached and plan_type == 'agency' %}
+                    <button class="btn btn-primary" onclick="openNewClientModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Store Slot
+                    </button>
+                {% elif limit_reached %}
+                    <a href="/upgrade" class="btn btn-upgrade">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>Upgrade
+                    </a>
+                {% elif plan_type == 'agency' and overage_payment_status == 'overdue' %}
+                    <a href="{{ overage_payment_link }}" class="btn btn-upgrade" style="background:linear-gradient(135deg,#DC2626,#B91C1C);" target="_blank" rel="noopener">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Pay Invoice
+                    </a>
+                {% elif plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
+                    <a href="/upgrade" class="btn btn-upgrade" title="Add a payment method to connect more stores">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Add Payment Method
+                    </a>
+                {% else %}
+                    <button class="btn btn-primary" onclick="openNewClientModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Connect a Store
+                    </button>
+                {% endif %}
+            </div>
+        </div>
         <div class="stats-row">
             <div class="stat-card">
-                <div class="stat-label">Total Client Businesses</div>
-                <div class="stat-value">12</div>
+                <div class="stat-label">
+                    <div class="stat-icon-box" style="background:var(--gold-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="#B8924A" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                    Connected Stores
+                </div>
+                <div class="stat-value-row"><span class="stat-value">{{ client_count or clients|length }}</span></div>
+                <div class="stat-sub">{% if slots_display == 'Unlimited' %}Unlimited plan{% else %}of {{ slots_display }} allowed{% endif %}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-label">Active Staff Logins</div>
-                <div class="stat-value">24</div>
+                <div class="stat-label">
+                    <div class="stat-icon-box" style="background:var(--success-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                    Active AI Employees
+                </div>
+                <div class="stat-value-row"><span class="stat-value">{{ clients|length }}</span><span class="stat-trend up">Live</span></div>
+                <div class="stat-sub">All stores running</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">
+                    <div class="stat-icon-box" style="background:var(--warning-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
+                    Current Plan
+                </div>
+                <div class="stat-value-row"><span class="stat-value" style="font-size:20px;text-transform:capitalize;">{{ plan_type or user.plan_type }}</span></div>
+                <div class="stat-sub"><a href="/upgrade" style="color:var(--gold);text-decoration:none;font-weight:600;">Upgrade →</a></div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">
+                    <div class="stat-icon-box" style="background:#fdf2f8;"><svg viewBox="0 0 24 24" fill="none" stroke="#9d174d" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+                    Store Slots Used
+                </div>
+                <div class="stat-value-row"><span class="stat-value">{{ client_count or clients|length }}</span><span class="stat-trend neutral">/ {{ slots_display or '∞' }}</span></div>
+                <div class="stat-sub">{% if limit_reached %}<span style="color:var(--warning);font-weight:600;">Limit reached</span>{% else %}Slots available{% endif %}</div>
             </div>
         </div>
+        {% if plan_type == 'agency' and limit_reached %}
+        {# ── ALL SEATS IN USE: prompt to buy ── #}
+        <div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:16px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;">
+            <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" style="width:22px;height:22px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span style="font-size:13.5px;color:#78350F;line-height:1.5;">
+                    <strong>All {{ client_limit }} store slot{{ 's' if client_limit != 1 else '' }} in use.</strong>
+                    <!-- TODO(pricing): $15/$60 seat pricing carried over from the agency model as a placeholder — revisit once merchant pricing (flat-tier vs. usage-based) is decided. -->
+                    Add a slot to connect more stores — $15/mo for 1 slot or $60/mo for 5.
+                </span>
+            </div>
+            <button onclick="openNewClientModal()"
+                    style="flex-shrink:0;padding:10px 20px;background:#D97706;color:#fff;border-radius:8px;font-weight:700;font-size:13px;border:none;cursor:pointer;white-space:nowrap;">
+                Add Slot →
+            </button>
+        </div>
 
+        {% elif plan_type == 'agency' and active_seat_count > 0 %}
+        {# ── HAS EXTRA SEATS, STILL ROOM ── #}
+        <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            <span style="font-size:13.5px;color:#166534;line-height:1.5;">
+                {{ active_seat_count }} active store slot subscription{{ 's' if active_seat_count != 1 else '' }} —
+                {{ client_limit }} total slots available ({{ client_limit - client_count }} remaining).
+            </span>
+        </div>
+
+        {% elif plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
+        {# ── NO PAYMENT METHOD ── #}
+        <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span style="font-size:13.5px;color:#92400E;line-height:1.5;">
+                <strong>Payment method required.</strong> You have {{ client_count - agency_included_clients }} extra store slot{{ 's' if (client_count - agency_included_clients) != 1 else '' }} above your {{ agency_included_clients }} included — each costs ${{ agency_seat_price|int }}/mo.
+                <a href="/upgrade" style="color:#B45309;font-weight:700;text-decoration:underline;">Add a payment method →</a>
+            </span>
+        </div>
+        {% endif %}
+        <div class="section-header">
+            <span class="section-title">Your Stores</span>
+            {% if not limit_reached %}
+                {% if plan_type == 'agency' and limit_reached %}
+                    <button class="btn btn-primary" onclick="openNewClientModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Store Slot
+                    </button>
+                {% elif plan_type == 'agency' and overage_payment_status == 'overdue' %}
+                    <a href="{{ overage_payment_link }}" target="_blank" rel="noopener"
+                       class="btn btn-upgrade" style="background:linear-gradient(135deg,#DC2626,#B91C1C);" title="Pay your overdue invoice to connect more stores">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Pay Invoice
+                    </a>
+                {% elif plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
+                    <a href="/upgrade" class="btn btn-upgrade" title="Add a payment method to connect more stores">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Add Payment Method
+                    </a>
+                {% else %}
+                    <button class="btn btn-primary" onclick="openNewClientModal()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Connect a Store
+                    </button>
+                {% endif %}
+            {% endif %}
+        </div>
+        {% if clients %}
         <div class="clients-table-wrap">
             <table class="clients-table">
-                <thead>
-                    <tr>
-                        <th>Client Structure</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Store</th><th>Platform</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
-                    <tr>
+                    {% for client in clients %}
+                    <tr id="row-{{ client.client_id }}">
+                        <td><div class="client-cell"><div class="client-avatar-sm">{{ client.company_name[0]|upper }}</div><div class="client-cell-name">{{ client.company_name }}</div></div></td>
+                        <!-- TODO(backend): populate client.platform ('shopify' | 'woocommerce') from the store connection record -->
                         <td>
-                            <div class="client-cell">
-                                <div class="client-avatar-sm">A</div>
-                                <div class="client-info-stack">
-                                    <div style="font-weight:700;">Acme Corp</div>
-                                    <div class="staff-hierarchy">
-                                        <div class="staff-node">
-                                            <span class="node-line">└─</span>
-                                            <span class="node-role">Manager</span>
-                                            <span class="node-email">sarah@acme.com</span>
-                                        </div>
-                                        <div class="staff-node">
-                                            <span class="node-line">└─</span>
-                                            <span class="node-role">Support</span>
-                                            <span class="node-email">mike@acme.com</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            {% if client.platform == 'woocommerce' %}
+                            <span class="platform-badge woocommerce"><span class="platform-badge-dot"></span>WooCommerce</span>
+                            {% else %}
+                            <span class="platform-badge shopify"><span class="platform-badge-dot"></span>Shopify</span>
+                            {% endif %}
                         </td>
-                        <td><span style="color:var(--success); font-size:12px; font-weight:700;">● Active</span></td>
+                        <td><span class="status-badge active">Active</span></td>
                         <td>
-                            <div style="display:flex; gap:5px;">
-                                <button class="btn-xs btn-xs-logins" onclick="openStaffModal('CL-101', 'Acme Corp')">+ Add Staff</button>
-                                <button class="btn-xs btn-xs-manage">Manage Bot</button>
-                                <button class="btn-xs btn-xs-delete">Delete</button>
+                            <div class="table-actions">
+                                <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Knowledge</a>
+                                <a href="/article-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>Articles</a>
+                                {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<button onclick="openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="btn-xs btn-xs-logins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</button>{% endif %}
+                                {% if plan_type in ('pro', 'agency', 'enterprise') or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="btn-xs btn-xs-integrations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Integrations</a>{% endif %}
+                                <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Install</button>
+                                {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Analytics</a><a href="/client-report?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics" style="margin-left:2px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Report</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Analytics</button>{% endif %}
+                                {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>Customize AI</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Customize AI</button>{% endif %}
+                                <button class="btn-xs btn-xs-delete" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="confirmDelete(this.dataset.clientId, this.dataset.clientName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
                             </div>
                         </td>
                     </tr>
+                    {% endfor %}
                 </tbody>
             </table>
-        </div>
-    </div>
-</div>
-
-<div class="modal" id="staff-modal">
-    <div class="modal-content">
-        <div class="modal-header">
-            <div>
-                <h2 style="font-family:'Fraunces'">Add Client Staff</h2>
-                <p id="staff-subtitle" style="font-size:12px; color:var(--sub)"></p>
-            </div>
-            <button style="border:none; background:none; font-size:20px; cursor:pointer;" onclick="closeModal('staff-modal')">×</button>
-        </div>
-        <form id="addStaffForm" onsubmit="submitStaff(event)">
-            <input type="hidden" id="target-client-id">
-            <div class="form-group">
-                <label>Staff Email</label>
-                <input type="email" id="staff-email" required placeholder="staff@client.com">
-            </div>
-            <div class="form-group">
-                <label>Access Level</label>
-                <div class="vertical-grid">
-                    <div class="vertical-card selected" id="role-manager" onclick="setRole('manager')">
-                        <div style="font-size:20px">🔑</div>
-                        <div style="font-weight:700; font-size:12px">Manager</div>
+            <div class="client-cards-mobile">
+                {% for client in clients %}
+                <div class="client-card" id="card-{{ client.client_id }}">
+                    <div class="client-card-top">
+                        <div class="client-avatar-sm">{{ client.company_name[0]|upper }}</div>
+                        <div><div class="client-card-name">{{ client.company_name }}</div>
+                            {% if client.platform == 'woocommerce' %}
+                            <span class="platform-badge woocommerce" style="margin-top:3px;"><span class="platform-badge-dot"></span>WooCommerce</span>
+                            {% else %}
+                            <span class="platform-badge shopify" style="margin-top:3px;"><span class="platform-badge-dot"></span>Shopify</span>
+                            {% endif %}
+                        </div>
+                        <span class="status-badge active" style="margin-left:auto;">Active</span>
                     </div>
-                    <div class="vertical-card" id="role-support" onclick="setRole('support')">
-                        <div style="font-size:20px">💬</div>
-                        <div style="font-weight:700; font-size:12px">Support</div>
+                    <div class="client-card-actions">
+                        <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">Knowledge</a>
+                        {% if plan_type in ('pro', 'agency', 'enterprise') or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="btn-xs btn-xs-integrations">Integrations</a>{% endif %}
+                        {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics">Analytics</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Analytics</button>{% endif %}
+                        <div class="card-menu">
+                            <button class="btn-xs card-menu-btn" onclick="toggleCardMenu(event, '{{ client.client_id }}')" aria-label="More actions">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+                            </button>
+                            <div class="card-menu-dropdown" id="cardMenu-{{ client.client_id }}">
+                                <a href="/article-manager?client_id={{ client.client_id }}" class="card-menu-item">Articles</a>
+                                {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<button onclick="closeAllCardMenus();openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="card-menu-item">Dashboard</button>{% endif %}
+                                <button onclick="closeAllCardMenus();showEmbedCode('{{ client.client_id }}')" class="card-menu-item">Install</button>
+                                {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="card-menu-item">Customize AI</a>{% endif %}
+                                <button class="card-menu-item card-menu-item-danger" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="closeAllCardMenus();confirmDelete(this.dataset.clientId, this.dataset.clientName)">Disconnect</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
+                {% endfor %}
             </div>
-            <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center;">Create Invitation</button>
-        </form>
+        </div>
+        {% else %}
+        <div class="clients-table-wrap">
+            <div class="empty-state">
+                <div class="empty-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                <h2>No Stores Connected Yet</h2>
+                <p>Connect your Shopify or WooCommerce store to bring your AI employee online</p>
+                <button class="btn btn-primary" onclick="openNewClientModal()">
+                    {% if plan_type == 'agency' and limit_reached %}Add Store Slot{% elif overage_payment_status == 'overdue' %}Pay Invoice to Connect a Store{% else %}Connect Your First Store{% endif %}
+                </button>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+<!-- CONNECT A STORE MODAL -->
+<!-- Mirrors onboarding.html step 1 so returning merchants get the same connect experience
+     when adding a second/third store rather than a separate "create client" mental model. -->
+<div class="modal" id="new-client-modal">
+    <div class="modal-content" style="max-width:520px;width:100%;">
+        <div class="modal-header"><h2>Connect a Store</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+        <p style="color:var(--sub);font-size:13.5px;line-height:1.6;margin:-10px 0 18px;">
+            Connect a Shopify or WooCommerce store — we'll import its catalog and policies automatically.
+        </p>
+        <div class="dash-platform-grid">
+            <div class="dash-platform-card" data-platform="shopify" onclick="selectDashPlatform('shopify')">
+                <div class="dash-platform-logo shopify">🛍️</div>
+                <div class="dash-platform-name">Shopify</div>
+            </div>
+            <div class="dash-platform-card" data-platform="woocommerce" onclick="selectDashPlatform('woocommerce')">
+                <div class="dash-platform-logo woo">🧩</div>
+                <div class="dash-platform-name">WooCommerce</div>
+            </div>
+        </div>
+        <div class="form-group" id="dashStoreUrlGroup" style="display:none;">
+            <label id="dashStoreUrlLabel">Store URL</label>
+            <input type="text" id="dashStoreUrl" placeholder="your-store.myshopify.com">
+        </div>
+        {% if plan_type == 'agency' and client_count >= agency_included_clients %}
+        <div style="background:#FEF9EC;border:1px solid #F59E0B;border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#92400E;line-height:1.5;">
+            <!-- TODO(pricing): seat pricing carried over as a placeholder pending merchant pricing model decision -->
+            <strong>Extra store slot:</strong> This store will be billed at <strong>${{ agency_seat_price|int }}/mo</strong> on your next invoice (slot {{ client_count + 1 }}, {{ agency_included_clients }} included in your plan).
+        </div>
+        {% endif %}
+        <button type="button" class="btn btn-primary" id="dashConnectBtn" style="width:100%;justify-content:center;" disabled onclick="startDashConnect()">Continue</button>
+    </div>
+</div>
+<!-- BUY SEAT MODAL -->
+<div class="modal" id="buy-seat-modal">
+    <div class="modal-content" style="max-width:580px;width:100%;">
+        <div class="modal-header">
+            <h2>Add a Store Slot</h2>
+            <button class="modal-close" onclick="closeBuySeatModal()">×</button>
+        </div>
+        <p style="color:var(--sub);font-size:14px;line-height:1.6;margin:-8px 0 20px;">
+            You've used all your included store slots. Choose a package —
+            you'll pay a prorated amount today, then the monthly rate on the 1st of each month.
+        </p>
+        <div id="seat-loading" style="text-align:center;padding:20px;color:var(--sub);font-size:14px;">
+            Loading prices…
+        </div>
+        <div id="seat-options" style="display:none;display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">
+            <!-- Single Seat -->
+            <div style="border:2px solid var(--border);border-radius:14px;padding:20px;cursor:pointer;transition:all 0.15s;"
+                 id="seat-card-single"
+                 onclick="selectSeatPackage('single')"
+                 onmouseenter="this.style.borderColor='var(--gold)'"
+                 onmouseleave="if(selectedPkg!=='single')this.style.borderColor='var(--border)'">
+                <div style="font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:500;">SINGLE SLOT</div>
+                <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:700;color:var(--dark);" id="single-prorated">—</div>
+                <div style="font-size:12px;color:var(--sub);margin-top:2px;">today (prorated)</div>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--mid);">
+                    then <strong>$15/month</strong> from <span id="single-next">—</span>
+                </div>
+                <div style="margin-top:10px;font-size:12px;color:var(--sub);">+1 store slot</div>
+            </div>
+            <!-- Bundle -->
+            <div style="border:2px solid var(--border);border-radius:14px;padding:20px;cursor:pointer;transition:all 0.15s;position:relative;"
+                 id="seat-card-bundle"
+                 onclick="selectSeatPackage('bundle')"
+                 onmouseenter="this.style.borderColor='var(--gold)'"
+                 onmouseleave="if(selectedPkg!=='bundle')this.style.borderColor='var(--border)'">
+                <div style="position:absolute;top:-1px;right:12px;background:var(--gold);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:0 0 6px 6px;letter-spacing:0.5px;">BEST VALUE</div>
+                <div style="font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:500;">5-SLOT BUNDLE</div>
+                <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:700;color:var(--dark);" id="bundle-prorated">—</div>
+                <div style="font-size:12px;color:var(--sub);margin-top:2px;">today (prorated)</div>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--mid);">
+                    then <strong>$60/month</strong> from <span id="bundle-next">—</span>
+                </div>
+                <div style="margin-top:10px;font-size:12px;color:var(--sub);">+5 store slots · save $15/mo vs single</div>
+            </div>
+        </div>
+        <div id="seat-error" style="display:none;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;padding:12px 14px;font-size:13px;color:#7F1D1D;margin-bottom:16px;"></div>
+        <button id="seat-pay-btn" onclick="confirmBuySeat()"
+                style="display:none;width:100%;padding:14px;background:var(--gold);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer;font-family:'DM Sans',sans-serif;justify-content:center;">
+            Pay & Add Slot →
+        </button>
     </div>
 </div>
 
+<!-- DELETE MODAL -->
+<div class="delete-modal" id="delete-modal">
+    <div class="delete-modal-content">
+        <div class="delete-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></div>
+        <h2>Disconnect Store?</h2>
+        <p>You are about to disconnect:</p>
+        <div class="delete-client-name" id="delete-client-name">—</div>
+        <p style="font-size:13px;">Your AI employee will go offline for this store, and its knowledge, leads and history will be removed. <strong>This cannot be undone.</strong></p>
+        <div class="delete-modal-actions" style="margin-top:20px;">
+            <button class="btn btn-cancel" onclick="closeDeleteModal()">Cancel</button>
+            <button class="btn btn-danger" id="confirm-delete-btn" onclick="executeDelete()">Disconnect</button>
+        </div>
+    </div>
+</div>
+<!-- EMBED MODAL -->
+<div id="embedModal" class="embed-modal">
+    <div class="embed-modal-content">
+        <h2>Manual Install</h2>
+        <p>Your AI employee installs automatically on Shopify and WooCommerce. If you're using a custom theme, paste this just before the closing <code>&lt;/body&gt;</code> tag instead.</p>
+        <div class="embed-textarea-wrapper"><textarea id="embedCodeText" readonly></textarea><div class="embed-lang-tag">HTML</div></div>
+        <div class="embed-actions">
+            <button onclick="copyEmbedCode()" class="btn btn-primary" style="flex:1;justify-content:center;">Copy to Clipboard</button>
+            <button onclick="closeEmbedModal()" class="btn btn-secondary" style="justify-content:center;">Close</button>
+        </div>
+        <div class="embed-tip"><strong>Tip:</strong> Your AI employee appears in the bottom-right corner. Customize its look in Customize AI settings.</div>
+    </div>
+</div>
 <div class="toast" id="toast"></div>
-
+{% if sub_status in ('grace', 'expired') and not user.is_admin %}
+<div id="subExpiryModal" style="display:flex;position:fixed;inset:0;z-index:9999;align-items:center;justify-content:center;background:rgba(28,25,23,0.8);backdrop-filter:blur(6px);padding:20px;">
+    <div style="background:var(--white);border:1px solid var(--border);border-radius:20px;padding:36px 32px;max-width:440px;width:100%;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,0.18);">
+        <div style="width:52px;height:52px;border-radius:14px;background:var(--warning-lt);border:1px solid rgba(217,119,6,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+        {% if sub_status == 'grace' %}
+        <h2 style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--dark);margin-bottom:10px;">Subscription expired</h2>
+        <p style="color:var(--mid);font-size:14px;line-height:1.7;margin-bottom:8px;">You are in a <strong style="color:var(--warning);">3-day grace period</strong>. Your AI employees are still running — renew before the grace period ends.</p>
+        {% if sub_grace_ends_at %}<div style="background:var(--warning-lt);border:1px solid rgba(217,119,6,0.25);border-radius:9px;padding:10px 14px;margin:14px 0;color:var(--warning);font-size:13px;font-weight:600;">Grace period ends: {{ sub_grace_ends_at.strftime('%B %d, %Y') if sub_grace_ends_at else 'Soon' }}</div>{% endif %}
+        {% else %}
+        <h2 style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--dark);margin-bottom:10px;">Subscription expired</h2>
+        <p style="color:var(--mid);font-size:14px;line-height:1.7;margin-bottom:14px;">Your account has been downgraded to the Free plan. Upgrade to restore all features.</p>
+        {% endif %}
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap;">
+            <a href="/upgrade" style="padding:12px 24px;background:var(--gold);color:#fff;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;box-shadow:0 4px 16px rgba(184,146,74,0.4);">Renew Subscription</a>
+            <button onclick="document.getElementById('subExpiryModal').style.display='none'" style="padding:12px 18px;background:transparent;color:var(--sub);border:1px solid var(--border);border-radius:10px;font-weight:600;font-size:14px;cursor:pointer;font-family:'DM Sans',sans-serif;">Dismiss</button>
+        </div>
+    </div>
+</div>
+{% endif %}
 <script>
-    let currentRole = 'manager';
-
-    function openStaffModal(id, name) {
-        document.getElementById('target-client-id').value = id;
-        document.getElementById('staff-subtitle').innerText = `Assign login for ${name}`;
-        document.getElementById('staff-modal').style.display = 'flex';
+    function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sidebarOverlay').classList.add('open');}
+    function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('open');}
+    // ── Connect a Store modal: platform selection + connect ──────────────
+    let dashSelectedPlatform = null;
+    function selectDashPlatform(platform) {
+        dashSelectedPlatform = platform;
+        document.querySelectorAll('.dash-platform-card').forEach(c => c.classList.remove('selected'));
+        document.querySelector(`.dash-platform-card[data-platform="${platform}"]`).classList.add('selected');
+        const urlGroup = document.getElementById('dashStoreUrlGroup');
+        const label    = document.getElementById('dashStoreUrlLabel');
+        const input    = document.getElementById('dashStoreUrl');
+        urlGroup.style.display = 'block';
+        if (platform === 'shopify') {
+            label.textContent = 'Shopify Store URL';
+            input.placeholder = 'your-store.myshopify.com';
+        } else {
+            label.textContent = 'Store URL';
+            input.placeholder = 'yourstore.com';
+        }
+        document.getElementById('dashConnectBtn').disabled = false;
     }
-
-    function closeModal(id) {
-        document.getElementById(id).style.display = 'none';
-    }
-
-    function setRole(role) {
-        currentRole = role;
-        document.getElementById('role-manager').classList.toggle('selected', role === 'manager');
-        document.getElementById('role-support').classList.toggle('selected', role === 'support');
-    }
-
-    function showToast(msg) {
-        const t = document.getElementById('toast');
-        t.innerText = msg;
-        t.className = "toast success show";
-        setTimeout(() => t.className = "toast", 3000);
-    }
-
-    async function submitStaff(e) {
-        e.preventDefault();
-        const data = {
-            client_id: document.getElementById('target-client-id').value,
-            email: document.getElementById('staff-email').value,
-            role: currentRole
-        };
-        
-        console.log("Sending to Python:", data);
-        showToast("Staff login created!");
-        closeModal('staff-modal');
-        // You would typically use fetch('/api/staff', {method:'POST', body: JSON.stringify(data)}) here
-    }
-
-    // Close modals on background click
-    window.onclick = function(event) {
-        if (event.target.className === 'modal') {
-            event.target.style.display = 'none';
+    // TODO(backend): reuses the same /connect/shopify/start and /connect/woocommerce/start
+    // endpoints introduced for onboarding.html — see that file's comments for the expected contract.
+    async function startDashConnect() {
+        const url = document.getElementById('dashStoreUrl').value.trim();
+        if (!url || !dashSelectedPlatform) return;
+        const btn = document.getElementById('dashConnectBtn');
+        btn.disabled = true;
+        btn.textContent = 'Connecting…';
+        try {
+            const endpoint = dashSelectedPlatform === 'shopify' ? '/connect/shopify/start' : '/connect/woocommerce/start';
+            const payload   = dashSelectedPlatform === 'shopify' ? { shop_domain: url } : { store_url: url };
+            const res  = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const data = await res.json();
+            const authUrl = data.auth_url || data.authorize_url;
+            if (authUrl) { window.location.href = authUrl; }
+            else { throw new Error(data.error || 'Could not start connection.'); }
+        } catch (e) {
+            showToast("Couldn't reach that store — check the URL and try again.", 'error');
+            btn.disabled = false;
+            btn.textContent = 'Continue';
         }
     }
-</script>
+    // Overage payment state (legacy fallback — kept for safety net cron)
+    const OVERAGE_STATUS = {{ overage_payment_status | tojson }};
+    const OVERAGE_LINK   = {{ overage_payment_link   | tojson }};
+    const OVERAGE_DUE    = {{ overage_amount_due      | tojson }};
+    const PLAN_TYPE      = {{ plan_type              | tojson }};
+    const LIMIT_REACHED  = {{ limit_reached          | tojson }};
 
+    let selectedPkg = null;
+    let seatPrices  = null;
+
+    function openNewClientModal() {
+        // Agency + seat limit reached → show Buy Seat modal instead
+        if (PLAN_TYPE === 'agency' && LIMIT_REACHED) {
+            openBuySeatModal();
+            return;
+        }
+        // Legacy overage guard (safety net)
+        if (OVERAGE_STATUS === 'overdue') {
+            if (OVERAGE_LINK && confirm(
+                'Your extra-seat invoice of $' + OVERAGE_DUE.toFixed(2) + ' is overdue.\n' +
+                'Connecting new stores is paused until payment is received.\n\nOpen payment page?'
+            )) { window.open(OVERAGE_LINK, '_blank'); }
+            else if (!OVERAGE_LINK) { alert('Your extra-seat invoice is overdue. Check your email for the payment link.'); }
+            return;
+        }
+        document.getElementById('new-client-modal').style.display = 'flex';
+    }
+
+    function openBuySeatModal() {
+        selectedPkg = null;
+        document.getElementById('seat-pay-btn').style.display  = 'none';
+        document.getElementById('seat-error').style.display    = 'none';
+        document.getElementById('seat-loading').style.display  = 'block';
+        document.getElementById('seat-options').style.display  = 'none';
+        document.getElementById('buy-seat-modal').style.display = 'flex';
+        fetchSeatPrices();
+    }
+
+    function closeBuySeatModal() {
+        document.getElementById('buy-seat-modal').style.display = 'none';
+        selectedPkg = null;
+    }
+
+    async function fetchSeatPrices() {
+        try {
+            const res  = await fetch('/agency/seat-prices');
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            seatPrices = data;
+            document.getElementById('single-prorated').textContent = '$' + data.single.prorated.toFixed(2);
+            document.getElementById('single-next').textContent     = data.single.next_billing;
+            document.getElementById('bundle-prorated').textContent = '$' + data.bundle.prorated.toFixed(2);
+            document.getElementById('bundle-next').textContent     = data.bundle.next_billing;
+            document.getElementById('seat-loading').style.display  = 'none';
+            document.getElementById('seat-options').style.display  = 'grid';
+        } catch (e) {
+            document.getElementById('seat-loading').textContent = 'Could not load prices. Please refresh.';
+        }
+    }
+
+    function selectSeatPackage(pkg) {
+        selectedPkg = pkg;
+        ['single', 'bundle'].forEach(p => {
+            const card = document.getElementById('seat-card-' + p);
+            card.style.borderColor = (p === pkg) ? 'var(--gold)' : 'var(--border)';
+            card.style.background  = (p === pkg) ? 'var(--cream)' : '';
+        });
+        const btn = document.getElementById('seat-pay-btn');
+        const price = seatPrices ? seatPrices[pkg] : null;
+        btn.textContent = price
+            ? `Pay $${price.prorated.toFixed(2)} Today & Add ${price.seats} Store Slot${price.seats > 1 ? 's' : ''} →`
+            : 'Pay & Add Slot →';
+        btn.style.display = 'block';
+        document.getElementById('seat-error').style.display = 'none';
+    }
+
+    async function confirmBuySeat() {
+        if (!selectedPkg) return;
+        const btn = document.getElementById('seat-pay-btn');
+        btn.textContent = 'Redirecting to payment…';
+        btn.disabled    = true;
+        document.getElementById('seat-error').style.display = 'none';
+        try {
+            const res  = await fetch('/agency/buy-seat', {
+                method:  'POST',
+                headers: {'Content-Type': 'application/json'},
+                body:    JSON.stringify({package_type: selectedPkg}),
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Unknown error');
+            window.location.href = data.payment_link;
+        } catch (e) {
+            const errEl = document.getElementById('seat-error');
+            errEl.textContent = e.message || 'Could not generate payment link. Please try again.';
+            errEl.style.display = 'block';
+            btn.textContent = 'Pay & Add Slot →';
+            btn.disabled    = false;
+        }
+    }
+
+    // Auto-open new-client modal if returning from a successful seat purchase
+    (function checkSeatPurchased() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('seat_purchased') === '1') {
+            history.replaceState({}, '', window.location.pathname);
+            document.getElementById('new-client-modal').style.display = 'flex';
+        }
+        // Redirected from portal when seat limit hit — open Buy Seat modal directly
+        if (params.get('buy_seat') === '1') {
+            history.replaceState({}, '', window.location.pathname);
+            openBuySeatModal();
+        }
+    })();
+    function closeModal(){document.getElementById('new-client-modal').style.display='none';}
+    function showEmbedCode(clientId){const baseUrl=window.location.origin;const code=`<!-- Lumvi AI Employee Widget -->\n<script>\n    (function() {\n        var s = document.createElement('script');\n        s.src = '${baseUrl}/static/widget.js';\n        s.setAttribute('data-client-id', '${clientId}');\n        document.body.appendChild(s);\n    })();\n<\/script>`;document.getElementById('embedCodeText').value=code;document.getElementById('embedModal').style.display='flex';}
+    function closeEmbedModal(){document.getElementById('embedModal').style.display='none';}
+    function copyEmbedCode(){const t=document.getElementById('embedCodeText');t.select();t.setSelectionRange(0,99999);try{document.execCommand('copy');showToast('Embed code copied','success');}catch{alert('Please select and copy manually.');}}
+    let pendingDeleteId=null;
+    function confirmDelete(clientId,clientName){pendingDeleteId=clientId;document.getElementById('delete-client-name').textContent=clientName;document.getElementById('delete-modal').style.display='flex';}
+    function closeDeleteModal(){pendingDeleteId=null;document.getElementById('delete-modal').style.display='none';}
+    async function executeDelete(){if(!pendingDeleteId)return;const btn=document.getElementById('confirm-delete-btn');btn.textContent='Disconnecting…';btn.disabled=true;try{const res=await fetch(`/api/clients/${pendingDeleteId}/delete`,{method:'DELETE',headers:{'Content-Type':'application/json'}});const data=await res.json();if(data.success){['row-','card-'].forEach(p=>{const el=document.getElementById(p+pendingDeleteId);if(el){el.style.transition='opacity 0.3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);}});closeDeleteModal();showToast('Store disconnected','success');const badge=document.querySelector('.nav-badge');if(badge){const c=parseInt(badge.textContent)||0;if(c-1<=0)badge.remove();else badge.textContent=c-1;}}else{showToast(data.error||'Disconnect failed','error');btn.textContent='Disconnect';btn.disabled=false;}}catch{showToast('Network error','error');btn.textContent='Disconnect';btn.disabled=false;}}
+    function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} show`;setTimeout(()=>{t.className='toast';},3500);}
+    document.addEventListener('click',function(e){if(e.target===document.getElementById('embedModal'))closeEmbedModal();if(e.target===document.getElementById('new-client-modal'))closeModal();if(e.target===document.getElementById('delete-modal'))closeDeleteModal();if(e.target===document.getElementById('buy-seat-modal'))closeBuySeatModal();});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeEmbedModal();closeModal();closeDeleteModal();closeSidebar();closeBuySeatModal();}});
+</script>
+<!-- ── CLIENT DASHBOARD SLIDE PANEL ── -->
+<div class="cdash-overlay" id="cdashOverlay" onclick="closeClientDashPanel()"></div>
+<div class="cdash-panel" id="cdashPanel">
+  <div class="cdash-head">
+    <div class="cdash-head-left">
+      <div class="cdash-client-av" id="cdashAv">—</div>
+      <div>
+        <div class="cdash-client-name" id="cdashName">Store</div>
+        <div class="cdash-client-id" id="cdashId"></div>
+      </div>
+    </div>
+    <button class="cdash-close" onclick="closeClientDashPanel()">×</button>
+  </div>
+  <div class="cdash-body" id="cdashBody">
+    <div class="cdash-loading">
+      <div class="cdash-spinner"></div><br>Loading…
+    </div>
+  </div>
+  <div class="cdash-footer">
+    <a class="cdash-footer-btn outline" id="cdashFullLink" href="#" target="_blank">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      Open Full Dashboard
+    </a>
+    <a class="cdash-footer-btn gold" id="cdashCustomizeLink" href="#">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+      Customize AI
+    </a>
+  </div>
+</div>
+
+<script>
+let _cdashCid = null;
+
+function toggleCardMenu(e, cid) {
+  e.stopPropagation();
+  const dd = document.getElementById('cardMenu-' + cid);
+  const wasOpen = dd.classList.contains('show');
+  closeAllCardMenus();
+  if (!wasOpen) {
+    const btnRect = e.currentTarget.getBoundingClientRect();
+    dd.style.top   = (btnRect.bottom + 6) + 'px';
+    dd.style.right = (window.innerWidth - btnRect.right) + 'px';
+    dd.classList.add('show');
+  }
+}
+
+function closeAllCardMenus() {
+  document.querySelectorAll('.card-menu-dropdown.show').forEach(el => el.classList.remove('show'));
+}
+
+document.addEventListener('click', closeAllCardMenus);
+window.addEventListener('scroll', closeAllCardMenus, true);
+window.addEventListener('resize', closeAllCardMenus);
+
+function openClientDashPanel(cid, name) {
+  _cdashCid = cid;
+  document.getElementById('cdashAv').textContent   = (name || '?')[0].toUpperCase();
+  document.getElementById('cdashName').textContent = name || cid;
+  document.getElementById('cdashId').textContent   = cid;
+  document.getElementById('cdashFullLink').href      = `/client-dashboard?client_id=${cid}`;
+  document.getElementById('cdashCustomizeLink').href = `/customize?client_id=${cid}`;
+  document.getElementById('cdashBody').innerHTML = `<div class="cdash-loading"><div class="cdash-spinner"></div><br>Loading…</div>`;
+  document.getElementById('cdashOverlay').classList.add('show');
+  document.getElementById('cdashPanel').classList.add('show');
+  document.body.style.overflow = 'hidden';
+  loadCdashData(cid, name);
+}
+
+function closeClientDashPanel() {
+  document.getElementById('cdashOverlay').classList.remove('show');
+  document.getElementById('cdashPanel').classList.remove('show');
+  document.body.style.overflow = 'auto';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeClientDashPanel(); closeAllCardMenus(); }
+});
+
+async function loadCdashData(cid, name) {
+  try {
+    const [analyticsR, faqsR] = await Promise.all([
+      fetch(`/api/admin/analytics?client_id=${cid}&range=month`),
+      fetch(`/api/faqs?client_id=${cid}`),
+    ]);
+    if (!analyticsR.ok) throw new Error(`Analytics API ${analyticsR.status}`);
+    const analyticsData = await analyticsR.json();
+    const faqsData      = faqsR.ok ? await faqsR.json() : {faqs: []};
+
+    const analytics  = analyticsData.analytics || {};
+    const leadList   = analytics.leads_captured || [];
+    const totalLeads = analytics.total_leads ?? leadList.length;
+    const faqs       = (faqsData.faqs || []).length;
+    const msgs       = analytics.total_conversations ?? 0;
+
+    const leadsHtml = leadList.length
+      ? leadList.slice(0, 8).map(l => `
+          <div class="cdash-lead-row">
+            <div>
+              <div class="cdash-lead-name">${esc(l.name || 'Unknown')}</div>
+              <div class="cdash-lead-email">${esc(l.email || '—')}</div>
+            </div>
+            <div class="cdash-lead-date">${fmtDate(l.created_at)}</div>
+          </div>`).join('')
+      : `<div style="text-align:center;padding:20px;color:var(--sub);font-size:13px;">No leads yet</div>`;
+
+    document.getElementById('cdashBody').innerHTML = `
+      <div class="cdash-stats">
+        <div class="cdash-stat"><div class="cdash-stat-val">${totalLeads}</div><div class="cdash-stat-lbl">Leads</div></div>
+        <div class="cdash-stat"><div class="cdash-stat-val">${faqs}</div><div class="cdash-stat-lbl">Knowledge</div></div>
+        <div class="cdash-stat"><div class="cdash-stat-val">${msgs}</div><div class="cdash-stat-lbl">Convos Today</div></div>
+      </div>
+      <div class="cdash-section">
+        <div class="cdash-section-title">Quick Links</div>
+        <div class="cdash-links">
+          <a href="/admin/leads?client_id=${cid}" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            View Leads
+          </a>
+          <a href="/faq-manager?client_id=${cid}" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/></svg>
+            Manage Knowledge
+          </a>
+          <a href="/article-manager?client_id=${cid}" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
+            Articles
+          </a>
+          <a href="/analytics?client_id=${cid}" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Analytics
+          </a>
+          <a href="/widget?client_id=${cid}" target="_blank" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+            Preview Assistant
+          </a>
+          <a href="/manage-client-users?client_id=${cid}" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Store Team Logins
+          </a>
+          <a href="/integrations?client_id=${cid}" class="cdash-link">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Integrations
+          </a>
+        </div>
+      </div>
+      <div class="cdash-section">
+        <div class="cdash-section-title">Recent Leads</div>
+        <div class="cdash-leads-list">${leadsHtml}</div>
+      </div>`;
+  } catch(e) {
+    console.error('[CdashPanel] load error:', e);
+    document.getElementById('cdashBody').innerHTML =
+      `<div style="text-align:center;padding:40px;color:var(--danger);font-size:13px;">Failed to load — <a href="/client-dashboard?client_id=${_cdashCid}" style="color:var(--gold);">open full dashboard</a></div>`;
+  }
+}
+
+function fmtDate(str) {
+  if (!str) return '—';
+  const d = new Date(str);
+  return isNaN(d) ? str.substring(0,10) : d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
 </body>
 </html>

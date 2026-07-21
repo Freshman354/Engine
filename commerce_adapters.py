@@ -18,6 +18,7 @@ platform-specific signals in platform_config — no schema changes required.
 ═══════════════════════════════════════════════════════════════════════════
 """
 
+import re
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -32,11 +33,30 @@ logger = get_logger('lumvi.commerce')
 
 @dataclass
 class InventoryMatch:
-    title:     str
-    available: bool
-    quantity:  Optional[int] = None
-    variant:   Optional[str] = None   # e.g. "Red / Large" — None for simple products
-    price:     Optional[str] = None
+    title:        str
+    available:    bool
+    quantity:     Optional[int] = None
+    variant:      Optional[str] = None   # e.g. "Red / Large" — None for simple products
+    price:        Optional[str] = None
+    # Added for tools.search_products (product recommendations) — the
+    # original three fields above were enough to answer "is X in stock",
+    # but not enough to usefully recommend a product in chat. These three
+    # are product-level, not variant-level, so every variant of the same
+    # product carries identical values here.
+    product_url:  Optional[str] = None
+    description:  Optional[str] = None   # short, plain text (HTML stripped for WooCommerce)
+    image_url:    Optional[str] = None
+
+
+def _strip_html(text: str, max_length: int = 200) -> str:
+    """Strip HTML tags and collapse whitespace. WooCommerce's
+    short_description is stored as HTML; Shopify's description field is
+    already plain text so this is a no-op for that adapter."""
+    if not text:
+        return ''
+    text = re.sub(r'<[^>]+>', '', text)
+    text = ' '.join(text.split())
+    return text[:max_length].strip()
 
 
 @dataclass
@@ -116,17 +136,102 @@ class CommerceAdapter(ABC):
 # only verifies inbound webhook payloads, it grants no API call rights).
 # Credentials shape: {'shop_domain': 'mystore.myshopify.com', 'access_token': '...'}
 
+# ── Shopify OAuth token cache/refresh ──────────────────────────────────
+# Shopify deprecated static, paste-once Admin API access tokens for NEW
+# custom apps as of January 1, 2026 (legacy custom apps created before
+# that date keep working with a static token — not relevant to Lumvi,
+# which has no clients predating that cutoff). A new custom app instead
+# issues a client_id + client_secret, and the CONSUMING app (Lumvi) must
+# exchange those for an access token via the OAuth client credentials
+# grant — and that token expires roughly every 24 hours, so it has to be
+# refreshed, not stored once and reused forever.
+#
+# Per-process, in-memory cache — matches _INVENTORY_CACHE's existing
+# pattern further down this file. Fine for a single Railway instance;
+# multiple workers would each independently maintain and refresh their
+# own cached token, which is wasteful (extra grant calls) but not
+# incorrect — Shopify doesn't limit how many tokens a given client_id/
+# secret pair can mint.
+
+_shopify_token_cache: Dict[str, tuple] = {}   # shop_domain -> (access_token, expires_at_epoch)
+_SHOPIFY_TOKEN_REFRESH_BUFFER_SEC = 300        # refresh 5 min before actual expiry
+
+
+class ShopifyAuthError(Exception):
+    """Raised when the client credentials grant fails — bad/revoked
+    client_id+client_secret, or Shopify's token endpoint is unreachable.
+    Caught by each ShopifyAdapter method's existing try/except and
+    translated into the normal resolved=False/error=... result shape."""
+    pass
+
+
+def _get_shopify_access_token(shop_domain: str, client_id: str, client_secret: str) -> str:
+    """Returns a valid access token for this shop, fetching/refreshing via
+    the client credentials grant if the cached one is missing or close to
+    expiring. Raises ShopifyAuthError on failure."""
+    now    = time.time()
+    cached = _shopify_token_cache.get(shop_domain)
+    if cached and cached[1] - _SHOPIFY_TOKEN_REFRESH_BUFFER_SEC > now:
+        return cached[0]
+
+    import requests
+    try:
+        resp = requests.post(
+            f'https://{shop_domain}/admin/oauth/access_token',
+            json={
+                'grant_type':    'client_credentials',
+                'client_id':     client_id,
+                'client_secret': client_secret,
+            },
+            timeout=10,
+        )
+    except requests.exceptions.RequestException as e:
+        raise ShopifyAuthError(f'token endpoint unreachable: {e}')
+
+    if resp.status_code != 200:
+        raise ShopifyAuthError(f'client credentials grant failed: http_{resp.status_code}')
+
+    data  = resp.json()
+    token = data.get('access_token')
+    if not token:
+        raise ShopifyAuthError('client credentials grant returned no access_token')
+
+    expires_in = data.get('expires_in', 86399)  # Shopify docs: ~24h
+    _shopify_token_cache[shop_domain] = (token, now + expires_in)
+    return token
+
+
 class ShopifyAdapter(CommerceAdapter):
     platform_name = "shopify"
-    API_VERSION   = "2024-10"
+    API_VERSION   = "2026-07"
 
     def __init__(self, credentials: Dict[str, str]):
         super().__init__(credentials)
-        self.shop_domain  = (credentials.get('shop_domain') or '').strip()
-        self.access_token = (credentials.get('access_token') or '').strip()
+        self.shop_domain          = (credentials.get('shop_domain') or '').strip()
+        self.shopify_client_id     = (credentials.get('shopify_client_id') or '').strip()
+        self.shopify_client_secret = (credentials.get('shopify_client_secret') or '').strip()
+        # Legacy fallback only — a static token pasted directly, from a
+        # custom app created before Shopify's Jan 1 2026 cutoff. No Lumvi
+        # client predates that, but this keeps a manual-testing escape
+        # hatch and costs nothing to support.
+        self._static_access_token = (credentials.get('access_token') or '').strip()
+
+    def _has_credentials(self) -> bool:
+        return bool(self.shop_domain and (
+            self._static_access_token or (self.shopify_client_id and self.shopify_client_secret)
+        ))
+
+    def _get_access_token(self) -> str:
+        """Returns a usable access token — the static legacy one if set,
+        otherwise fetches/refreshes one via the client credentials grant.
+        Raises ShopifyAuthError on failure. Only call this from inside a
+        try/except — see each method below."""
+        if self._static_access_token:
+            return self._static_access_token
+        return _get_shopify_access_token(self.shop_domain, self.shopify_client_id, self.shopify_client_secret)
 
     def search_inventory(self, query: str) -> InventoryResult:
-        if not self.shop_domain or not self.access_token:
+        if not self._has_credentials():
             return InventoryResult(resolved=False, error='shopify_credentials_missing')
 
         import requests
@@ -137,6 +242,9 @@ class ShopifyAdapter(CommerceAdapter):
             edges {
               node {
                 title
+                handle
+                description(truncateAt: 200)
+                featuredImage { url }
                 variants(first: 10) {
                   edges {
                     node {
@@ -153,10 +261,11 @@ class ShopifyAdapter(CommerceAdapter):
         }
         '''
         try:
+            access_token = self._get_access_token()
             resp = requests.post(
                 url,
                 json={'query': gql, 'variables': {'q': f'title:*{query}*'}},
-                headers={'X-Shopify-Access-Token': self.access_token},
+                headers={'X-Shopify-Access-Token': access_token},
                 timeout=5,
             )
             if resp.status_code == 429:
@@ -173,6 +282,15 @@ class ShopifyAdapter(CommerceAdapter):
             for edge in edges:
                 node  = edge.get('node', {})
                 title = node.get('title', '')
+                handle = node.get('handle', '')
+                # Uses the same shop_domain as the API credential (the
+                # *.myshopify.com domain), which serves the storefront by
+                # default. Clients on a custom domain (e.g. shop.brand.com)
+                # will get a working-but-not-vanity link — worth revisiting
+                # if that comes up, but not worth a second stored field for v1.
+                product_url = f'https://{self.shop_domain}/products/{handle}' if handle else None
+                description = node.get('description') or None
+                image_url   = ((node.get('featuredImage') or {}).get('url')) or None
                 for v_edge in ((node.get('variants') or {}).get('edges') or []):
                     v = v_edge.get('node', {})
                     matches.append(InventoryMatch(
@@ -181,17 +299,23 @@ class ShopifyAdapter(CommerceAdapter):
                         quantity=v.get('inventoryQuantity'),
                         variant=v.get('title') if v.get('title') not in (None, 'Default Title') else None,
                         price=v.get('price'),
+                        product_url=product_url,
+                        description=description,
+                        image_url=image_url,
                     ))
             return InventoryResult(resolved=True, matches=matches)
 
         except requests.exceptions.Timeout:
             return InventoryResult(resolved=False, error='timeout')
+        except ShopifyAuthError as e:
+            logger.error(f'[ShopifyAdapter] search_inventory auth error shop={self.shop_domain}: {e}')
+            return InventoryResult(resolved=False, error='unauthorized')
         except Exception as e:
             logger.error(f'[ShopifyAdapter] search_inventory error: {e}')
             return InventoryResult(resolved=False, error=str(e))
 
     def get_order(self, order_id: str, customer_email: str = "") -> OrderLookupResult:
-        if not self.shop_domain or not self.access_token:
+        if not self._has_credentials():
             return OrderLookupResult(resolved=False, error='shopify_credentials_missing')
 
         import requests
@@ -217,10 +341,11 @@ class ShopifyAdapter(CommerceAdapter):
         }
         '''
         try:
+            access_token = self._get_access_token()
             resp = requests.post(
                 url,
                 json={'query': gql, 'variables': {'q': f'name:{name}'}},
-                headers={'X-Shopify-Access-Token': self.access_token},
+                headers={'X-Shopify-Access-Token': access_token},
                 timeout=5,
             )
             if resp.status_code == 429:
@@ -256,18 +381,22 @@ class ShopifyAdapter(CommerceAdapter):
 
         except requests.exceptions.Timeout:
             return OrderLookupResult(resolved=False, error='timeout')
+        except ShopifyAuthError as e:
+            logger.error(f'[ShopifyAdapter] get_order auth error shop={self.shop_domain}: {e}')
+            return OrderLookupResult(resolved=False, error='unauthorized')
         except Exception as e:
             logger.error(f'[ShopifyAdapter] get_order error: {e}')
             return OrderLookupResult(resolved=False, error=str(e))
 
     def test_connection(self) -> bool:
-        if not self.shop_domain or not self.access_token:
+        if not self._has_credentials():
             return False
         import requests
         try:
+            access_token = self._get_access_token()
             resp = requests.get(
                 f'https://{self.shop_domain}/admin/api/{self.API_VERSION}/shop.json',
-                headers={'X-Shopify-Access-Token': self.access_token},
+                headers={'X-Shopify-Access-Token': access_token},
                 timeout=5,
             )
             return resp.status_code == 200
@@ -316,11 +445,15 @@ class WooCommerceAdapter(CommerceAdapter):
             matches: List[InventoryMatch] = []
             for p in products:
                 stock_status = p.get('stock_status')  # 'instock' | 'outofstock' | 'onbackorder'
+                images = p.get('images') or []
                 matches.append(InventoryMatch(
                     title=p.get('name', ''),
                     available=(stock_status == 'instock'),
                     quantity=p.get('stock_quantity'),
                     price=p.get('price') or None,
+                    product_url=p.get('permalink') or None,
+                    description=_strip_html(p.get('short_description') or p.get('description') or '') or None,
+                    image_url=(images[0].get('src') if images else None),
                 ))
             return InventoryResult(resolved=True, matches=matches)
 
@@ -405,11 +538,12 @@ def get_adapter_for_client(client_id: str) -> Optional[CommerceAdapter]:
     client has connected with inventory capability — or None if they
     haven't connected one.
 
-    Shopify:     requires 'inventory_enabled': True and 'access_token' in
-                 platform_config. The basic Shopify connection (order webhooks
-                 only) does NOT satisfy this — the agency must go through the
-                 OAuth flow (/api/integrations/shopify/oauth/start) to grant
-                 read_products + read_inventory scope.
+    Shopify:     requires 'inventory_enabled': True and either a legacy
+                 'access_token' or a 'shopify_client_id' + 'shopify_client_secret'
+                 pair in platform_config. The basic Shopify connection
+                 (order webhooks only) does NOT satisfy this — the agency
+                 must also enter Shopify credentials via the dashboard's
+                 order-lookup/product-search fields.
     WooCommerce: requires 'consumer_key' and 'consumer_secret' in
                  platform_config. Any active WooCommerce row has these.
     """
@@ -426,6 +560,22 @@ def get_adapter_for_client(client_id: str) -> Optional[CommerceAdapter]:
     return adapter_cls(integration.get('credentials', {}))
 
 
+def _shopify_has_auth(cfg: dict) -> bool:
+    """True if this platform_config has enough to authenticate as Shopify —
+    either a legacy static access_token, or a client_id+client_secret pair
+    for the client credentials grant (see _get_shopify_access_token)."""
+    return bool(cfg.get('access_token')) or bool(cfg.get('shopify_client_id') and cfg.get('shopify_client_secret'))
+
+
+def _shopify_credentials(cfg: dict) -> dict:
+    return {
+        'shop_domain':          cfg.get('shop_domain', ''),
+        'access_token':         cfg.get('access_token', ''),
+        'shopify_client_id':     cfg.get('shopify_client_id', ''),
+        'shopify_client_secret': cfg.get('shopify_client_secret', ''),
+    }
+
+
 def _get_inventory_integration(client_id: str) -> Optional[Dict]:
     """
     Returns the first active integration for this client that has inventory
@@ -435,30 +585,29 @@ def _get_inventory_integration(client_id: str) -> Optional[Dict]:
     platform_config — not a dedicated column (none exists in the schema):
 
       Shopify:     platform_config must contain 'inventory_enabled': True
-                   and a non-empty 'access_token'. The basic Shopify row
-                   (order webhooks only) has neither — a client can have
-                   both without conflict since the same row gets extended
-                   in-place when the OAuth flow completes.
+                   and Shopify auth (see _shopify_has_auth). The basic
+                   Shopify row (order webhooks only) has neither — a client
+                   can have both without conflict since the same row gets
+                   extended in-place when order-lookup/product-search
+                   credentials are added.
 
       WooCommerce: platform_config must contain 'consumer_key' and
                    'consumer_secret'. These are required by the connect form,
                    so any active WooCommerce row is inventory-capable by
                    default.
+
+    Uses list_integrations(client_id, redact=False) deliberately — this is
+    a trusted, server-side-only call that needs the real credentials to
+    build a working adapter. Never expose this result to the frontend.
     """
     import webhooks as _wh
-    for row in _wh.list_integrations(client_id):
+    for row in _wh.list_integrations(client_id, redact=False):
         platform = row.get('platform', '')
         cfg      = row.get('platform_config', {}) or {}
 
         if platform == 'shopify':
-            if cfg.get('inventory_enabled') and cfg.get('access_token'):
-                return {
-                    'platform':    'shopify',
-                    'credentials': {
-                        'shop_domain':  cfg.get('shop_domain', ''),
-                        'access_token': cfg.get('access_token', ''),
-                    },
-                }
+            if cfg.get('inventory_enabled') and _shopify_has_auth(cfg):
+                return {'platform': 'shopify', 'credentials': _shopify_credentials(cfg)}
 
         elif platform == 'woocommerce':
             if cfg.get('consumer_key') and cfg.get('consumer_secret'):
@@ -480,36 +629,32 @@ def _get_order_integration(client_id: str) -> Optional[Dict]:
     order-lookup capability, or None if none exists.
 
     Shopify:     platform_config must contain 'order_lookup_enabled': True
-                 and a non-empty 'access_token'. Gated on its own explicit
-                 flag rather than piggybacking on 'inventory_enabled' — an
-                 agency may want the bot answering "is my order shipped"
+                 and Shopify auth (see _shopify_has_auth). Gated on its own
+                 explicit flag rather than piggybacking on 'inventory_enabled'
+                 — an agency may want the bot answering "is my order shipped"
                  without also exposing product/stock search, or vice versa.
-                 (This assumes the OAuth app's granted scopes include
-                 read_orders whenever access_token is present — worth
-                 confirming against whatever scope bundle
-                 /api/integrations/shopify/oauth/start actually requests;
-                 if orders and inventory turn out to be separate OAuth
-                 grants, this flag alone won't be enough.)
+                 Both flags are satisfied by the SAME credentials (one
+                 client_id+client_secret pair grants whatever scopes were
+                 selected when the custom app was created) — order_lookup_enabled
+                 and inventory_enabled just independently control what the
+                 bot is ALLOWED to use, not what the token CAN do.
 
     WooCommerce: same as inventory — platform_config must contain
                  'consumer_key' and 'consumer_secret'. WooCommerce's REST
                  API key auth doesn't have Shopify-style scoped grants, so
                  any active row can already read orders; no extra flag.
+
+    Uses list_integrations(client_id, redact=False) — see
+    _get_inventory_integration's docstring for why.
     """
     import webhooks as _wh
-    for row in _wh.list_integrations(client_id):
+    for row in _wh.list_integrations(client_id, redact=False):
         platform = row.get('platform', '')
         cfg      = row.get('platform_config', {}) or {}
 
         if platform == 'shopify':
-            if cfg.get('order_lookup_enabled') and cfg.get('access_token'):
-                return {
-                    'platform':    'shopify',
-                    'credentials': {
-                        'shop_domain':  cfg.get('shop_domain', ''),
-                        'access_token': cfg.get('access_token', ''),
-                    },
-                }
+            if cfg.get('order_lookup_enabled') and _shopify_has_auth(cfg):
+                return {'platform': 'shopify', 'credentials': _shopify_credentials(cfg)}
 
         elif platform == 'woocommerce':
             if cfg.get('consumer_key') and cfg.get('consumer_secret'):
@@ -560,7 +705,7 @@ def get_order_management_url(client_id: str) -> Optional[str]:
     with 'order_management_url' set in platform_config qualifies.
     """
     import webhooks as _wh
-    for row in _wh.list_integrations(client_id):
+    for row in _wh.list_integrations(client_id, redact=False):
         cfg = row.get('platform_config', {}) or {}
         url = cfg.get('order_management_url')
         if url:

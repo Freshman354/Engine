@@ -100,7 +100,7 @@ INTEGRATION_TEMPLATES: Dict[str, Dict] = {
     'shopify': {
         'name': 'Shopify',
         'platform': 'shopify',
-        'base_url': 'https://{store}.myshopify.com/admin/api/2024-01',
+        'base_url': 'https://{store}.myshopify.com/admin/api/2024-10',
         'auth_type': 'api_key',
         'auth_hint': "Admin API access token. Header name should stay 'X-Shopify-Access-Token'.",
         'actions': [
@@ -121,19 +121,6 @@ INTEGRATION_TEMPLATES: Dict[str, Dict] = {
                 'param_mapping': {'order_id': 'order_id', 'reason': 'note'},
                 'response_mapping': {'return_id': 'return.id'},
                 'requires_confirmation': True,
-            },
-            {
-                'action_name': 'issue_refund',
-                'description': 'Issues a refund for an order.',
-                'http_method': 'POST',
-                'endpoint_path': '/orders/{order_id}/refunds.json',
-                'param_mapping': {'order_id': 'order_id', 'refund_amount': 'amount', 'reason': 'note'},
-                'response_mapping': {'refund_id': 'refund.id'},
-                'requires_confirmation': True,
-                # amount_param/max_auto_amount are applied by the dashboard
-                # after template creation — refunds should always start
-                # capped, agencies raise the limit deliberately per client.
-                'suggested_amount_param': 'refund_amount',
             },
         ],
     },

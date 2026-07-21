@@ -26,13 +26,30 @@ logger = get_logger('lumvi.client_settings')
 
 client_settings_bp = Blueprint('client_settings', __name__)
 
+# Plans that include cart recovery — MUST be kept in sync with PLAN_LIMITS's
+# 'cart_recovery' flag in app.py (same pattern email_domains.py already uses
+# for white-label: a local hardcoded set rather than importing PLAN_LIMITS
+# from app.py, since app.py imports this blueprint and not the other way
+# around).
+_CART_RECOVERY_PLANS = {'ai_growth', 'ai_scale'}
+
 # ── Validation helpers ────────────────────────────────────────────────────────
 
 _EMAIL_RE  = re.compile(r'^[\w.%+\-]+@[\w.\-]+\.[a-zA-Z]{2,}$')
 _PHONE_RE  = re.compile(r'^[+\d][\d\s\-().]{6,19}$')
 _HTTPS_RE  = re.compile(r'^https://.{4,}')
 
-ALLOWED_FIELDS = {'notification_email', 'notification_phone', 'webhook_url'}
+ALLOWED_FIELDS = {'notification_email', 'notification_phone', 'webhook_url', 'cart_recovery_enabled'}
+
+# Shown to the merchant the moment they turn cart recovery ON — see
+# update_client_settings() below. Keep this exact wording in sync with
+# whatever the settings page displays, since it's also returned in the API
+# response for pages that render it dynamically rather than hardcoding it.
+CART_RECOVERY_ENABLE_NOTICE = (
+    "Lumvi will automatically send cart recovery emails on your behalf "
+    "from notifications@lumvi.net. Customer replies will be forwarded to "
+    "your support email."
+)
 
 
 def _validate_field(name: str, value: str):
@@ -95,10 +112,37 @@ def update_client_settings():
     # Collect fields to update
     updates = {}
     webhook_url = None
+    cart_recovery_just_enabled = False
 
     for field in ALLOWED_FIELDS:
         if field not in data:
             continue
+
+        if field == 'cart_recovery_enabled':
+            enabled = bool(data[field])
+            if enabled:
+                owner = models.get_user_by_id(current_user.id)
+                plan  = (owner or {}).get('plan_type', 'free')
+                if plan not in _CART_RECOVERY_PLANS:
+                    return jsonify({
+                        'success': False,
+                        'error':   'Cart recovery requires the Growth or Scale plan.',
+                    }), 403
+                # Forwarding replies needs somewhere to forward them to —
+                # check the incoming batch first (notification_email might
+                # be set in this same request) before falling back to what's
+                # already on the client record.
+                existing_client   = models.get_client_by_id(client_id) or {}
+                effective_contact = data.get('notification_email') or existing_client.get('notification_email')
+                if not effective_contact:
+                    return jsonify({
+                        'success': False,
+                        'error':   'Set a support/notification email first — that\'s where cart recovery replies get forwarded.',
+                    }), 400
+                cart_recovery_just_enabled = True
+            updates['cart_recovery_enabled'] = enabled
+            continue
+
         clean, err = _validate_field(field, data[field])
         if err:
             return jsonify({'success': False, 'error': err}), 400
@@ -150,7 +194,10 @@ def update_client_settings():
         f'user={current_user.id} fields={list(updates.keys())}'
         + (f' webhook_url={bool(webhook_url)}' if webhook_url is not None else '')
     )
-    return jsonify({'success': True})
+    response = {'success': True}
+    if cart_recovery_just_enabled:
+        response['notice'] = CART_RECOVERY_ENABLE_NOTICE
+    return jsonify(response)
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -162,7 +209,7 @@ def _write_client_columns(client_id: str, fields: dict) -> bool:
     """
     safe_fields = {
         k: v for k, v in fields.items()
-        if k in ('notification_email', 'notification_phone')
+        if k in ('notification_email', 'notification_phone', 'cart_recovery_enabled')
     }
     if not safe_fields:
         return True

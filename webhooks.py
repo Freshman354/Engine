@@ -240,10 +240,39 @@ def get_integration(client_id: str, platform: str) -> dict | None:
         if conn:   conn.close()
 
 
-def list_integrations(client_id: str) -> list:
+# platform_config sub-keys that are real credentials, not metadata — never
+# safe to send back to the browser once saved. get_integration() (above)
+# deliberately does NOT use this — it's called server-side only, by webhook
+# handlers and by shopify_connect.py/app.py's read-merge-write, which need
+# the real values. Only list_integrations() (below), which feeds the
+# dashboard UI directly, needs to redact.
+_SENSITIVE_CONFIG_KEYS = ('access_token', 'shopify_client_secret', 'consumer_secret')
+
+
+def _redact_platform_config(cfg: dict) -> dict:
+    """Replace credential values with a has_<key> boolean so the dashboard
+    can show "already connected" / drive a rotate flow without the raw
+    secret ever reaching the browser."""
+    cfg = dict(cfg or {})
+    for key in _SENSITIVE_CONFIG_KEYS:
+        cfg[f'has_{key}'] = bool(cfg.pop(key, None))
+    return cfg
+
+
+def list_integrations(client_id: str, redact: bool = True) -> list:
     """
-    List all active integrations for a client (for the dashboard UI).
-    Webhook secrets are redacted — never returned to the frontend.
+    List all active integrations for a client.
+
+    redact=True (default, safe): for anything that reaches the browser —
+    e.g. app.py's GET /api/integrations/<client_id> — credential sub-fields
+    in platform_config (access_token, client_secret, consumer_secret) are
+    replaced with has_<key> booleans. Webhook secrets are always excluded
+    entirely (not selected from the DB at all, further down).
+
+    redact=False: for trusted server-side callers that need the real
+    credentials to actually call the platform's API — commerce_adapters.py's
+    _get_inventory_integration/_get_order_integration, specifically. Never
+    pass False anywhere a result might reach the frontend.
     """
     conn = cursor = None
     try:
@@ -266,7 +295,7 @@ def list_integrations(client_id: str) -> list:
                 except Exception: cfg = {}
             result.append({
                 'platform':        row['platform'],
-                'platform_config': cfg,
+                'platform_config': _redact_platform_config(cfg) if redact else cfg,
                 'is_active':       row['is_active'],
                 'created_at':      str(row.get('created_at', '')),
                 'updated_at':      str(row.get('updated_at', '')),

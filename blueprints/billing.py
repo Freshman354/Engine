@@ -63,11 +63,31 @@ def init_billing(mail, get_subscription_status):
 # Import PLAN_PRICES_FLW in app.py if any non-blueprint code needs it.
 
 PLAN_PRICES_FLW = {
+    # ── Grandfathered — existing subscribers only, no longer sold ──────────
+    # These four keys are NOT on the new /upgrade page and must not be
+    # removed: renewal webhooks for existing subscribers keep sending the
+    # SAME tx_ref (and therefore the same plan key) every billing cycle
+    # (native Flutterwave recurring charges reuse the original tx_ref).
+    # Removing a key here would make flutterwave_webhook reject a paying
+    # customer's renewal as "unknown plan" and silently fail to extend
+    # their subscription_expires_at.
     'solo':    {'monthly': 19.00,  'annual': 190.00},
     'starter': {'monthly': 49.00,  'annual': 490.00},
     'pro':     {'monthly': 99.00,  'annual': 990.00},
     'growth':  {'monthly': 149.00, 'annual': 1490.00},
-    'agency':  {'monthly': 299.00, 'annual': 2990.00},
+    # 'agency' deliberately removed — no existing subscribers remain (all
+    # migrated to ai_scale by migrate_ai_employee_plan_rename()), and it's
+    # not sold anymore either. If it's ever needed again for a manual
+    # grandfather case, re-add it here first.
+
+    # ── "AI Employee for Shopify & WooCommerce" — sold on /upgrade ─────────
+    # Annual total = monthly * 10 (2 months free), matching the page's JS
+    # exactly — this dict IS the server-side enforcement of that formula,
+    # used to validate the amount actually paid in both flutterwave_callback
+    # and flutterwave_webhook.
+    'ai_starter': {'monthly': 29.00,  'annual': 290.00},
+    'ai_growth':  {'monthly': 79.00,  'annual': 790.00},
+    'ai_scale':   {'monthly': 199.00, 'annual': 1990.00},
 }
 
 
@@ -77,7 +97,11 @@ PLAN_PRICES_FLW = {
 @login_required
 def upgrade_page():
     def _parse_plan_ids(env_var_name):
-        """Parse 'solo:<id>,starter:<id>,...' into {'solo': '<id>', ...} with env validation logging."""
+        """Parse 'ai_starter:<id>,ai_growth:<id>,ai_scale:<id>' into
+        {'ai_starter': '<id>', ...} with env validation logging.
+        Only the 3 new self-serve tiers get recurring Payment Plan IDs here —
+        grandfathered solo/starter/pro/growth subscribers keep whatever plan
+        ID they were already on; this route no longer sells to them."""
         raw = os.environ.get(env_var_name, '')
         if not raw:
             current_app.logger.error(
@@ -86,7 +110,7 @@ def upgrade_page():
             )
             return {}
         result = {}
-        plans = ['solo', 'starter', 'pro', 'growth', 'agency']
+        plans = ['ai_starter', 'ai_growth', 'ai_scale']
         for pair in raw.split(','):
             pair = pair.strip()
             if ':' not in pair:
@@ -109,12 +133,12 @@ def upgrade_page():
             )
         else:
             current_app.logger.info(
-                f"[Billing] {env_var_name}: all 5 plan IDs present — {list(result.keys())}"
+                f"[Billing] {env_var_name}: all {len(plans)} plan IDs present — {list(result.keys())}"
             )
         return result
 
     return render_template(
-        'upgrade.html',
+        'upgrade-shopify.html',
         user=current_user,
         flw_public_key=os.environ.get('FLW_PUBLIC_KEY', ''),
         FLW_PLAN_IDS_MONTHLY=_parse_plan_ids('FLW_PLAN_IDS_MONTHLY'),

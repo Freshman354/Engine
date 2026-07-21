@@ -36,6 +36,46 @@ def get_daily_message_count(client_id):
         return 0  # fail open — never block chat due to a DB error
 
 
+def get_monthly_conversation_count(client_id):
+    """
+    Return the number of distinct CONVERSATIONS (not raw messages) logged
+    for this client so far in the current calendar month (UTC).
+
+    Used by the new ai_starter/ai_growth/ai_scale 'conversations_per_month'
+    plan limit — a different unit from get_daily_message_count()'s
+    'messages_per_day' (which counts every logged row, is per-day, and
+    stays exactly as-is for grandfathered solo/starter/pro/growth/agency
+    plans).
+
+    A "conversation" = one distinct session_id. Rows with no session_id
+    (older logs, or calls made without one) each count as their own
+    one-message conversation via COALESCE(session_id, id::text), so they
+    aren't dropped or accidentally merged together.
+
+    Excludes lead_captured rows, same reasoning as get_daily_message_count.
+    Fails open (returns 0) if the DB is unavailable so chat is never
+    blocked by an infrastructure hiccup.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            '''
+            SELECT COUNT(DISTINCT COALESCE(session_id, id::text)) AS cnt
+            FROM conversations
+            WHERE client_id = %s
+              AND timestamp >= date_trunc('month', CURRENT_DATE)
+              AND (method IS NULL OR method != 'lead_captured')
+            ''',
+            (client_id,)
+        )
+        row = cursor.fetchone() or {}
+        cursor.close()
+        conn.close()
+        return int(row.get('cnt', 0))
+    except Exception:
+        return 0  # fail open — never block chat due to a DB error
+
+
 def get_client_owner(client_id):
     """
     Return the full user row for whoever owns this client_id.

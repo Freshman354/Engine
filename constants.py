@@ -121,13 +121,20 @@ TOOL_KEYWORDS: Dict[str, List[str]] = {
         'reserve a time', 'i want to book',
     ],
     'escalate_to_human': [
-        'speak to a human', 'talk to a person',
+        'speak to a human', 'talk to a person', 'talk to a human',
         'talk to someone', 'connect me to support',
         'i need help from a person',
     ],
     'search_knowledge_base': [
         'search your docs', 'search your knowledge', 'look it up',
         'find in your docs', 'search for information',
+    ],
+    'search_products': [
+        'do you have this in', 'do you have any', 'do you sell',
+        'is this in stock', 'in stock', 'what goes well with',
+        'goes well with', 'pairs well with', 'pairs with',
+        'recommend something', 'recommend a', 'any recommendations',
+        'looking for something', 'similar to this', 'do you carry',
     ],
 }
 

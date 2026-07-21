@@ -867,6 +867,162 @@ def search_knowledge_base(client_id: str, query: str, limit: int = 5) -> dict:
 
 
 # =====================================================================
+# TOOL 7 — search_products
+# Searches the client's live product catalog (Shopify/WooCommerce) by
+# name, category, or free-text description. Used for "do you have X",
+# "what goes well with Y", "do you have this in blue" type questions.
+#
+# Unlike lookup_order, this is LIVE-ONLY for v1 — there is no local
+# products table and no product webhook sync (webhooks.py only subscribes
+# to orders/* topics), so there's nothing to fall back to if a client
+# hasn't connected inventory-capable credentials. Reuses
+# commerce_adapters.search_inventory_cached() rather than adding a
+# second live-lookup mechanism — that function already implements the
+# same resolved/error contract as lookup_order_live, including its own
+# 60s in-process cache.
+#
+# Note on Shopify: search_inventory_cached is gated on a SEPARATE OAuth
+# grant (inventory_enabled + access_token) from the basic order-webhook
+# connection most clients already have for lookup_order. A client with
+# working order tracking will not automatically have this working — they
+# need to (re)connect via the Shopify OAuth flow to grant read_products.
+# =====================================================================
+
+def _catalog_search(client_id: str, query: str, limit: int) -> dict:
+    """
+    Shared implementation behind search_products (reactive: "is X in
+    stock?") and recommend_products (proactive: "the customer described a
+    need, suggest something") — both hit the exact same live catalog via
+    commerce_adapters.search_inventory_cached. There's no separate
+    personalization/ML recommendation engine behind this; "recommend"
+    means the AI proactively surfaces catalog matches for a described need
+    rather than only searching when a customer names a specific item.
+    """
+    client_id = _sanitize(client_id, 50)
+    query     = _sanitize(query, 300)
+    limit     = min(int(limit) if str(limit).isdigit() else 5, 5)
+
+    if not query:
+        return {'success': False, 'error': 'A search query is required.'}
+
+    try:
+        from commerce_adapters import search_inventory_cached
+        result = search_inventory_cached(client_id, query)
+    except Exception as e:
+        logger.error(f'[Tool:_catalog_search] commerce_adapters import/call failed: {e}')
+        return {
+            'success': False,
+            'error': "I'm having trouble checking our products right now — please try again in a moment.",
+        }
+
+    if not result.resolved:
+        if result.error == 'no_adapter_connected':
+            # Expected case for clients who haven't connected inventory-
+            # capable credentials (or Shopify clients who only have the
+            # basic order-webhook connection). Honest, not a false "no
+            # matches found" — there's a real difference between "we
+            # don't sell that" and "I can't check right now."
+            return {
+                'success': False,
+                'error': "I'm not able to check live product availability for this store yet.",
+            }
+        logger.warning(f'[Tool:_catalog_search] live lookup failed client={client_id} error={result.error}')
+        return {
+            'success': False,
+            'error': "I'm having trouble checking our products right now — please try again in a moment.",
+        }
+
+    products = []
+    for m in result.matches[:limit]:
+        products.append({
+            'title':       m.title,
+            'available':   m.available,
+            'quantity':    m.quantity,
+            'variant':     m.variant,
+            'price':       m.price,
+            'product_url': m.product_url,
+            'description': m.description,
+            'image_url':   m.image_url,
+        })
+
+    return {'success': True, 'products': products, 'count': len(products), 'query': query}
+
+
+def search_products(client_id: str, query: str, limit: int = 5) -> dict:
+    """
+    Search the client's live product catalog for products matching a
+    query, category, or description.
+
+    Args:
+        client_id: Lumvi client identifier
+        query:     Product name, category, or descriptive search text
+        limit:     Max number of products to return (capped at 5 — the
+                   underlying adapter call itself always fetches top 5,
+                   this just controls how many of those are returned)
+
+    Returns:
+        {success, products: [{title, available, quantity, variant, price,
+         product_url, description, image_url}], count, query} or
+        {success: False, error: str}
+    """
+    result = _catalog_search(client_id, query, limit)
+    if not result['success']:
+        return result
+    if not result['products']:
+        return {
+            'success': True,
+            'products': [],
+            'count': 0,
+            'query': result['query'],
+            'message': f'No products found matching "{result["query"]}".',
+        }
+    logger.info(f'[Tool:search_products] client={client_id} query="{result["query"]}" found={len(result["products"])}')
+    return result
+
+
+def recommend_products(client_id: str, customer_need: str, limit: int = 3) -> dict:
+    """
+    Proactively suggest products from the client's live catalog based on
+    what the customer said they need/want — e.g. "something for dry skin",
+    "a gift for a coffee lover" — as opposed to search_products, which
+    answers a direct "do you have X in stock" question. Same underlying
+    live catalog lookup as search_products (commerce_adapters.
+    search_inventory_cached), just used proactively and framed as a
+    recommendation rather than a stock check. This is NOT a personalized/
+    purchase-history-based recommender — there's no such engine behind it
+    yet — it's a contextual catalog search.
+
+    Gated by the 'product_recommendations' plan flag (ai_growth/ai_scale
+    only) — see dispatch_tool_call and get_tool_schemas_for_gemini.
+
+    Args:
+        client_id:     Lumvi client identifier
+        customer_need: 1-5 keywords capturing what the customer described
+                       wanting — extract the core need/category, don't
+                       pass their whole sentence verbatim.
+        limit:         Max number of products to suggest (capped at 5,
+                       default 3 — a recommendation is a short curated
+                       list, not a full search results page)
+
+    Returns:
+        {success, products: [...], count, query} or {success: False, error}
+    """
+    result = _catalog_search(client_id, customer_need, limit)
+    if not result['success']:
+        return result
+    if not result['products']:
+        return {
+            'success': True,
+            'products': [],
+            'count': 0,
+            'query': result['query'],
+            'message': f'No matching products found for "{result["query"]}" to recommend.',
+        }
+    logger.info(f'[Tool:recommend_products] client={client_id} need="{result["query"]}" found={len(result["products"])}')
+    return result
+
+
+# =====================================================================
 # TOOL REGISTRY
 # This is the single source of truth consumed by generate_response_agent()
 # in ai_helper.py to build the Gemini function-calling schema.
@@ -1056,6 +1212,64 @@ TOOL_REGISTRY = [
             },
             'required': ['query']
         }
+    },
+    {
+        'name':        'search_products',
+        'function':    search_products,
+        'description': (
+            'Search the store\'s live product catalog by name, category, or '
+            'description. Use this when a customer asks if an item is in '
+            'stock, wants a specific variant (size/color/etc.), or is '
+            'looking for a recommendation ("what goes well with X", "do '
+            'you have anything for Y", "do you have this in blue"). Pass '
+            'the customer\'s own words as the query — no need to guess an '
+            'exact product name first.'
+        ),
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'query': {
+                    'type':        'string',
+                    'description': 'Product name, category, or descriptive search text from the customer'
+                },
+                'limit': {
+                    'type':        'integer',
+                    'description': 'Max number of products to return (default 5, max 5)'
+                }
+            },
+            'required': ['query']
+        }
+    },
+    {
+        'name':        'recommend_products',
+        'function':    recommend_products,
+        # Only offered to plans with 'product_recommendations' truthy in
+        # PLAN_LIMITS (ai_growth/ai_scale) — see get_tool_schemas_for_gemini
+        # and dispatch_tool_call's plan_limits filtering below.
+        'required_flag': 'product_recommendations',
+        'description': (
+            'Proactively suggest 1-3 products from the store\'s live catalog '
+            'when a customer describes a need or interest WITHOUT naming a '
+            'specific product ("something for sensitive skin", "a gift for '
+            'a coffee lover", "what do you suggest for a beginner?"). Use '
+            'this instead of search_products when the customer hasn\'t '
+            'named an item — extract the core need as 1-5 keywords, don\'t '
+            'pass their whole sentence.'
+        ),
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'customer_need': {
+                    'type':        'string',
+                    'description': '1-5 keywords capturing what the customer described wanting'
+                },
+                'limit': {
+                    'type':        'integer',
+                    'description': 'Max number of products to suggest (default 3, max 5)'
+                }
+            },
+            'required': ['customer_need']
+        }
     }
 ]
 
@@ -1064,16 +1278,37 @@ TOOL_REGISTRY = [
 # CONVENIENCE HELPERS used by generate_response_agent() in ai_helper.py
 # =====================================================================
 
-def get_tool_schemas_for_gemini() -> list:
+def get_tool_schemas_for_gemini(plan_limits: dict = None) -> list:
     """
     Return the list of Gemini-compatible function declarations.
     Pass the result directly to the `tools` parameter of the Gemini API call.
 
+    Args:
+        plan_limits: optional — the calling client's resolved PLAN_LIMITS
+            dict (e.g. PLAN_LIMITS.get(owner['plan_type'], PLAN_LIMITS['free'])).
+            When given, any TOOL_REGISTRY entry with a 'required_flag' is
+            excluded unless plan_limits.get(that_flag) is truthy — e.g.
+            recommend_products is only offered when plan_limits has
+            'product_recommendations': True (ai_growth/ai_scale). Every
+            grandfathered plan (solo/starter/pro/growth/agency/enterprise/
+            free) has no such key, so recommend_products is NOT offered to
+            them by default — this only withholds a brand-new tool that
+            didn't exist before, nothing they previously had access to.
+            When omitted entirely (existing callers that don't pass this
+            yet), NO filtering happens — every tool is offered, identical
+            to behavior before this change.
+
     Example:
         import google.genai as genai
-        tools = get_tool_schemas_for_gemini()
+        tools = get_tool_schemas_for_gemini(plan_limits=plan_limits)
         model.generate_content(prompt, tools=tools)
     """
+    eligible = TOOL_REGISTRY
+    if plan_limits is not None:
+        eligible = [
+            t for t in TOOL_REGISTRY
+            if not t.get('required_flag') or plan_limits.get(t['required_flag'], False)
+        ]
     return [
         {
             'function_declarations': [
@@ -1082,13 +1317,13 @@ def get_tool_schemas_for_gemini() -> list:
                     'description': t['description'],
                     'parameters':  t['parameters']
                 }
-                for t in TOOL_REGISTRY
+                for t in eligible
             ]
         }
     ]
 
 
-def dispatch_tool_call(client_id: str, tool_name: str, tool_args: dict) -> dict:
+def dispatch_tool_call(client_id: str, tool_name: str, tool_args: dict, plan_limits: dict = None) -> dict:
     """
     Execute a tool by name, injecting client_id automatically.
     Called by the ReAct loop in generate_response_agent().
@@ -1097,15 +1332,26 @@ def dispatch_tool_call(client_id: str, tool_name: str, tool_args: dict) -> dict:
         client_id:  Always injected — tools must never trust user-supplied client_id
         tool_name:  The function name from TOOL_REGISTRY
         tool_args:  Dict of arguments as returned by Gemini function calling
+        plan_limits: optional — same dict as get_tool_schemas_for_gemini's
+            plan_limits param. Defense-in-depth: re-checks a tool's
+            'required_flag' server-side even if the schema filtering above
+            somehow didn't keep Gemini from attempting the call. When
+            omitted, no re-check happens (matches pre-existing behavior).
 
     Returns:
         The tool's result dict, always with at least {success: bool}
     """
-    tool_map = {t['name']: t['function'] for t in TOOL_REGISTRY}
+    tool_map  = {t['name']: t['function'] for t in TOOL_REGISTRY}
+    flag_map  = {t['name']: t.get('required_flag') for t in TOOL_REGISTRY}
 
     if tool_name not in tool_map:
         logger.warning(f'[Tool:dispatch] Unknown tool requested: "{tool_name}"')
         return {'success': False, 'error': f'Tool "{tool_name}" is not available.'}
+
+    required_flag = flag_map.get(tool_name)
+    if required_flag and plan_limits is not None and not plan_limits.get(required_flag, False):
+        logger.info(f'[Tool:dispatch] tool={tool_name} blocked — plan lacks "{required_flag}"')
+        return {'success': False, 'error': f'"{tool_name}" is not available on this plan.'}
 
     # Always override client_id from the verified server-side value
     safe_args = dict(tool_args)

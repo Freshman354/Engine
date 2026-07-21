@@ -23,6 +23,7 @@ Routes
   GET/POST    /cron/follow-up-reminders               cron_follow_up_reminders
   GET         /cron/status                            cron_status
   GET/POST    /cron/agency-overage                    cron_agency_overage
+  GET/POST    /cron/cart-recovery                      cron_cart_recovery
   GET         /api/admin/training/stats               admin_training_stats
   GET         /api/admin/training/export              admin_training_export
   POST        /api/admin/training/assign-splits       admin_assign_splits
@@ -416,7 +417,136 @@ def send_followup_reminders():
     return result
 
 
-# ── Agency overage billing ────────────────────────────────────────────────────
+# ── Cart recovery ──────────────────────────────────────────────────────────────
+# ai_growth/ai_scale plan feature (PLAN_LIMITS['cart_recovery'] in app.py).
+# Shopify only for now — WooCommerce has no built-in abandoned-checkout
+# webhook in core (would need a store-side plugin), so it isn't offered
+# there yet.
+
+# Always sent from this fixed address, regardless of any white-label
+# custom-domain sender a client may have configured elsewhere (white-label
+# isn't part of ai_growth/ai_scale anyway) — this was an explicit choice,
+# not the generic get_email_from_for_client() branded-sender path.
+CART_RECOVERY_SENDER      = 'notifications@lumvi.net'
+# Dedicated inbound-parsing subdomain — MUST be a different domain than
+# whatever sends mail (Brevo requires this). One-time setup needed in
+# Brevo's dashboard + DNS — see the accompanying chat message for the
+# exact MX records and webhook URL to configure; nothing here creates
+# that configuration automatically.
+CART_RECOVERY_REPLY_DOMAIN = 'reply.lumvi.net'
+CART_RECOVERY_DELAY_HOURS  = 1   # how long after abandonment to send
+
+
+def _build_cart_recovery_email_html(business_name: str, line_items: list,
+                                    cart_total, currency: str, checkout_url: str) -> str:
+    currency = currency or 'USD'
+    items_html = ''.join(
+        f"""<tr>
+          <td style="padding:10px 16px;border-bottom:1px solid #F0EBE1;font-size:14px;color:#1C1917;">
+            {(item.get('title') or 'Item')} {f"× {item['quantity']}" if item.get('quantity') else ''}
+          </td>
+          <td style="padding:10px 16px;border-bottom:1px solid #F0EBE1;font-size:13px;color:#57534E;text-align:right;">
+            {item.get('price', '')}
+          </td>
+        </tr>"""
+        for item in (line_items or [])
+    )
+    total_str = f"{cart_total} {currency}" if cart_total is not None else ''
+    return f"""
+    <div style="font-family:'DM Sans',Arial,sans-serif;max-width:540px;margin:0 auto;background:#F7F4EF;padding:32px 20px;">
+      <div style="background:#fff;border:1px solid #E7E2DA;border-radius:16px;overflow:hidden;">
+        <div style="background:#1C1917;padding:20px 24px;">
+          <p style="color:#fff;font-size:15px;margin:0;font-weight:700;">
+            {business_name} — you left something behind!
+          </p>
+        </div>
+        <table style="width:100%;border-collapse:collapse;">
+          <tbody>{items_html}</tbody>
+        </table>
+        <div style="padding:20px 24px;text-align:center;border-top:1px solid #F0EBE1;">
+          {f'<p style="font-size:14px;color:#1C1917;margin:0 0 14px;font-weight:700;">Total: {total_str}</p>' if total_str else ''}
+          <a href="{checkout_url}"
+             style="display:inline-block;padding:12px 28px;background:#B8924A;color:#fff;
+                    border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;">
+            Complete your order →
+          </a>
+        </div>
+      </div>
+      <p style="text-align:center;font-size:11px;color:#A8A29E;margin-top:16px;">
+        Sent on behalf of {business_name} · Reply to this email to reach their support team directly.
+      </p>
+    </div>
+    """
+
+
+def send_cart_recovery_emails():
+    """
+    Sends one recovery email per abandoned cart that's been sitting for
+    CART_RECOVERY_DELAY_HOURS with cart_recovery_enabled=True on the
+    client and a known customer_email. See
+    models.get_carts_due_for_recovery_email's docstring — single touch
+    only, no follow-up sequence yet.
+
+    Reply-To is a unique per-cart address at CART_RECOVERY_REPLY_DOMAIN —
+    Brevo's inbound parsing webhook (blueprints/inbound_email.py) is what
+    actually receives and forwards a reply; this function only sends the
+    first outbound email.
+    """
+    t0 = time.time()
+    carts = models.get_carts_due_for_recovery_email(delay_hours=CART_RECOVERY_DELAY_HOURS)
+    sent = skipped = errors = 0
+
+    for cart in carts:
+        business_name = cart.get('business_name') or 'the store'
+        line_items    = cart.get('line_items') or []
+        if isinstance(line_items, str):
+            try:
+                line_items = json.loads(line_items)
+            except Exception:
+                line_items = []
+
+        if not cart.get('checkout_url'):
+            skipped += 1
+            continue
+
+        try:
+            html = _build_cart_recovery_email_html(
+                business_name = business_name,
+                line_items    = line_items,
+                cart_total    = cart.get('cart_total'),
+                currency      = cart.get('currency'),
+                checkout_url  = cart['checkout_url'],
+            )
+            reply_to = f"{cart['reply_local_part']}@{CART_RECOVERY_REPLY_DOMAIN}"
+            msg = MailMessage(
+                subject    = f"You left something in your cart at {business_name}",
+                sender     = f"{business_name} via Lumvi <{CART_RECOVERY_SENDER}>",
+                reply_to   = reply_to,
+                recipients = [cart['customer_email']],
+                html       = html,
+            )
+            if _mail:
+                _mail.send(msg)
+            models.mark_recovery_email_sent(cart['id'])
+            sent += 1
+            current_app.logger.info(
+                f"[CartRecovery] sent cart={cart['id']} client={cart['client_id']} reply_to={reply_to}"
+            )
+        except Exception as e:
+            current_app.logger.error(f"[CartRecovery] failed for cart={cart.get('id')}: {e}")
+            errors += 1
+
+    duration_ms = int((time.time() - t0) * 1000)
+    result = {'sent': sent, 'skipped': skipped, 'errors': errors}
+    current_app.logger.info(f'[CartRecovery] complete — {result} dur={duration_ms}ms')
+    models.log_cron_run(
+        'cart_recovery', success=(errors == 0), result=result,
+        duration_ms=duration_ms, triggered_by='http',
+    )
+    return result
+
+
+
 
 def _generate_flw_payment_link(user_id: int, email: str, amount: float,
                                tx_ref: str, base_url: str) -> str | None:
@@ -871,6 +1001,29 @@ def cron_follow_up_reminders():
         return err
 
     result = send_followup_reminders()
+    return jsonify({
+        'success': True,
+        'ran_at':  datetime.utcnow().isoformat(),
+        **result,
+    })
+
+
+@cron_bp.route('/cron/cart-recovery', methods=['GET', 'POST'])
+def cron_cart_recovery():
+    """
+    Recommended schedule: hourly. Sends recovery emails for carts
+    abandoned >= CART_RECOVERY_DELAY_HOURS ago (default 1h) on clients
+    with cart_recovery_enabled=True. Same CRON_SECRET as other cron routes.
+
+    Usage:
+      GET  /cron/cart-recovery?secret=YOUR_CRON_SECRET
+      POST /cron/cart-recovery  (body: {"secret": "YOUR_CRON_SECRET"})
+    """
+    _, err = _check_cron_secret()
+    if err:
+        return err
+
+    result = send_cart_recovery_emails()
     return jsonify({
         'success': True,
         'ran_at':  datetime.utcnow().isoformat(),

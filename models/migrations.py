@@ -2066,6 +2066,129 @@ def migrate_overage_tracking():
         if conn:   conn.close()
 
 
+def migrate_ai_employee_plan_rename():
+    """
+    One-time DATA migration for the "AI Employee for Shopify & WooCommerce"
+    pivot (new self-serve tiers: ai_starter $29 / ai_growth $79 / ai_scale $199).
+
+    Old plan_type values solo/starter/pro/growth/agency are DELIBERATELY left
+    untouched — every existing subscriber on those keys is grandfathered at
+    their exact current price and PLAN_LIMITS feature set forever. They are
+    simply no longer offered to new signups (the new /upgrade page only
+    sells ai_starter/ai_growth/ai_scale).
+
+    The ONE exception: 'agency' has no equivalent at all in the new 3-tier
+    lineup (no white-label, no unlimited-clients tier), so by explicit
+    decision existing agency accounts are moved onto ai_scale (the nearest
+    tier) at ai_scale's list price ($199), rather than grandfathered.
+
+    NOTE: this only updates the local plan_type column. It does NOT touch
+    Flutterwave — if an account has a live FLW subscription billing the old
+    $299 agency price, that subscription must be cancelled/recreated at the
+    new price manually in the Flutterwave dashboard, or it will keep
+    charging $299 even though the account now shows ai_scale limits.
+
+    Idempotent — WHERE plan_type = 'agency' matches zero rows after the
+    first run, so safe to leave in the startup migration list permanently.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "UPDATE users SET plan_type = 'ai_scale' WHERE plan_type = 'agency'"
+        )
+        moved = cursor.rowcount
+        conn.commit()
+        if moved:
+            print(f"migrate_ai_employee_plan_rename: moved {moved} agency user(s) to ai_scale")
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        print(f"migrate_ai_employee_plan_rename error: {e}")
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+
+def migrate_cart_recovery():
+    """
+    Cart recovery automation (ai_growth/ai_scale 'cart_recovery' feature).
+
+    abandoned_carts       — one row per Shopify checkout that hasn't
+                            converted to an order yet. Populated by the
+                            Shopify checkouts/create|update webhook handler
+                            (see webhooks.py's topic dispatch — NOT this
+                            module).
+    clients.cart_recovery_enabled — per-client on/off toggle, settable via
+                            /api/client/settings only when the account
+                            owner's plan includes 'cart_recovery'
+                            (blueprints/client_settings.py).
+
+    reply_local_part is the unique part before @ in the per-cart reply
+    address (e.g. 'cart-482' in cart-482@reply.lumvi.net) — generated from
+    the row's own id once inserted, so it's populated in a second UPDATE
+    right after the INSERT rather than at CREATE TABLE time.
+
+    Idempotent — CREATE TABLE/COLUMN IF NOT EXISTS throughout.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS abandoned_carts (
+                id                      SERIAL          PRIMARY KEY,
+                client_id               TEXT            NOT NULL,
+                platform                VARCHAR(20)     NOT NULL DEFAULT 'shopify',
+                checkout_token          TEXT            NOT NULL,
+                customer_email          TEXT,
+                customer_name           TEXT,
+                cart_total              DECIMAL(10,2),
+                currency                VARCHAR(10),
+                line_items              JSONB,
+                checkout_url            TEXT,
+                reply_local_part        TEXT            UNIQUE,
+                abandoned_at            TIMESTAMP       NOT NULL DEFAULT NOW(),
+                recovery_email_sent_at  TIMESTAMP,
+                recovered_at            TIMESTAMP,
+                status                  VARCHAR(20)     NOT NULL DEFAULT 'pending',
+                reply_forwarded_count   INTEGER         NOT NULL DEFAULT 0,
+                created_at              TIMESTAMP       NOT NULL DEFAULT NOW(),
+                UNIQUE(client_id, checkout_token)
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_abandoned_carts_due "
+            "ON abandoned_carts (status, abandoned_at) WHERE status = 'pending'"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_abandoned_carts_client "
+            "ON abandoned_carts (client_id)"
+        )
+        cursor.execute(
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS "
+            "cart_recovery_enabled BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+        conn.commit()
+        print("migrate_cart_recovery complete")
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        print(f"migrate_cart_recovery error: {e}")
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+
 def migrate_seat_subscriptions():
     """
     Create seat_subscriptions table for agency per-seat purchases.

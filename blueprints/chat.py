@@ -141,52 +141,105 @@ def chat():
         )
         message_lower = message.lower()
 
-        # ── Plan enforcement: messages_per_day ──────────────────────────
+        # ── Plan enforcement: messages_per_day (grandfathered plans) or
+        # conversations_per_month (new ai_starter/ai_growth/ai_scale tiers) ──
         # Only check for real (non-demo) clients so the demo widget is
         # never accidentally blocked.
         #
-        # _chat_daily_limit is set here and threaded into every log_conversation
-        # call below so the atomic CTE insert can re-check the cap under the
-        # same DB snapshot — preventing races at the boundary.
-        _chat_daily_limit = None  # None == unlimited / demo — no atomic check needed
+        # _chat_daily_limit / _chat_monthly_limit are threaded into every
+        # log_conversation call below so the atomic CTE insert can re-check
+        # the cap under the same DB snapshot — preventing races at the
+        # boundary. Only one of the two is ever set for a given plan —
+        # 'conversations_per_month' is a brand-new PLAN_LIMITS key that only
+        # exists on ai_starter/ai_growth/ai_scale; every grandfathered plan
+        # (solo/starter/pro/growth/agency/enterprise/free) has no such key,
+        # so .get() returns None and they fall through to the unchanged
+        # daily-message-cap path exactly as before.
+        #
+        # lead_capture_allowed gates the two lead-trigger points further
+        # down. Defaults to True (unrestricted) for demo and for any plan
+        # without an explicit 'lead_capture' key — i.e. every grandfathered
+        # plan keeps today's behavior (lead capture was never gated before
+        # this pivot). Only ai_starter explicitly sets it False.
+        _chat_daily_limit    = None  # None == unlimited / demo — no atomic check needed
+        _chat_monthly_limit  = None
+        lead_capture_allowed = True
         if client and client_id != 'demo':
             owner = _get_cached_client_owner(client_id)
             if owner:
-                plan_type   = owner.get('plan_type', 'free')
-                daily_limit = _plan_limits.get(plan_type, _plan_limits['free'])['messages_per_day']
-                if daily_limit < 999999:
-                    _chat_daily_limit = daily_limit  # thread down to log_conversation
-                    today_count       = models.get_daily_message_count(client_id)
-                    if today_count >= daily_limit:
-                        current_app.logger.info(
-                            f"[Limit] {client_id} hit daily cap "
-                            f"({today_count}/{daily_limit}) on plan '{plan_type}'"
-                        )
-                        return jsonify({
-                            'success':       True,
-                            'response': (
-                                "You've reached today's message limit. "
-                                "Upgrade your plan for unlimited messages, or try again tomorrow. 🚀"
-                            ),
-                            'limit_reached': True,
-                            'upgrade_url':   '/upgrade?plan=pro',
-                            'method':        'limit_enforced',
-                        })
-                    # ── Overage warning: fire at 80% usage ──────────────────
-                    elif today_count >= int(daily_limit * 0.8):
-                        pct = round(today_count / daily_limit * 100)
-                        current_app.logger.info(
-                            f"[UsageWarning] {client_id} at {pct}% of daily cap "
-                            f"({today_count}/{daily_limit}) on plan '{plan_type}'"
-                        )
-                        # Continue processing but flag the warning in the response
-                        # so the dashboard can show a banner next time the owner logs in.
-                        try:
-                            models.upsert_usage_warning(
-                                client_id, pct, today_count, daily_limit
+                plan_type    = owner.get('plan_type', 'free')
+                plan_limits  = _plan_limits.get(plan_type, _plan_limits['free'])
+                lead_capture_allowed = plan_limits.get('lead_capture', True)
+                monthly_cap  = plan_limits.get('conversations_per_month', '__unset__')
+
+                if monthly_cap != '__unset__':
+                    # ── New tiers: monthly conversation cap ─────────────────
+                    if monthly_cap is not None:  # None == unlimited (ai_scale)
+                        _chat_monthly_limit = monthly_cap
+                        month_count         = models.get_monthly_conversation_count(client_id)
+                        if month_count >= monthly_cap:
+                            current_app.logger.info(
+                                f"[Limit] {client_id} hit monthly cap "
+                                f"({month_count}/{monthly_cap}) on plan '{plan_type}'"
                             )
-                        except Exception:
-                            pass  # non-fatal
+                            return jsonify({
+                                'success':       True,
+                                'response': (
+                                    "You've reached this month's conversation limit. "
+                                    "Upgrade your plan for more capacity. 🚀"
+                                ),
+                                'limit_reached': True,
+                                'upgrade_url':   '/upgrade?plan=ai_growth',
+                                'method':        'limit_enforced',
+                            })
+                        elif month_count >= int(monthly_cap * 0.8):
+                            pct = round(month_count / monthly_cap * 100)
+                            current_app.logger.info(
+                                f"[UsageWarning] {client_id} at {pct}% of monthly cap "
+                                f"({month_count}/{monthly_cap}) on plan '{plan_type}'"
+                            )
+                            try:
+                                models.upsert_usage_warning(
+                                    client_id, pct, month_count, monthly_cap
+                                )
+                            except Exception:
+                                pass  # non-fatal
+                else:
+                    # ── Grandfathered plans: unchanged daily message cap ────
+                    daily_limit = plan_limits['messages_per_day']
+                    if daily_limit < 999999:
+                        _chat_daily_limit = daily_limit  # thread down to log_conversation
+                        today_count       = models.get_daily_message_count(client_id)
+                        if today_count >= daily_limit:
+                            current_app.logger.info(
+                                f"[Limit] {client_id} hit daily cap "
+                                f"({today_count}/{daily_limit}) on plan '{plan_type}'"
+                            )
+                            return jsonify({
+                                'success':       True,
+                                'response': (
+                                    "You've reached today's message limit. "
+                                    "Upgrade your plan for unlimited messages, or try again tomorrow. 🚀"
+                                ),
+                                'limit_reached': True,
+                                'upgrade_url':   '/upgrade?plan=ai_growth',
+                                'method':        'limit_enforced',
+                            })
+                        # ── Overage warning: fire at 80% usage ──────────────────
+                        elif today_count >= int(daily_limit * 0.8):
+                            pct = round(today_count / daily_limit * 100)
+                            current_app.logger.info(
+                                f"[UsageWarning] {client_id} at {pct}% of daily cap "
+                                f"({today_count}/{daily_limit}) on plan '{plan_type}'"
+                            )
+                            # Continue processing but flag the warning in the response
+                            # so the dashboard can show a banner next time the owner logs in.
+                            try:
+                                models.upsert_usage_warning(
+                                    client_id, pct, today_count, daily_limit
+                                )
+                            except Exception:
+                                pass  # non-fatal
 
         # Load vertical system prompt
         vertical = config.get('vertical', 'general')
@@ -198,7 +251,10 @@ def chat():
         # ── Step 1: Keyword-only lead check (AI disabled path only) ────────
         # When AI is enabled, generate_response() handles lead detection
         # internally as part of the full pipeline — no need to pre-check here.
-        if not (_ai_helper and _ai_helper.enabled):
+        # Gated on lead_capture_allowed — ai_starter doesn't include lead
+        # capture, so those clients fall straight through to a normal answer
+        # instead of being offered the "connect you with our team" prompt.
+        if not (_ai_helper and _ai_helper.enabled) and lead_capture_allowed:
             for trigger in lead_triggers:
                 if trigger.lower() in message_lower:
                     response_text = (
@@ -208,7 +264,7 @@ def chat():
                     _log_conversation(
                         client_id, message, response_text,
                         matched=True, method='lead_trigger',
-                        session_id=session_id, daily_limit=_chat_daily_limit,
+                        session_id=session_id, daily_limit=_chat_daily_limit, monthly_limit=_chat_monthly_limit,
                     )
                     return jsonify({
                         'success':                 True,
@@ -259,10 +315,14 @@ def chat():
                 # When the AI returns a contact_request action (IDK, confidence
                 # gate, frustration escalation), create a human_inbox ticket
                 # immediately — don't wait for the user to fill in a lead form.
+                # contact_request handoffs are always allowed (baseline support
+                # escalation, not the marketed "Lead capture" feature) — only
+                # the is_lead branch is gated on lead_capture_allowed, since
+                # ai_starter doesn't include lead capture.
                 _action     = result.get('action') or {}
                 _is_handoff = (
                     _action.get('type') == 'contact_request' or
-                    result.get('is_lead')
+                    (result.get('is_lead') and lead_capture_allowed)
                 )
                 if _is_handoff and client_id != 'demo':
                     _handoff    = result.get('handoff') or {}
@@ -322,7 +382,7 @@ def chat():
                     _log_conversation(
                         client_id, message, response_text,
                         matched=True, method=method,
-                        session_id=session_id, daily_limit=_chat_daily_limit,
+                        session_id=session_id, daily_limit=_chat_daily_limit, monthly_limit=_chat_monthly_limit,
                     )
 
                     # System 2: collect escalation training sample
@@ -355,11 +415,11 @@ def chat():
                     })
 
                 # Catch any remaining is_lead signals not caught above
-                if result.get('is_lead'):
+                if result.get('is_lead') and lead_capture_allowed:
                     _log_conversation(
                         client_id, message, response_text,
                         matched=True, method='lead_pipeline',
-                        session_id=session_id, daily_limit=_chat_daily_limit,
+                        session_id=session_id, daily_limit=_chat_daily_limit, monthly_limit=_chat_monthly_limit,
                     )
                     return jsonify({
                         'success':                 True,
@@ -375,7 +435,7 @@ def chat():
                     _log_conversation(
                         client_id, message, response_text,
                         matched=matched, method=method,
-                        session_id=session_id, daily_limit=_chat_daily_limit,
+                        session_id=session_id, daily_limit=_chat_daily_limit, monthly_limit=_chat_monthly_limit,
                     )
 
                     # System 2: collect training sample in background
@@ -459,7 +519,7 @@ def chat():
             _log_conversation(
                 client_id, message, response_text,
                 matched=True, method='keyword_fallback',
-                session_id=session_id, daily_limit=_chat_daily_limit,
+                session_id=session_id, daily_limit=_chat_daily_limit, monthly_limit=_chat_monthly_limit,
             )
             _fire_webhook(client_id, 'message_sent', {
                 'session_id': session_id,
@@ -490,7 +550,7 @@ def chat():
         _log_conversation(
             client_id, message, fallback,
             matched=False, method='fallback',
-            session_id=session_id, daily_limit=_chat_daily_limit,
+            session_id=session_id, daily_limit=_chat_daily_limit, monthly_limit=_chat_monthly_limit,
         )
         return jsonify({
             'success':             True,

@@ -1283,6 +1283,68 @@ a { text-decoration: none; color: inherit; }
         </div>
       </div>
 
+      <!-- Shopify only: order lookup / product search live reads, optional Agent Actions -->
+      <div class="form-group" id="shopify-extra-fields" style="display:none">
+        <div class="form-label" style="margin-top:4px">
+          Order lookup &amp; product search <span style="font-weight:400;color:var(--text-muted,#8a8580)">(optional)</span>
+        </div>
+        <div class="form-hint" style="margin-bottom:10px">
+          Lets the chatbot answer "where's my order" and "do you have this in stock" live from the store, on top of the webhook sync above.
+        </div>
+
+        <input type="text" class="form-input" id="shopify-shop-domain-input"
+               placeholder="mystore.myshopify.com" style="margin-bottom:8px" />
+
+        <input type="text" class="form-input" id="shopify-client-id-input"
+               placeholder="Client ID" style="margin-bottom:8px" />
+
+        <input type="password" class="form-input secret" id="shopify-client-secret-input"
+               placeholder="Client secret" />
+        <div class="form-hint">
+          From a custom app in Shopify's Dev Dashboard → Apps → Develop apps. Grant <strong>read_orders</strong> and <strong>read_products</strong> on the same app — one client ID/secret pair covers both order lookup and product search below.
+        </div>
+
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="shopify-order-lookup-checkbox" checked />
+            Let the chatbot look up order status
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="shopify-inventory-checkbox" checked />
+            Let the chatbot search products and check stock
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-muted,#8a8580);cursor:not-allowed" title="Not available yet for Shopify — needs a credential-refresh mechanism this system doesn't have.">
+            <input type="checkbox" id="shopify-agent-actions-checkbox" disabled />
+            Also let the chatbot start return requests (Agent Actions) — not available yet
+          </label>
+        </div>
+      </div>
+
+      <!-- WooCommerce only: order lookup / product search live reads.
+           No separate on/off toggles here (unlike Shopify) — the backend
+           gates both order lookup and product search on the same signal:
+           having all three credentials below. -->
+      <div class="form-group" id="woocommerce-extra-fields" style="display:none">
+        <div class="form-label" style="margin-top:4px">
+          Order lookup &amp; product search <span style="font-weight:400;color:var(--text-muted,#8a8580)">(optional)</span>
+        </div>
+        <div class="form-hint" style="margin-bottom:10px">
+          Lets the chatbot answer "where's my order" and "do you have this in stock" live from the store, on top of the webhook sync above. Filling these in enables both automatically.
+        </div>
+
+        <input type="text" class="form-input" id="woocommerce-store-url-input"
+               placeholder="https://mystore.com" style="margin-bottom:8px" />
+
+        <input type="text" class="form-input" id="woocommerce-consumer-key-input"
+               placeholder="Consumer key (ck_…)" style="margin-bottom:8px" />
+
+        <input type="password" class="form-input secret" id="woocommerce-consumer-secret-input"
+               placeholder="Consumer secret (cs_…)" />
+        <div class="form-hint">
+          From WooCommerce → Settings → Advanced → REST API. Read access is enough — both order lookup and product search use the same key pair.
+        </div>
+      </div>
+
     </div>
 
     <!-- Step 2: Success + webhook URL -->
@@ -1361,6 +1423,7 @@ let selectedPlatform = 'shopify';
 let disconnectTarget = null;
 let isEditMode       = false;
 let integrationCache = {};   // { client_id: { shopify: bool, acuity: bool } }
+let configCache = {};        // { client_id: { shopify: <redacted platform_config>, ... } }
 
 /* ── INIT ────────────────────────────────────────────────────────*/
 window.addEventListener('DOMContentLoaded', () => {
@@ -1461,15 +1524,18 @@ async function loadIntegrations(clientId) {
 
     const state = Object.fromEntries(ALL_PLATFORMS.map(p => [p, false]));
     const urlMap = {};
+    const cfgMap = {};
 
     for (const i of (data.integrations || [])) {
       if (i.is_active) {
         state[i.platform] = true;
         urlMap[i.platform] = i.webhook_url;
+        cfgMap[i.platform] = i.platform_config || {};
       }
     }
 
     integrationCache[clientId] = state;
+    configCache[clientId]      = cfgMap;
 
     // Count for badge
     const count = Object.values(state).filter(Boolean).length;
@@ -1754,6 +1820,16 @@ function openModal(platform) {
   selectedPlatform = platform || 'shopify';
   highlightPlatformTab(selectedPlatform);
   updateSecretHint(selectedPlatform);
+  updateExtraFieldsVisibility(selectedPlatform);
+  document.getElementById('shopify-shop-domain-input').value = '';
+  document.getElementById('shopify-client-id-input').value = '';
+  document.getElementById('shopify-client-secret-input').value = '';
+  document.getElementById('shopify-order-lookup-checkbox').checked = true;
+  document.getElementById('shopify-inventory-checkbox').checked = true;
+  document.getElementById('shopify-agent-actions-checkbox').checked = false;
+  document.getElementById('woocommerce-store-url-input').value = '';
+  document.getElementById('woocommerce-consumer-key-input').value = '';
+  document.getElementById('woocommerce-consumer-secret-input').value = '';
   renderSteps(selectedPlatform, 'steps-list');
   document.getElementById('steps-title').textContent = `Setup steps — ${displayName(selectedPlatform)}`;
 
@@ -1768,22 +1844,52 @@ function openEditModal(platform) {
   isEditMode = true;
   selectedPlatform = platform;
   const pName = displayName(platform);
+  const hasExtraFields = (platform === 'shopify' || platform === 'woocommerce');
   const clientName = CLIENTS.find(c => c.client_id === currentClient)?.company_name || '';
-  document.getElementById('modal-title').textContent    = clientName ? `Update ${pName} Key — ${clientName}` : `Update ${pName} Secret`;
+  document.getElementById('modal-title').textContent    = clientName ? `Update ${pName} Connection — ${clientName}` : `Update ${pName} Connection`;
   document.getElementById('modal-step-1').style.display = 'flex';
   document.getElementById('modal-step-2').style.display = 'none';
   document.getElementById('modal-footer').style.display = 'flex';
   document.getElementById('modal-footer').innerHTML = `
     <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" id="modal-submit-btn" onclick="submitIntegration()">
-      <span id="submit-label">Save Secret</span>
+      <span id="submit-label">${hasExtraFields ? 'Save Changes' : 'Save Secret'}</span>
       <div class="spinner" id="submit-spinner" style="display:none"></div>
     </button>
   `;
   document.getElementById('secret-input').value = '';
   document.getElementById('platform-picker-group').style.display = 'none';
   document.getElementById('modal-setup-flow').style.display      = 'none';
+  updateExtraFieldsVisibility(platform); // now shown in edit mode too, for credential rotation
   updateSecretHint(platform);
+
+  const cfg = (configCache[currentClient] && configCache[currentClient][platform]) || {};
+
+  // Non-secret fields: pre-filled with the real value — nothing sensitive
+  // to protect, and it saves re-typing a domain/ID that isn't changing.
+  document.getElementById('shopify-shop-domain-input').value = cfg.shop_domain || '';
+  document.getElementById('shopify-client-id-input').value   = cfg.shopify_client_id || '';
+  document.getElementById('shopify-order-lookup-checkbox').checked = cfg.order_lookup_enabled !== false;
+  document.getElementById('shopify-inventory-checkbox').checked    = cfg.inventory_enabled !== false;
+  document.getElementById('shopify-agent-actions-checkbox').checked = false; // always starts off in edit mode — leaving it unchecked and submitting doesn't touch or remove an existing Agent Actions setup, connect_shopify() only acts on it when explicitly True
+  document.getElementById('woocommerce-store-url-input').value    = cfg.store_url || '';
+  document.getElementById('woocommerce-consumer-key-input').value = cfg.consumer_key || '';
+
+  // Secret fields: NEVER pre-filled (the backend never sends the real
+  // value back — see webhooks._redact_platform_config). Blank means "keep
+  // what's already there"; the placeholder just says so.
+  const clientSecretInput = document.getElementById('shopify-client-secret-input');
+  clientSecretInput.value = '';
+  clientSecretInput.placeholder = cfg.has_shopify_client_secret
+    ? 'Currently set — leave blank to keep it, or paste a new secret to rotate'
+    : 'Client secret';
+
+  const consumerSecretInput = document.getElementById('woocommerce-consumer-secret-input');
+  consumerSecretInput.value = '';
+  consumerSecretInput.placeholder = cfg.has_consumer_secret
+    ? 'Currently set — leave blank to keep it, or paste a new secret to rotate'
+    : 'Consumer secret (cs_…)';
+
   document.getElementById('steps-title').textContent = `Where to find the ${pName} secret`;
   renderSteps(platform, 'steps-list');
   document.getElementById('connectModal').classList.add('open');
@@ -1797,6 +1903,7 @@ function selectPlatform(platform) {
   selectedPlatform = platform;
   highlightPlatformTab(platform);
   updateSecretHint(platform);
+  updateExtraFieldsVisibility(platform);
   document.getElementById('steps-title').textContent =
     `Setup steps — ${displayName(platform)}`;
   renderSteps(platform, 'steps-list');
@@ -1820,6 +1927,13 @@ function updateSecretHint(platform) {
   if (hint)  hint.textContent  = cfg.hint;
 }
 
+function updateExtraFieldsVisibility(platform) {
+  const shopifyEl = document.getElementById('shopify-extra-fields');
+  const wooEl     = document.getElementById('woocommerce-extra-fields');
+  if (shopifyEl) shopifyEl.style.display = (platform === 'shopify')     ? 'block' : 'none';
+  if (wooEl)     wooEl.style.display     = (platform === 'woocommerce') ? 'block' : 'none';
+}
+
 /* ── SUBMIT (real API) ───────────────────────────────────────── */
 async function submitIntegration() {
   const secret = document.getElementById('secret-input').value.trim();
@@ -1829,6 +1943,66 @@ async function submitIntegration() {
     return;
   }
   document.getElementById('secret-input').classList.remove('error');
+
+  // Shopify/WooCommerce fields — order lookup / product search /
+  // (Shopify) Agent Actions. All optional in connect mode. In edit mode,
+  // non-secret fields (shop_domain, client_id, store_url, consumer_key,
+  // toggles) are pre-filled by openEditModal() and always resent; secret
+  // fields (client_secret, consumer_secret) are OMITTED entirely when left
+  // blank — not sent as '' — so the backend's merge preserves the existing
+  // value instead of overwriting it with nothing. A blank secret field
+  // is only rejected if there's nothing on file to fall back to yet.
+  const cfg = (configCache[currentClient] && configCache[currentClient][selectedPlatform]) || {};
+  let platformExtra = {};
+  let enableAgentActions = false;
+
+  if (selectedPlatform === 'shopify') {
+    const shopDomain   = document.getElementById('shopify-shop-domain-input').value.trim();
+    const clientId     = document.getElementById('shopify-client-id-input').value.trim();
+    const clientSecret = document.getElementById('shopify-client-secret-input').value.trim();
+    const orderLookup  = document.getElementById('shopify-order-lookup-checkbox').checked;
+    const inventory    = document.getElementById('shopify-inventory-checkbox').checked;
+    enableAgentActions = document.getElementById('shopify-agent-actions-checkbox').checked; // always false — checkbox is disabled, not available yet
+    const canOmitSecret = isEditMode && cfg.has_shopify_client_secret;
+
+    const wantsCapability = orderLookup || inventory || enableAgentActions;
+    if (wantsCapability && (!shopDomain || !clientId || (!clientSecret && !canOmitSecret))) {
+      document.getElementById('shopify-client-secret-input').classList.add('error');
+      const msg = canOmitSecret
+        ? 'Add the shop domain and client ID, or turn off order lookup / product search.'
+        : 'Add the shop domain, client ID, and client secret, or turn off order lookup / product search.';
+      showToast(msg, 'error');
+      return;
+    }
+    document.getElementById('shopify-client-secret-input').classList.remove('error');
+
+    if (shopDomain || clientId) {
+      platformExtra = { shop_domain: shopDomain, shopify_client_id: clientId, order_lookup_enabled: orderLookup, inventory_enabled: inventory };
+      if (clientSecret) platformExtra.shopify_client_secret = clientSecret; // omitted if blank — see note above
+    }
+  } else if (selectedPlatform === 'woocommerce') {
+    const storeUrl       = document.getElementById('woocommerce-store-url-input').value.trim();
+    const consumerKey    = document.getElementById('woocommerce-consumer-key-input').value.trim();
+    const consumerSecret = document.getElementById('woocommerce-consumer-secret-input').value.trim();
+    const canOmitSecret  = isEditMode && cfg.has_consumer_secret;
+    const anyFilled = storeUrl || consumerKey || consumerSecret;
+    const readyToSave = storeUrl && consumerKey && (consumerSecret || canOmitSecret);
+
+    if (anyFilled && !readyToSave) {
+      document.getElementById('woocommerce-consumer-secret-input').classList.add('error');
+      const msg = canOmitSecret
+        ? 'Add the store URL and consumer key together.'
+        : 'Add the store URL, consumer key, and consumer secret together — or leave all three blank for webhook sync only.';
+      showToast(msg, 'error');
+      return;
+    }
+    document.getElementById('woocommerce-consumer-secret-input').classList.remove('error');
+
+    if (anyFilled) {
+      platformExtra = { store_url: storeUrl, consumer_key: consumerKey };
+      if (consumerSecret) platformExtra.consumer_secret = consumerSecret; // omitted if blank
+    }
+  }
 
   const submitBtn = document.getElementById('modal-submit-btn');
   document.getElementById('submit-label').style.display = 'none';
@@ -1840,9 +2014,10 @@ async function submitIntegration() {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        platform:        selectedPlatform,
-        webhook_secret:  secret,
-        platform_config: {},
+        platform:             selectedPlatform,
+        webhook_secret:       secret,
+        platform_config:      platformExtra,
+        enable_agent_actions: enableAgentActions,
       }),
     });
     const data = await res.json();

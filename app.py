@@ -49,6 +49,7 @@ from paypalrestsdk import Payment, configure
 # ── Local ─────────────────────────────────────────────────────────────────────
 import cache_utils
 import models
+import shopify_connect
 import webhooks as _webhooks
 from ai_helper import get_ai_helper
 from app_utils import sanitize_input
@@ -274,6 +275,18 @@ PLAN_LIMITS = {
         'webhooks': True, 'priority_support': True,
         'agentic_actions': True,
     },
+    # BUG FIX: 'growth' ($149/mo old tier) was missing from this dict
+    # entirely — any user on it was silently falling back to
+    # PLAN_LIMITS['free'] via the .get(plan_type, PLAN_LIMITS['free'])
+    # pattern used everywhere. Interpolated between 'pro' and 'agency'
+    # since no real subscribers are currently on this plan to break.
+    'growth': {
+        'clients': 25, 'faqs_per_client': 999, 'messages_per_day': 999999,
+        'analytics': True, 'analytics_level': 'full',
+        'customization': True, 'white_label': False,
+        'webhooks': True, 'priority_support': True,
+        'agentic_actions': True,
+    },
     'agency': {
         'clients': 999999, 'faqs_per_client': 999, 'messages_per_day': 999999,
         'analytics': True, 'analytics_level': 'full',
@@ -285,6 +298,65 @@ PLAN_LIMITS = {
         'clients': 999999, 'faqs_per_client': 999, 'messages_per_day': 999999,
         'analytics': True, 'analytics_level': 'full',
         'customization': True, 'white_label': True,
+        'webhooks': True, 'priority_support': True,
+        'agentic_actions': True,
+    },
+
+    # ── "AI Employee for Shopify & WooCommerce" tiers (upgrade-shopify.html) ──
+    # Brand-new plan_type keys — solo/starter/pro/growth/agency above are
+    # frozen/grandfathered and no longer sold. New self-serve customers can
+    # only land on one of these three.
+    #
+    # New dimensions used only by these three tiers (all old tiers simply
+    # don't have these keys — every gate checks .get(key, <old-behavior
+    # default>) so grandfathered plans are completely unaffected):
+    #   conversations_per_month — monthly cap, checked in blueprints/chat.py.
+    #                             None = unlimited. Counts distinct
+    #                             conversations, not raw messages (see
+    #                             models.get_monthly_conversation_count).
+    #   integrations_limit      — max connected platforms, checked in
+    #                             create_platform_integration() below.
+    #                             None = unlimited.
+    #   product_recommendations — gates the recommend_products AI tool
+    #                             (tools.py).
+    #   cart_recovery           — gates the abandoned-checkout recovery
+    #                             feature (Shopify only for now).
+    #   lead_capture            — gates the lead-collection trigger in
+    #                             blueprints/chat.py. Previously ungated
+    #                             for every plan.
+    #   api_access              — reserved. No external developer API
+    #                             exists yet to gate — this flag is a
+    #                             placeholder for when one ships.
+    'ai_starter': {
+        'clients': 1, 'faqs_per_client': 999, 'messages_per_day': 999999,
+        'conversations_per_month': 1000,
+        'integrations_limit': 1,
+        'product_recommendations': False, 'cart_recovery': False,
+        'lead_capture': False, 'api_access': False,
+        'analytics': True, 'analytics_level': 'basic',
+        'customization': True, 'white_label': False,
+        'webhooks': True, 'priority_support': False,
+        'agentic_actions': False,
+    },
+    'ai_growth': {
+        'clients': 1, 'faqs_per_client': 999, 'messages_per_day': 999999,
+        'conversations_per_month': 5000,
+        'integrations_limit': 5,  # "Shopify + WooCommerce + additional integrations"
+        'product_recommendations': True, 'cart_recovery': True,
+        'lead_capture': True, 'api_access': False,
+        'analytics': True, 'analytics_level': 'advanced',
+        'customization': True, 'white_label': False,
+        'webhooks': True, 'priority_support': True,
+        'agentic_actions': True,
+    },
+    'ai_scale': {
+        'clients': 999999, 'faqs_per_client': 999, 'messages_per_day': 999999,
+        'conversations_per_month': None,   # unlimited
+        'integrations_limit': None,        # unlimited
+        'product_recommendations': True, 'cart_recovery': True,
+        'lead_capture': True, 'api_access': True,
+        'analytics': True, 'analytics_level': 'advanced',
+        'customization': True, 'white_label': False,
         'webhooks': True, 'priority_support': True,
         'agentic_actions': True,
     },
@@ -721,7 +793,7 @@ def notify_webhook(client_id: str, lead_data: dict) -> None:
 
 def log_conversation(client_id, user_message, bot_response,
                      matched=False, method='unknown',
-                     session_id=None, daily_limit=None,
+                     session_id=None, daily_limit=None, monthly_limit=None,
                      page_url=None, referrer=None,
                      utm_source=None, utm_medium=None,
                      utm_campaign=None) -> bool:
@@ -729,6 +801,13 @@ def log_conversation(client_id, user_message, bot_response,
     Insert a conversation row.
     When daily_limit is supplied, the INSERT is wrapped in a CTE that
     re-counts today's rows atomically — prevents races at the cap boundary.
+    monthly_limit does the same thing for the new ai_starter/ai_growth/
+    ai_scale 'conversations_per_month' gate — counts DISTINCT conversations
+    (session_id, or id::text as a fallback for session-less rows) in the
+    current calendar month rather than raw rows today. Only one of
+    daily_limit/monthly_limit should be passed at a time (grandfathered
+    plans use daily_limit; the new tiers use monthly_limit) — if both are
+    given, daily_limit takes precedence.
     Returns True if the row was inserted, False if the cap was already reached.
     Page-context fields (page_url, referrer, utm_*) are written on the first
     message of a session; subsequent messages carry the same values.
@@ -757,6 +836,30 @@ def log_conversation(client_id, user_message, bot_response,
                  daily_limit)
             )
             inserted = cursor.rowcount > 0
+        elif monthly_limit is not None:
+            cursor.execute(
+                '''
+                WITH month_count AS (
+                    SELECT COUNT(DISTINCT COALESCE(session_id, id::text)) AS cnt
+                    FROM conversations
+                    WHERE  client_id = %s
+                      AND  timestamp >= date_trunc('month', CURRENT_DATE)
+                )
+                INSERT INTO conversations
+                    (client_id, user_message, bot_response, matched, method,
+                     session_id, page_url, referrer,
+                     utm_source, utm_medium, utm_campaign)
+                SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                FROM   month_count
+                WHERE  cnt < %s
+                ''',
+                (client_id,
+                 client_id, user_message, bot_response,
+                 matched, method, session_id or None,
+                 page_url, referrer, utm_source, utm_medium, utm_campaign,
+                 monthly_limit)
+            )
+            inserted = cursor.rowcount > 0
         else:
             cursor.execute(
                 '''
@@ -783,7 +886,7 @@ def log_conversation(client_id, user_message, bot_response,
         else:
             app.logger.info(
                 f'[Limit] atomic insert blocked for {client_id} '
-                f'(daily_limit={daily_limit})'
+                f'(daily_limit={daily_limit}, monthly_limit={monthly_limit})'
             )
         return inserted
     except Exception as e:
@@ -828,6 +931,8 @@ try:
         'migrate_external_integrations',       # client_ext_integrations + actions + audit log (agentic external tool calls)
         'migrate_account_profile',             # profile fields + soft/hard delete on users
         'migrate_system_settings',             # generic key-value store for live admin toggles
+        'migrate_ai_employee_plan_rename',     # Shopify/WooCommerce pivot: agency -> ai_scale (one-time)
+        'migrate_cart_recovery',               # abandoned_carts table + clients.cart_recovery_enabled
     ]
     for _fn in _optional_migrations:
         if hasattr(models, _fn):
@@ -1035,6 +1140,11 @@ app.register_blueprint(email_domains_bp)
 
 from blueprints.client_settings import client_settings_bp
 app.register_blueprint(client_settings_bp)
+
+# Inbound email (Brevo inbound parsing — cart recovery reply forwarding)
+from blueprints.inbound_email import inbound_email_bp, init_inbound_email
+init_inbound_email(mail=mail)
+app.register_blueprint(inbound_email_bp)
 
 # Blog (Knowledge Hub) — no dependencies, same shape as account_bp
 from blueprints.blog import blog_bp
@@ -1824,21 +1934,95 @@ def integrations_page():
 def create_platform_integration(client_id):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
-    if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
+    plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
+    if not plan_limits.get('webhooks'):
         return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
     data     = request.get_json(force=True) or {}
     platform = (data.get('platform') or '').lower().strip()
     secret   = (data.get('webhook_secret') or '').strip()
     config   = data.get('platform_config') or {}
+    enable_agent_actions = bool(data.get('enable_agent_actions'))
     if platform not in ('shopify', 'acuity', 'calendly', 'woocommerce', 'square'):
         return jsonify({'success': False, 'error': 'platform must be shopify, acuity, calendly, woocommerce, or square'}), 400
     if not secret:
         return jsonify({'success': False, 'error': 'webhook_secret is required'}), 400
-    ok = _webhooks.upsert_integration(client_id, platform, secret, config)
-    if not ok:
-        return jsonify({'success': False, 'error': 'Failed to save integration'}), 500
+    if enable_agent_actions and not plan_limits.get('agentic_actions'):
+        # Same gate /api/agent-actions/<client_id>/integrations POST uses —
+        # this route can now also provision a client_ext_integrations row,
+        # so it shouldn't be a side-door around that plan check.
+        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+
+    # ai_starter/ai_growth/ai_scale count-based integration cap (1 / 5 /
+    # unlimited — see upgrade-shopify.html). Grandfathered solo/starter/pro/
+    # growth/agency/enterprise plans have no 'integrations_limit' key at all,
+    # so .get() returns None and this block is skipped entirely — their
+    # behavior is unchanged (boolean webhooks gate only, no count cap).
+    # Only counts against the cap if this is a NEW platform for this client —
+    # rotating the secret on an already-connected platform doesn't add to
+    # the count.
+    integrations_limit = plan_limits.get('integrations_limit')
+    if integrations_limit is not None and not _webhooks.get_integration(client_id, platform):
+        current_count = len(_webhooks.list_integrations(client_id))
+        if current_count >= integrations_limit:
+            return jsonify({
+                'success': False,
+                'error': f'Your plan allows up to {integrations_limit} connected integration(s). Upgrade to connect more.'
+            }), 403
+
     base_url    = os.environ.get('APP_BASE_URL', 'https://app.lumvi.ai')
     webhook_url = f'{base_url}/webhooks/{platform}/{client_id}'
+
+    # Shopify with client_id+client_secret also feeds commerce_adapters.py's
+    # live order/inventory reads (tools.lookup_order / tools.search_products)
+    # via a client-credentials-grant token that's fetched/refreshed
+    # automatically. See shopify_connect.py.
+    if platform == 'shopify' and config.get('shopify_client_id') and config.get('shopify_client_secret'):
+        result = shopify_connect.connect_shopify(
+            client_id=client_id,
+            shop_domain=config.get('shop_domain', ''),
+            shopify_client_id=config.get('shopify_client_id', ''),
+            shopify_client_secret=config.get('shopify_client_secret', ''),
+            webhook_secret=secret,
+            enable_order_lookup=bool(config.get('order_lookup_enabled', True)),
+            enable_inventory=bool(config.get('inventory_enabled', True)),
+            enable_agent_actions=enable_agent_actions,
+        )
+        if not result.get('success'):
+            if 'error' in result:
+                # Bad input caught before anything was written (e.g. blank
+                # shop_domain/client_id/client_secret) — same 400 the old
+                # path used for a blank webhook_secret.
+                return jsonify({'success': False, 'error': result['error']}), 400
+            error = '; '.join(result.get('errors', [])) or 'Failed to save integration'
+            return jsonify({'success': False, 'error': error}), 500
+        app.logger.info(
+            f'[Integration] user={current_user.id} connected platform=shopify client={client_id} '
+            f'agent_actions_integration={result.get("agent_actions_integration_id")}'
+        )
+        return jsonify({
+            'success':                      True,
+            'platform':                     platform,
+            'webhook_url':                  webhook_url,
+            'instructions':                 _webhooks._onboarding_instructions(platform, webhook_url),
+            'agent_actions_integration_id': result.get('agent_actions_integration_id'),
+            'actions_created':              result.get('actions_created', 0),
+            'warnings':                     result.get('errors', []),
+        }), 200
+
+    # Every other platform — and Shopify with no access_token (webhook
+    # sync only, no live order/inventory reads) — merges with any existing
+    # platform_config rather than replacing it outright. upsert_integration's
+    # ON CONFLICT does a full replace, not a merge — openEditModal's
+    # "rotate secret" flow deliberately sends an EMPTY platform_config (it
+    # only touches the secret), so without this merge every secret
+    # rotation would silently wipe out an existing access_token /
+    # consumer_key / consumer_secret.
+    existing      = _webhooks.get_integration(client_id, platform)
+    merged_config = dict((existing or {}).get('platform_config') or {})
+    merged_config.update(config)
+    ok = _webhooks.upsert_integration(client_id, platform, secret, merged_config)
+    if not ok:
+        return jsonify({'success': False, 'error': 'Failed to save integration'}), 500
     app.logger.info(
         f'[Integration] user={current_user.id} connected platform={platform} client={client_id}'
     )
