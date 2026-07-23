@@ -13,7 +13,6 @@ This file is responsible for wiring only:
   - Static/widget/legal routes and error handlers
 
 All business logic lives in blueprints/ and services/.
-Target: ~500 lines. Route count in this file: 7.
 """
 
 # ── Standard library ─────────────────────────────────────────────────────────
@@ -45,6 +44,7 @@ from flask_login import (LoginManager, UserMixin, current_user,
                          login_required, login_user, logout_user)
 from flask_mail import Mail, Message
 from paypalrestsdk import Payment, configure
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ── Local ─────────────────────────────────────────────────────────────────────
 import cache_utils
@@ -68,6 +68,12 @@ _wh_executor  = ThreadPoolExecutor(max_workers=8,  thread_name_prefix='wh-delive
 # ═══════════════════════════════════════════════════════════════════════════════
 
 app = Flask(__name__)
+
+# Railway terminates TLS at its edge and forwards plain HTTP to this app,
+# setting X-Forwarded-Proto/Host headers. Without this, url_for(_external=True)
+# (used e.g. for the Google OAuth redirect_uri) builds http:// URLs instead of
+# https://, which then fail to match what's registered in Google Cloud Console.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # ── Required env vars — crash at startup rather than silently misconfigure ────
 
