@@ -35,8 +35,6 @@ Registration in app.py:
       valid_verticals=VALID_VERTICALS,
       get_subscription_status=get_subscription_status,
       send_welcome_email=send_welcome_email,
-      agency_included_clients=AGENCY_INCLUDED_CLIENTS,
-      agency_seat_price=AGENCY_SEAT_PRICE,
       User=User,
   )
   app.register_blueprint(auth_bp)
@@ -65,29 +63,23 @@ _plan_limits             = None
 _valid_verticals         = None
 _get_subscription_status = None
 _send_welcome_email      = None
-_agency_included_clients = None
-_agency_seat_price       = None
 _User                    = None
 
 
 def init_auth(mail, google_oauth, plan_limits, valid_verticals,
-              get_subscription_status, send_welcome_email,
-              agency_included_clients, agency_seat_price, User):
+              get_subscription_status, send_welcome_email, User):
     """
     Called once in app.py after all shared objects are ready.
     Must be called before the first request reaches this blueprint.
     """
     global _mail, _google_oauth, _plan_limits, _valid_verticals, \
-            _get_subscription_status, _send_welcome_email, \
-            _agency_included_clients, _agency_seat_price, _User
+            _get_subscription_status, _send_welcome_email, _User
     _mail                    = mail
     _google_oauth            = google_oauth
     _plan_limits             = plan_limits
     _valid_verticals         = valid_verticals
     _get_subscription_status = get_subscription_status
     _send_welcome_email      = send_welcome_email
-    _agency_included_clients = agency_included_clients
-    _agency_seat_price       = agency_seat_price
     _User                    = User
 
 
@@ -367,31 +359,10 @@ def dashboard():
 
     plan_type    = (fresh_user or {}).get('plan_type', current_user.plan_type)
     plan_limits  = _plan_limits.get(plan_type, _plan_limits['free'])
-    client_limit = plan_limits['clients']
-    client_count = len(clients)
-    slots_display = 'Unlimited' if client_limit >= 999999 else str(client_limit)
-    limit_reached = False if client_limit >= 999999 else client_count >= client_limit
 
-    # For agency plans, recompute limit against included slots + purchased seats
-    active_seat_count = 0
-    if plan_type == 'agency':
-        active_seat_count = models.get_active_seat_count(current_user.id)
-        client_limit  = _agency_included_clients + active_seat_count
-        slots_display = str(client_limit)
-        limit_reached = client_count >= client_limit
-
-    agency_extra_seats  = (max(0, client_count - _agency_included_clients)
-                           if plan_type == 'agency' else 0)
-    agency_overage_cost = agency_extra_seats * _agency_seat_price
-    agency_overage_label = (
-        f"+{agency_extra_seats} extra seat{'s' if agency_extra_seats != 1 else ''} "
-        f"× ${_agency_seat_price:.0f}/mo = ${agency_overage_cost:.0f}/mo billed next cycle"
-        if agency_extra_seats > 0 else ''
-    )
-
-    has_payment_method = bool(
-        (fresh_user or {}).get('subscription_id') and
-        (fresh_user or {}).get('subscription_status', 'active') in ('active', 'trialing')
+    monthly_conversations = (
+        models.get_monthly_conversation_count(clients[0]['client_id'])
+        if clients else 0
     )
 
     sub_status = session.pop('sub_status', None)
@@ -401,33 +372,13 @@ def dashboard():
 
     return render_template(
         'dashboard_enterprise.html',
-        user                     = current_user,
-        clients                  = clients,
-        plan_type                = plan_type,
-        plan_limits              = plan_limits,
-        client_count             = client_count,
-        client_limit             = client_limit,
-        slots_display            = slots_display,
-        limit_reached            = limit_reached,
-        sub_status               = sub_info['status'],
-        sub_expires_at           = sub_info.get('expires_at'),
-        sub_grace_ends_at        = sub_info.get('grace_ends_at'),
-        agency_extra_seats       = agency_extra_seats,
-        agency_overage_cost      = agency_overage_cost,
-        agency_overage_label     = agency_overage_label,
-        agency_included_clients  = _agency_included_clients,
-        agency_seat_price        = _agency_seat_price,
-        has_payment_method       = has_payment_method,
-        # Seat subscription system
-        active_seat_count        = active_seat_count,
-        # Overage payment tracking — invoice banners + button guards
-        overage_payment_status   = (fresh_user or {}).get('overage_payment_status', 'none'),
-        overage_amount_due       = float((fresh_user or {}).get('overage_amount_due') or 0),
-        overage_due_date_str     = (
-            (fresh_user or {}).get('overage_due_date').strftime('%B %d, %Y')
-            if (fresh_user or {}).get('overage_due_date') else None
-        ),
-        overage_payment_link     = (fresh_user or {}).get('overage_payment_link', '') or '',
+        user                   = current_user,
+        clients                = clients,
+        plan_type              = plan_type,
+        plan_limits            = plan_limits,
+        monthly_conversations  = monthly_conversations,
+        sub_status             = sub_info['status'],
+        sub_grace_ends_at      = sub_info.get('grace_ends_at'),
     )
 
 
@@ -480,14 +431,6 @@ def create_client():
         plan_type    = user['plan_type']
         plan_limit   = _plan_limits.get(plan_type, _plan_limits['free'])['clients']
 
-        plan_upgrade_hints = {
-            'free':    'Solo: 1 chatbot $19/mo | Starter: 3 chatbots | Pro: 10 chatbots | Agency: Unlimited',
-            'solo':    'Starter: 3 chatbots | Pro: 10 chatbots | Agency: Unlimited',
-            'starter': 'Pro: 10 chatbots | Agency: Unlimited',
-            'pro':     'Agency: Unlimited chatbots at $299/mo',
-        }
-        upgrade_hint = plan_upgrade_hints.get(plan_type, 'Upgrade to add more chatbots')
-
         _lock_conn, _lock_cursor = models.get_db()
         try:
             _lock_cursor.execute("SELECT pg_advisory_lock(%s)", (current_user.id,))
@@ -495,25 +438,7 @@ def create_client():
             current_clients = models.get_user_clients(current_user.id)
             client_count    = len(current_clients)
 
-            # ── Agency: gate on included slots + purchased seat subscriptions ──
-            if plan_type == 'agency':
-                active_seats = models.get_active_seat_count(current_user.id)
-                ceiling      = _agency_included_clients + active_seats
-                if client_count >= ceiling:
-                    _lock_cursor.execute("SELECT pg_advisory_unlock(%s)", (current_user.id,))
-                    _lock_cursor.close()
-                    _lock_conn.close()
-                    return jsonify({
-                        'success':                False,
-                        'error':                  (
-                            'All seats are in use. Purchase an extra seat '
-                            'to add more chatbots.'
-                        ),
-                        'requires_seat_purchase': True,
-                    }), 402
-
-            # ── Non-agency: standard plan limit ────────────────────────────────
-            elif client_count >= plan_limit:
+            if client_count >= plan_limit:
                 _lock_cursor.execute("SELECT pg_advisory_unlock(%s)", (current_user.id,))
                 _lock_cursor.close()
                 _lock_conn.close()
@@ -525,15 +450,15 @@ def create_client():
                     return jsonify({
                         'success': False,
                         'error': (
-                            f'Plan limit reached. You can have '
-                            f'{plan_limit} chatbot{"s" if plan_limit != 1 else ""} '
-                            f'on your {plan_type} plan. Upgrade to add more.'
+                            'Lumvi supports one connected store per account. '
+                            'To connect a different store, remove your current '
+                            'one first from Settings.'
                         ),
-                        'upgrade_url': '/upgrade',
+                        'settings_url': '/dashboard',
                     }), 403
                 return f'''<!DOCTYPE html>
 <html>
-<head><title>Plan Limit Reached</title>
+<head><title>Store Already Connected</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 *{{box-sizing:border-box;margin:0;padding:0;}}
@@ -553,15 +478,14 @@ p{{color:#57534E;margin-bottom:16px;line-height:1.65;font-size:15px;}}
 </style></head>
 <body>
 <div class="card">
-  <h1>Chatbot Limit Reached</h1>
-  <p>You've reached the maximum number of chatbots for your current plan.</p>
+  <h1>Store Already Connected</h1>
+  <p>Lumvi supports one connected store per account.</p>
   <div class="info">
     <strong>Plan:</strong> {plan_type.title()}<br>
-    <strong>Chatbots:</strong> {client_count} / {plan_limit if plan_limit < 999999 else "Unlimited"}<br>
-    <strong>Status:</strong> Limit Reached
+    <strong>Connected store:</strong> {client_count} / {plan_limit}<br>
   </div>
-  <p style="font-size:13px;color:#A8A29E;">{upgrade_hint}</p>
-  <a href="/upgrade" class="btn btn-gold">Upgrade Plan →</a>
+  <p style="font-size:13px;color:#A8A29E;">To connect a different store, remove your current one first.</p>
+  <a href="/dashboard" class="btn btn-gold">Go to Settings →</a>
   <a href="/dashboard" class="btn btn-ghost">← Back</a>
 </div>
 </body></html>''', 403

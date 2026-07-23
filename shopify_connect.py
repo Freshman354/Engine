@@ -2,7 +2,7 @@
 shopify_connect.py
 ===================
 Single connect step for Shopify that feeds client_integrations (webhooks.py)
-so an agency only enters their Shopify credentials once:
+so a merchant only enters their Shopify credentials once:
 
   - client_integrations (webhooks.py) — powers tools.lookup_order /
     tools.search_products via commerce_adapters.py's live GraphQL reads

@@ -164,12 +164,14 @@ def chat():
         _chat_daily_limit    = None  # None == unlimited / demo — no atomic check needed
         _chat_monthly_limit  = None
         lead_capture_allowed = True
+        product_recs_allowed = True
         if client and client_id != 'demo':
             owner = _get_cached_client_owner(client_id)
             if owner:
                 plan_type    = owner.get('plan_type', 'free')
                 plan_limits  = _plan_limits.get(plan_type, _plan_limits['free'])
                 lead_capture_allowed = plan_limits.get('lead_capture', True)
+                product_recs_allowed = plan_limits.get('product_recommendations', True)
                 monthly_cap  = plan_limits.get('conversations_per_month', '__unset__')
 
                 if monthly_cap != '__unset__':
@@ -304,6 +306,7 @@ def chat():
                     lead_triggers         = lead_triggers,
                     kb_version            = kb_version,
                     session_id            = session_id,
+                    product_recommendations_enabled = product_recs_allowed,
                 )
 
                 response_text = result.get('response', '')

@@ -587,7 +587,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 <!-- ADD CLIENT MODAL -->
 <div class="modal-overlay" id="addModal">
   <div class="modal">
-    <h2>Add New Client</h2>
+    <h2>Add New Store</h2>
     <p>Agency branding defaults are applied automatically. Customise everything on the Customize page afterwards.</p>
     <div class="field">
       <label>Company Name *</label>
@@ -620,10 +620,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 <!-- CLONE MODAL -->
 <div class="modal-overlay" id="cloneModal">
   <div class="modal">
-    <h2>Clone Client</h2>
-    <p id="cloneDesc">Copy all branding and FAQs to a new client.</p>
+    <h2>Clone Store</h2>
+    <p id="cloneDesc">Copy all branding and FAQs to a new store.</p>
     <div class="field">
-      <label>New Client Name *</label>
+      <label>Store Name *</label>
       <input type="text" id="cloneName" placeholder="e.g. Acme Law Firm — Branch 2">
     </div>
     <div class="modal-actions" style="margin-top:20px;">
@@ -802,7 +802,7 @@ async function addClient(){
   btn.disabled=true; btn.innerHTML='<div class="spinner"></div> Creating…';
   const form = new FormData(); form.append('company_name',name);
   try{
-    const r = await fetch('/create-client',{method:'POST',body:form});
+    const r = await fetch('/create-store',{method:'POST',body:form});
     if(r.ok || r.redirected){
       toast(`"${name}" created`,'success');
       closeModal('addModal');

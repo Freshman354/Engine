@@ -11,6 +11,11 @@ nothing has been changed except:
   - Inline stdlib imports (time, base64) promoted to module level
   - PLAN_PRICES_FLW moved here — it is billing-only data
   - Dependencies injected at registration time via init_billing()
+  - REMOVED: /agency/seat-prices, /agency/buy-seat, and the seat/
+    overage tx_ref branches in flutterwave_callback/flutterwave_webhook
+    — obsolete agency-business-model pricing logic, see the billing
+    cleanup report for what this touches elsewhere (models/billing.py,
+    cron.py)
 
 Routes
 ------
@@ -150,19 +155,23 @@ def upgrade_page():
 @login_required
 def flutterwave_callback():
     """
-    Flutterwave redirects here after payment (plan upgrades AND seat overages).
+    Flutterwave redirects here after payment (plan upgrades).
 
-    tx_ref formats:
-      Plan upgrade:  lumvi_{plan}_{cycle}_{user_id}_{timestamp}
-      Seat overage:  lumvi_overage_{user_id}_{timestamp}
+    tx_ref format:  lumvi_{plan}_{cycle}_{user_id}_{timestamp}
 
     Fixes:
     - FW-001: Duplicate check before subscription update
     - FW-002: Remove USD-only currency guard on amount validation
     - FW-004: Validate via Flutterwave signature
     - FW-008: Retry logic for verify API
-    - FW-009: Handle overage tx_ref (was crashing with 'unknown plan')
     - FW-010: Fix url_for('dashboard') → url_for('auth.dashboard')
+
+    REMOVED: seat-purchase and seat-overage tx_ref handling (lumvi_seat_*,
+    lumvi_overage_*). Both belonged to the agency/white-label business
+    model — no plan can grant more than 1 connected store anymore, so
+    there's nothing left to buy extra seats or overage for. See the
+    accompanying billing-cleanup report for what else this touches
+    (models/billing.py's seat functions, cron.py's seat cron jobs).
     """
     status         = request.args.get('status', '')
     tx_ref         = request.args.get('tx_ref', '')
@@ -218,158 +227,7 @@ def flutterwave_callback():
     paid_currency  = txn.get('currency', 'USD')
     txn_created_at = txn.get('created_at')
 
-    # ── Detect tx_ref type by parts[1] ───────────────────────────────────────
-    parts     = tx_ref.split('_')
-    is_seat   = (len(parts) >= 2 and parts[1] == 'seat' and parts[2] not in ('renewal',))
-    is_overage = (len(parts) >= 2 and parts[1] == 'overage')
-
-    # ── Seat subscription (initial purchase) ──────────────────────────────────
-    if is_seat:
-        # tx_ref: lumvi_seat_{package_type}_{user_id}_{ts}
-        try:
-            package_type = parts[2]
-            tx_user_id   = int(parts[3]) if len(parts) >= 4 else None
-        except (IndexError, ValueError):
-            package_type = 'single'
-            tx_user_id   = None
-
-        if tx_user_id and tx_user_id != current_user.id:
-            current_app.logger.warning(
-                f"Seat callback: tx_ref user_id={tx_user_id} != "
-                f"session user_id={current_user.id} — rejected"
-            )
-            flash("Payment link mismatch. Please try again.", 'error')
-            return redirect(url_for('billing.upgrade_page'))
-
-        # Duplicate check
-        try:
-            conn, cursor = models.get_db()
-            cursor.execute(
-                "SELECT id FROM payments WHERE reference = %s LIMIT 1",
-                (str(transaction_id),)
-            )
-            already = cursor.fetchone()
-            cursor.close(); conn.close()
-            if already:
-                flash("This payment has already been processed.", 'info')
-                return redirect(url_for('auth.dashboard'))
-        except Exception as e:
-            current_app.logger.error(f"Seat callback duplicate check failed: {e}")
-
-        # Resolve seat details — prefer Flutterwave meta, fall back to proration
-        meta            = txn.get('meta', {}) or {}
-        pkg_type        = meta.get('package_type') or package_type
-        if pkg_type not in ('single', 'bundle'):
-            pkg_type = 'single'
-        _, next_billing, seat_count, monthly = models.calculate_seat_proration(pkg_type)
-        # Use meta values if present (more reliable than recalculating)
-        try:
-            seat_count = int(meta.get('seat_count') or seat_count)
-            monthly    = float(meta.get('monthly')    or monthly)
-        except (TypeError, ValueError):
-            pass
-        if meta.get('next_billing'):
-            from datetime import date as _date
-            try:
-                next_billing = _date.fromisoformat(meta['next_billing'])
-            except (ValueError, TypeError):
-                pass
-
-        sub_id = models.create_seat_subscription(
-            agency_id       = current_user.id,
-            package_type    = pkg_type,
-            first_payment   = paid_amount,
-            monthly_amount  = monthly,
-            seat_count      = seat_count,
-            next_billing_date = next_billing,
-            tx_ref          = tx_ref,
-        )
-        models.record_payment(
-            current_user.id, paid_amount, 'agency',
-            provider  = 'flutterwave_seat',
-            reference = str(transaction_id),
-            notes     = (
-                f"Seat purchase: {pkg_type} ({seat_count} seat(s)) "
-                f"sub_id={sub_id} next_billing={next_billing}"
-            ),
-        )
-        models.track_event(
-            'seat_purchased', user_id=current_user.id,
-            metadata={'package': pkg_type, 'seats': seat_count,
-                      'amount': paid_amount, 'sub_id': sub_id},
-        )
-        current_app.logger.info(
-            f"[SeatCallback] OK user={current_user.id} pkg={pkg_type} "
-            f"seats={seat_count} amount={paid_amount} sub_id={sub_id}"
-        )
-        flash(
-            f"Payment successful! {seat_count} extra seat"
-            f"{'s' if seat_count != 1 else ''} added — you can now create more chatbots.",
-            'success'
-        )
-        # ?seat_purchased=1 triggers auto-open of new-client modal in dashboard JS
-        return redirect(url_for('auth.dashboard') + '?seat_purchased=1')
-
-    # ── FW-009: Detect overage payments by tx_ref prefix ─────────────────────
-    # (parts and is_overage already defined above)
-
-    if is_overage:
-        # tx_ref format: lumvi_overage_{user_id}_{timestamp}
-        # Validate the tx_ref belongs to the logged-in user — prevents one
-        # user clearing another account's overdue hold if a link is shared.
-        try:
-            tx_user_id = int(parts[2]) if len(parts) >= 3 else None
-        except (ValueError, IndexError):
-            tx_user_id = None
-
-        if tx_user_id and tx_user_id != current_user.id:
-            current_app.logger.warning(
-                f"Overage callback: tx_ref user_id={tx_user_id} != "
-                f"session user_id={current_user.id} — rejected"
-            )
-            flash("Payment link mismatch. Please use your own invoice link.", 'error')
-            return redirect(url_for('billing.upgrade_page'))
-
-        # Duplicate check
-        try:
-            conn, cursor = models.get_db()
-            cursor.execute(
-                "SELECT id FROM payments WHERE reference = %s LIMIT 1",
-                (str(transaction_id),)
-            )
-            already_processed = cursor.fetchone()
-            cursor.close()
-            conn.close()
-            if already_processed:
-                current_app.logger.warning(
-                    f"Overage callback: duplicate txn {transaction_id} for user {current_user.id}"
-                )
-                flash("This payment has already been processed.", 'info')
-                return redirect(url_for('auth.dashboard'))
-        except Exception as e:
-            current_app.logger.error(f"Overage duplicate check failed: {e}")
-
-        models.record_payment(
-            current_user.id, paid_amount, 'agency',
-            provider='flutterwave_overage',
-            reference=str(transaction_id),
-            notes=f"Seat overage payment — tx_ref={tx_ref}",
-            payment_date=txn_created_at,
-        )
-
-        # Clear the overdue hold so the user can add clients again
-        if hasattr(models, 'mark_overage_paid'):
-            models.mark_overage_paid(current_user.id, reference=str(transaction_id))
-
-        models.track_event(
-            'overage_paid', user_id=current_user.id,
-            metadata={'amount': paid_amount, 'tx_ref': tx_ref},
-        )
-        current_app.logger.info(
-            f"Overage payment OK: user={current_user.id} amount={paid_amount} txn={transaction_id}"
-        )
-        flash("Overage invoice paid — thank you! You can now add more chatbots.", 'success')
-        return redirect(url_for('auth.dashboard'))  # FW-010 fix
+    parts = tx_ref.split('_')
 
     # ── Standard plan-upgrade payment ─────────────────────────────────────────
     plan  = None
@@ -506,179 +364,6 @@ def flutterwave_webhook():
         current_app.logger.error(f"Flutterwave webhook: bad tx_ref '{tx_ref}' — {e}")
         return jsonify({'status': 'bad tx_ref'}), 200
 
-    # ── Seat subscription — initial purchase (lumvi_seat_{pkg}_{user_id}_{ts}) ─
-    if plan == 'seat' and (len(parts) < 3 or parts[2] != 'renewal'):
-        try:
-            package_type = parts[2]
-            user_id      = int(parts[3]) if len(parts) >= 4 else None
-        except (IndexError, ValueError):
-            package_type = 'single'
-            user_id      = None
-
-        if not user_id:
-            current_app.logger.error(
-                f"Webhook seat: no user_id in tx_ref '{tx_ref}'"
-            )
-            return jsonify({'status': 'bad tx_ref'}), 200
-
-        # Duplicate check
-        try:
-            conn, cursor = models.get_db()
-            cursor.execute(
-                "SELECT id FROM payments WHERE reference = %s LIMIT 1", (txn_id,)
-            )
-            already = cursor.fetchone()
-            cursor.close(); conn.close()
-            if already:
-                current_app.logger.info(f"Webhook seat: already processed txn {txn_id}")
-                return jsonify({'status': 'already processed'}), 200
-        except Exception as e:
-            current_app.logger.error(f"Webhook seat duplicate check failed: {e}")
-
-        meta = data.get('meta', {}) or {}
-        pkg_type = meta.get('package_type') or package_type
-        if pkg_type not in ('single', 'bundle'):
-            pkg_type = 'single'
-        _, next_billing, seat_count, monthly = models.calculate_seat_proration(pkg_type)
-        try:
-            seat_count = int(meta.get('seat_count') or seat_count)
-            monthly    = float(meta.get('monthly')    or monthly)
-        except (TypeError, ValueError):
-            pass
-        if meta.get('next_billing'):
-            from datetime import date as _date
-            try:
-                next_billing = _date.fromisoformat(meta['next_billing'])
-            except (ValueError, TypeError):
-                pass
-
-        user = models.get_user_by_id(user_id)
-        if not user:
-            current_app.logger.error(f"Webhook seat: user {user_id} not found (txn {txn_id})")
-            return jsonify({'status': 'user not found'}), 200
-
-        sub_id = models.create_seat_subscription(
-            agency_id       = user_id,
-            package_type    = pkg_type,
-            first_payment   = amount,
-            monthly_amount  = monthly,
-            seat_count      = seat_count,
-            next_billing_date = next_billing,
-            tx_ref          = tx_ref,
-        )
-        models.record_payment(
-            user_id, amount, 'agency',
-            provider  = 'flutterwave_seat',
-            reference = txn_id,
-            notes     = (
-                f"Seat purchase webhook: {pkg_type} ({seat_count} seat(s)) "
-                f"sub_id={sub_id}"
-            ),
-        )
-        models.track_event(
-            'seat_purchased', user_id=user_id,
-            metadata={'package': pkg_type, 'seats': seat_count,
-                      'amount': amount, 'sub_id': sub_id, 'source': 'webhook'},
-        )
-        current_app.logger.info(
-            f"[SeatWebhook] OK user={user_id} pkg={pkg_type} "
-            f"seats={seat_count} amount={amount} sub_id={sub_id}"
-        )
-        return jsonify({'status': 'ok'}), 200
-
-    # ── Seat subscription — renewal (lumvi_seat_renewal_{sub_id}_{user_id}_{ts}) ─
-    if plan == 'seat' and len(parts) >= 3 and parts[2] == 'renewal':
-        try:
-            sub_id  = int(parts[3]) if len(parts) >= 4 else None
-            user_id = int(parts[4]) if len(parts) >= 5 else None
-        except (IndexError, ValueError):
-            sub_id = user_id = None
-
-        if not sub_id or not user_id:
-            current_app.logger.error(
-                f"Webhook seat renewal: bad tx_ref '{tx_ref}'"
-            )
-            return jsonify({'status': 'bad tx_ref'}), 200
-
-        # Duplicate check
-        try:
-            conn, cursor = models.get_db()
-            cursor.execute(
-                "SELECT id FROM payments WHERE reference = %s LIMIT 1", (txn_id,)
-            )
-            already = cursor.fetchone()
-            cursor.close(); conn.close()
-            if already:
-                return jsonify({'status': 'already processed'}), 200
-        except Exception as e:
-            current_app.logger.error(f"Webhook seat renewal duplicate check failed: {e}")
-
-        models.renew_seat(sub_id, txn_id)
-        models.record_payment(
-            user_id, amount, 'agency',
-            provider  = 'flutterwave_seat_renewal',
-            reference = txn_id,
-            notes     = f"Seat renewal sub_id={sub_id}",
-        )
-        current_app.logger.info(
-            f"[SeatRenewalWebhook] OK sub_id={sub_id} user={user_id} "
-            f"amount={amount} txn={txn_id}"
-        )
-        return jsonify({'status': 'ok'}), 200
-
-    # ── Overage payment path ──────────────────────────────────────────────────
-    if plan == 'overage':
-        # lumvi_overage_{user_id}_{ts}
-        try:
-            user_id = int(parts[2]) if len(parts) >= 3 else None
-        except (IndexError, ValueError):
-            user_id = None
-
-        if not user_id:
-            current_app.logger.error(
-                f"Flutterwave webhook (overage): no user_id in tx_ref '{tx_ref}'"
-            )
-            return jsonify({'status': 'bad tx_ref'}), 200
-
-        # Duplicate check
-        try:
-            conn, cursor = models.get_db()
-            cursor.execute(
-                "SELECT id FROM payments WHERE reference = %s LIMIT 1", (txn_id,)
-            )
-            already = cursor.fetchone()
-            cursor.close(); conn.close()
-            if already:
-                current_app.logger.info(f"Webhook overage: already processed txn {txn_id}")
-                return jsonify({'status': 'already processed'}), 200
-        except Exception as e:
-            current_app.logger.error(f"Webhook overage duplicate check failed: {e}")
-
-        user = models.get_user_by_id(user_id)
-        if not user:
-            current_app.logger.error(f"Webhook overage: user {user_id} not found (txn {txn_id})")
-            return jsonify({'status': 'user not found'}), 200
-
-        models.record_payment(
-            user_id, amount, 'agency',
-            provider='flutterwave_overage',
-            reference=txn_id,
-            notes=f"Seat overage webhook — tx_ref={tx_ref}",
-            payment_date=txn_created_at,
-        )
-
-        if hasattr(models, 'mark_overage_paid'):
-            models.mark_overage_paid(user_id, reference=txn_id)
-
-        models.track_event(
-            'overage_paid', user_id=user_id,
-            metadata={'amount': amount, 'tx_ref': tx_ref, 'source': 'webhook'},
-        )
-        current_app.logger.info(
-            f"Webhook overage payment OK: user={user_id} amount={amount} txn={txn_id}"
-        )
-        return jsonify({'status': 'ok'}), 200
-
     # ── Standard plan-upgrade path ────────────────────────────────────────────
     try:
         if len(parts) > 2 and parts[2] in ('monthly', 'annual'):
@@ -780,110 +465,14 @@ def flutterwave_webhook():
 
 
 # =====================================================================
-# AGENCY SEAT SUBSCRIPTION ROUTES
+# AGENCY SEAT SUBSCRIPTION ROUTES — REMOVED
+# Both routes gated on current_user.plan_type == 'agency', which can
+# never be true again (migrate_ai_employee_plan_rename() moved every
+# 'agency' account to 'ai_scale', and no plan grants more than 1 store
+# anymore — there's nothing left to buy seats for). Removed rather than
+# left in place: they were already unreachable (always 403) before this
+# edit, this just removes the dead code along with the dead data path.
 # =====================================================================
-
-@billing_bp.route('/agency/seat-prices', methods=['GET'])
-@login_required
-def seat_prices():
-    """
-    Return prorated first-payment amounts for both seat packages.
-    Called by the Buy Seat modal JS when it opens so prices are live.
-    """
-    if current_user.plan_type not in ('agency',):
-        return jsonify({'error': 'Agency accounts only'}), 403
-    result = {}
-    for pkg in ('single', 'bundle'):
-        prorated, next_billing, seat_count, monthly = models.calculate_seat_proration(pkg)
-        result[pkg] = {
-            'prorated':     prorated,
-            'monthly':      monthly,
-            'seats':        seat_count,
-            'next_billing': next_billing.strftime('%B 1, %Y'),
-        }
-    return jsonify(result)
-
-
-@billing_bp.route('/agency/buy-seat', methods=['POST'])
-@login_required
-def buy_seat():
-    """
-    Generate a Flutterwave hosted-checkout link for an extra seat subscription.
-    The Buy Seat modal JS POSTs { package_type: 'single' | 'bundle' } here,
-    receives payment_link, and redirects the browser to Flutterwave checkout.
-
-    tx_ref format: lumvi_seat_{package_type}_{user_id}_{timestamp}
-    On payment: callback/webhook detects parts[1]=='seat', creates subscription row.
-    """
-    if current_user.plan_type not in ('agency',):
-        return jsonify({'error': 'Only agency accounts can purchase extra seats'}), 403
-
-    data         = request.get_json() or {}
-    package_type = data.get('package_type', 'single')
-    if package_type not in ('single', 'bundle'):
-        return jsonify({'error': 'Invalid package type — must be single or bundle'}), 400
-
-    prorated, next_billing, seat_count, monthly = models.calculate_seat_proration(package_type)
-    ts     = int(time.time())
-    tx_ref = f'lumvi_seat_{package_type}_{current_user.id}_{ts}'
-
-    flw_secret = os.environ.get('FLW_SECRET_KEY', '')
-    if not flw_secret:
-        return jsonify({'error': 'Payment not configured — contact support'}), 500
-
-    base_url   = os.environ.get('APP_BASE_URL', 'https://lumvi.net')
-    seat_label = '1 Extra Seat' if package_type == 'single' else '5-Seat Bundle'
-    try:
-        resp = _requests.post(
-            'https://api.flutterwave.com/v3/payments',
-            headers={'Authorization': f'Bearer {flw_secret}'},
-            json={
-                'tx_ref':       tx_ref,
-                'amount':       prorated,
-                'currency':     'USD',
-                'redirect_url': f'{base_url}/payment/flutterwave/callback',
-                'customer':     {'email': current_user.email},
-                'meta': {
-                    'type':         'seat',
-                    'package_type': package_type,
-                    'user_id':      current_user.id,
-                    'seat_count':   seat_count,
-                    'monthly':      monthly,
-                    'next_billing': next_billing.isoformat(),
-                },
-                'customizations': {
-                    'title':       f'Lumvi — {seat_label}',
-                    'description': (
-                        f'${prorated:.2f} today (prorated), '
-                        f'then ${monthly:.0f}/month from {next_billing.strftime("%b 1, %Y")}'
-                    ),
-                },
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        link_data = resp.json()
-        if link_data.get('status') != 'success':
-            raise ValueError(link_data.get('message', 'Flutterwave error'))
-        payment_link = link_data['data']['link']
-    except Exception as e:
-        current_app.logger.error(f'[BuySeat] FLW link error: {e}')
-        return jsonify({'error': 'Could not generate payment link. Please try again.'}), 500
-
-    current_app.logger.info(
-        f'[BuySeat] user={current_user.id} pkg={package_type} '
-        f'prorated=${prorated} tx_ref={tx_ref}'
-    )
-    return jsonify({
-        'success':      True,
-        'payment_link': payment_link,
-        'tx_ref':       tx_ref,
-        'amount':       prorated,
-        'monthly':      monthly,
-        'seat_count':   seat_count,
-        'next_billing': next_billing.strftime('%B 1, %Y'),
-        'package_type': package_type,
-    })
 
 
 @billing_bp.route('/subscription/cancel', methods=['GET', 'POST'])

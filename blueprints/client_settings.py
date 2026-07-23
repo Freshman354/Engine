@@ -10,8 +10,8 @@ Each save button posts one field at a time:
   { client_id, notification_phone }   → UPDATE clients SET notification_phone
   { client_id, webhook_url }          → upsert into webhook_configs via save_webhooks()
 
-Ownership is enforced on every request — agencies can only edit
-clients that belong to their account.
+Ownership is enforced on every request — a merchant can only edit
+the one store their account owns.
 """
 
 import re
@@ -154,28 +154,14 @@ def update_client_settings():
     if not updates and webhook_url is None:
         return jsonify({'success': False, 'error': 'No valid fields provided'}), 400
 
-    # FIX: notification_email used to be freely agency-editable text with no
-    # ownership guarantee at all — any string, no verification. If this
-    # client has a designated primary contact (a client_user who holds their
-    # own portal login — see models.get_primary_contact), that person's
-    # email is the source of truth going forward and the agency can no
-    # longer overwrite it directly here. Change who the primary contact is
-    # via /api/client-users/set-primary instead.
-    if 'notification_email' in updates:
-        primary = models.get_primary_contact(client_id)
-        if primary:
-            return jsonify({
-                'success': False,
-                'error': (
-                    "This client has a designated primary contact — "
-                    "notification email is managed from Client Users, "
-                    "not set directly."
-                ),
-            }), 409
-            # 409 Conflict: the request is well-formed, but this field is no
-            # longer agency-owned — distinct from a 400 (bad input) or a 403
-            # (route in general is unauthorized), since neither describes
-            # "this specific field has moved out of your control."
+    # Previously: if this client had a designated primary contact (a
+    # client_user seat login), that person's email overrode this field and
+    # the merchant couldn't edit notification_email directly here. The
+    # client-user/seat system was removed along with the agency business
+    # model (see blueprints/agency.py's removal report) — models.get_primary_contact
+    # and the client_users table it reads from are now dead code (left in
+    # models.py pending a follow-up cleanup pass). notification_email is
+    # simply merchant-editable now.
 
     # ── Write notification columns to clients table ────────────────────────────
     if updates:

@@ -339,6 +339,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                     <button class="btn btn-primary" onclick="openNewClientModal()">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Store Slot
                     </button>
+                {% elif limit_reached and single_store_plan %}
+                    <span class="btn btn-upgrade" style="cursor:default;">Your plan includes one store.</span>
                 {% elif limit_reached %}
                     <a href="/upgrade" class="btn btn-upgrade">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>Upgrade
@@ -526,9 +528,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 <div class="empty-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
                 <h2>No Stores Connected Yet</h2>
                 <p>Connect your Shopify or WooCommerce store to bring your AI employee online</p>
+                {% if limit_reached and plan_type in ('starter', 'growth', 'scale', 'ai_starter', 'ai_growth', 'ai_scale') %}
+                <div class="empty-state-note" style="color:var(--sub);font-size:14px;">Your plan includes one store.</div>
+                {% else %}
                 <button class="btn btn-primary" onclick="openNewClientModal()">
                     {% if plan_type == 'agency' and limit_reached %}Add Store Slot{% elif overage_payment_status == 'overdue' %}Pay Invoice to Connect a Store{% else %}Connect Your First Store{% endif %}
                 </button>
+                {% endif %}
             </div>
         </div>
         {% endif %}

@@ -32,9 +32,9 @@ Each Lumvi client has one row in client_integrations keyed by
   • webhook_secret  — used to verify HMAC signatures
   • platform_config — JSON blob for any extra per-platform settings
 
-The agency sets this up once in the Lumvi dashboard. The small
-business owner then pastes the generated webhook URL into their
-platform's settings. No ongoing maintenance needed.
+The merchant sets this up once in the Lumvi dashboard, then pastes
+the generated webhook URL into their platform's settings. No ongoing
+maintenance needed.
 
 Signature schemes (all verified against each platform's own docs —
 see the module-level comment above each _verify_*_signature function
@@ -48,7 +48,10 @@ for the exact source):
                  (signs "{notification_url}{body}" — URL matters)
 
 Supported platforms (v1)
-  • shopify      — orders/created, orders/updated, orders/cancelled
+  • shopify      — orders/created, orders/updated, orders/cancelled,
+                   orders/fulfilled, orders/paid, checkouts/create,
+                   checkouts/update (checkouts/* only captured for
+                   clients with cart_recovery_enabled=True)
   • woocommerce  — order.created, order.updated, order.deleted, order.restored
   • acuity       — appointment.scheduled, appointment.rescheduled,
                    appointment.cancelled
@@ -164,7 +167,7 @@ def upsert_integration(client_id: str, platform: str,
     """
     Create or update a client integration row.
 
-    Called from the Lumvi agency dashboard when an operator sets up
+    Called from the Lumvi dashboard when a merchant sets up
     a new platform connection. Returns True on success.
 
     Args:
@@ -539,6 +542,43 @@ def _upsert_order(client_id: str, order_data: dict) -> bool:
         if conn:   conn.close()
 
 
+# =====================================================================
+# SHOPIFY CHECKOUT NORMALISER — cart recovery
+# Shopify checkouts/create and checkouts/update webhooks fire as a
+# customer fills in the checkout form. Same shape for both topics.
+# https://shopify.dev/docs/api/admin-rest/latest/resources/abandoned-checkouts
+# =====================================================================
+
+def _normalise_shopify_checkout(payload: dict) -> dict:
+    """
+    Map a Shopify checkout payload → the kwargs upsert_abandoned_cart() expects.
+    """
+    customer   = payload.get('customer') or {}
+    billing    = payload.get('billing_address') or {}
+    email      = (payload.get('email') or customer.get('email') or '').lower().strip()
+    first_name = customer.get('first_name') or billing.get('first_name') or ''
+    last_name  = customer.get('last_name') or billing.get('last_name') or ''
+    name       = f"{first_name} {last_name}".strip() or email
+
+    items = []
+    for li in (payload.get('line_items') or []):
+        items.append({
+            'name':     li.get('title', ''),
+            'quantity': li.get('quantity', 1),
+            'price':    li.get('price', '0.00'),
+        })
+
+    return {
+        'checkout_token': payload.get('token'),
+        'customer_email': email or None,
+        'customer_name':  name or None,
+        'cart_total':     payload.get('total_price'),
+        'currency':       payload.get('currency', 'USD'),
+        'line_items':     items,
+        'checkout_url':   payload.get('abandoned_checkout_url'),
+    }
+
+
 def _normalise_shopify_order(payload: dict, client_id: str) -> dict:
     """
     Map a Shopify order payload → Lumvi order dict.
@@ -609,6 +649,13 @@ def _normalise_shopify_order(payload: dict, client_id: str) -> dict:
         'currency':       payload.get('currency', 'USD'),
         'notes':          payload.get('note') or '',
         'created_at':     created_at,
+        # Links this order back to the checkout that produced it, so
+        # cart-recovery can mark the matching abandoned_carts row
+        # 'recovered' — see mark_cart_recovered() call in
+        # handle_shopify_webhook(). Present on Shopify order payloads;
+        # None if the order didn't originate from a tracked checkout
+        # (e.g. a manually-created draft order).
+        'checkout_token': payload.get('checkout_token'),
     }
 
 
@@ -724,15 +771,49 @@ def handle_shopify_webhook(client_id: str, raw_body: bytes,
 
     # 4. Route by topic
     topic = (topic or '').lower().strip()
-    supported_topics = {'orders/created', 'orders/updated', 'orders/cancelled',
+    order_topics    = {'orders/created', 'orders/updated', 'orders/cancelled',
                         'orders/fulfilled', 'orders/paid'}
+    checkout_topics = {'checkouts/create', 'checkouts/update'}
+    supported_topics = order_topics | checkout_topics
 
     if topic not in supported_topics:
         # Return 200 to prevent Shopify from retrying non-order topics
         _log_webhook(client_id, 'shopify', topic, 'ok', phash, 'topic ignored')
         return {'status': 'ignored', 'topic': topic}, 200
 
-    # 5. Normalise and upsert
+    # 5a. Checkout topics — abandoned-cart capture for cart recovery.
+    # Only tracked for clients who've turned the feature on (plan-gated at
+    # the point cart_recovery_enabled is set — see client_settings.py).
+    if topic in checkout_topics:
+        try:
+            client = models.get_client_by_id(client_id)
+            if not client or not client.get('cart_recovery_enabled'):
+                _log_webhook(client_id, 'shopify', topic, 'ok', phash,
+                             'cart recovery not enabled for this client')
+                return {'status': 'ignored', 'topic': topic}, 200
+
+            checkout_data = _normalise_shopify_checkout(payload)
+            if not checkout_data.get('checkout_token'):
+                raise ValueError('Could not extract checkout token from payload')
+
+            result = models.upsert_abandoned_cart(client_id, **checkout_data)
+            if not result.get('success'):
+                raise RuntimeError(result.get('error', 'upsert_abandoned_cart failed'))
+
+            logger.info(
+                f'[Shopify] {topic} → cart={checkout_data["checkout_token"]} client={client_id}'
+            )
+            _log_webhook(client_id, 'shopify', topic, 'ok', phash)
+            return {'status': 'ok', 'checkout_token': checkout_data['checkout_token']}, 200
+
+        except Exception as e:
+            logger.error(f'[Shopify] checkout processing error client={client_id} topic={topic}: {e}')
+            _log_webhook(client_id, 'shopify', topic, 'error', phash, str(e))
+            return {'error': 'Processing failed'}, 500
+
+    # 5b. Order topics — order upsert, plus close out any abandoned cart
+    # this order completed (prevents a recovery email going out for a
+    # cart that already converted).
     try:
         order_data = _normalise_shopify_order(payload, client_id)
         if not order_data.get('order_id'):
@@ -741,6 +822,9 @@ def handle_shopify_webhook(client_id: str, raw_body: bytes,
         success = _upsert_order(client_id, order_data)
         if not success:
             raise RuntimeError('DB upsert failed')
+
+        if order_data.get('checkout_token'):
+            models.mark_cart_recovered(client_id, order_data['checkout_token'])
 
         logger.info(
             f'[Shopify] {topic} → order={order_data["order_id"]} '
@@ -1492,7 +1576,7 @@ def register_webhook_routes(app):
     # function used to run before app.py's route definitions, the
     # unauthenticated versions here were silently shadowing app.py's
     # secured ones — anyone who knew or guessed a client_id could create,
-    # view, or delete another agency's integration with zero login.
+    # view, or delete another merchant's integration with zero login.
     # Removed rather than fixed-in-place so there is exactly one
     # implementation of each route, not two that can drift apart again.
 
@@ -1501,13 +1585,13 @@ def register_webhook_routes(app):
 
 # =====================================================================
 # ONBOARDING INSTRUCTIONS
-# Returned to the dashboard so the agency knows exactly what to paste
-# into the platform settings for their client.
+# Returned to the dashboard so the merchant knows exactly what to paste
+# into their platform's settings.
 # =====================================================================
 
 def _onboarding_instructions(platform: str, webhook_url: str) -> dict:
     """
-    Human-readable setup instructions for the agency operator.
+    Human-readable setup instructions for the merchant.
     Returned as part of the POST /api/integrations response.
     """
     if platform == 'shopify':
@@ -1519,12 +1603,16 @@ def _onboarding_instructions(platform: str, webhook_url: str) -> dict:
                 f'Paste this URL: {webhook_url}',
                 'Set Format to JSON',
                 'Subscribe to: orders/created, orders/updated, orders/cancelled',
+                'If you plan to turn on cart recovery, also subscribe to: '
+                'checkouts/create, checkouts/update',
                 'Copy the "Webhook signing secret" shown after saving',
                 'Paste the signing secret back into the Lumvi dashboard',
             ],
             'note': (
                 'Lumvi only stores order ID, status, customer name/email, '
-                'items, and total. No payment details are ever stored.'
+                'items, and total. No payment details are ever stored. '
+                'Checkout data is only captured if cart recovery is turned '
+                'on for your store.'
             ),
         }
 

@@ -792,6 +792,7 @@ class AIHelper:
         kb_version:            Optional[int] = None,
         session_id:            Optional[str] = None,
         lead_q3:               str = '',
+        product_recommendations_enabled: bool = True,
     ) -> Dict:
 
         conversation_history = conversation_history or []
@@ -811,6 +812,7 @@ class AIHelper:
             lead_triggers=lead_triggers,
             kb_version=kb_version,
             session_id=session_id,
+            product_recommendations_enabled=product_recommendations_enabled,
         )
 
         # ── Response cache key ─────────────────────────────────────────
@@ -1266,7 +1268,19 @@ class AIHelper:
                 ).to_dict()
 
             # ── Tool dispatch exit ────────────────────────────────────
-            if intent['intent'] == 'tool' and intent.get('tool'):
+            # FIX: search_products had no plan gate at all — PLAN_LIMITS
+            # ['product_recommendations'] is False on Free/Starter but was
+            # never actually checked anywhere in the dispatch path, so
+            # every plan got full AI product search regardless. Gated here
+            # rather than inside dispatch_tool/tools.py: on a blocked plan
+            # this falls through to normal FAQ/RAG handling below (as if no
+            # tool had been detected), rather than dispatching and then
+            # returning an error — the shopper still gets a helpful answer,
+            # and no "upgrade your plan" messaging leaks to them (that's
+            # the merchant's billing relationship, not theirs to see).
+            if (intent['intent'] == 'tool' and intent.get('tool')
+                    and not (intent['tool'] == 'search_products'
+                             and not ctx.product_recommendations_enabled)):
                 tool_name = intent['tool']
 
                 if is_write_tool(tool_name):

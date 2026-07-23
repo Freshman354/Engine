@@ -62,6 +62,11 @@ class PipelineRequest:
     kb_version: Optional[int]             = None
     session_id: Optional[str]             = None
 
+    # Plan gate for the search_products tool — see PLAN_LIMITS['product_recommendations']
+    # in app.py. False on Free/Starter. Checked in the tool-dispatch stage
+    # (ai_helper.generate_response) before search_products is allowed to run.
+    product_recommendations_enabled: bool = True
+
     # ── Preprocessing ─────────────────────────────────────────────────
     # clean_message: whitespace-normalised version of user_message.
     # Set by the preprocess stage; all subsequent stages read this,

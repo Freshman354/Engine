@@ -247,12 +247,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
   <!-- PAGE HEADER -->
   <div class="page-header">
     <div>
-      <h1>My Clients</h1>
-      <p>{{ client_count }} client{{ 's' if client_count != 1 else '' }} · {{ slots_display }} slot{{ '' if slots_display == 'Unlimited' else 's' }} total</p>
+      <h1>My Stores</h1>
+      <p>{{ client_count }} store{{ 's' if client_count != 1 else '' }} · {{ slots_display }} slot{{ '' if slots_display == 'Unlimited' else 's' }} total</p>
     </div>
     <a href="/dashboard" class="btn-primary" onclick="openNewClientModal(); return false;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Add Client
+      Add Store
     </a>
   </div>
 
@@ -261,7 +261,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
     <div class="summary-card">
       <div class="summary-label">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Total Clients
+        Total Stores
       </div>
       <div class="summary-value">{{ client_count }}</div>
       <div class="summary-sub">of {{ slots_display }} allowed</div>
@@ -272,7 +272,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         Total Leads
       </div>
       <div class="summary-value">{{ total_leads }}</div>
-      <div class="summary-sub">across all clients</div>
+      <div class="summary-sub">across all stores</div>
     </div>
     <div class="summary-card">
       <div class="summary-label">
@@ -520,7 +520,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
       </svg>
     </div>
-    <h2>Delete Client?</h2>
+    <h2>Delete Store?</h2>
     <p>You are about to permanently delete:</p>
     <div class="del-name" id="deleteClientName">—</div>
     <p style="font-size:13px;">All FAQs, leads and conversations will be removed. <strong>This cannot be undone.</strong></p>

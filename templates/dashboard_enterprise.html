@@ -92,6 +92,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
 .status-badge.active{background:var(--success-lt);color:var(--success);}
 .status-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;}
+.platform-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;font-size:11.5px;font-weight:700;}
+.platform-badge.shopify{background:rgba(149,191,71,0.14);color:#5C7A2E;}
+.platform-badge.woocommerce{background:rgba(127,84,179,0.12);color:#7F54B3;}
+.platform-badge-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
 .table-actions{display:flex;gap:5px;flex-wrap:wrap;}
 .btn-xs{padding:5px 10px;font-size:11.5px;border-radius:7px;border:none;cursor:pointer;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:all 0.15s;font-family:'DM Sans',sans-serif;white-space:nowrap;}
 .btn-xs svg{width:11px;height:11px;flex-shrink:0;}
@@ -200,14 +204,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .embed-lang-tag{position:absolute;top:10px;right:10px;background:var(--gold);color:#fff;padding:2px 9px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:0.5px;}
 .embed-actions{margin-top:14px;display:flex;gap:10px;}
 .embed-tip{margin-top:14px;padding:12px 14px;background:var(--warning-lt);border-left:3px solid var(--warning);border-radius:8px;font-size:12px;color:#92400e;line-height:1.6;}
-.vertical-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;}
-.vertical-card{background:var(--cream);border:1.5px solid var(--border);border-radius:10px;padding:12px 8px;text-align:center;cursor:pointer;transition:all 0.2s;display:flex;flex-direction:column;align-items:center;gap:5px;}
-.vertical-card:hover{border-color:rgba(184,146,74,0.4);background:var(--gold-lt);}
-.vertical-card.selected{border-color:var(--gold);background:var(--gold-lt);box-shadow:0 0 0 3px rgba(184,146,74,0.12);}
-.vertical-icon{font-size:20px;}
-.vertical-label{font-size:11px;font-weight:600;color:var(--mid);}
-.vertical-card.selected .vertical-label{color:var(--gold-dk);}
-.vertical-preview{background:rgba(184,146,74,0.06);border:1px solid rgba(184,146,74,0.2);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--mid);line-height:1.5;min-height:36px;}
+.dash-platform-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+.dash-platform-card{border:2px solid var(--border);border-radius:12px;padding:18px 14px;text-align:center;cursor:pointer;transition:all 0.18s;background:var(--cream);}
+.dash-platform-card:hover{border-color:var(--sub);}
+.dash-platform-card.selected[data-platform="shopify"]{border-color:#95BF47;background:rgba(149,191,71,0.1);}
+.dash-platform-card.selected[data-platform="woocommerce"]{border-color:#7F54B3;background:rgba(127,84,179,0.08);}
+.dash-platform-logo{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin:0 auto 8px;font-size:18px;}
+.dash-platform-logo.shopify{background:#95BF47;}
+.dash-platform-logo.woo{background:#7F54B3;}
+.dash-platform-name{font-size:13.5px;font-weight:700;color:var(--dark);}
 .toast{position:fixed;bottom:20px;right:20px;padding:12px 18px;border-radius:10px;font-size:14px;font-weight:600;color:#fff;z-index:9999;opacity:0;transform:translateY(10px);transition:all 0.3s;pointer-events:none;max-width:300px;}
 .toast.show{opacity:1;transform:translateY(0);}
 .toast.success{background:var(--success);}
@@ -238,7 +243,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 @media(max-width:480px){
     .stats-row{grid-template-columns:1fr 1fr;}
     .modal-content,.embed-modal-content,.delete-modal-content{padding:20px;}
-    .vertical-grid{grid-template-columns:repeat(2,1fr);}
+    .dash-platform-grid{grid-template-columns:1fr;}
 }
     </style>
 </head>
@@ -253,8 +258,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         <div class="nav-label">Main</div>
         <a href="/dashboard" class="nav-item active">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-            Dashboard
-            {% if clients %}<span class="nav-badge">{{ clients|length }}</span>{% endif %}
+            Your Store
         </a>
         <a href="/sales" class="nav-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
@@ -264,13 +268,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
             Affiliate
         </a>
-        {% if plan_type in ('agency', 'enterprise') or user.is_admin %}
-        <a href="/client-portal" class="nav-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Client Portal
-        </a>
-        {% endif %}
-        {% if plan_type in ('pro', 'agency', 'enterprise') or user.is_admin %}
+        {% if plan_limits.webhooks or user.is_admin %}
         <a href="/integrations" class="nav-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             Integrations
@@ -310,7 +308,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
             <button class="hamburger" onclick="openSidebar()" aria-label="Open menu">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
             </button>
-            <span class="topbar-title">Dashboard</span>
+            <span class="topbar-title">Your Store</span>
         </div>
         <div class="topbar-right">
             <span class="plan-chip">{{ plan_type or user.plan_type }}</span>
@@ -321,7 +319,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         <div class="page-header">
             <div class="page-header-left">
                 <h1>Overview</h1>
-                <p>Manage your chatbot clients and monitor activity</p>
+                <p>Manage your connected store and see how your AI employee is performing</p>
             </div>
             <div class="page-header-actions">
                 <a href="/affiliate-dashboard" class="btn btn-affiliate">
@@ -330,25 +328,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 <a href="/sales" class="btn btn-secondary">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>Sales Page
                 </a>
-                {% if limit_reached and plan_type == 'agency' %}
+                {% if not clients %}
                     <button class="btn btn-primary" onclick="openNewClientModal()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Seat
-                    </button>
-                {% elif limit_reached %}
-                    <a href="/upgrade" class="btn btn-upgrade">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg>Upgrade
-                    </a>
-                {% elif plan_type == 'agency' and overage_payment_status == 'overdue' %}
-                    <a href="{{ overage_payment_link }}" class="btn btn-upgrade" style="background:linear-gradient(135deg,#DC2626,#B91C1C);" target="_blank" rel="noopener">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Pay Invoice
-                    </a>
-                {% elif plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
-                    <a href="/upgrade" class="btn btn-upgrade" title="Add a payment method to create extra seats">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Add Payment Method
-                    </a>
-                {% else %}
-                    <button class="btn btn-primary" onclick="openNewClientModal()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New Client
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Connect Your Store
                     </button>
                 {% endif %}
             </div>
@@ -357,18 +339,25 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
             <div class="stat-card">
                 <div class="stat-label">
                     <div class="stat-icon-box" style="background:var(--gold-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="#B8924A" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-                    Total Clients
+                    Store Status
                 </div>
-                <div class="stat-value-row"><span class="stat-value">{{ client_count or clients|length }}</span></div>
-                <div class="stat-sub">{% if slots_display == 'Unlimited' %}Unlimited plan{% else %}of {{ slots_display }} allowed{% endif %}</div>
+                <div class="stat-value-row"><span class="stat-value" style="font-size:20px;">{% if clients %}Connected{% else %}Not Connected{% endif %}</span></div>
+                <div class="stat-sub">{% if clients %}Your AI employee is live{% else %}Connect a store to go live{% endif %}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">
-                    <div class="stat-icon-box" style="background:var(--success-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
-                    Active Bots
+                    <div class="stat-icon-box" style="background:var(--success-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+                    Conversations
                 </div>
-                <div class="stat-value-row"><span class="stat-value">{{ clients|length }}</span><span class="stat-trend up">Live</span></div>
-                <div class="stat-sub">All clients running</div>
+                <div class="stat-value-row">
+                    <span class="stat-value" style="font-size:20px;">{{ monthly_conversations }}{% if plan_limits.conversations_per_month %} <span style="color:var(--sub);font-weight:500;">/ {{ plan_limits.conversations_per_month }}</span>{% endif %}</span>
+                    {% if clients %}<span class="stat-trend up">This month</span>{% endif %}
+                </div>
+                <div class="stat-sub">
+                    {% if not clients %}Nothing connected yet
+                    {% elif plan_limits.conversations_per_month and monthly_conversations >= plan_limits.conversations_per_month %}<span style="color:var(--warning);font-weight:600;">Limit reached — </span><a href="/upgrade" style="color:var(--gold);font-weight:600;text-decoration:none;">upgrade →</a>
+                    {% else %}Answering customer questions{% endif %}
+                </div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">
@@ -378,111 +367,58 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 <div class="stat-value-row"><span class="stat-value" style="font-size:20px;text-transform:capitalize;">{{ plan_type or user.plan_type }}</span></div>
                 <div class="stat-sub"><a href="/upgrade" style="color:var(--gold);text-decoration:none;font-weight:600;">Upgrade →</a></div>
             </div>
-            <div class="stat-card">
-                <div class="stat-label">
-                    <div class="stat-icon-box" style="background:#fdf2f8;"><svg viewBox="0 0 24 24" fill="none" stroke="#9d174d" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-                    Slots Used
-                </div>
-                <div class="stat-value-row"><span class="stat-value">{{ client_count or clients|length }}</span><span class="stat-trend neutral">/ {{ slots_display or '∞' }}</span></div>
-                <div class="stat-sub">{% if limit_reached %}<span style="color:var(--warning);font-weight:600;">Limit reached</span>{% else %}Slots available{% endif %}</div>
-            </div>
         </div>
-        {% if plan_type == 'agency' and limit_reached %}
-        {# ── ALL SEATS IN USE: prompt to buy ── #}
-        <div style="background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:16px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;">
-            <div style="display:flex;align-items:center;gap:12px;min-width:0;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" style="width:22px;height:22px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                <span style="font-size:13.5px;color:#78350F;line-height:1.5;">
-                    <strong>All {{ client_limit }} seat{{ 's' if client_limit != 1 else '' }} in use.</strong>
-                    Add a seat to create more chatbots — $15/mo for 1 seat or $60/mo for 5.
-                </span>
-            </div>
-            <button onclick="openNewClientModal()"
-                    style="flex-shrink:0;padding:10px 20px;background:#D97706;color:#fff;border-radius:8px;font-weight:700;font-size:13px;border:none;cursor:pointer;white-space:nowrap;">
-                Add Seat →
-            </button>
-        </div>
-
-        {% elif plan_type == 'agency' and active_seat_count > 0 %}
-        {# ── HAS EXTRA SEATS, STILL ROOM ── #}
-        <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-            <span style="font-size:13.5px;color:#166534;line-height:1.5;">
-                {{ active_seat_count }} active seat subscription{{ 's' if active_seat_count != 1 else '' }} —
-                {{ client_limit }} total slots available ({{ client_limit - client_count }} remaining).
-            </span>
-        </div>
-
-        {% elif plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
-        {# ── NO PAYMENT METHOD ── #}
-        <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" style="width:20px;height:20px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <span style="font-size:13.5px;color:#92400E;line-height:1.5;">
-                <strong>Payment method required.</strong> You have {{ client_count - agency_included_clients }} extra seat{{ 's' if (client_count - agency_included_clients) != 1 else '' }} above your {{ agency_included_clients }} included — each costs ${{ agency_seat_price|int }}/mo.
-                <a href="/upgrade" style="color:#B45309;font-weight:700;text-decoration:underline;">Add a payment method →</a>
-            </span>
-        </div>
-        {% endif %}
         <div class="section-header">
-            <span class="section-title">Your Clients</span>
-            {% if not limit_reached %}
-                {% if plan_type == 'agency' and limit_reached %}
-                    <button class="btn btn-primary" onclick="openNewClientModal()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Seat
-                    </button>
-                {% elif plan_type == 'agency' and overage_payment_status == 'overdue' %}
-                    <a href="{{ overage_payment_link }}" target="_blank" rel="noopener"
-                       class="btn btn-upgrade" style="background:linear-gradient(135deg,#DC2626,#B91C1C);" title="Pay your overdue invoice to add more chatbots">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Pay Invoice
-                    </a>
-                {% elif plan_type == 'agency' and client_count >= agency_included_clients and not has_payment_method %}
-                    <a href="/upgrade" class="btn btn-upgrade" title="Add a payment method to create extra seats">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Add Payment Method
-                    </a>
-                {% else %}
-                    <button class="btn btn-primary" onclick="openNewClientModal()">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Add Client
-                    </button>
-                {% endif %}
-            {% endif %}
+            <span class="section-title">Your Store</span>
         </div>
         {% if clients %}
+        {% set client = clients[0] %}
         <div class="clients-table-wrap">
             <table class="clients-table">
-                <thead><tr><th>Client</th><th>Client ID</th><th>Status</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Store</th><th>Platform</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>
-                    {% for client in clients %}
                     <tr id="row-{{ client.client_id }}">
                         <td><div class="client-cell"><div class="client-avatar-sm">{{ client.company_name[0]|upper }}</div><div class="client-cell-name">{{ client.company_name }}</div></div></td>
-                        <td><span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--sub);background:var(--cream);padding:3px 8px;border-radius:5px;">{{ client.client_id }}</span></td>
+                        <!-- TODO(backend): populate client.platform ('shopify' | 'woocommerce') from the store connection record -->
+                        <td>
+                            {% if client.platform == 'woocommerce' %}
+                            <span class="platform-badge woocommerce"><span class="platform-badge-dot"></span>WooCommerce</span>
+                            {% else %}
+                            <span class="platform-badge shopify"><span class="platform-badge-dot"></span>Shopify</span>
+                            {% endif %}
+                        </td>
                         <td><span class="status-badge active">Active</span></td>
                         <td>
                             <div class="table-actions">
-                                <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>FAQs</a>
+                                <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Knowledge</a>
                                 <a href="/article-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>Articles</a>
-                                {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<button onclick="openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="btn-xs btn-xs-logins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</button>{% endif %}
-                                {% if plan_type in ('pro', 'agency', 'enterprise') or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="btn-xs btn-xs-integrations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Integrations</a>{% endif %}
-                                <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Embed</button>
+                                <button onclick="openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="btn-xs btn-xs-logins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</button>
+                                {% if plan_limits.webhooks or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="btn-xs btn-xs-integrations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Integrations</a>{% endif %}
+                                <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Install</button>
                                 {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Analytics</a><a href="/client-report?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics" style="margin-left:2px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Report</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Analytics</button>{% endif %}
-                                {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>Theme</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Theme</button>{% endif %}
+                                {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>Customize AI</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Customize AI</button>{% endif %}
                                 <button class="btn-xs btn-xs-delete" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="confirmDelete(this.dataset.clientId, this.dataset.clientName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
                             </div>
                         </td>
                     </tr>
-                    {% endfor %}
                 </tbody>
             </table>
             <div class="client-cards-mobile">
-                {% for client in clients %}
                 <div class="client-card" id="card-{{ client.client_id }}">
                     <div class="client-card-top">
                         <div class="client-avatar-sm">{{ client.company_name[0]|upper }}</div>
-                        <div><div class="client-card-name">{{ client.company_name }}</div><div class="client-card-id">{{ client.client_id }}</div></div>
+                        <div><div class="client-card-name">{{ client.company_name }}</div>
+                            {% if client.platform == 'woocommerce' %}
+                            <span class="platform-badge woocommerce" style="margin-top:3px;"><span class="platform-badge-dot"></span>WooCommerce</span>
+                            {% else %}
+                            <span class="platform-badge shopify" style="margin-top:3px;"><span class="platform-badge-dot"></span>Shopify</span>
+                            {% endif %}
+                        </div>
                         <span class="status-badge active" style="margin-left:auto;">Active</span>
                     </div>
                     <div class="client-card-actions">
-                        <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">FAQs</a>
-                        {% if plan_type in ('pro', 'agency', 'enterprise') or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="btn-xs btn-xs-integrations">Integrations</a>{% endif %}
+                        <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">Knowledge</a>
+                        {% if plan_limits.webhooks or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="btn-xs btn-xs-integrations">Integrations</a>{% endif %}
                         {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics">Analytics</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Analytics</button>{% endif %}
                         <div class="card-menu">
                             <button class="btn-xs card-menu-btn" onclick="toggleCardMenu(event, '{{ client.client_id }}')" aria-label="More actions">
@@ -490,128 +426,52 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                             </button>
                             <div class="card-menu-dropdown" id="cardMenu-{{ client.client_id }}">
                                 <a href="/article-manager?client_id={{ client.client_id }}" class="card-menu-item">Articles</a>
-                                {% if plan_type in ('pro', 'agency', 'enterprise', 'solo') %}<button onclick="closeAllCardMenus();openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="card-menu-item">Dashboard</button>{% endif %}
-                                <button onclick="closeAllCardMenus();showEmbedCode('{{ client.client_id }}')" class="card-menu-item">Embed</button>
-                                {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="card-menu-item">Theme</a>{% endif %}
-                                <button class="card-menu-item card-menu-item-danger" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="closeAllCardMenus();confirmDelete(this.dataset.clientId, this.dataset.clientName)">Delete</button>
+                                <button onclick="closeAllCardMenus();openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="card-menu-item">Dashboard</button>
+                                <button onclick="closeAllCardMenus();showEmbedCode('{{ client.client_id }}')" class="card-menu-item">Install</button>
+                                {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="card-menu-item">Customize AI</a>{% endif %}
+                                <button class="card-menu-item card-menu-item-danger" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="closeAllCardMenus();confirmDelete(this.dataset.clientId, this.dataset.clientName)">Disconnect</button>
                             </div>
                         </div>
                     </div>
                 </div>
-                {% endfor %}
             </div>
         </div>
         {% else %}
         <div class="clients-table-wrap">
             <div class="empty-state">
                 <div class="empty-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-                <h2>No Clients Yet</h2>
-                <p>Create your first chatbot client to get started</p>
-                <button class="btn btn-primary" onclick="openNewClientModal()">
-                    {% if plan_type == 'agency' and limit_reached %}Add Seat{% elif overage_payment_status == 'overdue' %}Pay Invoice to Add Chatbots{% else %}Create First Client{% endif %}
-                </button>
+                <h2>No Store Connected Yet</h2>
+                <p>Connect your Shopify or WooCommerce store to bring your AI employee online</p>
+                <button class="btn btn-primary" onclick="openNewClientModal()">Connect Your Store</button>
             </div>
         </div>
         {% endif %}
     </div>
 </div>
-<!-- NEW CLIENT MODAL -->
+<!-- CONNECT A STORE MODAL -->
+<!-- Mirrors onboarding.html step 1 so returning merchants who disconnect and
+     reconnect get the same connect experience, not a separate mental model. -->
 <div class="modal" id="new-client-modal">
-    <div class="modal-content" style="max-width:560px;width:100%;">
-        <div class="modal-header"><h2>Create New Client</h2><button class="modal-close" onclick="closeModal()">×</button></div>
-        <form method="POST" action="/create-client">
-            <div class="form-group"><label>Company Name</label><input type="text" name="company_name" placeholder="Acme Corporation" required autofocus></div>
-            <div class="form-group">
-                <label>Industry Template</label>
-                <p style="font-size:13px;color:var(--sub);margin:-4px 0 12px;font-weight:300;">Pre-configures tone, prompts and FAQs for this industry.</p>
-                <input type="hidden" name="vertical" id="vertical-input" value="general">
-                <div class="vertical-grid" style="grid-template-columns:repeat(4,1fr);max-height:280px;overflow-y:auto;padding-right:4px;">
-                    <div class="vertical-card selected" data-vertical="general" onclick="selectVertical(this)"><span class="vertical-icon">🌐</span><span class="vertical-label">General</span></div>
-                    <div class="vertical-card" data-vertical="real_estate" onclick="selectVertical(this)"><span class="vertical-icon">🏠</span><span class="vertical-label">Real Estate</span></div>
-                    <div class="vertical-card" data-vertical="saas" onclick="selectVertical(this)"><span class="vertical-icon">💻</span><span class="vertical-label">SaaS</span></div>
-                    <div class="vertical-card" data-vertical="ecommerce" onclick="selectVertical(this)"><span class="vertical-icon">🛒</span><span class="vertical-label">E-commerce</span></div>
-                    <div class="vertical-card" data-vertical="healthcare" onclick="selectVertical(this)"><span class="vertical-icon">🏥</span><span class="vertical-label">Healthcare</span></div>
-                    <div class="vertical-card" data-vertical="law_firm" onclick="selectVertical(this)"><span class="vertical-icon">⚖️</span><span class="vertical-label">Law Firm</span></div>
-                    <div class="vertical-card" data-vertical="restaurant" onclick="selectVertical(this)"><span class="vertical-icon">🍽️</span><span class="vertical-label">Restaurant</span></div>
-                    <div class="vertical-card" data-vertical="hotel" onclick="selectVertical(this)"><span class="vertical-icon">🏨</span><span class="vertical-label">Hotel</span></div>
-                    <div class="vertical-card" data-vertical="fitness" onclick="selectVertical(this)"><span class="vertical-icon">🏋️</span><span class="vertical-label">Fitness</span></div>
-                    <div class="vertical-card" data-vertical="dental" onclick="selectVertical(this)"><span class="vertical-icon">🦷</span><span class="vertical-label">Dental</span></div>
-                    <div class="vertical-card" data-vertical="mortgage" onclick="selectVertical(this)"><span class="vertical-icon">🏦</span><span class="vertical-label">Mortgage</span></div>
-                    <div class="vertical-card" data-vertical="insurance" onclick="selectVertical(this)"><span class="vertical-icon">🛡️</span><span class="vertical-label">Insurance</span></div>
-                    <div class="vertical-card" data-vertical="education" onclick="selectVertical(this)"><span class="vertical-icon">🎓</span><span class="vertical-label">Education</span></div>
-                    <div class="vertical-card" data-vertical="automotive" onclick="selectVertical(this)"><span class="vertical-icon">🚗</span><span class="vertical-label">Automotive</span></div>
-                    <div class="vertical-card" data-vertical="beauty" onclick="selectVertical(this)"><span class="vertical-icon">💅</span><span class="vertical-label">Beauty</span></div>
-                    <div class="vertical-card" data-vertical="travel" onclick="selectVertical(this)"><span class="vertical-icon">✈️</span><span class="vertical-label">Travel</span></div>
-                    <div class="vertical-card" data-vertical="recruitment" onclick="selectVertical(this)"><span class="vertical-icon">💼</span><span class="vertical-label">Recruitment</span></div>
-                    <div class="vertical-card" data-vertical="accounting" onclick="selectVertical(this)"><span class="vertical-icon">📊</span><span class="vertical-label">Accounting</span></div>
-                    <div class="vertical-card" data-vertical="construction" onclick="selectVertical(this)"><span class="vertical-icon">🏗️</span><span class="vertical-label">Construction</span></div>
-                    <div class="vertical-card" data-vertical="pet_services" onclick="selectVertical(this)"><span class="vertical-icon">🐾</span><span class="vertical-label">Pet Services</span></div>
-                    <div class="vertical-card" data-vertical="nonprofit" onclick="selectVertical(this)"><span class="vertical-icon">❤️</span><span class="vertical-label">Non-Profit</span></div>
-                    <div class="vertical-card" data-vertical="events" onclick="selectVertical(this)"><span class="vertical-icon">🎉</span><span class="vertical-label">Events</span></div>
-                    <div class="vertical-card" data-vertical="therapy" onclick="selectVertical(this)"><span class="vertical-icon">🧠</span><span class="vertical-label">Therapy</span></div>
-                    <div class="vertical-card" data-vertical="photography" onclick="selectVertical(this)"><span class="vertical-icon">📸</span><span class="vertical-label">Photography</span></div>
-                </div>
-                <div class="vertical-preview" id="vertical-preview"><span id="preview-text">Friendly, professional assistant. Suitable for any business type.</span></div>
-            </div>
-            {% if plan_type == 'agency' and client_count >= agency_included_clients %}
-            <div style="background:#FEF9EC;border:1px solid #F59E0B;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:13px;color:#92400E;line-height:1.5;">
-                <strong>Extra seat:</strong> This client will be billed at <strong>${{ agency_seat_price|int }}/mo</strong> on your next invoice (seat {{ client_count + 1 }}, {{ agency_included_clients }} included in your plan).
-            </div>
-            {% endif %}
-            <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;">Create Client</button>
-        </form>
-    </div>
-</div>
-<!-- BUY SEAT MODAL -->
-<div class="modal" id="buy-seat-modal">
-    <div class="modal-content" style="max-width:580px;width:100%;">
-        <div class="modal-header">
-            <h2>Add Extra Seat</h2>
-            <button class="modal-close" onclick="closeBuySeatModal()">×</button>
-        </div>
-        <p style="color:var(--sub);font-size:14px;line-height:1.6;margin:-8px 0 20px;">
-            You've used all your included slots. Choose a seat package —
-            you'll pay a prorated amount today, then the monthly rate on the 1st of each month.
+    <div class="modal-content" style="max-width:520px;width:100%;">
+        <div class="modal-header"><h2>Connect a Store</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+        <p style="color:var(--sub);font-size:13.5px;line-height:1.6;margin:-10px 0 18px;">
+            Connect a Shopify or WooCommerce store — we'll import its catalog and policies automatically.
         </p>
-        <div id="seat-loading" style="text-align:center;padding:20px;color:var(--sub);font-size:14px;">
-            Loading prices…
-        </div>
-        <div id="seat-options" style="display:none;display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;">
-            <!-- Single Seat -->
-            <div style="border:2px solid var(--border);border-radius:14px;padding:20px;cursor:pointer;transition:all 0.15s;"
-                 id="seat-card-single"
-                 onclick="selectSeatPackage('single')"
-                 onmouseenter="this.style.borderColor='var(--gold)'"
-                 onmouseleave="if(selectedPkg!=='single')this.style.borderColor='var(--border)'">
-                <div style="font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:500;">SINGLE SEAT</div>
-                <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:700;color:var(--dark);" id="single-prorated">—</div>
-                <div style="font-size:12px;color:var(--sub);margin-top:2px;">today (prorated)</div>
-                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--mid);">
-                    then <strong>$15/month</strong> from <span id="single-next">—</span>
-                </div>
-                <div style="margin-top:10px;font-size:12px;color:var(--sub);">+1 chatbot slot</div>
+        <div class="dash-platform-grid">
+            <div class="dash-platform-card" data-platform="shopify" onclick="selectDashPlatform('shopify')">
+                <div class="dash-platform-logo shopify">🛍️</div>
+                <div class="dash-platform-name">Shopify</div>
             </div>
-            <!-- Bundle -->
-            <div style="border:2px solid var(--border);border-radius:14px;padding:20px;cursor:pointer;transition:all 0.15s;position:relative;"
-                 id="seat-card-bundle"
-                 onclick="selectSeatPackage('bundle')"
-                 onmouseenter="this.style.borderColor='var(--gold)'"
-                 onmouseleave="if(selectedPkg!=='bundle')this.style.borderColor='var(--border)'">
-                <div style="position:absolute;top:-1px;right:12px;background:var(--gold);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:0 0 6px 6px;letter-spacing:0.5px;">BEST VALUE</div>
-                <div style="font-size:13px;color:var(--sub);margin-bottom:6px;font-weight:500;">5-SEAT BUNDLE</div>
-                <div style="font-family:'Fraunces',serif;font-size:28px;font-weight:700;color:var(--dark);" id="bundle-prorated">—</div>
-                <div style="font-size:12px;color:var(--sub);margin-top:2px;">today (prorated)</div>
-                <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--mid);">
-                    then <strong>$60/month</strong> from <span id="bundle-next">—</span>
-                </div>
-                <div style="margin-top:10px;font-size:12px;color:var(--sub);">+5 chatbot slots · save $15/mo vs single</div>
+            <div class="dash-platform-card" data-platform="woocommerce" onclick="selectDashPlatform('woocommerce')">
+                <div class="dash-platform-logo woo">🧩</div>
+                <div class="dash-platform-name">WooCommerce</div>
             </div>
         </div>
-        <div id="seat-error" style="display:none;background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;padding:12px 14px;font-size:13px;color:#7F1D1D;margin-bottom:16px;"></div>
-        <button id="seat-pay-btn" onclick="confirmBuySeat()"
-                style="display:none;width:100%;padding:14px;background:var(--gold);color:#fff;border:none;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer;font-family:'DM Sans',sans-serif;justify-content:center;">
-            Pay & Add Seat →
-        </button>
+        <div class="form-group" id="dashStoreUrlGroup" style="display:none;">
+            <label id="dashStoreUrlLabel">Store URL</label>
+            <input type="text" id="dashStoreUrl" placeholder="your-store.myshopify.com">
+        </div>
+        <button type="button" class="btn btn-primary" id="dashConnectBtn" style="width:100%;justify-content:center;" disabled onclick="startDashConnect()">Continue</button>
     </div>
 </div>
 
@@ -619,27 +479,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 <div class="delete-modal" id="delete-modal">
     <div class="delete-modal-content">
         <div class="delete-icon-box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></div>
-        <h2>Delete Chatbot?</h2>
-        <p>You are about to permanently delete:</p>
+        <h2>Disconnect Store?</h2>
+        <p>You are about to disconnect:</p>
         <div class="delete-client-name" id="delete-client-name">—</div>
-        <p style="font-size:13px;">All FAQs, leads and history will be removed. <strong>This cannot be undone.</strong></p>
+        <p style="font-size:13px;">Your AI employee will go offline for this store, and its knowledge, leads and history will be removed. <strong>This cannot be undone.</strong></p>
         <div class="delete-modal-actions" style="margin-top:20px;">
             <button class="btn btn-cancel" onclick="closeDeleteModal()">Cancel</button>
-            <button class="btn btn-danger" id="confirm-delete-btn" onclick="executeDelete()">Delete</button>
+            <button class="btn btn-danger" id="confirm-delete-btn" onclick="executeDelete()">Disconnect</button>
         </div>
     </div>
 </div>
 <!-- EMBED MODAL -->
 <div id="embedModal" class="embed-modal">
     <div class="embed-modal-content">
-        <h2>Embed Code</h2>
-        <p>Paste this just before the closing <code>&lt;/body&gt;</code> tag on your website.</p>
+        <h2>Manual Install</h2>
+        <p>Your AI employee installs automatically on Shopify and WooCommerce. If you're using a custom theme, paste this just before the closing <code>&lt;/body&gt;</code> tag instead.</p>
         <div class="embed-textarea-wrapper"><textarea id="embedCodeText" readonly></textarea><div class="embed-lang-tag">HTML</div></div>
         <div class="embed-actions">
             <button onclick="copyEmbedCode()" class="btn btn-primary" style="flex:1;justify-content:center;">Copy to Clipboard</button>
             <button onclick="closeEmbedModal()" class="btn btn-secondary" style="justify-content:center;">Close</button>
         </div>
-        <div class="embed-tip"><strong>Tip:</strong> The chatbot appears in the bottom-right corner. Customise colors in Theme settings.</div>
+        <div class="embed-tip"><strong>Tip:</strong> Your AI employee appears in the bottom-right corner. Customize its look in Customize AI settings.</div>
     </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -649,7 +509,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         <div style="width:52px;height:52px;border-radius:14px;background:var(--warning-lt);border:1px solid rgba(217,119,6,0.2);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
         {% if sub_status == 'grace' %}
         <h2 style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--dark);margin-bottom:10px;">Subscription expired</h2>
-        <p style="color:var(--mid);font-size:14px;line-height:1.7;margin-bottom:8px;">You are in a <strong style="color:var(--warning);">3-day grace period</strong>. Your chatbots are still running — renew before the grace period ends.</p>
+        <p style="color:var(--mid);font-size:14px;line-height:1.7;margin-bottom:8px;">You are in a <strong style="color:var(--warning);">3-day grace period</strong>. Your AI employees are still running — renew before the grace period ends.</p>
         {% if sub_grace_ends_at %}<div style="background:var(--warning-lt);border:1px solid rgba(217,119,6,0.25);border-radius:9px;padding:10px 14px;margin:14px 0;color:var(--warning);font-size:13px;font-weight:600;">Grace period ends: {{ sub_grace_ends_at.strftime('%B %d, %Y') if sub_grace_ends_at else 'Soon' }}</div>{% endif %}
         {% else %}
         <h2 style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;color:var(--dark);margin-bottom:10px;">Subscription expired</h2>
@@ -665,157 +525,64 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 <script>
     function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sidebarOverlay').classList.add('open');}
     function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('open');}
-    const VERTICAL_PREVIEWS={
-  general:'Friendly, professional assistant. Suitable for any business type.',
-  real_estate:'Warm, consultative tone. Focused on booking property viewings and lead qualification.',
-  saas:'Helpful, technical tone. Handles onboarding, billing and support tickets.',
-  ecommerce:'Fast, friendly tone. Handles returns, shipping and product questions.',
-  healthcare:'Calm, professional tone. Books appointments and handles clinic FAQs — never gives medical advice.',
-  law_firm:'Formal, precise tone. Legal intake assistant — never gives legal advice.',
-  restaurant:'Warm and enthusiastic. Handles reservations, menus, dietary options and opening hours.',
-  hotel:'Professional concierge tone. Handles bookings, room enquiries and local recommendations.',
-  fitness:'Energetic and encouraging. Handles memberships, class schedules and personal training enquiries.',
-  dental:'Friendly and reassuring. Books appointments and handles clinic FAQs — never diagnoses conditions.',
-  mortgage:'Clear and jargon-free. Collects lead details for mortgage enquiries — never gives financial advice.',
-  insurance:'Straightforward and trustworthy. Handles policy enquiries and lead capture — no claims advice.',
-  education:'Warm and supportive. Handles course enquiries, enrolment and tutor availability.',
-  automotive:'Knowledgeable and direct. Handles vehicle enquiries, test drives and service bookings.',
-  beauty:'Personable and stylish. Books appointments for treatments, stylists and therapists.',
-  travel:'Enthusiastic and inspiring. Handles travel packages, itineraries and booking enquiries.',
-  recruitment:'Professional and encouraging. Handles job seeker and employer enquiries and intake.',
-  accounting:'Clear and confident. Handles service enquiries and lead qualification — no tax advice.',
-  construction:'Dependable and detail-oriented. Handles quote requests, project types and site visits.',
-  pet_services:'Warm and caring. Books vet appointments and grooming — never gives medical diagnoses.',
-  nonprofit:'Compassionate and mission-driven. Guides donors, volunteers and partners.',
-  events:'Creative and detail-oriented. Handles venue hire, packages and event enquiries.',
-  therapy:'Calm and empathetic. Handles booking enquiries — never provides clinical advice or crisis support.',
-  photography:'Creative and personable. Handles shoot enquiries, packages and availability.'
-};
-    function selectVertical(card){document.querySelectorAll('.vertical-card').forEach(c=>c.classList.remove('selected'));card.classList.add('selected');const v=card.getAttribute('data-vertical');document.getElementById('vertical-input').value=v;document.getElementById('preview-text').textContent=VERTICAL_PREVIEWS[v]||'';}
-    // Overage payment state (legacy fallback — kept for safety net cron)
-    const OVERAGE_STATUS = {{ overage_payment_status | tojson }};
-    const OVERAGE_LINK   = {{ overage_payment_link   | tojson }};
-    const OVERAGE_DUE    = {{ overage_amount_due      | tojson }};
-    const PLAN_TYPE      = {{ plan_type              | tojson }};
-    const LIMIT_REACHED  = {{ limit_reached          | tojson }};
-
-    let selectedPkg = null;
-    let seatPrices  = null;
+    // ── Connect a Store modal: platform selection + connect ──────────────
+    let dashSelectedPlatform = null;
+    function selectDashPlatform(platform) {
+        dashSelectedPlatform = platform;
+        document.querySelectorAll('.dash-platform-card').forEach(c => c.classList.remove('selected'));
+        document.querySelector(`.dash-platform-card[data-platform="${platform}"]`).classList.add('selected');
+        const urlGroup = document.getElementById('dashStoreUrlGroup');
+        const label    = document.getElementById('dashStoreUrlLabel');
+        const input    = document.getElementById('dashStoreUrl');
+        urlGroup.style.display = 'block';
+        if (platform === 'shopify') {
+            label.textContent = 'Shopify Store URL';
+            input.placeholder = 'your-store.myshopify.com';
+        } else {
+            label.textContent = 'Store URL';
+            input.placeholder = 'yourstore.com';
+        }
+        document.getElementById('dashConnectBtn').disabled = false;
+    }
+    // TODO(backend): reuses the same /connect/shopify/start and /connect/woocommerce/start
+    // endpoints introduced for onboarding.html — see that file's comments for the expected contract.
+    async function startDashConnect() {
+        const url = document.getElementById('dashStoreUrl').value.trim();
+        if (!url || !dashSelectedPlatform) return;
+        const btn = document.getElementById('dashConnectBtn');
+        btn.disabled = true;
+        btn.textContent = 'Connecting…';
+        try {
+            const endpoint = dashSelectedPlatform === 'shopify' ? '/connect/shopify/start' : '/connect/woocommerce/start';
+            const payload   = dashSelectedPlatform === 'shopify' ? { shop_domain: url } : { store_url: url };
+            const res  = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const data = await res.json();
+            const authUrl = data.auth_url || data.authorize_url;
+            if (authUrl) { window.location.href = authUrl; }
+            else { throw new Error(data.error || 'Could not start connection.'); }
+        } catch (e) {
+            showToast("Couldn't reach that store — check the URL and try again.", 'error');
+            btn.disabled = false;
+            btn.textContent = 'Continue';
+        }
+    }
+    // (overage/agency seat constants removed — obsolete with the agency
+    // business model; no plan can ever have more than 1 connected store)
 
     function openNewClientModal() {
-        // Agency + seat limit reached → show Buy Seat modal instead
-        if (PLAN_TYPE === 'agency' && LIMIT_REACHED) {
-            openBuySeatModal();
-            return;
-        }
-        // Legacy overage guard (safety net)
-        if (OVERAGE_STATUS === 'overdue') {
-            if (OVERAGE_LINK && confirm(
-                'Your extra-seat invoice of $' + OVERAGE_DUE.toFixed(2) + ' is overdue.\n' +
-                'Adding new chatbots is paused until payment is received.\n\nOpen payment page?'
-            )) { window.open(OVERAGE_LINK, '_blank'); }
-            else if (!OVERAGE_LINK) { alert('Your extra-seat invoice is overdue. Check your email for the payment link.'); }
-            return;
-        }
         document.getElementById('new-client-modal').style.display = 'flex';
     }
-
-    function openBuySeatModal() {
-        selectedPkg = null;
-        document.getElementById('seat-pay-btn').style.display  = 'none';
-        document.getElementById('seat-error').style.display    = 'none';
-        document.getElementById('seat-loading').style.display  = 'block';
-        document.getElementById('seat-options').style.display  = 'none';
-        document.getElementById('buy-seat-modal').style.display = 'flex';
-        fetchSeatPrices();
-    }
-
-    function closeBuySeatModal() {
-        document.getElementById('buy-seat-modal').style.display = 'none';
-        selectedPkg = null;
-    }
-
-    async function fetchSeatPrices() {
-        try {
-            const res  = await fetch('/agency/seat-prices');
-            const data = await res.json();
-            if (data.error) throw new Error(data.error);
-            seatPrices = data;
-            document.getElementById('single-prorated').textContent = '$' + data.single.prorated.toFixed(2);
-            document.getElementById('single-next').textContent     = data.single.next_billing;
-            document.getElementById('bundle-prorated').textContent = '$' + data.bundle.prorated.toFixed(2);
-            document.getElementById('bundle-next').textContent     = data.bundle.next_billing;
-            document.getElementById('seat-loading').style.display  = 'none';
-            document.getElementById('seat-options').style.display  = 'grid';
-        } catch (e) {
-            document.getElementById('seat-loading').textContent = 'Could not load prices. Please refresh.';
-        }
-    }
-
-    function selectSeatPackage(pkg) {
-        selectedPkg = pkg;
-        ['single', 'bundle'].forEach(p => {
-            const card = document.getElementById('seat-card-' + p);
-            card.style.borderColor = (p === pkg) ? 'var(--gold)' : 'var(--border)';
-            card.style.background  = (p === pkg) ? 'var(--cream)' : '';
-        });
-        const btn = document.getElementById('seat-pay-btn');
-        const price = seatPrices ? seatPrices[pkg] : null;
-        btn.textContent = price
-            ? `Pay $${price.prorated.toFixed(2)} Today & Add ${price.seats} Seat${price.seats > 1 ? 's' : ''} →`
-            : 'Pay & Add Seat →';
-        btn.style.display = 'block';
-        document.getElementById('seat-error').style.display = 'none';
-    }
-
-    async function confirmBuySeat() {
-        if (!selectedPkg) return;
-        const btn = document.getElementById('seat-pay-btn');
-        btn.textContent = 'Redirecting to payment…';
-        btn.disabled    = true;
-        document.getElementById('seat-error').style.display = 'none';
-        try {
-            const res  = await fetch('/agency/buy-seat', {
-                method:  'POST',
-                headers: {'Content-Type': 'application/json'},
-                body:    JSON.stringify({package_type: selectedPkg}),
-            });
-            const data = await res.json();
-            if (!data.success) throw new Error(data.error || 'Unknown error');
-            window.location.href = data.payment_link;
-        } catch (e) {
-            const errEl = document.getElementById('seat-error');
-            errEl.textContent = e.message || 'Could not generate payment link. Please try again.';
-            errEl.style.display = 'block';
-            btn.textContent = 'Pay & Add Seat →';
-            btn.disabled    = false;
-        }
-    }
-
-    // Auto-open new-client modal if returning from a successful seat purchase
-    (function checkSeatPurchased() {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('seat_purchased') === '1') {
-            history.replaceState({}, '', window.location.pathname);
-            document.getElementById('new-client-modal').style.display = 'flex';
-        }
-        // Redirected from portal when seat limit hit — open Buy Seat modal directly
-        if (params.get('buy_seat') === '1') {
-            history.replaceState({}, '', window.location.pathname);
-            openBuySeatModal();
-        }
-    })();
     function closeModal(){document.getElementById('new-client-modal').style.display='none';}
-    function showEmbedCode(clientId){const baseUrl=window.location.origin;const code=`<!-- Lumvi Chatbot Widget -->\n<script>\n    (function() {\n        var s = document.createElement('script');\n        s.src = '${baseUrl}/static/widget.js';\n        s.setAttribute('data-client-id', '${clientId}');\n        document.body.appendChild(s);\n    })();\n<\/script>`;document.getElementById('embedCodeText').value=code;document.getElementById('embedModal').style.display='flex';}
+    function showEmbedCode(clientId){const baseUrl=window.location.origin;const code=`<!-- Lumvi AI Employee Widget -->\n<script>\n    (function() {\n        var s = document.createElement('script');\n        s.src = '${baseUrl}/static/widget.js';\n        s.setAttribute('data-client-id', '${clientId}');\n        document.body.appendChild(s);\n    })();\n<\/script>`;document.getElementById('embedCodeText').value=code;document.getElementById('embedModal').style.display='flex';}
     function closeEmbedModal(){document.getElementById('embedModal').style.display='none';}
     function copyEmbedCode(){const t=document.getElementById('embedCodeText');t.select();t.setSelectionRange(0,99999);try{document.execCommand('copy');showToast('Embed code copied','success');}catch{alert('Please select and copy manually.');}}
     let pendingDeleteId=null;
     function confirmDelete(clientId,clientName){pendingDeleteId=clientId;document.getElementById('delete-client-name').textContent=clientName;document.getElementById('delete-modal').style.display='flex';}
     function closeDeleteModal(){pendingDeleteId=null;document.getElementById('delete-modal').style.display='none';}
-    async function executeDelete(){if(!pendingDeleteId)return;const btn=document.getElementById('confirm-delete-btn');btn.textContent='Deleting…';btn.disabled=true;try{const res=await fetch(`/api/clients/${pendingDeleteId}/delete`,{method:'DELETE',headers:{'Content-Type':'application/json'}});const data=await res.json();if(data.success){['row-','card-'].forEach(p=>{const el=document.getElementById(p+pendingDeleteId);if(el){el.style.transition='opacity 0.3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);}});closeDeleteModal();showToast('Chatbot deleted','success');const badge=document.querySelector('.nav-badge');if(badge){const c=parseInt(badge.textContent)||0;if(c-1<=0)badge.remove();else badge.textContent=c-1;}}else{showToast(data.error||'Delete failed','error');btn.textContent='Delete';btn.disabled=false;}}catch{showToast('Network error','error');btn.textContent='Delete';btn.disabled=false;}}
+    async function executeDelete(){if(!pendingDeleteId)return;const btn=document.getElementById('confirm-delete-btn');btn.textContent='Disconnecting…';btn.disabled=true;try{const res=await fetch(`/api/clients/${pendingDeleteId}/delete`,{method:'DELETE',headers:{'Content-Type':'application/json'}});const data=await res.json();if(data.success){['row-','card-'].forEach(p=>{const el=document.getElementById(p+pendingDeleteId);if(el){el.style.transition='opacity 0.3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);}});closeDeleteModal();showToast('Store disconnected','success');const badge=document.querySelector('.nav-badge');if(badge){const c=parseInt(badge.textContent)||0;if(c-1<=0)badge.remove();else badge.textContent=c-1;}}else{showToast(data.error||'Disconnect failed','error');btn.textContent='Disconnect';btn.disabled=false;}}catch{showToast('Network error','error');btn.textContent='Disconnect';btn.disabled=false;}}
     function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} show`;setTimeout(()=>{t.className='toast';},3500);}
-    document.addEventListener('click',function(e){if(e.target===document.getElementById('embedModal'))closeEmbedModal();if(e.target===document.getElementById('new-client-modal'))closeModal();if(e.target===document.getElementById('delete-modal'))closeDeleteModal();if(e.target===document.getElementById('buy-seat-modal'))closeBuySeatModal();});
-    document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeEmbedModal();closeModal();closeDeleteModal();closeSidebar();closeBuySeatModal();}});
+    document.addEventListener('click',function(e){if(e.target===document.getElementById('embedModal'))closeEmbedModal();if(e.target===document.getElementById('new-client-modal'))closeModal();if(e.target===document.getElementById('delete-modal'))closeDeleteModal();});
+    document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeEmbedModal();closeModal();closeDeleteModal();closeSidebar();}});
 </script>
 <!-- ── CLIENT DASHBOARD SLIDE PANEL ── -->
 <div class="cdash-overlay" id="cdashOverlay" onclick="closeClientDashPanel()"></div>
@@ -824,7 +591,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
     <div class="cdash-head-left">
       <div class="cdash-client-av" id="cdashAv">—</div>
       <div>
-        <div class="cdash-client-name" id="cdashName">Client</div>
+        <div class="cdash-client-name" id="cdashName">Store</div>
         <div class="cdash-client-id" id="cdashId"></div>
       </div>
     </div>
@@ -842,7 +609,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
     </a>
     <a class="cdash-footer-btn gold" id="cdashCustomizeLink" href="#">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-      Customize Bot
+      Customize AI
     </a>
   </div>
 </div>
@@ -925,7 +692,7 @@ async function loadCdashData(cid, name) {
     document.getElementById('cdashBody').innerHTML = `
       <div class="cdash-stats">
         <div class="cdash-stat"><div class="cdash-stat-val">${totalLeads}</div><div class="cdash-stat-lbl">Leads</div></div>
-        <div class="cdash-stat"><div class="cdash-stat-val">${faqs}</div><div class="cdash-stat-lbl">FAQs</div></div>
+        <div class="cdash-stat"><div class="cdash-stat-val">${faqs}</div><div class="cdash-stat-lbl">Knowledge</div></div>
         <div class="cdash-stat"><div class="cdash-stat-val">${msgs}</div><div class="cdash-stat-lbl">Convos Today</div></div>
       </div>
       <div class="cdash-section">
@@ -937,7 +704,7 @@ async function loadCdashData(cid, name) {
           </a>
           <a href="/faq-manager?client_id=${cid}" class="cdash-link">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/></svg>
-            Manage FAQs
+            Manage Knowledge
           </a>
           <a href="/article-manager?client_id=${cid}" class="cdash-link">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>
@@ -949,11 +716,7 @@ async function loadCdashData(cid, name) {
           </a>
           <a href="/widget?client_id=${cid}" target="_blank" class="cdash-link">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-            Preview Widget
-          </a>
-          <a href="/manage-client-users?client_id=${cid}" class="cdash-link">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Portal Logins
+            Preview Assistant
           </a>
           <a href="/integrations?client_id=${cid}" class="cdash-link">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>

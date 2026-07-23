@@ -144,6 +144,7 @@ from .clients import (
 # ── Conversations ─────────────────────────────────────────────────────────────
 from .conversations import (
     get_daily_message_count,
+    get_monthly_conversation_count,
     get_client_owner,
     get_conversation_message_count,
     save_conversation_summary,

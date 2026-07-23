@@ -247,69 +247,34 @@ USE_AI = Config.USE_AI
 # ═══════════════════════════════════════════════════════════════════════════════
 
 PLAN_LIMITS = {
-    'free': {
-        'clients': 1, 'faqs_per_client': 5, 'messages_per_day': 50,
-        'analytics': False, 'analytics_level': 'none',
-        'customization': False, 'white_label': False,
-        'webhooks': False, 'priority_support': False,
-        'agentic_actions': False,
-    },
-    'solo': {
-        'clients': 1, 'faqs_per_client': 999, 'messages_per_day': 999999,
-        'analytics': True, 'analytics_level': 'basic',
-        'customization': True, 'white_label': False,
-        'webhooks': False, 'priority_support': False,
-        'agentic_actions': False,
-    },
-    'starter': {
-        'clients': 3, 'faqs_per_client': 999, 'messages_per_day': 2000,
-        'analytics': True, 'analytics_level': 'basic',
-        'customization': True, 'white_label': False,
-        'webhooks': False, 'priority_support': False,
-        'agentic_actions': False,
-    },
-    'pro': {
-        'clients': 10, 'faqs_per_client': 999, 'messages_per_day': 999999,
-        'analytics': True, 'analytics_level': 'full',
-        'customization': True, 'white_label': False,
-        'webhooks': True, 'priority_support': True,
-        'agentic_actions': True,
-    },
-    # BUG FIX: 'growth' ($149/mo old tier) was missing from this dict
-    # entirely — any user on it was silently falling back to
-    # PLAN_LIMITS['free'] via the .get(plan_type, PLAN_LIMITS['free'])
-    # pattern used everywhere. Interpolated between 'pro' and 'agency'
-    # since no real subscribers are currently on this plan to break.
-    'growth': {
-        'clients': 25, 'faqs_per_client': 999, 'messages_per_day': 999999,
-        'analytics': True, 'analytics_level': 'full',
-        'customization': True, 'white_label': False,
-        'webhooks': True, 'priority_support': True,
-        'agentic_actions': True,
-    },
-    'agency': {
-        'clients': 999999, 'faqs_per_client': 999, 'messages_per_day': 999999,
-        'analytics': True, 'analytics_level': 'full',
-        'customization': True, 'white_label': True,
-        'webhooks': True, 'priority_support': True,
-        'agentic_actions': True,
-    },
-    'enterprise': {
-        'clients': 999999, 'faqs_per_client': 999, 'messages_per_day': 999999,
-        'analytics': True, 'analytics_level': 'full',
-        'customization': True, 'white_label': True,
-        'webhooks': True, 'priority_support': True,
-        'agentic_actions': True,
-    },
-
-    # ── "AI Employee for Shopify & WooCommerce" tiers (upgrade-shopify.html) ──
-    # Brand-new plan_type keys — solo/starter/pro/growth/agency above are
-    # frozen/grandfathered and no longer sold. New self-serve customers can
-    # only land on one of these three.
+    # ── Lumvi: AI Employee for Shopify & WooCommerce ──────────────────────
+    # These are the ONLY plans the product now supports: Free, Starter,
+    # Growth, Scale. Free is a first-class plan (not a placeholder) — it's
+    # the plan every new signup lands on (see models.create_user /
+    # models.create_or_link_google_user) and the plan expired subscriptions
+    # fall back to (see models.downgrade_expired_users).
+    # The obsolete white-label/agency-era tiers (solo, starter[old $49
+    # tier], pro, growth[old $149 tier], agency, enterprise) have been
+    # removed — that product no longer exists, and no production accounts
+    # remain on any of them (migrate_ai_employee_plan_rename moves any
+    # stragglers onto the nearest current tier).
     #
-    # New dimensions used only by these three tiers (all old tiers simply
-    # don't have these keys — every gate checks .get(key, <old-behavior
-    # default>) so grandfathered plans are completely unaffected):
+    #   clients                 — number of connected stores allowed on the
+    #                             account. NOTE: "clients" is the underlying
+    #                             models.py/DB field name inherited from the
+    #                             old agency architecture (one row per
+    #                             managed business); in the new product it
+    #                             means "connected store", not "agency's
+    #                             customer". Renaming the field itself is a
+    #                             models.py change — out of scope here.
+    #   faqs_per_client         — effectively unlimited (999) on every tier.
+    #                             Vestigial: kept only because
+    #                             blueprints/faqs.py still reads this key.
+    #   messages_per_day        — effectively unlimited (999999) on every
+    #                             tier. Superseded by conversations_per_month
+    #                             below; kept only because blueprints/chat.py
+    #                             still reads this key for the daily_limit
+    #                             path in log_conversation().
     #   conversations_per_month — monthly cap, checked in blueprints/chat.py.
     #                             None = unlimited. Counts distinct
     #                             conversations, not raw messages (see
@@ -322,11 +287,37 @@ PLAN_LIMITS = {
     #   cart_recovery           — gates the abandoned-checkout recovery
     #                             feature (Shopify only for now).
     #   lead_capture            — gates the lead-collection trigger in
-    #                             blueprints/chat.py. Previously ungated
-    #                             for every plan.
+    #                             blueprints/chat.py.
     #   api_access              — reserved. No external developer API
     #                             exists yet to gate — this flag is a
     #                             placeholder for when one ships.
+    #
+    # White-label branding has been removed entirely as a product concept —
+    # there is no 'white_label' key any more. See remove_branding handling
+    # in save_customization() below, which is now hardcoded to False.
+    # Paid dict keys stay 'ai_starter'/'ai_growth'/'ai_scale' — NOT the
+    # plainer 'starter'/'growth'/'scale' the plan names suggest. 'free'
+    # is the one key that IS the plain plan_type value (see
+    # models.create_user / models.create_or_link_google_user). A one-time
+    # migration (migrate_ai_employee_plan_rename, see the migrations list
+    # below) moves every obsolete plan_type (solo, old starter, pro, old
+    # growth, agency, enterprise) onto the nearest current tier. Renaming
+    # any of these keys would silently drop every affected user to the
+    # .get(..., PLAN_LIMITS['free']) fallback the next time they load a
+    # page. 'Free' / 'Starter' / 'Growth' / 'Scale' are the display names
+    # shown to users (see admin_set_plan()'s form and any upgrade/billing
+    # pages) — the storage values are free/ai_starter/ai_growth/ai_scale.
+    'free': {
+        'clients': 1, 'faqs_per_client': 50, 'messages_per_day': 999999,
+        'conversations_per_month': 50,
+        'integrations_limit': 1,
+        'product_recommendations': False, 'cart_recovery': False,
+        'lead_capture': False, 'api_access': False,
+        'analytics': True, 'analytics_level': 'basic',
+        'customization': False,
+        'webhooks': True, 'priority_support': False,
+        'agentic_actions': False,
+    },
     'ai_starter': {
         'clients': 1, 'faqs_per_client': 999, 'messages_per_day': 999999,
         'conversations_per_month': 1000,
@@ -334,7 +325,7 @@ PLAN_LIMITS = {
         'product_recommendations': False, 'cart_recovery': False,
         'lead_capture': False, 'api_access': False,
         'analytics': True, 'analytics_level': 'basic',
-        'customization': True, 'white_label': False,
+        'customization': True,
         'webhooks': True, 'priority_support': False,
         'agentic_actions': False,
     },
@@ -345,23 +336,31 @@ PLAN_LIMITS = {
         'product_recommendations': True, 'cart_recovery': True,
         'lead_capture': True, 'api_access': False,
         'analytics': True, 'analytics_level': 'advanced',
-        'customization': True, 'white_label': False,
+        'customization': True,
         'webhooks': True, 'priority_support': True,
         'agentic_actions': True,
     },
     'ai_scale': {
-        'clients': 999999, 'faqs_per_client': 999, 'messages_per_day': 999999,
+        'clients': 1, 'faqs_per_client': 999, 'messages_per_day': 999999,
         'conversations_per_month': None,   # unlimited
         'integrations_limit': None,        # unlimited
         'product_recommendations': True, 'cart_recovery': True,
         'lead_capture': True, 'api_access': True,
         'analytics': True, 'analytics_level': 'advanced',
-        'customization': True, 'white_label': False,
+        'customization': True,
         'webhooks': True, 'priority_support': True,
         'agentic_actions': True,
     },
 }
 
+# TODO(legacy, out of scope): AGENCY_INCLUDED_CLIENTS / AGENCY_SEAT_PRICE are
+# per-seat billing constants from the old agency/reseller architecture. They
+# no longer correspond to any active plan above. agency.py and auth.py no
+# longer need them (removed along with the agency business model — see the
+# billing/dashboard cleanup reports). blueprints/cron.py is now the only
+# remaining consumer (its seat-billing cron jobs, themselves obsolete but
+# out of scope for this pass — see cron.py follow-up notes). Delete this
+# constant once cron.py's seat/overage cron jobs are retired too.
 AGENCY_INCLUDED_CLIENTS = 20
 AGENCY_SEAT_PRICE       = 15.00   # USD per extra client per month
 
@@ -484,16 +483,18 @@ def send_welcome_email(email: str) -> None:
 def get_subscription_status(user: dict) -> dict:
     """
     Returns subscription info for a user.
-    status: 'active' | 'cancelling' | 'grace' | 'expired' | 'free'
+    status: 'active' | 'cancelling' | 'grace' | 'expired'
     Admins are always treated as active.
     """
     if user.get('is_admin'):
         return {'status': 'active', 'expires_at': None, 'grace_ends_at': None}
 
-    plan = user.get('plan_type', 'free')
-    if plan in ('free', 'enterprise'):
-        return {'status': 'free', 'expires_at': None, 'grace_ends_at': None}
-
+    # NOTE: 'enterprise' no longer exists under the Free/Starter/Growth/
+    # Scale architecture (see PLAN_LIMITS above). 'free' IS a real current
+    # plan again, but doesn't need a special case here — free accounts are
+    # never given a subscription_expires_at value, so they fall straight
+    # into the `if not expires_at` branch just below and read as
+    # permanently active, same as admin-granted accounts (admin_set_plan()).
     expires_at    = user.get('subscription_expires_at')
     grace_ends_at = user.get('grace_period_ends_at')
 
@@ -801,13 +802,15 @@ def log_conversation(client_id, user_message, bot_response,
     Insert a conversation row.
     When daily_limit is supplied, the INSERT is wrapped in a CTE that
     re-counts today's rows atomically — prevents races at the cap boundary.
-    monthly_limit does the same thing for the new ai_starter/ai_growth/
-    ai_scale 'conversations_per_month' gate — counts DISTINCT conversations
+    monthly_limit does the same thing for the Starter/Growth/Scale
+    'conversations_per_month' gate — counts DISTINCT conversations
     (session_id, or id::text as a fallback for session-less rows) in the
     current calendar month rather than raw rows today. Only one of
-    daily_limit/monthly_limit should be passed at a time (grandfathered
-    plans use daily_limit; the new tiers use monthly_limit) — if both are
-    given, daily_limit takes precedence.
+    daily_limit/monthly_limit should be passed at a time — every current
+    plan uses monthly_limit; daily_limit is kept only for callers still
+    passing messages_per_day-style caps (see PLAN_LIMITS note on
+    'messages_per_day' being vestigial). If both are given, daily_limit
+    takes precedence.
     Returns True if the row was inserted, False if the cap was already reached.
     Page-context fields (page_url, referrer, utm_*) are written on the first
     message of a session; subsequent messages carry the same values.
@@ -1068,19 +1071,19 @@ init_faqs(
 app.register_blueprint(faqs_bp)
 
 # Billing
-from blueprints.billing import billing_bp, init_billing, PLAN_PRICES_FLW
+# NOTE: billing.py's PLAN_PRICES_FLW (a legacy pricing dict, duplicate of
+# the pricing represented by PLAN_LIMITS above) is no longer imported here —
+# it was unused in this file. It still lives in blueprints/billing.py;
+# TODO(legacy, out of scope): update billing.py's own pricing table to only
+# price Starter/Growth/Scale, since that's a change to billing.py.
+from blueprints.billing import billing_bp, init_billing
 init_billing(mail=mail, get_subscription_status=get_subscription_status)
 app.register_blueprint(billing_bp)
 
-# Agency
+# Agency (stripped down — single-store analytics/dashboard only, see
+# blueprints/agency.py's module docstring for what was removed and why)
 from blueprints.agency import agency_bp, init_agency
-init_agency(
-    mail=mail,
-    plan_limits=PLAN_LIMITS,
-    dns_executor=_dns_executor,
-    futures_timeout=_FuturesTimeout,
-    agency_included_clients=AGENCY_INCLUDED_CLIENTS,
-)
+init_agency(plan_limits=PLAN_LIMITS)
 app.register_blueprint(agency_bp)
 
 # Account settings (profile, email, password, notifications, deletion)
@@ -1096,8 +1099,6 @@ init_auth(
     valid_verticals=VALID_VERTICALS,
     get_subscription_status=get_subscription_status,
     send_welcome_email=send_welcome_email,
-    agency_included_clients=AGENCY_INCLUDED_CLIENTS,
-    agency_seat_price=AGENCY_SEAT_PRICE,
     User=User,
 )
 app.register_blueprint(auth_bp)
@@ -1524,7 +1525,7 @@ def admin_set_plan():
         email       = request.form.get('email', '').strip().lower()
         plan        = request.form.get('plan', '').strip().lower()
         grace_days_raw = request.form.get('grace_days', '30').strip()
-        valid_plans = ['free', 'solo', 'starter', 'pro', 'growth', 'agency', 'enterprise']
+        valid_plans = ['ai_starter', 'ai_growth', 'ai_scale']
         if secret != ADMIN_SECRET:
             error = 'Invalid admin secret.'
         elif not email:
@@ -1541,10 +1542,10 @@ def admin_set_plan():
                 error = f'No user found with email: {email}'
             else:
                 conn, cursor = models.get_db()
-                if plan in ('free', 'enterprise') or grace_days == 0:
-                    # free has nothing to expire; enterprise is excluded from
-                    # the downgrade cron entirely; grace_days=0 is an
-                    # explicit, deliberate permanent grant.
+                if grace_days == 0:
+                    # grace_days=0 is an explicit, deliberate permanent grant
+                    # (no more free/enterprise tiers to special-case here —
+                    # every plan is a paid subscription now).
                     cursor.execute(
                         '''UPDATE users SET plan_type = %s, upgraded_at = CURRENT_TIMESTAMP,
                                grace_period_ends_at = NULL, subscription_expires_at = NULL
@@ -1565,9 +1566,10 @@ def admin_set_plan():
                         (plan, grace_days, email)
                     )
                 conn.commit(); cursor.close(); conn.close()
-                success = f'✅ {email} updated to {plan.capitalize()} plan.' + (
-                    ' (permanent — no auto-downgrade)' if (plan in ('free', 'enterprise') or grace_days == 0)
-                    else f' (auto-downgrades to free in {grace_days} days unless renewed)'
+                _plan_display = {'free': 'Free', 'ai_starter': 'Starter', 'ai_growth': 'Growth', 'ai_scale': 'Scale'}.get(plan, plan)
+                success = f'✅ {email} updated to {_plan_display} plan.' + (
+                    ' (permanent — no auto-downgrade)' if grace_days == 0
+                    else f' (auto-downgrades after {grace_days} days unless renewed)'
                 )
 
     return f'''<!DOCTYPE html>
@@ -1598,13 +1600,11 @@ def admin_set_plan():
     <label>New Plan</label>
     <select name="plan">
       <option value="free">Free</option>
-      <option value="solo">Solo ($19/mo)</option>
-      <option value="starter">Starter ($49/mo)</option>
-      <option value="pro">Pro ($99/mo)</option>
-      <option value="agency">Agency ($299/mo)</option>
-      <option value="enterprise">Enterprise</option>
+      <option value="ai_starter">Starter</option>
+      <option value="ai_growth">Growth</option>
+      <option value="ai_scale">Scale</option>
     </select>
-    <label>Auto-downgrade to Free after (paid plans only)</label>
+    <label>Auto-downgrade after</label>
     <select name="grace_days">
       <option value="7">7 days</option>
       <option value="30" selected>30 days</option>
@@ -1667,8 +1667,12 @@ def customize_page():
         plan_type       = plan_type,
         plan_limits     = plan_limits,
         has_webhooks    = plan_limits.get('webhooks', False),
-        has_white_label = plan_limits.get('white_label', False),
         has_analytics   = plan_limits.get('analytics', False),
+        # TODO(legacy, out of scope): templates/customize.html may still
+        # reference a `has_white_label` variable for white-label UI that no
+        # longer applies to any plan — Jinja treats a missing var as falsy,
+        # so this doesn't break rendering, but the template's white-label
+        # section should be deleted there.
     )
 
 
@@ -1687,7 +1691,7 @@ def save_customization():
             return jsonify({'success': False, 'error': 'Client not found'}), 404
 
         fresh_user  = models.get_user_by_id(current_user.id)
-        fresh_plan  = (fresh_user or {}).get('plan_type', 'free')
+        fresh_plan  = (fresh_user or {}).get('plan_type', 'ai_starter')
         plan_limits = PLAN_LIMITS.get(fresh_plan, PLAN_LIMITS['free'])
 
         incoming_integrations = data.get('integrations', {})
@@ -1758,9 +1762,14 @@ def save_customization():
             r for r in raw_qr if r and str(r).strip()
         ]
 
+        # White-label branding removal was an agency/enterprise-only feature
+        # under the old architecture — no current plan (Starter/Growth/
+        # Scale) offers it, so this is now always False regardless of what
+        # the client sends.
+        # TODO(legacy, out of scope): the `remove_branding` column on the
+        # clients table (models.py) and any related UI in customize.html
+        # are dead weight now and candidates for a future migration to drop.
         remove_branding = False
-        if fresh_plan in ('agency', 'enterprise'):
-            remove_branding = bool(data.get('remove_branding'))
         branding_settings['branding']['remove_branding'] = remove_branding
 
         conn   = models.get_db_connection()
@@ -1796,7 +1805,7 @@ def get_webhooks_route():
     if not client_id or not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
-        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Webhooks are not available on your current plan'}), 403
     return jsonify({'success': True, 'webhooks': models.get_webhooks(client_id)})
 
 
@@ -1808,7 +1817,7 @@ def save_webhooks_route():
     if not client_id or not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
-        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Webhooks are not available on your current plan'}), 403
     webhooks = data.get('webhooks', [])
     if len(webhooks) > 10:
         return jsonify({'success': False, 'error': 'Maximum 10 webhooks per client'}), 400
@@ -1828,7 +1837,7 @@ def regenerate_webhook_secret():
     if not client_id or not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
-        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Webhooks are not available on your current plan'}), 403
     new_secret = models.regenerate_signing_secret(client_id, webhook_id)
     return jsonify({'success': True, 'signing_secret': new_secret})
 
@@ -1840,7 +1849,7 @@ def get_webhook_logs_route():
     if not client_id or not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
-        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Webhooks are not available on your current plan'}), 403
     return jsonify({'success': True, 'logs': models.get_webhook_logs(client_id, limit=20)})
 
 
@@ -1856,7 +1865,7 @@ def test_webhook():
     if not webhook_url:
         return jsonify({'success': False, 'error': 'No webhook URL provided'}), 400
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
-        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Webhooks are not available on your current plan'}), 403
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
 
@@ -1936,7 +1945,7 @@ def create_platform_integration(client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
     if not plan_limits.get('webhooks'):
-        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Webhooks are not available on your current plan'}), 403
     data     = request.get_json(force=True) or {}
     platform = (data.get('platform') or '').lower().strip()
     secret   = (data.get('webhook_secret') or '').strip()
@@ -1950,14 +1959,11 @@ def create_platform_integration(client_id):
         # Same gate /api/agent-actions/<client_id>/integrations POST uses —
         # this route can now also provision a client_ext_integrations row,
         # so it shouldn't be a side-door around that plan check.
-        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Agent actions require the Growth or Scale plan'}), 403
 
-    # ai_starter/ai_growth/ai_scale count-based integration cap (1 / 5 /
-    # unlimited — see upgrade-shopify.html). Grandfathered solo/starter/pro/
-    # growth/agency/enterprise plans have no 'integrations_limit' key at all,
-    # so .get() returns None and this block is skipped entirely — their
-    # behavior is unchanged (boolean webhooks gate only, no count cap).
-    # Only counts against the cap if this is a NEW platform for this client —
+    # Starter/Growth/Scale count-based integration cap (1 / 5 / unlimited —
+    # see upgrade-shopify.html). Only counts against the cap if this is a
+    # NEW platform for this client —
     # rotating the secret on an already-connected platform doesn't add to
     # the count.
     integrations_limit = plan_limits.get('integrations_limit')
@@ -2040,7 +2046,7 @@ def list_platform_integrations(client_id):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
-        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Webhooks are not available on your current plan'}), 403
     integrations = _webhooks.list_integrations(client_id)
     base_url     = os.environ.get('APP_BASE_URL', 'https://app.lumvi.ai')
     for i in integrations:
@@ -2054,7 +2060,7 @@ def delete_platform_integration(client_id, platform):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
-        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Webhooks are not available on your current plan'}), 403
     if platform not in ('shopify', 'acuity', 'calendly', 'woocommerce', 'square'):
         return jsonify({'success': False, 'error': 'Unknown platform'}), 400
     ok = _webhooks.delete_integration(client_id, platform)
@@ -2072,7 +2078,7 @@ def get_integration_log(client_id):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('webhooks'):
-        return jsonify({'success': False, 'error': 'Webhooks require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Webhooks are not available on your current plan'}), 403
     limit    = min(int(request.args.get('limit', 20)), 100)
     conn = cursor = None
     try:
@@ -2150,7 +2156,7 @@ def list_agent_integrations(client_id):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
-        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Agent actions require the Growth or Scale plan'}), 403
     integrations = models.get_integrations(client_id)
     all_actions  = models.get_actions_for_client(client_id)
     for i in integrations:
@@ -2164,7 +2170,7 @@ def create_agent_integration(client_id):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
-        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Agent actions require the Growth or Scale plan'}), 403
     data = request.get_json(force=True) or {}
     result = models.create_integration(
         client_id=client_id,
@@ -2190,7 +2196,7 @@ def update_agent_integration(client_id, integration_id):
     if not _integration_belongs_to_client(integration_id, client_id):
         return jsonify({'success': False, 'error': 'Integration not found'}), 404
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
-        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Agent actions require the Growth or Scale plan'}), 403
     data = request.get_json(force=True) or {}
     if 'credentials' in data:
         ok = models.update_integration_credentials(integration_id, data['credentials'] or {})
@@ -2211,7 +2217,7 @@ def delete_agent_integration(client_id, integration_id):
     if not _integration_belongs_to_client(integration_id, client_id):
         return jsonify({'success': False, 'error': 'Integration not found'}), 404
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
-        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Agent actions require the Growth or Scale plan'}), 403
     ok = models.delete_integration(integration_id)
     if not ok:
         return jsonify({'success': False, 'error': 'Failed to delete integration'}), 500
@@ -2227,7 +2233,7 @@ def create_agent_action(client_id, integration_id):
     if not _integration_belongs_to_client(integration_id, client_id):
         return jsonify({'success': False, 'error': 'Integration not found'}), 404
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
-        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Agent actions require the Growth or Scale plan'}), 403
     data = request.get_json(force=True) or {}
 
     # CORRECTION to the fix I made here last time: I had this backwards.
@@ -2282,7 +2288,7 @@ def delete_agent_action(client_id, action_id):
     if not _action_belongs_to_client(action_id, client_id):
         return jsonify({'success': False, 'error': 'Action not found'}), 404
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
-        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Agent actions require the Growth or Scale plan'}), 403
     ok = models.delete_action(action_id)
     if not ok:
         return jsonify({'success': False, 'error': 'Failed to delete action'}), 500
@@ -2297,7 +2303,7 @@ def test_agent_action(client_id):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
-        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Agent actions require the Growth or Scale plan'}), 403
     data      = request.get_json(force=True) or {}
     action_id = data.get('action_id')
     params    = data.get('params') or {}
@@ -2319,7 +2325,7 @@ def get_agent_action_log(client_id):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
-        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Agent actions require the Growth or Scale plan'}), 403
     limit = min(int(request.args.get('limit', 50)), 100)
     log   = models.get_action_log(client_id, limit=limit)
     return jsonify({'success': True, 'log': log}), 200
@@ -2330,7 +2336,7 @@ def get_agent_action_log(client_id):
 def get_agent_actions_overview():
     """Cross-client rollup — every client this agency owns, one call."""
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
-        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Agent actions require the Growth or Scale plan'}), 403
     clients = models.get_user_clients(current_user.id)
     client_ids = [c['client_id'] for c in clients]
     stats = {s['client_id']: s for s in models.get_agency_integration_overview(client_ids)}
@@ -2372,7 +2378,7 @@ def apply_agent_action_template(client_id):
     if not models.verify_client_ownership(current_user.id, client_id):
         return jsonify({'success': False, 'error': 'Unauthorized'}), 403
     if not PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free']).get('agentic_actions'):
-        return jsonify({'success': False, 'error': 'Agent actions require Pro or Agency plan'}), 403
+        return jsonify({'success': False, 'error': 'Agent actions require the Growth or Scale plan'}), 403
 
     from integration_templates import get_template
     data = request.get_json(force=True) or {}
@@ -2451,7 +2457,14 @@ def analytics_page():
                 c['branding_settings'] = json.loads(c['branding_settings'])
             except Exception:
                 c['branding_settings'] = {}
-    is_agency = plan_type in ('pro', 'agency', 'enterprise') or is_admin
+    # No plan supports more than one connected store anymore (see 'clients'
+    # in PLAN_LIMITS above — free/ai_starter/ai_growth/ai_scale are all
+    # capped at 1). is_agency below is now vestigial for every real account
+    # — plan_type == 'ai_scale' can never actually have >1 client to switch
+    # between — kept only for is_admin's sake and because templates/
+    # analytics.html still reads the `is_agency` kwarg name. Candidate to
+    # simplify to just `is_agency = is_admin` once that template is updated.
+    is_agency = plan_type == 'ai_scale' or is_admin
     return render_template(
         'analytics.html',
         clients     = clients,

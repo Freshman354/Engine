@@ -98,14 +98,17 @@ def downgrade_expired_users():
            or whose grace was never set. They get downgraded immediately when
            subscription_expires_at passes.
 
-    Admin users (is_admin = TRUE) are always skipped.
+    Admin users (is_admin = TRUE) are always skipped. 'enterprise' no longer
+    has a standing exclusion here — it's an obsolete plan_type now
+    (see migrate_ai_employee_plan_rename); any account still found on it
+    downgrades to 'free' like any other expired paid plan.
     Returns list of user dicts that were downgraded.
     """
     conn, cursor = get_db()
     try:
         cursor.execute(
             '''SELECT id, email, plan_type FROM users
-               WHERE plan_type NOT IN ('free', 'enterprise')
+               WHERE plan_type != 'free'
                  AND (is_admin IS NOT TRUE)
                  AND (
                    -- Normal: grace period has passed
@@ -125,7 +128,7 @@ def downgrade_expired_users():
                    SET plan_type               = 'free',
                        subscription_expires_at = NULL,
                        grace_period_ends_at    = NULL
-                   WHERE plan_type NOT IN ('free', 'enterprise')
+                   WHERE plan_type != 'free'
                      AND (is_admin IS NOT TRUE)
                      AND (
                        (grace_period_ends_at IS NOT NULL AND grace_period_ends_at < NOW())

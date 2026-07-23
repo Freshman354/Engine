@@ -2069,38 +2069,55 @@ def migrate_overage_tracking():
 def migrate_ai_employee_plan_rename():
     """
     One-time DATA migration for the "AI Employee for Shopify & WooCommerce"
-    pivot (new self-serve tiers: ai_starter $29 / ai_growth $79 / ai_scale $199).
+    pivot. Supported plans going forward: free / ai_starter $29 / ai_growth
+    $79 / ai_scale $199.
 
-    Old plan_type values solo/starter/pro/growth/agency are DELIBERATELY left
-    untouched — every existing subscriber on those keys is grandfathered at
-    their exact current price and PLAN_LIMITS feature set forever. They are
-    simply no longer offered to new signups (the new /upgrade page only
-    sells ai_starter/ai_growth/ai_scale).
+    UPDATED (obsolete-plan removal): solo/starter[old $49]/pro/growth[old
+    $149]/agency/enterprise are no longer grandfathered — by explicit
+    product decision there are no production accounts left on any of them,
+    so every one is moved onto the nearest current tier rather than kept
+    around as a permanent legacy branch. 'free' is NOT touched by this
+    migration — it's a first-class current-generation plan, not obsolete.
 
-    The ONE exception: 'agency' has no equivalent at all in the new 3-tier
-    lineup (no white-label, no unlimited-clients tier), so by explicit
-    decision existing agency accounts are moved onto ai_scale (the nearest
-    tier) at ai_scale's list price ($199), rather than grandfathered.
+    Mapping (nearest-tier by feature/price proximity, store-count NOT
+    preserved — the new product is single-store-per-account focused):
+        solo, starter[old $49]  -> ai_starter
+        pro, growth[old $149]   -> ai_growth
+        agency, enterprise      -> ai_scale
 
     NOTE: this only updates the local plan_type column. It does NOT touch
-    Flutterwave — if an account has a live FLW subscription billing the old
-    $299 agency price, that subscription must be cancelled/recreated at the
-    new price manually in the Flutterwave dashboard, or it will keep
-    charging $299 even though the account now shows ai_scale limits.
+    Flutterwave — any live FLW subscription still billing an old-tier price
+    must be cancelled/recreated at the new price manually in the
+    Flutterwave dashboard, or it will keep charging the old amount even
+    though the account now shows new-tier limits. Confirmed with product:
+    no production accounts are on any obsolete plan_type, so this should
+    be a no-op in practice — the WHERE clauses are the safety net if that
+    assumption is ever wrong.
 
-    Idempotent — WHERE plan_type = 'agency' matches zero rows after the
-    first run, so safe to leave in the startup migration list permanently.
+    Idempotent — every WHERE clause matches zero rows once no account
+    remains on an obsolete plan_type, so safe to leave in the startup
+    migration list permanently.
     """
     conn = cursor = None
+    plan_map = {
+        'solo':       'ai_starter',
+        'starter':    'ai_starter',
+        'pro':        'ai_growth',
+        'growth':     'ai_growth',
+        'agency':     'ai_scale',
+        'enterprise': 'ai_scale',
+    }
     try:
         conn, cursor = get_db()
-        cursor.execute(
-            "UPDATE users SET plan_type = 'ai_scale' WHERE plan_type = 'agency'"
-        )
-        moved = cursor.rowcount
+        for old_plan, new_plan in plan_map.items():
+            cursor.execute(
+                "UPDATE users SET plan_type = %s WHERE plan_type = %s",
+                (new_plan, old_plan)
+            )
+            moved = cursor.rowcount
+            if moved:
+                print(f"migrate_ai_employee_plan_rename: moved {moved} '{old_plan}' user(s) to '{new_plan}'")
         conn.commit()
-        if moved:
-            print(f"migrate_ai_employee_plan_rename: moved {moved} agency user(s) to ai_scale")
     except Exception as e:
         if conn:
             try: conn.rollback()

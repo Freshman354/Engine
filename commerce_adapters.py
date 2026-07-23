@@ -541,7 +541,7 @@ def get_adapter_for_client(client_id: str) -> Optional[CommerceAdapter]:
     Shopify:     requires 'inventory_enabled': True and either a legacy
                  'access_token' or a 'shopify_client_id' + 'shopify_client_secret'
                  pair in platform_config. The basic Shopify connection
-                 (order webhooks only) does NOT satisfy this — the agency
+                 (order webhooks only) does NOT satisfy this — the merchant
                  must also enter Shopify credentials via the dashboard's
                  order-lookup/product-search fields.
     WooCommerce: requires 'consumer_key' and 'consumer_secret' in
@@ -631,7 +631,7 @@ def _get_order_integration(client_id: str) -> Optional[Dict]:
     Shopify:     platform_config must contain 'order_lookup_enabled': True
                  and Shopify auth (see _shopify_has_auth). Gated on its own
                  explicit flag rather than piggybacking on 'inventory_enabled'
-                 — an agency may want the bot answering "is my order shipped"
+                 — a merchant may want the bot answering "is my order shipped"
                  without also exposing product/stock search, or vice versa.
                  Both flags are satisfied by the SAME credentials (one
                  client_id+client_secret pair grants whatever scopes were
@@ -700,7 +700,7 @@ def get_order_management_url(client_id: str) -> Optional[str]:
     the action itself. See tools.py's cancel_order.
 
     Unlike order lookup, this needs no live API credentials — it's just a
-    link an agency pastes in — so it isn't gated through
+    link a merchant pastes in — so it isn't gated through
     _get_order_integration(); any active integration (of any platform)
     with 'order_management_url' set in platform_config qualifies.
     """

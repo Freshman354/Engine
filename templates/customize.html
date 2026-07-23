@@ -1254,12 +1254,12 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
       </div>
       <div class="card-text">
         <h2>Agency Defaults</h2>
-        <p>Auto-applied when you create a new client</p>
+        <p>Auto-applied when you create a new store</p>
       </div>
       <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
     </div>
     <div class="card-body open">
-      <p class="hint" style="margin-bottom:14px;">These settings are automatically applied to every new client you create. You can still override them per-client on the customize page.</p>
+      <p class="hint" style="margin-bottom:14px;">These settings are automatically applied to every new store you create. You can still override them per-store on the customize page.</p>
       <div class="field-row">
         <div class="field">
           <label>Default Brand Colour</label>
@@ -2092,7 +2092,7 @@ async function saveAgencyDefaults() {
     });
     const d = await r.json();
     console.log('[Customize] saveAgencyDefaults response:', d);
-    if (d.success) toast('Agency defaults saved — applied to new clients automatically', 'success');
+    if (d.success) toast('Agency defaults saved — applied to new stores automatically', 'success');
     else { console.error('[Customize] saveAgencyDefaults failed:', d.error); toast(d.error||'Save failed','error'); }
   } catch(e) { console.error('[Customize] saveAgencyDefaults network error:', e); toast('Network error','error'); }
   finally {
