@@ -39,7 +39,12 @@ _EMAIL_RE  = re.compile(r'^[\w.%+\-]+@[\w.\-]+\.[a-zA-Z]{2,}$')
 _PHONE_RE  = re.compile(r'^[+\d][\d\s\-().]{6,19}$')
 _HTTPS_RE  = re.compile(r'^https://.{4,}')
 
-ALLOWED_FIELDS = {'notification_email', 'notification_phone', 'webhook_url', 'cart_recovery_enabled'}
+ALLOWED_FIELDS = {
+    'notification_email', 'notification_phone', 'webhook_url', 'cart_recovery_enabled',
+    'ai_unavailable_mode', 'human_support_contact',
+}
+
+_AI_UNAVAILABLE_MODES = {'unavailable', 'faq_only', 'redirect_human'}
 
 # Shown to the merchant the moment they turn cart recovery ON — see
 # update_client_settings() below. Keep this exact wording in sync with
@@ -61,6 +66,12 @@ def _validate_field(name: str, value: str):
     v = (value or '').strip()
 
     if v == '':
+        # human_support_contact clearing is fine; ai_unavailable_mode should
+        # never be cleared to empty (it's an enum, not free text) — every
+        # other field treats empty as "clear this field", so mirror that
+        # except here, where empty isn't a valid mode.
+        if name == 'ai_unavailable_mode':
+            return None, 'ai_unavailable_mode cannot be empty'
         return v, None   # clearing a field is always allowed
 
     if name == 'notification_email':
@@ -80,6 +91,16 @@ def _validate_field(name: str, value: str):
         if not _HTTPS_RE.match(v):
             return None, 'Webhook URL must start with https://'
         return v, None
+
+    if name == 'ai_unavailable_mode':
+        if v not in _AI_UNAVAILABLE_MODES:
+            return None, f"ai_unavailable_mode must be one of {sorted(_AI_UNAVAILABLE_MODES)}"
+        return v, None
+
+    if name == 'human_support_contact':
+        if len(v) > 300:
+            return None, 'human_support_contact must be 300 characters or fewer'
+        return v, None  # free text — an email, phone, or "visit our contact page", merchant's choice
 
     return v, None
 
@@ -195,7 +216,8 @@ def _write_client_columns(client_id: str, fields: dict) -> bool:
     """
     safe_fields = {
         k: v for k, v in fields.items()
-        if k in ('notification_email', 'notification_phone', 'cart_recovery_enabled')
+        if k in ('notification_email', 'notification_phone', 'cart_recovery_enabled',
+                 'ai_unavailable_mode', 'human_support_contact')
     }
     if not safe_fields:
         return True

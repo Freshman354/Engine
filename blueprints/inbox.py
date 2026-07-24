@@ -147,6 +147,98 @@ def notify_handoff(client_id, client, config, ticket_id, reason,
     threading.Thread(target=_send, daemon=True).start()
 
 
+# ── Usage-threshold notification (background, non-blocking) ──────────────────
+# Per spec: dashboard notification at 70/90/100%, email at 90/100% only.
+# Reuses the exact notify_handoff() pattern above — same sender resolution,
+# same daemon-thread-so-chat-never-blocks approach, same client.notification_email
+# recipient lookup.
+
+def notify_usage_threshold(client_id, client, threshold, usage_count, usage_cap,
+                            grace_used=0, grace_total=0):
+    """
+    Email the merchant when their store crosses the 90% or 100% usage
+    threshold. threshold=70 is dashboard-only per spec — this function
+    still gets called for 70 (so the call site in chat.py doesn't need to
+    know which thresholds email), it just no-ops past the email step.
+
+    threshold=100 means grace is exhausted and the AI has actually
+    stopped responding (see chat.py's monthly-cap block) — NOT that the
+    base plan cap was reached, since grace_conversations may still have
+    been available at that point.
+
+    Public so the chat blueprint can call it directly.
+    """
+    if threshold not in (90, 100):
+        return  # 70% is dashboard-only, no email
+
+    def _send():
+        try:
+            notify_email = (client or {}).get('notification_email')
+            company_name = (client or {}).get('company_name', 'your chatbot')
+            if not (notify_email and _mail):
+                return
+
+            if threshold == 100:
+                subject = f"⚠️ AI assistant paused — {company_name}"
+                headline = "Your AI assistant has stopped responding"
+                body = (
+                    f"{company_name} has used all {usage_cap} conversations included "
+                    f"this month" + (f" plus its {grace_total}-conversation grace "
+                    f"allowance" if grace_total else "") + ". New chat messages are "
+                    f"no longer being answered by AI until your usage resets or you "
+                    f"upgrade."
+                )
+                color = '#DC2626'
+            else:  # 90
+                subject = f"Usage alert: 90% of monthly limit — {company_name}"
+                headline = "Approaching your monthly conversation limit"
+                body = (
+                    f"{company_name} has used {usage_count} of {usage_cap} "
+                    f"conversations included this month (90%)."
+                    + (f" A {grace_total}-conversation grace allowance kicks in "
+                       f"after that." if grace_total else
+                       " AI responses will pause once the limit is reached.")
+                )
+                color = '#D97706'
+
+            try:
+                sender_info = models.get_email_from_for_client(client_id)
+                msg = Message(
+                    subject=subject,
+                    sender=f"{sender_info['name']} <{sender_info['address']}>",
+                    recipients=[notify_email],
+                    html=f"""
+                    <div style="font-family:'DM Sans',sans-serif;max-width:560px;margin:0 auto;
+                                background:#F7F4EF;padding:36px;border-radius:16px;">
+                      <h2 style="font-size:20px;font-weight:700;color:{color};margin-bottom:4px;">
+                        {headline}</h2>
+                      <p style="color:#57534E;font-size:14px;line-height:1.6;margin:16px 0 24px;">
+                        {body}</p>
+                      <a href="https://lumvi.net/dashboard"
+                         style="display:inline-block;padding:11px 22px;
+                                background:#B8924A;color:#fff;text-decoration:none;
+                                border-radius:9px;font-weight:700;font-size:13.5px;">
+                        View Dashboard →</a>
+                      <p style="font-size:11px;color:#A8A29E;margin-top:20px;">
+                        Lumvi Platform</p>
+                    </div>"""
+                )
+                _mail.send(msg)
+                current_app.logger.info(
+                    f"[UsageThreshold] {threshold}% email sent client={client_id} to={notify_email}"
+                )
+            except Exception as _mail_err:
+                current_app.logger.warning(
+                    f"[UsageThreshold] email failed client={client_id}: {_mail_err}"
+                )
+        except Exception as _outer_err:
+            current_app.logger.error(
+                f"[UsageThreshold] notify thread error: {_outer_err}"
+            )
+
+    threading.Thread(target=_send, daemon=True).start()
+
+
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @inbox_bp.route('/inbox')

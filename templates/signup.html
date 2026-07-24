@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Launch AI Employees for Your Clients — Lumvi</title>
+    <title>Launch Your AI Employee — Lumvi</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -25,7 +25,7 @@
         html, body { height: 100%; }
 
         body {
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Outfit', sans-serif;
             background: var(--cream);
             display: flex;
             min-height: 100vh;
@@ -59,7 +59,7 @@
         }
 
         .logo-text {
-            font-family: 'Fraunces', serif;
+            font-family: 'Playfair Display', serif;
             font-size: 18px; font-weight: 600;
             color: var(--dark); letter-spacing: -0.3px;
         }
@@ -73,7 +73,7 @@
         .left-copy { text-align: center; position: relative; z-index: 1; }
 
         .left-copy h2 {
-            font-family: 'Fraunces', serif;
+            font-family: 'Playfair Display', serif;
             font-size: 22px; font-weight: 600;
             color: var(--dark); line-height: 1.35; margin-bottom: 10px;
             letter-spacing: -0.3px;
@@ -112,7 +112,7 @@
         .form-header { margin-bottom: 26px; }
 
         .form-header h1 {
-            font-family: 'Fraunces', serif;
+            font-family: 'Playfair Display', serif;
             font-size: 28px; font-weight: 700;
             color: var(--dark); letter-spacing: -0.5px; margin-bottom: 7px;
         }
@@ -133,7 +133,7 @@
             width: 100%; padding: 12px 14px;
             background: var(--cream); border: 1.5px solid var(--border);
             border-radius: 10px; font-size: 14px;
-            color: var(--dark); font-family: 'DM Sans', sans-serif;
+            color: var(--dark); font-family: 'Outfit', sans-serif;
             transition: all 0.2s; outline: none;
         }
 
@@ -158,7 +158,7 @@
             background: var(--gold); color: #fff;
             border: none; border-radius: 10px;
             font-size: 15px; font-weight: 600;
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Outfit', sans-serif;
             cursor: pointer; transition: all 0.25s;
             margin-top: 4px;
         }
@@ -188,7 +188,7 @@
             width: 100%; padding: 12px;
             background: var(--cream); border: 1.5px solid var(--border);
             border-radius: 10px; font-size: 14px; font-weight: 500;
-            color: var(--dark); font-family: 'DM Sans', sans-serif;
+            color: var(--dark); font-family: 'Outfit', sans-serif;
             cursor: pointer; transition: all 0.2s;
             display: flex; align-items: center; justify-content: center; gap: 9px;
             margin-bottom: 10px; text-decoration: none;
@@ -230,7 +230,7 @@
     <!-- LEFT PANEL -->
     <div class="left-panel">
         <a href="/" class="brand-top">
-            <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi Logo" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid rgb(184, 146, 74);box-shadow:0 0 16px rgba(217, 171, 85, 0.414);">
+            <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi Logo" style="width:32px;height:32px;border-radius:8px;object-fit:cover;">
             <span class="logo-text">Lumvi</span>
         </a>
 
@@ -244,12 +244,12 @@
                 <rect x="34" y="20" width="200" height="34" rx="16" fill="#1C1917"/>
                 <rect x="34" y="42" width="200" height="12" fill="#1C1917"/>
                 <circle cx="54" cy="37" r="9" fill="#B8924A"/>
-                <text x="54" y="41" font-family="'Fraunces', serif" font-size="10" font-weight="700" fill="#1C1917" text-anchor="middle">A</text>
+                <text x="54" y="41" font-family="'Playfair Display', serif" font-size="10" font-weight="700" fill="#1C1917" text-anchor="middle">A</text>
                 <rect x="70" y="30" width="46" height="6" rx="3" fill="#E7E2DA"/>
                 <rect x="70" y="40" width="36" height="5" rx="2.5" fill="rgba(231,226,218,0.5)"/>
-                <!-- Client label — illustrates one client's branded AI Employee, not the agency's own -->
+                <!-- Store label — illustrates the AI Employee working for the user's own store -->
                 <rect x="152" y="32" width="74" height="14" rx="7" fill="rgba(255,255,255,0.12)"/>
-                <text x="159" y="42" font-family="'DM Sans', sans-serif" font-size="7" fill="#E7E2DA">Client: Riverside Co.</text>
+                <text x="159" y="42" font-family="'Outfit', sans-serif" font-size="7" fill="#E7E2DA">Shopify Store</text>
 
                 <!-- Customer bubble -->
                 <rect x="50" y="66" width="120" height="24" rx="12" fill="#F7F4EF"/>
@@ -264,7 +264,7 @@
                 <rect x="50" y="140" width="90" height="20" rx="10" fill="#F7F4EF"/>
                 <rect x="62" y="147" width="66" height="6" rx="3" fill="#A8A29E"/>
 
-                <!-- Booking confirmation card -->
+                <!-- Order confirmation card -->
                 <g transform="translate(150, 178)">
                     <rect width="118" height="62" rx="12" fill="#fff" filter="url(#sh1)"/>
                     <circle cx="22" cy="22" r="12" fill="rgba(76,154,106,0.14)"/>
@@ -272,14 +272,14 @@
                     <rect x="42" y="15" width="60" height="6" rx="3" fill="#1C1917"/>
                     <rect x="42" y="27" width="46" height="5" rx="2.5" fill="#A8A29E"/>
                     <rect x="16" y="42" width="86" height="10" rx="5" fill="#F7F4EF"/>
-                    <text x="20" y="50" font-family="'DM Sans', sans-serif" font-size="7.5" fill="#57534E">Appt booked</text>
+                    <text x="20" y="50" font-family="'Outfit', sans-serif" font-size="7.5" fill="#57534E">Order tracked</text>
                 </g>
 
                 <!-- Active badge -->
                 <g transform="translate(28, 200)">
                     <rect width="96" height="30" rx="15" fill="#1C1917"/>
                     <circle cx="18" cy="15" r="4" fill="#4C9A6A"/>
-                    <text x="30" y="19" font-family="'DM Sans', sans-serif" font-size="10.5" font-weight="500" fill="#fff">Working now</text>
+                    <text x="30" y="19" font-family="'Outfit', sans-serif" font-size="10.5" font-weight="500" fill="#fff">Working now</text>
                 </g>
 
                 <defs>
@@ -291,13 +291,13 @@
         </div>
 
         <div class="left-copy">
-            <h2>Give every store its own AI Employee.</h2>
-            <p>White-label AI Employees, trained on each store's business — branded as yours, working for them around the clock.</p>
+            <h2>Give your store an AI Employee.</h2>
+            <p>Connect Shopify or WooCommerce and it goes to work — answering customers, tracking orders, recommending products, and handling returns, day and night.</p>
             <ul class="features-list">
-                <li><div class="feat-icon"></div> Fully white-labeled — your brand, not ours</li>
-                <li><div class="feat-icon"></div> Manage your store from one dashboard</li>
-                <li><div class="feat-icon"></div> Each store's AI Employee answers customers 24/7</li>
-                <li><div class="feat-icon"></div> Launch a new store in under 10 minutes</li>
+                <li><div class="feat-icon"></div> Connects directly to Shopify &amp; WooCommerce</li>
+                <li><div class="feat-icon"></div> Trained on your products, policies, and FAQs</li>
+                <li><div class="feat-icon"></div> Answers customers and takes action 24/7</li>
+                <li><div class="feat-icon"></div> Live on your storefront in minutes</li>
             </ul>
         </div>
     </div>
@@ -306,11 +306,11 @@
     <div class="right-panel">
         <div class="form-box">
             <div class="form-header">
-                <h1>Launch AI Employees for your stores</h1>
-                <p>Free to start. No credit card, no setup calls — create your agency account and launch your first store today.</p>
+                <h1>Launch your AI Employee</h1>
+                <p>Free to start. No credit card, no setup calls — connect your store and go live today.</p>
             </div>
 
-            <div class="mobile-tag">🏷️ White-label — deploy under your own brand, for every client</div>
+            <div class="mobile-tag">🛍️ Built for Shopify &amp; WooCommerce stores</div>
 
             {% if error %}
             <div class="error-box">⚠️ {{ error }}</div>
@@ -326,7 +326,7 @@
                 Continue with Google
             </a>
 
-            <div class="divider">or hire with your email</div>
+            <div class="divider">or sign up with email</div>
 
             <form method="POST">
                 <input type="hidden" name="plan_param" value="{{ plan_param or 'free' }}">
@@ -355,7 +355,7 @@
                     </div>
                 </div>
 
-                <button type="submit" class="btn-submit">Launch My First AI Employee →</button>
+                <button type="submit" class="btn-submit">Launch My AI Employee →</button>
 
                 <div class="fine-print">
                     By continuing, you agree to Lumvi's <a href="/terms" target="_blank">Terms of Service</a> and <a href="/privacy-policy" target="_blank">Privacy Policy</a>.
@@ -363,7 +363,7 @@
             </form>
 
             <div class="login-link">
-                Already launching AI Employees with us? <a href="/login">Sign in</a>
+                Already have an AI Employee with us? <a href="/login">Sign in</a>
             </div>
         </div>
     </div>

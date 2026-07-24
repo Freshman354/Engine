@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign In — Lumvi</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800;900&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -25,7 +25,7 @@
         html, body { height: 100%; }
 
         body {
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Outfit', sans-serif;
             background: var(--cream);
             display: flex;
             min-height: 100vh;
@@ -72,7 +72,7 @@
         }
 
         .logo-text {
-            font-family: 'Fraunces', serif;
+            font-family: 'Playfair Display', serif;
             font-size: 18px; font-weight: 600;
             color: var(--dark); letter-spacing: -0.3px;
         }
@@ -86,7 +86,7 @@
         .left-copy { text-align: center; position: relative; z-index: 1; }
 
         .left-copy h2 {
-            font-family: 'Fraunces', serif;
+            font-family: 'Playfair Display', serif;
             font-size: 22px; font-weight: 600;
             color: var(--dark); line-height: 1.35;
             margin-bottom: 10px; letter-spacing: -0.3px;
@@ -120,7 +120,7 @@
         .form-header { margin-bottom: 28px; }
 
         .form-header h1 {
-            font-family: 'Fraunces', serif;
+            font-family: 'Playfair Display', serif;
             font-size: 30px; font-weight: 700;
             color: var(--dark); letter-spacing: -0.5px;
             margin-bottom: 7px;
@@ -143,7 +143,7 @@
             background: var(--cream);
             border: 1.5px solid var(--border);
             border-radius: 10px; font-size: 14px;
-            color: var(--dark); font-family: 'DM Sans', sans-serif;
+            color: var(--dark); font-family: 'Outfit', sans-serif;
             transition: all 0.2s; outline: none;
         }
 
@@ -177,7 +177,7 @@
             background: var(--gold);
             color: #fff; border: none; border-radius: 10px;
             font-size: 15px; font-weight: 600;
-            font-family: 'DM Sans', sans-serif;
+            font-family: 'Outfit', sans-serif;
             cursor: pointer; transition: all 0.25s;
             letter-spacing: 0.01em;
         }
@@ -199,7 +199,7 @@
             width: 100%; padding: 12px;
             background: var(--cream); border: 1.5px solid var(--border);
             border-radius: 10px; font-size: 14px; font-weight: 500;
-            color: var(--dark); font-family: 'DM Sans', sans-serif;
+            color: var(--dark); font-family: 'Outfit', sans-serif;
             cursor: pointer; transition: all 0.2s;
             display: flex; align-items: center; justify-content: center; gap: 9px;
             margin-bottom: 10px; text-decoration: none;
@@ -237,7 +237,7 @@
     <!-- LEFT PANEL -->
     <div class="left-panel">
         <a href="/" class="brand-top">
-            <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi Logo" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid rgb(184, 146, 74);box-shadow:0 0 16px rgba(217, 171, 85, 0.414);">
+            <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi Logo" style="width:32px;height:32px;border-radius:8px;object-fit:cover;">
             <span class="logo-text">Lumvi</span>
         </a>
 
@@ -250,11 +250,11 @@
                 <rect x="40" y="24" width="260" height="34" rx="16" fill="#1C1917"/>
                 <rect x="40" y="46" width="260" height="12" fill="#1C1917"/>
                 <circle cx="60" cy="41" r="9" fill="#B8924A"/>
-                <text x="60" y="45" font-family="'Fraunces', serif" font-size="10" font-weight="700" fill="#1C1917" text-anchor="middle">A</text>
+                <text x="60" y="45" font-family="'Playfair Display', serif" font-size="10" font-weight="700" fill="#1C1917" text-anchor="middle">A</text>
                 <rect x="76" y="34" width="50" height="6" rx="3" fill="#E7E2DA"/>
-                <!-- Client label — reinforces this console belongs to one of many managed clients -->
+                <!-- Store label — reinforces this console belongs to the user's own store -->
                 <rect x="200" y="32" width="86" height="14" rx="7" fill="rgba(255,255,255,0.12)"/>
-                <text x="207" y="42" font-family="'DM Sans', sans-serif" font-size="7" fill="#E7E2DA">Client: Riverside Co.</text>
+                <text x="207" y="42" font-family="'Outfit', sans-serif" font-size="7" fill="#E7E2DA">Shopify Store</text>
 
                 <!-- Live rows while user was away -->
                 <g>
@@ -281,7 +281,7 @@
                 <g transform="translate(120, 196)">
                     <rect width="100" height="16" rx="8" fill="#1C1917"/>
                     <circle cx="14" cy="8" r="3.5" fill="#4C9A6A"/>
-                    <text x="24" y="12" font-family="'DM Sans', sans-serif" font-size="8.5" font-weight="500" fill="#fff">Active now</text>
+                    <text x="24" y="12" font-family="'Outfit', sans-serif" font-size="8.5" font-weight="500" fill="#fff">Active now</text>
                 </g>
 
                 <defs>
@@ -293,8 +293,8 @@
         </div>
 
         <div class="left-copy">
-            <h2>Your clients' AI Employees never clocked out.</h2>
-            <p>Sign back in to see what's been handled across your clients while you were away.</p>
+            <h2>Your AI Employee never clocked out.</h2>
+            <p>Sign back in to see the orders it tracked, the products it recommended, and the returns it started while you were away.</p>
             <div class="dots">
                 <div class="dot active"></div>
                 <div class="dot"></div>
@@ -308,7 +308,7 @@
         <div class="form-box">
             <div class="form-header">
                 <h1>Good to see you</h1>
-                <p>Sign in to check in on your clients' AI Employees.</p>
+                <p>Sign in to check in on your Store AI.</p>
             </div>
 
             {% if error %}
@@ -352,7 +352,7 @@
                 New here? <a href="/signup">Launch your first AI Employee</a>
             </div>
 
-            <div class="copyright">© 2026 Lumvi — White-Label AI Employees for Agencies</div>
+            <div class="copyright">© 2026 Lumvi — The AI Employee for Shopify &amp; WooCommerce Stores</div>
         </div>
     </div>
 

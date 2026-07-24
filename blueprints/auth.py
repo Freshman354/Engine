@@ -42,7 +42,7 @@ Registration in app.py:
 
 import json
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 from flask import (Blueprint, flash, jsonify, redirect,
                    render_template, request, current_app, session, url_for)
@@ -104,7 +104,7 @@ def signup():
             'free'
         ).lower().strip()
 
-        PAID_PLANS  = ('solo', 'starter', 'pro', 'growth', 'agency', 'enterprise')
+        PAID_PLANS  = ('ai_starter', 'ai_growth', 'ai_scale')
         valid_plans = ('free',) + PAID_PLANS
         if plan_from_form not in valid_plans:
             plan_from_form = 'free'
@@ -365,6 +365,23 @@ def dashboard():
         if clients else 0
     )
 
+    _cap = plan_limits.get('conversations_per_month')
+    grace_used = max(0, monthly_conversations - _cap) if _cap is not None else 0
+
+    # First of next month — conversations are counted per calendar month
+    # (get_monthly_conversation_count), so this is the actual reset point,
+    # not a billing-cycle date.
+    _today = date.today()
+    if _today.month == 12:
+        usage_reset_date = date(_today.year + 1, 1, 1)
+    else:
+        usage_reset_date = date(_today.year, _today.month + 1, 1)
+
+    latest_usage_notification = (
+        models.get_latest_usage_notification(clients[0]['client_id'])
+        if clients else None
+    )
+
     sub_status = session.pop('sub_status', None)
     sub_info   = (_get_subscription_status(fresh_user)
                   if fresh_user and _get_subscription_status
@@ -372,13 +389,16 @@ def dashboard():
 
     return render_template(
         'dashboard_enterprise.html',
-        user                   = current_user,
-        clients                = clients,
-        plan_type              = plan_type,
-        plan_limits            = plan_limits,
-        monthly_conversations  = monthly_conversations,
-        sub_status             = sub_info['status'],
-        sub_grace_ends_at      = sub_info.get('grace_ends_at'),
+        user                        = current_user,
+        clients                     = clients,
+        plan_type                   = plan_type,
+        plan_limits                 = plan_limits,
+        monthly_conversations       = monthly_conversations,
+        grace_used                  = grace_used,
+        usage_reset_date            = usage_reset_date,
+        latest_usage_notification   = latest_usage_notification,
+        sub_status                  = sub_info['status'],
+        sub_grace_ends_at           = sub_info.get('grace_ends_at'),
     )
 
 

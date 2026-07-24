@@ -59,11 +59,12 @@ _find_best_match          = None
 _get_cached_client_owner  = None
 _fire_webhook             = None
 _notify_handoff           = None
+_notify_usage_threshold   = None
 
 
 def init_chat(limiter, ai_helper, plan_limits, vertical_prompts,
               log_conversation, find_best_match, get_cached_client_owner,
-              fire_webhook, notify_handoff):
+              fire_webhook, notify_handoff, notify_usage_threshold):
     """
     Called once in app.py after all shared objects are ready.
     limiter is accepted but not stored — rate limits are applied externally
@@ -71,7 +72,8 @@ def init_chat(limiter, ai_helper, plan_limits, vertical_prompts,
     Must be called before the first request reaches this blueprint.
     """
     global _ai_helper, _plan_limits, _vertical_prompts, _log_conversation, \
-            _find_best_match, _get_cached_client_owner, _fire_webhook, _notify_handoff
+            _find_best_match, _get_cached_client_owner, _fire_webhook, \
+            _notify_handoff, _notify_usage_threshold
     _ai_helper               = ai_helper
     _plan_limits             = plan_limits
     _vertical_prompts        = vertical_prompts
@@ -80,6 +82,7 @@ def init_chat(limiter, ai_helper, plan_limits, vertical_prompts,
     _get_cached_client_owner = get_cached_client_owner
     _fire_webhook            = fire_webhook
     _notify_handoff          = notify_handoff
+    _notify_usage_threshold  = notify_usage_threshold
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -175,35 +178,97 @@ def chat():
                 monthly_cap  = plan_limits.get('conversations_per_month', '__unset__')
 
                 if monthly_cap != '__unset__':
-                    # ── New tiers: monthly conversation cap ─────────────────
+                    # ── New tiers: monthly conversation cap + grace period ───
                     if monthly_cap is not None:  # None == unlimited (ai_scale)
-                        _chat_monthly_limit = monthly_cap
-                        month_count         = models.get_monthly_conversation_count(client_id)
-                        if month_count >= monthly_cap:
+                        grace_total = plan_limits.get('grace_conversations', 0)
+                        hard_limit  = monthly_cap + grace_total
+                        _chat_monthly_limit = hard_limit
+                        month_count = models.get_monthly_conversation_count(client_id)
+
+                        if month_count >= hard_limit:
+                            # ── Grace exhausted — AI actually stops responding here.
+                            # This is the true "100%" point, not monthly_cap itself
+                            # (grace_conversations may still have been available).
                             current_app.logger.info(
-                                f"[Limit] {client_id} hit monthly cap "
-                                f"({month_count}/{monthly_cap}) on plan '{plan_type}'"
+                                f"[Limit] {client_id} exhausted grace "
+                                f"({month_count}/{hard_limit}, cap={monthly_cap}, "
+                                f"grace={grace_total}) on plan '{plan_type}'"
                             )
+                            try:
+                                is_new = models.record_usage_notification(
+                                    client_id, 100, month_count, monthly_cap
+                                )
+                                if is_new:
+                                    _notify_usage_threshold(
+                                        client_id, client, 100, month_count, monthly_cap,
+                                        grace_used=grace_total, grace_total=grace_total,
+                                    )
+                            except Exception:
+                                pass  # non-fatal — never let notification plumbing block the reply
+
+                            # Never expose billing/quota language to the shopper —
+                            # merchant-configurable degrade behavior instead.
+                            mode = (client or {}).get('ai_unavailable_mode', 'unavailable')
+                            generic_reply = (
+                                "I'm temporarily unavailable right now. Please "
+                                "contact the store directly if you need immediate "
+                                "assistance."
+                            )
+
+                            if mode == 'faq_only':
+                                best_faq, _confidence = _find_best_match(message, faqs_list) if faqs_list else (None, 0)
+                                if best_faq:
+                                    response_text = best_faq.get('answer')
+                                    _log_conversation(
+                                        client_id, message, response_text,
+                                        matched=True, method='faq_only_limit',
+                                        session_id=session_id,
+                                        daily_limit=_chat_daily_limit,
+                                        monthly_limit=_chat_monthly_limit,
+                                    )
+                                    return jsonify({
+                                        'success':       True,
+                                        'response':      response_text,
+                                        'limit_reached': True,
+                                        'method':        'faq_only_limit',
+                                    })
+                                # no FAQ match — fall through to the generic reply below
+
+                            elif mode == 'redirect_human':
+                                contact = (client or {}).get('human_support_contact', '').strip()
+                                if contact:
+                                    generic_reply = (
+                                        "I'm temporarily unavailable right now. "
+                                        f"For immediate help, please reach out to {contact}."
+                                    )
+
                             return jsonify({
                                 'success':       True,
-                                'response': (
-                                    "You've reached this month's conversation limit. "
-                                    "Upgrade your plan for more capacity. 🚀"
-                                ),
+                                'response':      generic_reply,
                                 'limit_reached': True,
-                                'upgrade_url':   '/upgrade?plan=ai_growth',
                                 'method':        'limit_enforced',
                             })
-                        elif month_count >= int(monthly_cap * 0.8):
-                            pct = round(month_count / monthly_cap * 100)
+
+                        # ── Under the hard limit — allowed through (possibly in
+                        # the grace window). Fire whichever threshold notification
+                        # is newly crossed, then continue to normal AI handling. ──
+                        pct = round(month_count / monthly_cap * 100)
+                        threshold_hit = 90 if pct >= 90 else (70 if pct >= 70 else None)
+                        if threshold_hit:
                             current_app.logger.info(
                                 f"[UsageWarning] {client_id} at {pct}% of monthly cap "
                                 f"({month_count}/{monthly_cap}) on plan '{plan_type}'"
                             )
                             try:
-                                models.upsert_usage_warning(
-                                    client_id, pct, month_count, monthly_cap
+                                is_new = models.record_usage_notification(
+                                    client_id, threshold_hit, month_count, monthly_cap
                                 )
+                                if is_new:
+                                    _notify_usage_threshold(
+                                        client_id, client, threshold_hit, month_count, monthly_cap,
+                                        grace_used=max(0, month_count - monthly_cap),
+                                        grace_total=grace_total,
+                                    )
                             except Exception:
                                 pass  # non-fatal
                 else:
@@ -220,11 +285,11 @@ def chat():
                             return jsonify({
                                 'success':       True,
                                 'response': (
-                                    "You've reached today's message limit. "
-                                    "Upgrade your plan for unlimited messages, or try again tomorrow. 🚀"
+                                    "I'm temporarily unavailable right now. Please "
+                                    "contact the store directly if you need immediate "
+                                    "assistance."
                                 ),
                                 'limit_reached': True,
-                                'upgrade_url':   '/upgrade?plan=ai_growth',
                                 'method':        'limit_enforced',
                             })
                         # ── Overage warning: fire at 80% usage ──────────────────

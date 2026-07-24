@@ -44,7 +44,6 @@ from flask_login import (LoginManager, UserMixin, current_user,
                          login_required, login_user, logout_user)
 from flask_mail import Mail, Message
 from paypalrestsdk import Payment, configure
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ── Local ─────────────────────────────────────────────────────────────────────
 import cache_utils
@@ -69,10 +68,16 @@ _wh_executor  = ThreadPoolExecutor(max_workers=8,  thread_name_prefix='wh-delive
 
 app = Flask(__name__)
 
-# Railway terminates TLS at its edge and forwards plain HTTP to this app,
-# setting X-Forwarded-Proto/Host headers. Without this, url_for(_external=True)
-# (used e.g. for the Google OAuth redirect_uri) builds http:// URLs instead of
-# https://, which then fail to match what's registered in Google Cloud Console.
+# ── Trust the deploy platform's reverse proxy (Render/Railway/etc. terminate
+# TLS in front of this app — Flask sees plain http internally otherwise).
+# Without this, url_for(..., _external=True) builds http:// URLs even though
+# the site is actually served over https — which is exactly what breaks
+# Google OAuth (Error 400: redirect_uri_mismatch — Google's console has the
+# https:// redirect URI registered, but google_login() was generating the
+# http:// version). x_proto=1 trusts one hop of X-Forwarded-Proto; x_host=1
+# does the same for X-Forwarded-Host. Bump these if there's more than one
+# proxy hop in front of the app.
+from werkzeug.middleware.proxy_fix import ProxyFix  # noqa: E402
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
 # ── Required env vars — crash at startup rather than silently misconfigure ────
@@ -106,6 +111,7 @@ app.config['PERMANENT_SESSION_LIFETIME']  = timedelta(days=30)
 app.config['SESSION_COOKIE_SECURE']       = True
 app.config['SESSION_COOKIE_HTTPONLY']     = True
 app.config['SESSION_COOKIE_SAMESITE']     = 'Lax'
+app.config['PREFERRED_URL_SCHEME']        = 'https'
 app.config['SESSION_COOKIE_NAME']         = 'lumvi_session'
 app.config['REMEMBER_COOKIE_DURATION']    = timedelta(days=30)
 app.config['REMEMBER_COOKIE_SECURE']      = True
@@ -138,6 +144,14 @@ app.config['MAIL_PORT']              = int(os.environ.get('MAIL_PORT', 587))
 app.config['MAIL_USE_TLS']           = True
 app.config['MAIL_USE_SSL']           = False
 app.config['MAIL_USERNAME']          = os.environ.get('MAIL_USERNAME', '')
+# FIX: smtplib (what Flask-Mail wraps) has no default timeout — an SMTP
+# connection that hangs at any stage (connect, TLS handshake, auth, DATA)
+# just waits indefinitely, no exception ever raised, nothing ever logged.
+# This is why the original signup timeout produced zero error-log output:
+# it wasn't failing, it was silently stuck. 20s is generous for a normal
+# SMTP round-trip; long enough to not false-positive on a slow-but-working
+# connection, short enough that a hung one surfaces (and gets logged) fast.
+app.config['MAIL_TIMEOUT']           = 20
 app.config['MAIL_PASSWORD']          = os.environ.get('MAIL_PASSWORD', '')
 app.config['MAIL_DEFAULT_SENDER']    = 'Lumvi <support@lumvi.net>'
 app.config['MAIL_MAX_EMAILS']        = None
@@ -315,7 +329,7 @@ PLAN_LIMITS = {
     # pages) — the storage values are free/ai_starter/ai_growth/ai_scale.
     'free': {
         'clients': 1, 'faqs_per_client': 50, 'messages_per_day': 999999,
-        'conversations_per_month': 50,
+        'conversations_per_month': 50, 'grace_conversations': 0,
         'integrations_limit': 1,
         'product_recommendations': False, 'cart_recovery': False,
         'lead_capture': False, 'api_access': False,
@@ -326,7 +340,7 @@ PLAN_LIMITS = {
     },
     'ai_starter': {
         'clients': 1, 'faqs_per_client': 999, 'messages_per_day': 999999,
-        'conversations_per_month': 1000,
+        'conversations_per_month': 1000, 'grace_conversations': 20,
         'integrations_limit': 1,
         'product_recommendations': False, 'cart_recovery': False,
         'lead_capture': False, 'api_access': False,
@@ -337,7 +351,7 @@ PLAN_LIMITS = {
     },
     'ai_growth': {
         'clients': 1, 'faqs_per_client': 999, 'messages_per_day': 999999,
-        'conversations_per_month': 5000,
+        'conversations_per_month': 5000, 'grace_conversations': 50,
         'integrations_limit': 5,  # "Shopify + WooCommerce + additional integrations"
         'product_recommendations': True, 'cart_recovery': True,
         'lead_capture': True, 'api_access': False,
@@ -349,6 +363,7 @@ PLAN_LIMITS = {
     'ai_scale': {
         'clients': 1, 'faqs_per_client': 999, 'messages_per_day': 999999,
         'conversations_per_month': None,   # unlimited
+        'grace_conversations': 0,          # moot — cap is unlimited, grace never triggers
         'integrations_limit': None,        # unlimited
         'product_recommendations': True, 'cart_recovery': True,
         'lead_capture': True, 'api_access': True,
@@ -416,13 +431,29 @@ GENERIC_TAGS = {
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def send_welcome_email(email: str) -> None:
-    """Send a branded welcome email to a new Lumvi user."""
-    try:
-        msg = Message(
-            subject    = "Welcome to Lumvi — your AI chatbot is ready 🚀",
-            sender     = "Lumvi <support@lumvi.net>",
-            recipients = [email],
-            html       = """
+    """
+    Send a branded welcome email to a new Lumvi user.
+
+    FIX: fires in a background daemon thread now — this used to run
+    synchronously inside the signup()/google_callback() request itself.
+    mail.send() is a blocking SMTP call with no explicit timeout; if the
+    mail server is slow, rate-limiting, or unreachable, the whole signup
+    request hangs until Cloudflare's origin timeout and the new user gets
+    a 524 instead of an account (this is exactly what was reported —
+    signup via email timing out). Safe to background with no app-context
+    handling needed: `mail = Mail(app)` above uses direct init (stores
+    `self.app` internally), not the `init_app()` deferred pattern, so
+    mail.send() doesn't touch current_app. Same reasoning applies to the
+    app.logger calls below — they're the real `app` object, not the
+    current_app proxy.
+    """
+    def _send():
+        try:
+            msg = Message(
+                subject    = "Welcome to Lumvi — your AI chatbot is ready 🚀",
+                sender     = "Lumvi <support@lumvi.net>",
+                recipients = [email],
+                html       = """
 <!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -479,11 +510,13 @@ def send_welcome_email(email: str) -> None:
   </table>
 </body>
 </html>"""
-        )
-        mail.send(msg)
-        app.logger.info(f'Welcome email sent to {email}')
-    except Exception as e:
-        app.logger.error(f'Welcome email failed for {email}: {type(e).__name__}: {e}')
+            )
+            mail.send(msg)
+            app.logger.info(f'Welcome email sent to {email}')
+        except Exception as e:
+            app.logger.error(f'Welcome email failed for {email}: {type(e).__name__}: {e}')
+
+    threading.Thread(target=_send, daemon=True).start()
 
 
 def get_subscription_status(user: dict) -> dict:
@@ -903,10 +936,10 @@ def log_conversation(client_id, user_message, bot_response,
         return True   # fail-open: never block the chat response on a log error
 
 
-# ── notify_handoff — kept here so chat.py can receive it via injection ────────
-# The actual implementation lives in blueprints/inbox.py (notify_handoff).
-# We import it here so it can be passed into init_chat() by name.
-from blueprints.inbox import notify_handoff   # noqa: E402
+# ── notify_handoff / notify_usage_threshold — kept here so chat.py can
+# receive them via injection. Implementations live in blueprints/inbox.py.
+# We import them here so they can be passed into init_chat() by name.
+from blueprints.inbox import notify_handoff, notify_usage_threshold   # noqa: E402
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DATABASE MIGRATIONS (startup, idempotent)
@@ -942,6 +975,7 @@ try:
         'migrate_system_settings',             # generic key-value store for live admin toggles
         'migrate_ai_employee_plan_rename',     # Shopify/WooCommerce pivot: agency -> ai_scale (one-time)
         'migrate_cart_recovery',               # abandoned_carts table + clients.cart_recovery_enabled
+        'migrate_usage_notifications',         # usage_notifications table + clients.ai_unavailable_mode/human_support_contact
     ]
     for _fn in _optional_migrations:
         if hasattr(models, _fn):
@@ -1133,6 +1167,7 @@ init_chat(
     get_cached_client_owner=_get_cached_client_owner,
     fire_webhook=fire_webhook_event,
     notify_handoff=notify_handoff,
+    notify_usage_threshold=notify_usage_threshold,
 )
 app.register_blueprint(chat_bp)
 limiter.limit('30 per minute')(_chat_view)
