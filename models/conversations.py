@@ -36,6 +36,37 @@ def get_daily_message_count(client_id):
         return 0  # fail open — never block chat due to a DB error
 
 
+def get_daily_conversation_stats(client_id):
+    """
+    Return {'total': N, 'matched': N} for this client today (UTC) — the
+    data behind the dashboard's "Conversations Today" and "AI Resolution
+    Rate" cards. Same scope/exclusions as get_daily_message_count (right
+    above), just also splits out the matched subset in one query instead
+    of two. Fails open — returns zeros, never blocks dashboard render.
+    """
+    try:
+        conn, cursor = get_db()
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        cursor.execute(
+            '''
+            SELECT
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE matched) AS matched
+            FROM conversations
+            WHERE client_id = %s
+              AND DATE(timestamp) = %s
+              AND (method IS NULL OR method != 'lead_captured')
+            ''',
+            (client_id, today)
+        )
+        row = cursor.fetchone() or {}
+        cursor.close()
+        conn.close()
+        return {'total': int(row.get('total', 0)), 'matched': int(row.get('matched', 0))}
+    except Exception:
+        return {'total': 0, 'matched': 0}
+
+
 def get_monthly_conversation_count(client_id):
     """
     Return the number of distinct CONVERSATIONS (not raw messages) logged

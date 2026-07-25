@@ -381,6 +381,65 @@ def dashboard():
         models.get_latest_usage_notification(clients[0]['client_id'])
         if clients else None
     )
+    ai_paused = bool(latest_usage_notification and latest_usage_notification.get('threshold') == 100)
+
+    # ── Today's KPIs, health checks, recent activity, needs-attention ──────
+    # All scoped to the merchant's one connected store (or zeroed/empty if
+    # none yet) — this is the "is everything okay right now" dashboard view,
+    # distinct from analytics.html's historical/date-range view.
+    daily_stats          = {'total': 0, 'matched': 0}
+    leads_today          = 0
+    leads_total          = 0
+    recent_leads         = []
+    recent_conversations = []
+    faqs_count           = 0
+
+    if clients:
+        _client_id  = clients[0]['client_id']
+        daily_stats = models.get_daily_conversation_stats(_client_id)
+
+        _all_leads   = models.get_leads(_client_id)
+        leads_total  = len(_all_leads)
+        _today_str   = date.today().isoformat()
+        leads_today  = sum(1 for l in _all_leads if (l.get('created_at') or '').startswith(_today_str))
+        recent_leads = _all_leads[:5]
+
+        recent_conversations = models.get_conversations(_client_id, limit=5)
+        faqs_count            = len(models.get_faqs(_client_id))
+
+    resolution_rate_today = (
+        round(100 * daily_stats['matched'] / daily_stats['total'])
+        if daily_stats['total'] > 0 else None
+    )
+    unanswered_today = daily_stats['total'] - daily_stats['matched']
+
+    ai_health = {
+        'store_connected': bool(clients),
+        'ai_online':       bool(clients) and not ai_paused,
+        'knowledge_ready': faqs_count > 0,
+    }
+
+    needs_attention = []
+    if not clients:
+        needs_attention.append({
+            'message': 'No store connected yet — your AI employee is offline until you connect one.',
+            'link': None, 'action': 'connect',
+        })
+    if clients and faqs_count == 0:
+        needs_attention.append({
+            'message': "No knowledge base set up — your AI has nothing to answer questions from yet.",
+            'link': '/faq-manager?client_id=' + clients[0]['client_id'],
+        })
+    if ai_paused:
+        needs_attention.append({
+            'message': "Your AI assistant has stopped responding — this month's conversation limit is reached.",
+            'link': '/upgrade',
+        })
+    if clients and unanswered_today > 0:
+        needs_attention.append({
+            'message': f"{unanswered_today} unanswered question{'s' if unanswered_today != 1 else ''} today.",
+            'link': '/analytics?client_id=' + clients[0]['client_id'],
+        })
 
     sub_status = session.pop('sub_status', None)
     sub_info   = (_get_subscription_status(fresh_user)
@@ -397,6 +456,14 @@ def dashboard():
         grace_used                  = grace_used,
         usage_reset_date            = usage_reset_date,
         latest_usage_notification   = latest_usage_notification,
+        conversations_today         = daily_stats['total'],
+        resolution_rate_today       = resolution_rate_today,
+        leads_today                 = leads_today,
+        leads_total                 = leads_total,
+        recent_leads                = recent_leads,
+        recent_conversations        = recent_conversations,
+        ai_health                   = ai_health,
+        needs_attention             = needs_attention,
         sub_status                  = sub_info['status'],
         sub_grace_ends_at           = sub_info.get('grace_ends_at'),
     )

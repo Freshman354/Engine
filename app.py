@@ -13,9 +13,12 @@ This file is responsible for wiring only:
   - Static/widget/legal routes and error handlers
 
 All business logic lives in blueprints/ and services/.
+Target: ~500 lines. Route count in this file: 7.
 """
 
 # ── Standard library ─────────────────────────────────────────────────────────
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -36,7 +39,7 @@ from logging.handlers import RotatingFileHandler
 import requests
 from authlib.integrations.flask_client import OAuth as _OAuth
 from dotenv import load_dotenv
-from flask import (Flask, flash, jsonify, redirect, render_template,
+from flask import (Flask, jsonify, redirect, render_template,
                    request, session, url_for)
 from flask_cors import CORS
 from flask_limiter import Limiter
@@ -1961,79 +1964,167 @@ def test_webhook():
         return jsonify({'success': False, 'error': str(e), 'payload_sent': payload})
 
 
-# ── Onboarding store-connect (Shopify custom-app + WooCommerce manual) ────────
-# Both create the client record AND the platform credentials in one step,
-# since at this point in onboarding no client exists yet. Reuses the exact
-# same persistence shopify_connect.connect_shopify() / models.upsert_integration
-# already do for the dashboard's "Connect a Store" flow — this just adds the
-# create_client() step in front of it, and returns the shape onboarding.html's
-# JS already expects (see connectShopify()/connectWooManual() in
-# onboarding.html): {success, client_id} on success, {error} on failure.
+# ── Onboarding store-connect ───────────────────────────────────────────────
+# Shopify: real OAuth install flow (authorization_code grant against a
+# centrally-registered Lumvi Partner/Dev-Dashboard app — see SHOPIFY_APP_
+# CLIENT_ID/SECRET below). Replaces the old client_credentials/custom-app
+# flow — Shopify stopped letting merchants create new legacy custom apps
+# as of Jan 1 2026, so that path is a dead end for anyone new.
+# WooCommerce: still the manual key-entry flow (no centrally-registered
+# app needed — WooCommerce's REST API keys are just per-site credentials).
 #
-# NOTE: Shopify does NOT get a one-click OAuth flow here. commerce_adapters.py
-# authenticates via the client_credentials grant (a per-shop "custom app" the
-# merchant creates themselves in their own Shopify admin) — there is no
-# centrally-registered Lumvi Partner app to redirect through. See onboarding
-# .html's Shopify panel for the corresponding UI (client_id/client_secret
-# fields, not a redirect button).
+# Both create the client record AND the platform credentials, since at
+# this point in onboarding no client exists yet — except when the user
+# already has one (reconnecting, or switching platforms), in which case
+# both reuse it rather than creating a second one. Every plan caps at 1
+# connected store; creating a second client here would silently violate
+# that and orphan the first one.
 
-@app.route('/connect/shopify/manual', methods=['POST'])
+SHOPIFY_APP_CLIENT_ID     = os.environ.get('SHOPIFY_APP_CLIENT_ID', '')
+SHOPIFY_APP_CLIENT_SECRET = os.environ.get('SHOPIFY_APP_CLIENT_SECRET', '')
+SHOPIFY_APP_SCOPES        = 'read_products,read_orders'
+
+
+def _get_or_create_client_for_user(user_id, company_name, vertical='ecommerce'):
+    """
+    Returns the user's existing client_id if they already have one
+    (every plan caps at 1 store — reconnecting or switching platforms
+    should reuse the same client row, not create a second one), else
+    creates a new client and returns its id.
+    """
+    existing = models.get_user_clients(user_id)
+    if existing:
+        return existing[0]['client_id']
+    return models.create_client(user_id, company_name, vertical=vertical)
+
+
+@app.route('/connect/shopify/install')
 @login_required
-def connect_shopify_manual():
-    data               = request.json or {}
-    shop_domain        = (data.get('shop_domain') or '').strip().lower()
-    shopify_client_id  = (data.get('shopify_client_id') or '').strip()
-    shopify_client_secret = (data.get('shopify_client_secret') or '').strip()
-
-    if not shop_domain or not shopify_client_id or not shopify_client_secret:
-        return jsonify({
-            'success': False,
-            'error': 'Store domain, Client ID, and Client Secret are all required.',
-        }), 400
+def connect_shopify_install():
+    """
+    Step 1 of the OAuth flow — redirect the merchant's browser to
+    Shopify's install/consent screen. Shopify redirects back to
+    connect_shopify_callback() below after they approve.
+    """
+    shop_domain = (request.args.get('shop_domain') or '').strip().lower()
+    if not shop_domain:
+        return redirect(url_for('onboarding', error="Please enter your store's domain first."))
     if not shop_domain.endswith('.myshopify.com'):
-        return jsonify({'success': False, 'error': 'That doesn\'t look like a myshopify.com domain.'}), 400
+        shop_domain = f'{shop_domain}.myshopify.com'
+    if not re.match(r'^[a-z0-9][a-z0-9\-]*\.myshopify\.com$', shop_domain):
+        return redirect(url_for('onboarding', error="That doesn't look like a valid Shopify store domain."))
 
-    # Verify the credentials actually work before creating anything —
-    # same client_credentials grant commerce_adapters.py uses at request
-    # time, just run once up front so a typo'd secret fails here with a
-    # clear message instead of silently breaking every chat later.
+    if not SHOPIFY_APP_CLIENT_ID:
+        app.logger.error('[Shopify OAuth] SHOPIFY_APP_CLIENT_ID not set')
+        return redirect(url_for('onboarding', error='Shopify connection is not configured yet. Contact support@lumvi.net.'))
+
+    # CSRF protection — Shopify echoes this back on callback; must match
+    # what we stored in the session for this same browser/user.
+    state = secrets.token_urlsafe(32)
+    session['shopify_oauth_state'] = state
+    session['shopify_oauth_shop']  = shop_domain
+
+    redirect_uri = url_for('connect_shopify_callback', _external=True)
+    authorize_url = (
+        f'https://{shop_domain}/admin/oauth/authorize'
+        f'?client_id={SHOPIFY_APP_CLIENT_ID}'
+        f'&scope={SHOPIFY_APP_SCOPES}'
+        f'&redirect_uri={requests.utils.quote(redirect_uri, safe="")}'
+        f'&state={state}'
+    )
+    return redirect(authorize_url)
+
+
+@app.route('/connect/shopify/callback')
+@login_required
+def connect_shopify_callback():
+    """
+    Step 2 — Shopify redirects here after the merchant approves (or
+    denies) the install. Verifies the request actually came from
+    Shopify (HMAC) and matches the install we started (state), exchanges
+    the one-time code for a permanent access token, and saves the
+    connection.
+    """
+    shop  = (request.args.get('shop') or '').strip().lower()
+    code  = request.args.get('code')
+    state = request.args.get('state')
+    hmac_param = request.args.get('hmac')
+
+    expected_state = session.pop('shopify_oauth_state', None)
+    expected_shop  = session.pop('shopify_oauth_shop', None)
+
+    if not code or not shop:
+        return redirect(url_for('onboarding', error='Shopify did not return the expected connection details. Please try again.'))
+    if not expected_state or not secrets.compare_digest(state or '', expected_state):
+        app.logger.warning(f'[Shopify OAuth] state mismatch for shop={shop}')
+        return redirect(url_for('onboarding', error='This connection link expired or was already used. Please try connecting again.'))
+    if expected_shop and shop != expected_shop:
+        app.logger.warning(f'[Shopify OAuth] shop mismatch: expected={expected_shop} got={shop}')
+        return redirect(url_for('onboarding', error='Something looked off with that connection. Please try again.'))
+
+    # Verify Shopify actually signed this callback — without this, anyone
+    # could forge a request to this URL with an arbitrary shop/code.
+    # urlencode(sorted(...)) matches Shopify's documented algorithm exactly
+    # (percent-encodes values) rather than a naive string join — today's
+    # params (shop/code/state/timestamp) wouldn't need escaping in practice,
+    # but this is the actually-documented-correct form, not a guess.
+    from urllib.parse import urlencode
+    params = request.args.to_dict()
+    params.pop('hmac', None)
+    sorted_params = urlencode(sorted(params.items()))
+    computed_hmac = hmac.new(
+        SHOPIFY_APP_CLIENT_SECRET.encode(), sorted_params.encode(), hashlib.sha256
+    ).hexdigest()
+    if not hmac_param or not hmac.compare_digest(computed_hmac, hmac_param):
+        app.logger.error(f'[Shopify OAuth] HMAC verification failed for shop={shop}')
+        return redirect(url_for('onboarding', error='Could not verify that connection request. Please try again.'))
+
+    # Exchange the one-time code for a permanent access token.
     try:
         resp = requests.post(
-            f'https://{shop_domain}/admin/oauth/access_token',
+            f'https://{shop}/admin/oauth/access_token',
             json={
-                'grant_type':    'client_credentials',
-                'client_id':     shopify_client_id,
-                'client_secret': shopify_client_secret,
+                'client_id':     SHOPIFY_APP_CLIENT_ID,
+                'client_secret': SHOPIFY_APP_CLIENT_SECRET,
+                'code':          code,
             },
             timeout=10,
         )
         if resp.status_code != 200:
-            return jsonify({
-                'success': False,
-                'error': "Couldn't verify those credentials with Shopify — double-check the store domain, Client ID, and Client Secret.",
-            }), 400
-    except requests.exceptions.RequestException:
-        return jsonify({
-            'success': False,
-            'error': "Couldn't reach that store — check the domain and try again.",
-        }), 400
+            raise ValueError(f'token exchange returned http_{resp.status_code}')
+        access_token = resp.json().get('access_token')
+        if not access_token:
+            raise ValueError('token exchange response had no access_token')
+    except Exception as e:
+        app.logger.error(f'[Shopify OAuth] token exchange failed for shop={shop}: {e}')
+        return redirect(url_for('onboarding', error="Couldn't complete the connection with Shopify. Please try again."))
 
     try:
-        company_name = shop_domain.replace('.myshopify.com', '').replace('-', ' ').title()
-        client_id = models.create_client(current_user.id, company_name, vertical='ecommerce')
-        result = shopify_connect.connect_shopify(
-            client_id              = client_id,
-            shop_domain            = shop_domain,
-            shopify_client_id      = shopify_client_id,
-            shopify_client_secret  = shopify_client_secret,
-            webhook_secret         = secrets.token_hex(32),
-        )
-        if not result.get('success'):
-            return jsonify({'success': False, 'error': result.get('error', 'Could not save connection.')}), 500
-        return jsonify({'success': True, 'client_id': client_id})
+        company_name = shop.replace('.myshopify.com', '').replace('-', ' ').title()
+        client_id = _get_or_create_client_for_user(current_user.id, company_name)
+
+        existing = _webhooks.get_integration(client_id, 'shopify')
+        merged_config = dict((existing or {}).get('platform_config') or {})
+        merged_config.update({
+            'shop_domain':          shop,
+            'access_token':         access_token,
+            'order_lookup_enabled': True,
+            'inventory_enabled':    True,
+        })
+        # OAuth access tokens don't need a client_id/client_secret pair —
+        # drop any stale ones from a prior client-credentials connection.
+        merged_config.pop('shopify_client_id', None)
+        merged_config.pop('shopify_client_secret', None)
+
+        ok = _webhooks.upsert_integration(client_id, 'shopify', secrets.token_hex(32), merged_config)
+        if not ok:
+            raise RuntimeError('upsert_integration returned False')
     except Exception as e:
-        app.logger.error(f'[connect_shopify_manual] {e}')
-        return jsonify({'success': False, 'error': 'Something went wrong saving your store. Please try again.'}), 500
+        app.logger.error(f'[Shopify OAuth] save failed for shop={shop}: {e}')
+        return redirect(url_for('onboarding', error='Connected to Shopify, but saving the connection failed. Please try again.'))
+
+    app.logger.info(f'[Shopify OAuth] connected shop={shop} client={client_id} user={current_user.id}')
+    return redirect(url_for('onboarding', step=2, connected=1, client_id=client_id))
 
 
 @app.route('/connect/woocommerce/manual', methods=['POST'])
@@ -2076,7 +2167,7 @@ def connect_woocommerce_manual():
         from urllib.parse import urlparse
         host = urlparse(store_url).netloc or store_url
         company_name = host.replace('www.', '').split('.')[0].replace('-', ' ').title()
-        client_id = models.create_client(current_user.id, company_name, vertical='ecommerce')
+        client_id = _get_or_create_client_for_user(current_user.id, company_name)
 
         ok = _webhooks.upsert_integration(
             client_id, 'woocommerce',

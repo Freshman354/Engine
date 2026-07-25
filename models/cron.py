@@ -187,6 +187,81 @@ def get_usage_warning(client_id: str):
         conn.close()
 
 
+def record_usage_notification(client_id: str, threshold: int, usage_count: int,
+                               usage_cap, period_start=None) -> bool:
+    """
+    Record that the `threshold` (70/90/100) usage notification has fired
+    for `client_id` this billing period. Returns True the first time this
+    threshold is hit in this period (a NEW notification — dashboard/email
+    should fire), False on every repeat call for the same period+threshold
+    (already notified — caller should skip re-notifying).
+
+    period_start defaults to the first of the current calendar month —
+    matches get_monthly_conversation_count()'s own scoping, so a
+    notification correctly fires again next month without any cleanup job.
+    """
+    from datetime import date
+    if period_start is None:
+        period_start = date.today().replace(day=1)
+
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO usage_notifications
+                (client_id, period_start, threshold, usage_count, usage_cap)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (client_id, period_start, threshold) DO NOTHING
+            """,
+            (client_id, period_start, threshold, usage_count, usage_cap)
+        )
+        is_new = cursor.rowcount > 0
+        conn.commit()
+        return is_new
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"[record_usage_notification] {e}")
+        try: conn.rollback()
+        except: pass
+        return False
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_usage_notifications_this_period(client_id: str, period_start=None) -> list:
+    """All notifications fired for this client in the current billing period,
+    ordered by threshold ascending (70, 90, 100 — whichever have fired)."""
+    from datetime import date
+    if period_start is None:
+        period_start = date.today().replace(day=1)
+
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            """
+            SELECT * FROM usage_notifications
+            WHERE client_id = %s AND period_start = %s
+            ORDER BY threshold ASC
+            """,
+            (client_id, period_start)
+        )
+        return [dict(r) for r in cursor.fetchall()]
+    except Exception:
+        return []
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_latest_usage_notification(client_id: str, period_start=None):
+    """The highest-severity notification fired this period, or None —
+    what the dashboard banner should show (100 takes priority over 90
+    over 70, if more than one has fired)."""
+    notifications = get_usage_notifications_this_period(client_id, period_start)
+    return notifications[-1] if notifications else None
+
+
 def get_stale_new_leads(min_hours: int = 24, max_hours: int = 48) -> list:
     """
     Return leads still in 'new' stage that have never been touched since

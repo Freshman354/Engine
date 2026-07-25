@@ -2260,3 +2260,87 @@ def migrate_seat_subscriptions():
         if conn:
             try: conn.close()
             except Exception: pass
+
+
+def migrate_usage_notifications():
+    """
+    Conversation-limit notification tracking + merchant-configurable
+    behavior for what happens once a client's monthly AI capacity
+    (base cap + grace) is exhausted.
+
+    usage_notifications — one row per (client, calendar period, threshold)
+    so each of the 70/90/100 thresholds fires exactly once per billing
+    period, no matter how many messages land after it. UNIQUE constraint
+    is the whole mechanism: record_usage_notification() does an
+    INSERT ... ON CONFLICT DO NOTHING and checks rowcount to know whether
+    this was a genuinely new notification or a repeat. period_start is
+    the first day of the calendar month (matches how
+    get_monthly_conversation_count() scopes its own COUNT), so the table
+    self-resets every month with no cleanup job needed — old rows are
+    just never queried again once period_start rolls over, and can be
+    pruned later by anything that wants to.
+
+    threshold values: 70, 90, 100 — see chat.py's monthly-cap block for
+    where these actually fire. 100 means "grace exhausted, AI has
+    stopped responding," not "base cap reached" (base cap can still have
+    grace_conversations left).
+
+    clients.ai_unavailable_mode — merchant setting for what the widget
+    does once grace is exhausted. One of:
+      'unavailable'    (default) — generic "temporarily unavailable" reply
+      'faq_only'                 — falls back to deterministic FAQ keyword
+                                    matching (_find_best_match), no AI
+      'redirect_human'           — points the shopper at
+                                    human_support_contact instead
+    Settable via /api/client/settings (client_settings.py), same pattern
+    as cart_recovery_enabled — no plan gating on this one, every plan can
+    configure it (it's about degrading gracefully, not a premium feature).
+
+    clients.human_support_contact — free-text shown to the shopper only
+    when ai_unavailable_mode = 'redirect_human' (an email, phone number,
+    or "visit our contact page at ..." — merchant's choice, not validated
+    beyond length, since it's just decline-message copy).
+
+    Idempotent — CREATE TABLE/COLUMN IF NOT EXISTS throughout.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS usage_notifications (
+                id            SERIAL      PRIMARY KEY,
+                client_id     TEXT        NOT NULL,
+                period_start  DATE        NOT NULL,
+                threshold     INTEGER     NOT NULL,
+                usage_count   INTEGER     NOT NULL,
+                usage_cap     INTEGER,
+                created_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
+                UNIQUE(client_id, period_start, threshold)
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_usage_notifications_client "
+            "ON usage_notifications (client_id, period_start)"
+        )
+        cursor.execute(
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS "
+            "ai_unavailable_mode VARCHAR(20) NOT NULL DEFAULT 'unavailable'"
+        )
+        cursor.execute(
+            "ALTER TABLE clients ADD COLUMN IF NOT EXISTS "
+            "human_support_contact TEXT NOT NULL DEFAULT ''"
+        )
+        conn.commit()
+        print("✅ migrate_usage_notifications complete")
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        print(f"⚠️  migrate_usage_notifications: {e}")
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
