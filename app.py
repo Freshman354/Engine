@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import shutil
 import threading
 import uuid
@@ -1958,6 +1959,142 @@ def test_webhook():
     except Exception as e:
         app.logger.error(f'[test-webhook] {e}')
         return jsonify({'success': False, 'error': str(e), 'payload_sent': payload})
+
+
+# ── Onboarding store-connect (Shopify custom-app + WooCommerce manual) ────────
+# Both create the client record AND the platform credentials in one step,
+# since at this point in onboarding no client exists yet. Reuses the exact
+# same persistence shopify_connect.connect_shopify() / models.upsert_integration
+# already do for the dashboard's "Connect a Store" flow — this just adds the
+# create_client() step in front of it, and returns the shape onboarding.html's
+# JS already expects (see connectShopify()/connectWooManual() in
+# onboarding.html): {success, client_id} on success, {error} on failure.
+#
+# NOTE: Shopify does NOT get a one-click OAuth flow here. commerce_adapters.py
+# authenticates via the client_credentials grant (a per-shop "custom app" the
+# merchant creates themselves in their own Shopify admin) — there is no
+# centrally-registered Lumvi Partner app to redirect through. See onboarding
+# .html's Shopify panel for the corresponding UI (client_id/client_secret
+# fields, not a redirect button).
+
+@app.route('/connect/shopify/manual', methods=['POST'])
+@login_required
+def connect_shopify_manual():
+    data               = request.json or {}
+    shop_domain        = (data.get('shop_domain') or '').strip().lower()
+    shopify_client_id  = (data.get('shopify_client_id') or '').strip()
+    shopify_client_secret = (data.get('shopify_client_secret') or '').strip()
+
+    if not shop_domain or not shopify_client_id or not shopify_client_secret:
+        return jsonify({
+            'success': False,
+            'error': 'Store domain, Client ID, and Client Secret are all required.',
+        }), 400
+    if not shop_domain.endswith('.myshopify.com'):
+        return jsonify({'success': False, 'error': 'That doesn\'t look like a myshopify.com domain.'}), 400
+
+    # Verify the credentials actually work before creating anything —
+    # same client_credentials grant commerce_adapters.py uses at request
+    # time, just run once up front so a typo'd secret fails here with a
+    # clear message instead of silently breaking every chat later.
+    try:
+        resp = requests.post(
+            f'https://{shop_domain}/admin/oauth/access_token',
+            json={
+                'grant_type':    'client_credentials',
+                'client_id':     shopify_client_id,
+                'client_secret': shopify_client_secret,
+            },
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': "Couldn't verify those credentials with Shopify — double-check the store domain, Client ID, and Client Secret.",
+            }), 400
+    except requests.exceptions.RequestException:
+        return jsonify({
+            'success': False,
+            'error': "Couldn't reach that store — check the domain and try again.",
+        }), 400
+
+    try:
+        company_name = shop_domain.replace('.myshopify.com', '').replace('-', ' ').title()
+        client_id = models.create_client(current_user.id, company_name, vertical='ecommerce')
+        result = shopify_connect.connect_shopify(
+            client_id              = client_id,
+            shop_domain            = shop_domain,
+            shopify_client_id      = shopify_client_id,
+            shopify_client_secret  = shopify_client_secret,
+            webhook_secret         = secrets.token_hex(32),
+        )
+        if not result.get('success'):
+            return jsonify({'success': False, 'error': result.get('error', 'Could not save connection.')}), 500
+        return jsonify({'success': True, 'client_id': client_id})
+    except Exception as e:
+        app.logger.error(f'[connect_shopify_manual] {e}')
+        return jsonify({'success': False, 'error': 'Something went wrong saving your store. Please try again.'}), 500
+
+
+@app.route('/connect/woocommerce/manual', methods=['POST'])
+@login_required
+def connect_woocommerce_manual():
+    data            = request.json or {}
+    store_url       = (data.get('store_url') or '').strip()
+    consumer_key    = (data.get('consumer_key') or '').strip()
+    consumer_secret = (data.get('consumer_secret') or '').strip()
+
+    if not store_url or not consumer_key or not consumer_secret:
+        return jsonify({'success': False, 'error': 'Store URL and both API keys are required.'}), 400
+    if not store_url.startswith('http'):
+        store_url = f'https://{store_url}'
+    store_url = store_url.rstrip('/')
+
+    # Verify the keys actually work against this store's REST API before
+    # creating anything — same reasoning as the Shopify check above.
+    try:
+        resp = requests.get(
+            f'{store_url}/wp-json/wc/v3/products',
+            params={'per_page': 1},
+            auth=(consumer_key, consumer_secret),
+            timeout=10,
+        )
+        if resp.status_code == 401:
+            return jsonify({'success': False, 'error': "Those API keys were rejected — please double-check them."}), 400
+        if resp.status_code != 200:
+            return jsonify({
+                'success': False,
+                'error': f"Couldn't reach the WooCommerce REST API at that URL (HTTP {resp.status_code}).",
+            }), 400
+    except requests.exceptions.RequestException:
+        return jsonify({
+            'success': False,
+            'error': "Couldn't reach that store. Check the URL and try again.",
+        }), 400
+
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(store_url).netloc or store_url
+        company_name = host.replace('www.', '').split('.')[0].replace('-', ' ').title()
+        client_id = models.create_client(current_user.id, company_name, vertical='ecommerce')
+
+        ok = _webhooks.upsert_integration(
+            client_id, 'woocommerce',
+            secrets.token_hex(32),  # webhook_secret for inbound order webhooks
+            {
+                'store_url':        store_url,
+                'consumer_key':     consumer_key,
+                'consumer_secret':  consumer_secret,
+                'order_lookup_enabled': True,
+                'inventory_enabled':    True,
+            },
+        )
+        if not ok:
+            return jsonify({'success': False, 'error': 'Could not save connection.'}), 500
+        return jsonify({'success': True, 'client_id': client_id})
+    except Exception as e:
+        app.logger.error(f'[connect_woocommerce_manual] {e}')
+        return jsonify({'success': False, 'error': 'Something went wrong saving your store. Please try again.'}), 500
 
 
 # ── Platform integrations (Shopify / Acuity inbound webhooks) ─────────────────

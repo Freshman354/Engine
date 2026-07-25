@@ -350,7 +350,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         <div class="platform-check shopify-bg"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
         <div class="platform-logo shopify">🛍️</div>
         <div class="platform-name">Shopify</div>
-        <div class="platform-desc">One-click connect. No API keys needed.</div>
+        <div class="platform-desc">Connect using your store's custom app credentials.</div>
       </div>
       <div class="platform-card" data-platform="woocommerce" onclick="selectPlatform('woocommerce')">
         <div class="platform-check woo-bg"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
@@ -371,13 +371,27 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
           </div>
           <p class="hint">This is the store URL you use to log in to Shopify admin.</p>
         </div>
+        <div class="field">
+          <label>Client ID</label>
+          <input type="text" id="shopifyClientId" placeholder="a1b2c3d4e5f6..." oninput="validateStoreInput('shopify')">
+        </div>
+        <div class="field">
+          <label>Client Secret</label>
+          <input type="password" id="shopifyClientSecret" placeholder="shpss_..." oninput="validateStoreInput('shopify')">
+        </div>
+        <p class="hint">
+          In your Shopify admin: Settings → Apps and sales channels → Develop apps →
+          Create an app → Configure Admin API scopes (read_products, read_orders) →
+          Install app. The Client ID and Client Secret are shown on the app's API
+          credentials tab.
+        </p>
         <button class="btn-connect shopify" id="btnShopifyConnect" onclick="connectShopify()" disabled>
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.3 3.5c-.1-.1-.3-.2-.4-.2-.2 0-1.8.1-1.8.1s-1.2-1.2-1.3-1.3c-.1-.1-.3-.1-.4-.1-.6.2-1.1.4-1.7.6-.1-.4-.4-1-.9-1.4-.4-.4-1-.5-1.4-.5-.1 0-.2 0-.2.1-.1.1-.5.3-.9.7-.7.6-1.2 1.6-1.4 2.9-.7.2-1.2.4-1.2.4-.4.1-.4.1-.4.5L2.6 20l14.3 2.6 4.1-1c0 .1-5.7-18.1-5.7-18.1zM10.6 2.9c.3-.1.6-.2.9-.2.1.3.1.6.1 1v.1c-.6.2-1.3.4-2 .6.2-.6.6-1.1 1-1.5zm-1.2.4c-.3.5-.5 1.1-.6 1.9-.5.1-1 .3-1.5.4.2-1 .8-1.8 1.4-2.2.2-.1.4-.1.7-.1zm-1.1-.9c.1 0 .2 0 .3.1-.6.5-1.2 1.4-1.5 2.9l-1.2.4c.3-1.4 1.4-2.9 2.4-3.4z"/></svg>
-          Connect with Shopify
+          Connect Store
         </button>
         <div class="trust-row">
           <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          You'll approve access on Shopify's site — Lumvi never sees your password.
+          Your credentials are encrypted and only used to read products and orders.
         </div>
       </div>
     </div>
@@ -390,28 +404,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
           <input type="text" id="wooDomain" placeholder="yourstore.com" oninput="validateStoreInput('woo')">
           <p class="hint">The web address customers use to visit your shop.</p>
         </div>
-        <button class="btn-connect woo" id="btnWooConnect" onclick="connectWooCommerce()" disabled>
+        <div class="field">
+          <label>Consumer Key</label>
+          <input type="text" id="wooKey" placeholder="ck_xxxxxxxxxxxxxxxxxxxx">
+        </div>
+        <div class="field">
+          <label>Consumer Secret</label>
+          <input type="password" id="wooSecret" placeholder="cs_xxxxxxxxxxxxxxxxxxxx">
+        </div>
+        <p class="hint">Found under WooCommerce → Settings → Advanced → REST API. Create a key with Read/Write permissions.</p>
+        <button class="btn-connect woo" id="btnWooConnect" onclick="connectWooManual()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>
-          Authorize Store Access
+          Connect Store
         </button>
         <div class="trust-row">
           <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          You'll approve access from your own WordPress dashboard.
-        </div>
-        <div class="manual-toggle">
-          Store on a custom setup? <a onclick="toggleManualWoo()">Enter API keys manually</a>
-        </div>
-        <div class="manual-fields" id="manualWooFields">
-          <div class="field">
-            <label>Consumer Key</label>
-            <input type="text" id="wooKey" placeholder="ck_xxxxxxxxxxxxxxxxxxxx">
-          </div>
-          <div class="field">
-            <label>Consumer Secret</label>
-            <input type="password" id="wooSecret" placeholder="cs_xxxxxxxxxxxxxxxxxxxx">
-          </div>
-          <p class="hint">Found under WooCommerce → Settings → Advanced → REST API.</p>
-          <button class="btn-next wide" style="margin-top:10px;" onclick="connectWooManual()">Connect</button>
+          Your credentials are encrypted and only used to read products and orders.
         </div>
       </div>
     </div>
@@ -732,82 +740,51 @@ function selectPlatform(platform) {
 
 function validateStoreInput(which) {
   if (which === 'shopify') {
-    const v = document.getElementById('shopifyDomain').value.trim();
-    document.getElementById('btnShopifyConnect').disabled = v.length < 2;
+    const domain = document.getElementById('shopifyDomain').value.trim();
+    const cid     = document.getElementById('shopifyClientId').value.trim();
+    const secret  = document.getElementById('shopifyClientSecret').value.trim();
+    document.getElementById('btnShopifyConnect').disabled = !(domain.length >= 2 && cid.length >= 4 && secret.length >= 4);
   } else {
     const v = document.getElementById('wooDomain').value.trim();
     document.getElementById('btnWooConnect').disabled = v.length < 4;
   }
 }
 
-function toggleManualWoo() {
-  document.getElementById('manualWooFields').classList.toggle('show');
-}
-
-// TODO(backend): implement /connect/shopify/start — given a shop domain, build the
-// Shopify authorize URL using your existing Partner app's client_id + redirect_uri,
-// then redirect the browser there. On approval, Shopify redirects to your callback
-// route, which should exchange the code for an access token, create/find the client
-// record, and 302 back to /onboarding?step=2&connected=1&client_id=...
 async function connectShopify() {
   const domain = document.getElementById('shopifyDomain').value.trim().replace(/\.myshopify\.com$/i, '');
-  if (!domain) return;
+  const clientId     = document.getElementById('shopifyClientId').value.trim();
+  const clientSecret = document.getElementById('shopifyClientSecret').value.trim();
+  if (!domain || !clientId || !clientSecret) {
+    toast('Please fill in your store domain, Client ID, and Client Secret.', 'error');
+    return;
+  }
   const btn = document.getElementById('btnShopifyConnect');
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner"></div> Connecting…';
   try {
-    const res = await fetch('/connect/shopify/start', {
+    const res = await fetch('/connect/shopify/manual', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shop_domain: `${domain}.myshopify.com` }),
+      body: JSON.stringify({
+        shop_domain: `${domain}.myshopify.com`,
+        shopify_client_id: clientId,
+        shopify_client_secret: clientSecret,
+      }),
     });
     const data = await res.json();
-    if (data.auth_url) {
-      window.location.href = data.auth_url; // Shopify handles the OAuth consent screen
-    } else {
-      throw new Error(data.error || 'Could not start connection.');
-    }
+    if (!data.success) throw new Error(data.error || 'Could not connect.');
+    createdClientId = data.client_id;
+    startImport();
   } catch (e) {
     console.error('[Onboarding] Shopify connect failed:', e);
-    toast("Couldn't reach that store — check the URL and try again.", 'error');
+    toast(e.message || "Couldn't connect — please double-check your credentials.", 'error');
     btn.disabled = false;
-    btn.innerHTML = 'Connect with Shopify';
+    btn.innerHTML = 'Connect Store';
   }
 }
 
-// TODO(backend): implement /connect/woocommerce/start using the native WooCommerce
-// REST API authorization endpoint: {store_url}/wc-auth/v1/authorize?app_name=Lumvi
-// &scope=read_write&user_id={internal_user_id}&return_url={onboarding_url}
-// &callback_url={your_callback_endpoint}. WooCommerce shows its own consent screen
-// and POSTs the generated keys to callback_url — no manual key copying needed.
-async function connectWooCommerce() {
-  const url = document.getElementById('wooDomain').value.trim();
-  if (!url) return;
-  const btn = document.getElementById('btnWooConnect');
-  btn.disabled = true;
-  btn.innerHTML = '<div class="spinner"></div> Connecting…';
-  try {
-    const res = await fetch('/connect/woocommerce/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ store_url: url }),
-    });
-    const data = await res.json();
-    if (data.authorize_url) {
-      window.location.href = data.authorize_url;
-    } else {
-      throw new Error(data.error || 'Could not start connection.');
-    }
-  } catch (e) {
-    console.error('[Onboarding] WooCommerce connect failed:', e);
-    toast("Couldn't reach that store. Try entering API keys manually below.", 'error');
-    btn.disabled = false;
-    btn.innerHTML = 'Authorize Store Access';
-  }
-}
-
-// TODO(backend): implement /connect/woocommerce/manual — validates the provided
-// consumer key/secret against {store_url}/wp-json/wc/v3/, creates the client record.
+// Validates the provided consumer key/secret against {store_url}/wp-json/wc/v3/
+// server-side, creates the client record. See /connect/woocommerce/manual in app.py.
 async function connectWooManual() {
   const url    = document.getElementById('wooDomain').value.trim();
   const key    = document.getElementById('wooKey').value.trim();
