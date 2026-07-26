@@ -19,7 +19,8 @@
 }
 body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;display:flex;}
 .sidebar{width:var(--sidebar-w);background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:50;transition:transform 0.3s ease;}
-.sidebar-logo{padding:20px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.sidebar-logo{padding:20px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;text-decoration:none;cursor:pointer;transition:background 0.15s;}
+.sidebar-logo:hover{background:var(--cream);}
 .logo-img{width:34px;height:34px;border-radius:9px;object-fit:cover;flex-shrink:0;}
 .logo-text{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
 .sidebar-nav{flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
@@ -277,10 +278,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 <body>
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 <aside class="sidebar" id="sidebar">
-    <div class="sidebar-logo">
+    <a href="{{ url_for('account.settings') }}" class="sidebar-logo" title="Account settings">
         <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi" class="logo-img">
         <span class="logo-text">Lumvi</span>
-    </div>
+    </a>
     <nav class="sidebar-nav">
         <div class="nav-label">Main</div>
         <a href="/dashboard" class="nav-item active">
@@ -637,6 +638,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
             <label id="dashStoreUrlLabel">Store URL</label>
             <input type="text" id="dashStoreUrl" placeholder="your-store.myshopify.com">
         </div>
+        <div id="dashWooKeyFields" style="display:none;">
+            <div class="form-group">
+                <label>Consumer Key</label>
+                <input type="text" id="dashWooKey" placeholder="ck_xxxxxxxxxxxxxxxxxxxx">
+            </div>
+            <div class="form-group">
+                <label>Consumer Secret</label>
+                <input type="password" id="dashWooSecret" placeholder="cs_xxxxxxxxxxxxxxxxxxxx">
+            </div>
+            <p style="color:var(--sub);font-size:12px;margin:-8px 0 14px;">Found under WooCommerce → Settings → Advanced → REST API.</p>
+        </div>
         <button type="button" class="btn btn-primary" id="dashConnectBtn" style="width:100%;justify-content:center;" disabled onclick="startDashConnect()">Continue</button>
     </div>
 </div>
@@ -700,34 +712,54 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         const urlGroup = document.getElementById('dashStoreUrlGroup');
         const label    = document.getElementById('dashStoreUrlLabel');
         const input    = document.getElementById('dashStoreUrl');
+        const wooFields = document.getElementById('dashWooKeyFields');
         urlGroup.style.display = 'block';
         if (platform === 'shopify') {
             label.textContent = 'Shopify Store URL';
             input.placeholder = 'your-store.myshopify.com';
+            wooFields.style.display = 'none';
         } else {
             label.textContent = 'Store URL';
             input.placeholder = 'yourstore.com';
+            wooFields.style.display = 'block';
         }
         document.getElementById('dashConnectBtn').disabled = false;
     }
-    // TODO(backend): reuses the same /connect/shopify/start and /connect/woocommerce/start
-    // endpoints introduced for onboarding.html — see that file's comments for the expected contract.
+    // Shopify: real OAuth install flow (redirect, same as onboarding.html).
+    // WooCommerce: manual key entry against /connect/woocommerce/manual
+    // (already validates the keys server-side before saving).
     async function startDashConnect() {
         const url = document.getElementById('dashStoreUrl').value.trim();
         if (!url || !dashSelectedPlatform) return;
         const btn = document.getElementById('dashConnectBtn');
+
+        if (dashSelectedPlatform === 'shopify') {
+            btn.disabled = true;
+            btn.textContent = 'Redirecting to Shopify…';
+            const domain = url.trim().replace(/\.myshopify\.com$/i, '');
+            window.location.href = `/connect/shopify/install?shop_domain=${encodeURIComponent(domain)}.myshopify.com&return_to=dashboard`;
+            return;
+        }
+
+        const key    = document.getElementById('dashWooKey').value.trim();
+        const secret = document.getElementById('dashWooSecret').value.trim();
+        if (!key || !secret) {
+            showToast('Please fill in your store URL and both API keys.', 'error');
+            return;
+        }
         btn.disabled = true;
         btn.textContent = 'Connecting…';
         try {
-            const endpoint = dashSelectedPlatform === 'shopify' ? '/connect/shopify/start' : '/connect/woocommerce/start';
-            const payload   = dashSelectedPlatform === 'shopify' ? { shop_domain: url } : { store_url: url };
-            const res  = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const res  = await fetch('/connect/woocommerce/manual', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ store_url: url, consumer_key: key, consumer_secret: secret }),
+            });
             const data = await res.json();
-            const authUrl = data.auth_url || data.authorize_url;
-            if (authUrl) { window.location.href = authUrl; }
-            else { throw new Error(data.error || 'Could not start connection.'); }
+            if (!data.success) throw new Error(data.error || 'Could not connect.');
+            window.location.reload();
         } catch (e) {
-            showToast("Couldn't reach that store — check the URL and try again.", 'error');
+            showToast(e.message || "Couldn't reach that store — check the URL and keys.", 'error');
             btn.disabled = false;
             btn.textContent = 'Continue';
         }
@@ -747,6 +779,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
     function closeDeleteModal(){pendingDeleteId=null;document.getElementById('delete-modal').style.display='none';}
     async function executeDelete(){if(!pendingDeleteId)return;const btn=document.getElementById('confirm-delete-btn');btn.textContent='Disconnecting…';btn.disabled=true;try{const res=await fetch(`/api/clients/${pendingDeleteId}/delete`,{method:'DELETE',headers:{'Content-Type':'application/json'}});const data=await res.json();if(data.success){['row-','card-'].forEach(p=>{const el=document.getElementById(p+pendingDeleteId);if(el){el.style.transition='opacity 0.3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);}});closeDeleteModal();showToast('Store disconnected','success');const badge=document.querySelector('.nav-badge');if(badge){const c=parseInt(badge.textContent)||0;if(c-1<=0)badge.remove();else badge.textContent=c-1;}}else{showToast(data.error||'Disconnect failed','error');btn.textContent='Disconnect';btn.disabled=false;}}catch{showToast('Network error','error');btn.textContent='Disconnect';btn.disabled=false;}}
     function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} show`;setTimeout(()=>{t.className='toast';},3500);}
+    (function handleConnectRedirect(){
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('connected') === '1') {
+            showToast('Store connected successfully!', 'success');
+            history.replaceState({}, '', window.location.pathname);
+        } else if (params.get('error')) {
+            showToast(params.get('error'), 'error');
+            history.replaceState({}, '', window.location.pathname);
+        }
+    })();
     document.addEventListener('click',function(e){if(e.target===document.getElementById('embedModal'))closeEmbedModal();if(e.target===document.getElementById('new-client-modal'))closeModal();if(e.target===document.getElementById('delete-modal'))closeDeleteModal();});
     document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeEmbedModal();closeModal();closeDeleteModal();closeSidebar();}});
 </script>

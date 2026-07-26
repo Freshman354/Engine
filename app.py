@@ -13,7 +13,6 @@ This file is responsible for wiring only:
   - Static/widget/legal routes and error handlers
 
 All business logic lives in blueprints/ and services/.
-Target: ~500 lines. Route count in this file: 7.
 """
 
 # ── Standard library ─────────────────────────────────────────────────────────
@@ -2005,24 +2004,34 @@ def connect_shopify_install():
     Step 1 of the OAuth flow — redirect the merchant's browser to
     Shopify's install/consent screen. Shopify redirects back to
     connect_shopify_callback() below after they approve.
+
+    return_to=dashboard|onboarding controls where the merchant lands
+    afterward — set by whichever page's "Connect" button initiated this
+    (dashboard.html's reconnect modal vs onboarding.html's wizard), so
+    someone connecting later from the dashboard doesn't get bounced into
+    the onboarding wizard they specifically skipped.
     """
+    return_to = 'dashboard' if request.args.get('return_to') == 'dashboard' else 'onboarding'
+    return_endpoint = 'auth.dashboard' if return_to == 'dashboard' else 'auth.onboarding'
+
     shop_domain = (request.args.get('shop_domain') or '').strip().lower()
     if not shop_domain:
-        return redirect(url_for('auth.onboarding', error="Please enter your store's domain first."))
+        return redirect(url_for(return_endpoint, error="Please enter your store's domain first."))
     if not shop_domain.endswith('.myshopify.com'):
         shop_domain = f'{shop_domain}.myshopify.com'
     if not re.match(r'^[a-z0-9][a-z0-9\-]*\.myshopify\.com$', shop_domain):
-        return redirect(url_for('auth.onboarding', error="That doesn't look like a valid Shopify store domain."))
+        return redirect(url_for(return_endpoint, error="That doesn't look like a valid Shopify store domain."))
 
     if not SHOPIFY_APP_CLIENT_ID:
         app.logger.error('[Shopify OAuth] SHOPIFY_APP_CLIENT_ID not set')
-        return redirect(url_for('auth.onboarding', error='Shopify connection is not configured yet. Contact support@lumvi.net.'))
+        return redirect(url_for(return_endpoint, error='Shopify connection is not configured yet. Contact support@lumvi.net.'))
 
     # CSRF protection — Shopify echoes this back on callback; must match
     # what we stored in the session for this same browser/user.
     state = secrets.token_urlsafe(32)
-    session['shopify_oauth_state'] = state
-    session['shopify_oauth_shop']  = shop_domain
+    session['shopify_oauth_state']     = state
+    session['shopify_oauth_shop']      = shop_domain
+    session['shopify_oauth_return_to'] = return_to
 
     redirect_uri = url_for('connect_shopify_callback', _external=True)
     authorize_url = (
@@ -2052,15 +2061,17 @@ def connect_shopify_callback():
 
     expected_state = session.pop('shopify_oauth_state', None)
     expected_shop  = session.pop('shopify_oauth_shop', None)
+    return_to      = session.pop('shopify_oauth_return_to', 'onboarding')
+    return_endpoint = 'auth.dashboard' if return_to == 'dashboard' else 'auth.onboarding'
 
     if not code or not shop:
-        return redirect(url_for('auth.onboarding', error='Shopify did not return the expected connection details. Please try again.'))
+        return redirect(url_for(return_endpoint, error='Shopify did not return the expected connection details. Please try again.'))
     if not expected_state or not secrets.compare_digest(state or '', expected_state):
         app.logger.warning(f'[Shopify OAuth] state mismatch for shop={shop}')
-        return redirect(url_for('auth.onboarding', error='This connection link expired or was already used. Please try connecting again.'))
+        return redirect(url_for(return_endpoint, error='This connection link expired or was already used. Please try connecting again.'))
     if expected_shop and shop != expected_shop:
         app.logger.warning(f'[Shopify OAuth] shop mismatch: expected={expected_shop} got={shop}')
-        return redirect(url_for('auth.onboarding', error='Something looked off with that connection. Please try again.'))
+        return redirect(url_for(return_endpoint, error='Something looked off with that connection. Please try again.'))
 
     # Verify Shopify actually signed this callback — without this, anyone
     # could forge a request to this URL with an arbitrary shop/code.
@@ -2077,7 +2088,7 @@ def connect_shopify_callback():
     ).hexdigest()
     if not hmac_param or not hmac.compare_digest(computed_hmac, hmac_param):
         app.logger.error(f'[Shopify OAuth] HMAC verification failed for shop={shop}')
-        return redirect(url_for('auth.onboarding', error='Could not verify that connection request. Please try again.'))
+        return redirect(url_for(return_endpoint, error='Could not verify that connection request. Please try again.'))
 
     # Exchange the one-time code for a permanent access token.
     try:
@@ -2097,7 +2108,7 @@ def connect_shopify_callback():
             raise ValueError('token exchange response had no access_token')
     except Exception as e:
         app.logger.error(f'[Shopify OAuth] token exchange failed for shop={shop}: {e}')
-        return redirect(url_for('auth.onboarding', error="Couldn't complete the connection with Shopify. Please try again."))
+        return redirect(url_for(return_endpoint, error="Couldn't complete the connection with Shopify. Please try again."))
 
     try:
         company_name = shop.replace('.myshopify.com', '').replace('-', ' ').title()
@@ -2121,9 +2132,11 @@ def connect_shopify_callback():
             raise RuntimeError('upsert_integration returned False')
     except Exception as e:
         app.logger.error(f'[Shopify OAuth] save failed for shop={shop}: {e}')
-        return redirect(url_for('auth.onboarding', error='Connected to Shopify, but saving the connection failed. Please try again.'))
+        return redirect(url_for(return_endpoint, error='Connected to Shopify, but saving the connection failed. Please try again.'))
 
     app.logger.info(f'[Shopify OAuth] connected shop={shop} client={client_id} user={current_user.id}')
+    if return_to == 'dashboard':
+        return redirect(url_for('auth.dashboard', connected=1))
     return redirect(url_for('auth.onboarding', step=2, connected=1, client_id=client_id))
 
 
