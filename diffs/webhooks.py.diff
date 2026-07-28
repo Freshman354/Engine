@@ -1,0 +1,328 @@
+--- /mnt/user-data/uploads/webhooks.py	2026-07-26 18:08:37.430998000 +0000
++++ ../webhooks.py	2026-07-27 21:51:11.523011822 +0000
+@@ -48,10 +48,10 @@
+                  (signs "{notification_url}{body}" — URL matters)
+ 
+ Supported platforms (v1)
+-  • shopify      — orders/created, orders/updated, orders/cancelled,
++  • shopify      — orders/create, orders/updated, orders/cancelled,
+                    orders/fulfilled, orders/paid, checkouts/create,
+                    checkouts/update (checkouts/* only captured for
+-                   clients with cart_recovery_enabled=True)
++                   clients with cart_recovery_enabled=True), app/uninstalled
+   • woocommerce  — order.created, order.updated, order.deleted, order.restored
+   • acuity       — appointment.scheduled, appointment.rescheduled,
+                    appointment.cancelled
+@@ -82,6 +82,7 @@
+ from functools import wraps
+ 
+ import models
++import crypto_utils
+ 
+ logger = logging.getLogger(__name__)
+ 
+@@ -122,6 +123,18 @@
+             "ON client_integrations (client_id, platform) WHERE is_active = TRUE"
+         )
+ 
++        # Index for shop_domain -> client_id lookup, used by the headless
++        # Shopify OAuth install flow (app.py's connect_shopify_callback) to
++        # detect a reinstall/reconnect of a shop Lumvi already knows, before
++        # a Lumvi session exists to look it up the normal way. shop_domain
++        # lives inside platform_config JSONB rather than its own column —
++        # no schema change, just an expression index over the existing data.
++        cursor.execute(
++            "CREATE INDEX IF NOT EXISTS idx_client_integrations_shopify_shop "
++            "ON client_integrations ((platform_config->>'shop_domain')) "
++            "WHERE platform = 'shopify' AND is_active = TRUE"
++        )
++
+         # webhook_log — audit trail. Never used for query logic.
+         # Rotated externally (e.g. DELETE WHERE created_at < NOW() - INTERVAL '30 days').
+         cursor.execute('''
+@@ -179,6 +192,7 @@
+     conn = cursor = None
+     try:
+         conn, cursor = models.get_db()
++        encrypted_config = _encrypt_platform_config(platform_config or {})
+         cursor.execute(
+             """
+             INSERT INTO client_integrations
+@@ -193,7 +207,7 @@
+             """,
+             (client_id, platform,
+              webhook_secret,
+-             json.dumps(platform_config or {}))
++             json.dumps(encrypted_config))
+         )
+         conn.commit()
+         logger.info(f'[Integration] upserted client={client_id} platform={platform}')
+@@ -233,7 +247,7 @@
+             'client_id':       row['client_id'],
+             'platform':        row['platform'],
+             'webhook_secret':  row['webhook_secret'],
+-            'platform_config': cfg,
++            'platform_config': _decrypt_platform_config(cfg),
+         }
+     except Exception as e:
+         logger.error(f'[Integration] get_integration error: {e}')
+@@ -252,6 +266,53 @@
+ _SENSITIVE_CONFIG_KEYS = ('access_token', 'shopify_client_secret', 'consumer_secret')
+ 
+ 
++# Field-level encryption for the values in _SENSITIVE_CONFIG_KEYS, at rest
++# in client_integrations.platform_config. Reuses crypto_utils.py's existing
++# Fernet setup (already used for client_ext_integrations credentials) rather
++# than adding a second encryption scheme — crypto_utils.encrypt_credentials
++# takes a dict, so a single value is wrapped/unwrapped in a one-key dict
++# rather than adding a new function to crypto_utils.py itself.
++#
++# _decrypt_secret falls back to returning the value unchanged when it isn't
++# a valid Fernet token — this is what makes the migration backward
++# compatible with rows written before this change: nothing needs a backfill
++# migration, existing plaintext rows just keep working as plaintext until
++# the next upsert_integration() call on that row re-encrypts it naturally
++# (every write path already does read-merge-write through get_integration/
++# list_integrations, so this happens automatically on the next reconnect,
++# secret rotation, or config change — not something a caller has to do).
++
++def _encrypt_secret(value: str) -> str:
++    if not value:
++        return value
++    return crypto_utils.encrypt_credentials({'v': value})
++
++
++def _decrypt_secret(value: str) -> str:
++    if not value:
++        return value
++    decrypted = crypto_utils.decrypt_credentials(value)
++    if 'v' in decrypted:
++        return decrypted['v']
++    return value  # not a Fernet token — legacy plaintext row, pass through
++
++
++def _encrypt_platform_config(cfg: dict) -> dict:
++    cfg = dict(cfg or {})
++    for key in _SENSITIVE_CONFIG_KEYS:
++        if cfg.get(key):
++            cfg[key] = _encrypt_secret(cfg[key])
++    return cfg
++
++
++def _decrypt_platform_config(cfg: dict) -> dict:
++    cfg = dict(cfg or {})
++    for key in _SENSITIVE_CONFIG_KEYS:
++        if cfg.get(key):
++            cfg[key] = _decrypt_secret(cfg[key])
++    return cfg
++
++
+ def _redact_platform_config(cfg: dict) -> dict:
+     """Replace credential values with a has_<key> boolean so the dashboard
+     can show "already connected" / drive a rotate flow without the raw
+@@ -296,9 +357,14 @@
+             if isinstance(cfg, str):
+                 try: cfg = json.loads(cfg)
+                 except Exception: cfg = {}
++            # redact=True (dashboard/UI): _redact_platform_config only ever
++            # checks truthiness of these fields, and ciphertext is still a
++            # non-empty string — no need to decrypt just to redact.
++            # redact=False (commerce_adapters.py, trusted server-side callers
++            # that need a real usable token): decrypt.
+             result.append({
+                 'platform':        row['platform'],
+-                'platform_config': _redact_platform_config(cfg) if redact else cfg,
++                'platform_config': _redact_platform_config(cfg) if redact else _decrypt_platform_config(cfg),
+                 'is_active':       row['is_active'],
+                 'created_at':      str(row.get('created_at', '')),
+                 'updated_at':      str(row.get('updated_at', '')),
+@@ -312,6 +378,42 @@
+         if conn:   conn.close()
+ 
+ 
++def get_client_id_by_shopify_shop(shop_domain: str) -> str | None:
++    """
++    Returns the client_id already connected to this Shopify shop domain, or
++    None if Lumvi has never seen this shop before.
++
++    Used by app.py's connect_shopify_callback for a headless (Shopify-
++    initiated) install/reinstall, where there's no Lumvi session yet to look
++    the client up the normal way (models.get_user_clients). Matches on the
++    shop_domain stored inside platform_config JSONB — see the expression
++    index added in migrate_integrations() above.
++
++    shop_domain itself isn't a credential, so this reads platform_config
++    directly rather than going through get_integration()/_decrypt_platform_config.
++    """
++    conn = cursor = None
++    try:
++        conn, cursor = models.get_db()
++        cursor.execute(
++            """
++            SELECT client_id FROM client_integrations
++            WHERE platform = 'shopify' AND is_active = TRUE
++              AND platform_config->>'shop_domain' = %s
++            LIMIT 1
++            """,
++            (shop_domain,)
++        )
++        row = cursor.fetchone()
++        return row['client_id'] if row else None
++    except Exception as e:
++        logger.error(f'[Integration] get_client_id_by_shopify_shop error: {e}')
++        return None
++    finally:
++        if cursor: cursor.close()
++        if conn:   conn.close()
++
++
+ def delete_integration(client_id: str, platform: str) -> bool:
+     """Soft-delete (deactivate) an integration. Webhook events are rejected after this."""
+     conn = cursor = None
+@@ -730,6 +832,82 @@
+     }
+ 
+ 
++def _verify_shopify_app_signature(raw_body: bytes, hmac_header: str) -> bool:
++    """
++    Same HMAC scheme as _verify_shopify_signature, but against the app's
++    own client secret rather than a stored per-integration one.
++
++    Used only for the mandatory compliance topics (handle_shopify_compliance_
++    webhook, below) — those arrive at a shop-scoped but not client_id-scoped
++    URL, and may have no client_integrations row to read a secret from at
++    all (shop/redact fires up to 48 days after uninstall, by which point
++    the row may be long gone).
++    """
++    secret = os.environ.get('SHOPIFY_APP_CLIENT_SECRET', '')
++    if not secret:
++        return False
++    return _verify_shopify_signature(raw_body, hmac_header, secret)
++
++
++def handle_shopify_compliance_webhook(raw_body: bytes, hmac_header: str, topic: str) -> tuple[dict, int]:
++    """
++    Handles Shopify's three mandatory compliance topics: customers/data_request,
++    customers/redact, shop/redact — required for any Shopify app, listed or
++    custom-distributed. See https://shopify.dev/docs/apps/build/privacy-law-compliance.
++
++    These are NOT registered per-shop via webhookSubscriptionCreate the way
++    orders/checkouts/app-uninstalled are (see ShopifyAdapter.register_webhooks
++    in commerce_adapters.py) — Shopify doesn't support that for these three;
++    they're configured once, app-wide, in the Partner Dashboard's "Compliance
++    webhooks" section, pointing at the single URL register_webhook_routes
++    mounts below. That Partner Dashboard step is a manual one-time setup
++    action, not something this function or its caller can do.
++
++    IMPORTANT — this verifies the request, logs it durably, and returns 200
++    promptly (satisfying Shopify's delivery requirement). It does NOT
++    perform automated data export or deletion. That's a deliberate
++    boundary, not an oversight:
++      - customers/data_request and customers/redact are scoped to ONE
++        customer, identified by email/id in the payload. Lumvi's orders
++        table isn't indexed for a customer-scoped lookup today, so
++        answering these automatically needs that built as its own task,
++        not guessed at here against a schema I haven't seen.
++      - shop/redact could reuse models.delete_client(client_id), but that
++        wipes the WHOLE client — every conversation/lead/FAQ, not just
++        Shopify-derived data. Firing an irreversible cascade delete
++        automatically off an inbound webhook, with no review step, isn't
++        something to wire up as a side effect of adding webhook support —
++        that's a decision worth making deliberately.
++    A cron reading unactioned rows here — mirroring the delayed,
++    auditable pattern users.py already uses for account-deletion requests
++    (request_account_deletion / get_users_due_for_hard_delete /
++    hard_delete_user) — is the natural next step once the redaction scope
++    itself (what to purge from conversations/leads for one customer,
++    specifically) has been decided.
++    """
++    phash = _payload_hash(raw_body)
++
++    if not _verify_shopify_app_signature(raw_body, hmac_header):
++        logger.warning(f'[Shopify Compliance] signature verification failed topic={topic}')
++        return {'error': 'Invalid signature'}, 401
++
++    try:
++        payload = json.loads(raw_body)
++    except json.JSONDecodeError:
++        return {'error': 'Invalid JSON'}, 400
++
++    shop_domain = (payload.get('shop_domain') or '').strip().lower()
++    client_id = get_client_id_by_shopify_shop(shop_domain) if shop_domain else None
++
++    logger.info(f'[Shopify Compliance] {topic} shop={shop_domain} client={client_id or "unresolved"} '
++                f'payload={json.dumps(payload)[:2000]}')
++    if client_id:
++        _log_webhook(client_id, 'shopify', topic, 'ok', phash,
++                     'compliance request logged — needs manual/automated follow-up, see handler docstring')
++
++    return {'status': 'ok'}, 200
++
++
+ def handle_shopify_webhook(client_id: str, raw_body: bytes,
+                            hmac_header: str, topic: str) -> tuple[dict, int]:
+     """
+@@ -740,7 +918,7 @@
+         raw_body:     request.get_data() — raw bytes before any parsing
+         hmac_header:  request.headers.get('X-Shopify-Hmac-Sha256')
+         topic:        request.headers.get('X-Shopify-Topic')
+-                      e.g. 'orders/created', 'orders/updated', 'orders/cancelled'
++                      e.g. 'orders/create', 'orders/updated', 'orders/cancelled'
+ 
+     Returns:
+         (response_dict, http_status_code)
+@@ -771,7 +949,20 @@
+ 
+     # 4. Route by topic
+     topic = (topic or '').lower().strip()
+-    order_topics    = {'orders/created', 'orders/updated', 'orders/cancelled',
++
++    # app/uninstalled arrives on this same endpoint/secret as everything
++    # else Shopify sends this app for this shop — no separate route needed.
++    # Deactivates the integration the same way the dashboard's manual
++    # "disconnect" button already does (delete_integration is a soft
++    # delete — is_active=FALSE, not a data wipe); a later reinstall of the
++    # same shop reactivates this same row rather than creating a new one.
++    if topic == 'app/uninstalled':
++        ok = delete_integration(client_id, 'shopify')
++        logger.info(f'[Shopify] app/uninstalled client={client_id} deactivated={ok}')
++        _log_webhook(client_id, 'shopify', topic, 'ok' if ok else 'error', phash)
++        return {'status': 'ok'}, 200
++
++    order_topics    = {'orders/create', 'orders/updated', 'orders/cancelled',
+                         'orders/fulfilled', 'orders/paid'}
+     checkout_topics = {'checkouts/create', 'checkouts/update'}
+     supported_topics = order_topics | checkout_topics
+@@ -1491,6 +1682,8 @@
+ 
+     Routes mounted:
+         POST /webhooks/shopify/<client_id>
++        POST /webhooks/shopify/compliance        (mandatory GDPR topics — see
++                                                    handle_shopify_compliance_webhook)
+         POST /webhooks/acuity/<client_id>
+         GET  /webhooks/health                   (uptime check, no auth)
+ 
+@@ -1511,6 +1704,14 @@
+         result, status = handle_shopify_webhook(client_id, raw_body, hmac_header, topic)
+         return jsonify(result), status
+ 
++    @app.route('/webhooks/shopify/compliance', methods=['POST'])
++    def shopify_compliance_webhook():
++        raw_body    = request.get_data()
++        hmac_header = request.headers.get('X-Shopify-Hmac-Sha256', '')
++        topic       = request.headers.get('X-Shopify-Topic', '')
++        result, status = handle_shopify_compliance_webhook(raw_body, hmac_header, topic)
++        return jsonify(result), status
++
+     @app.route('/webhooks/acuity/<client_id>', methods=['POST'])
+     def acuity_webhook(client_id):
+         raw_body   = request.get_data()
+@@ -1602,7 +1803,7 @@
+                 'Scroll to the bottom and click "Create webhook"',
+                 f'Paste this URL: {webhook_url}',
+                 'Set Format to JSON',
+-                'Subscribe to: orders/created, orders/updated, orders/cancelled',
++                'Subscribe to: orders/create, orders/updated, orders/cancelled',
+                 'If you plan to turn on cart recovery, also subscribe to: '
+                 'checkouts/create, checkouts/update',
+                 'Copy the "Webhook signing secret" shown after saving',

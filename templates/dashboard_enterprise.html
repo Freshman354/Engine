@@ -19,7 +19,8 @@
 }
 body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);min-height:100vh;display:flex;}
 .sidebar{width:var(--sidebar-w);background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:50;transition:transform 0.3s ease;}
-.sidebar-logo{padding:20px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.sidebar-logo{padding:20px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;text-decoration:none;cursor:pointer;transition:background 0.15s;}
+.sidebar-logo:hover{background:var(--cream);}
 .logo-img{width:34px;height:34px;border-radius:9px;object-fit:cover;flex-shrink:0;}
 .logo-text{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);}
 .sidebar-nav{flex:1;padding:14px 10px;display:flex;flex-direction:column;gap:2px;overflow-y:auto;}
@@ -79,6 +80,34 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .stat-sub{font-size:11px;color:var(--sub);margin-top:4px;}
 .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
 .section-title{font-family:'Fraunces',serif;font-size:16px;font-weight:700;color:var(--dark);}
+
+/* ── AI HEALTH / NEEDS ATTENTION / QUICK ACTIONS ── */
+.section{background:var(--white);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+.section-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.section-body{padding:18px 20px;}
+.health-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.health-item{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:600;color:var(--dark);}
+.health-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.health-dot.ok{background:#16A34A;box-shadow:0 0 0 3px rgba(22,163,74,0.15);}
+.health-dot.bad{background:#DC2626;box-shadow:0 0 0 3px rgba(220,38,38,0.15);}
+.attention-item{display:flex;align-items:center;gap:10px;padding:14px 20px;}
+.attention-item-divider{border-bottom:1px solid var(--border);}
+.attention-item:last-child{border-bottom:none !important;}
+.attention-text{flex:1;font-size:13.5px;color:var(--dark);line-height:1.5;}
+.attention-link{flex-shrink:0;font-size:12.5px;font-weight:700;color:var(--gold);background:none;border:none;
+  cursor:pointer;text-decoration:none;padding:0;font-family:'DM Sans',sans-serif;white-space:nowrap;}
+.quick-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;}
+.quick-action-btn{display:flex;align-items:center;gap:7px;padding:10px 16px;background:var(--white);
+  border:1px solid var(--border);border-radius:10px;font-size:13px;font-weight:600;color:var(--dark);
+  text-decoration:none;cursor:pointer;transition:all 0.15s;font-family:'DM Sans',sans-serif;}
+.quick-action-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-lt);}
+.quick-action-btn svg{width:15px;height:15px;flex-shrink:0;}
+@media(max-width:640px){
+  .health-grid{grid-template-columns:1fr;gap:10px;}
+  .quick-actions{flex-direction:column;}
+  .quick-action-btn{width:100%;justify-content:center;}
+}
+
 .clients-table-wrap{background:var(--white);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
 .clients-table{width:100%;border-collapse:collapse;}
 .clients-table thead tr{background:var(--cream);border-bottom:1px solid var(--border);}
@@ -91,10 +120,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .client-cell-name{font-weight:600;color:var(--dark);font-size:14px;}
 .status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
 .status-badge.active{background:var(--success-lt);color:var(--success);}
+.status-badge.paused{background:var(--warning-lt);color:var(--warning);}
 .status-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;}
 .platform-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;font-size:11.5px;font-weight:700;}
 .platform-badge.shopify{background:rgba(149,191,71,0.14);color:#5C7A2E;}
 .platform-badge.woocommerce{background:rgba(127,84,179,0.12);color:#7F54B3;}
+.platform-badge.unconnected{background:var(--panel);color:var(--mid);}
 .platform-badge-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
 .table-actions{display:flex;gap:5px;flex-wrap:wrap;}
 .btn-xs{padding:5px 10px;font-size:11.5px;border-radius:7px;border:none;cursor:pointer;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:all 0.15s;font-family:'DM Sans',sans-serif;white-space:nowrap;}
@@ -121,6 +152,24 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .card-menu-item:hover{background:var(--cream);}
 .card-menu-item-danger{color:var(--danger);}
 .card-menu-item-danger:hover{background:var(--danger-lt);}
+
+/* ── UNIFIED STORE CARD (replaces the old table + separate mobile-card markup) ── */
+.store-card{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:20px 22px;}
+.store-card-header{display:flex;align-items:flex-start;gap:12px;margin-bottom:18px;}
+.store-card-info{flex:1;min-width:0;}
+.store-card-name{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--dark);margin-bottom:6px;}
+.store-card-badges{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.store-card-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px;
+  padding:16px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.store-card-stat{text-align:center;}
+.store-card-stat-value{font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--dark);}
+.store-card-stat-label{font-size:11px;color:var(--sub);margin-top:2px;}
+.store-card-actions{display:flex;gap:10px;}
+@media(max-width:480px){
+  .store-card-stats{grid-template-columns:1fr;gap:10px;padding:14px 0;}
+  .store-card-stat{display:flex;align-items:center;justify-content:space-between;text-align:left;}
+  .store-card-actions{flex-direction:column;}
+}
 .btn-xs-locked{background:var(--panel);color:var(--sub);cursor:not-allowed;}
 .btn-xs-delete{background:var(--danger-lt);color:var(--danger);}
 .btn-xs-delete:hover{background:#fecaca;}
@@ -250,10 +299,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 <body>
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 <aside class="sidebar" id="sidebar">
-    <div class="sidebar-logo">
+    <a href="{{ url_for('account.settings') }}" class="sidebar-logo" title="Account settings">
         <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi" class="logo-img">
         <span class="logo-text">Lumvi</span>
-    </div>
+    </a>
     <nav class="sidebar-nav">
         <div class="nav-label">Main</div>
         <a href="/dashboard" class="nav-item active">
@@ -335,14 +384,46 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 {% endif %}
             </div>
         </div>
+        <div id="activateEmbedBanner" style="display:none;background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:16px 18px;margin-bottom:16px;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" style="width:22px;height:22px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span style="font-size:13.5px;color:#78350F;line-height:1.5;">
+                    <strong>One last step —</strong> Shopify keeps new app widgets off by default on every store. Turn yours on in the theme editor; it's already toggled, just needs Save.
+                </span>
+            </div>
+            <a id="activateEmbedBtn" href="#" target="_blank" rel="noopener" style="flex-shrink:0;padding:10px 20px;background:#D97706;color:#fff;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;white-space:nowrap;">
+                Activate on my store →
+            </a>
+        </div>
+        {% if latest_usage_notification %}
+        {% set _th = latest_usage_notification.threshold %}
+        <div style="background:{{ '#FEF2F2' if _th == 100 else '#FFFBEB' }};border:1.5px solid {{ '#FCA5A5' if _th == 100 else '#FCD34D' }};border-radius:12px;padding:16px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:12px;min-width:0;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="{{ '#DC2626' if _th == 100 else '#D97706' }}" stroke-width="2" style="width:22px;height:22px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span style="font-size:13.5px;color:{{ '#7F1D1D' if _th == 100 else '#78350F' }};line-height:1.5;">
+                    {% if _th == 100 %}
+                        <strong>Your AI assistant is no longer responding.</strong>
+                        You've used all {{ plan_limits.conversations_per_month }} conversations included this month{% if plan_limits.grace_conversations %} plus your {{ plan_limits.grace_conversations }}-conversation grace allowance{% endif %}. Resets {{ usage_reset_date.strftime('%B %-d') }}.
+                    {% elif _th == 90 %}
+                        <strong>90% of your monthly conversation limit used</strong> ({{ monthly_conversations }}/{{ plan_limits.conversations_per_month }}).{% if plan_limits.grace_conversations %} A {{ plan_limits.grace_conversations }}-conversation grace allowance kicks in after that.{% endif %}
+                    {% else %}
+                        <strong>70% of your monthly conversation limit used</strong> ({{ monthly_conversations }}/{{ plan_limits.conversations_per_month }}). Resets {{ usage_reset_date.strftime('%B %-d') }}.
+                    {% endif %}
+                </span>
+            </div>
+            <a href="/upgrade" style="flex-shrink:0;padding:10px 20px;background:{{ '#DC2626' if _th == 100 else '#D97706' }};color:#fff;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;white-space:nowrap;">
+                Upgrade →
+            </a>
+        </div>
+        {% endif %}
         <div class="stats-row">
             <div class="stat-card">
                 <div class="stat-label">
-                    <div class="stat-icon-box" style="background:var(--gold-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="#B8924A" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
-                    Store Status
+                    <div class="stat-icon-box" style="background:var(--gold-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="#B8924A" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+                    Conversations Today
                 </div>
-                <div class="stat-value-row"><span class="stat-value" style="font-size:20px;">{% if clients %}Connected{% else %}Not Connected{% endif %}</span></div>
-                <div class="stat-sub">{% if clients %}Your AI employee is live{% else %}Connect a store to go live{% endif %}</div>
+                <div class="stat-value-row"><span class="stat-value">{{ conversations_today }}</span></div>
+                <div class="stat-sub">{% if not clients %}Nothing connected yet{% else %}Since midnight{% endif %}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">
@@ -355,85 +436,194 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 </div>
                 <div class="stat-sub">
                     {% if not clients %}Nothing connected yet
-                    {% elif plan_limits.conversations_per_month and monthly_conversations >= plan_limits.conversations_per_month %}<span style="color:var(--warning);font-weight:600;">Limit reached — </span><a href="/upgrade" style="color:var(--gold);font-weight:600;text-decoration:none;">upgrade →</a>
+                    {% elif plan_limits.conversations_per_month and monthly_conversations >= (plan_limits.conversations_per_month + plan_limits.grace_conversations) %}<span style="color:var(--warning);font-weight:600;">AI paused</span> — resets {{ usage_reset_date.strftime('%B %-d') }}
+                    {% elif grace_used > 0 %}<span style="color:var(--warning);font-weight:600;">{{ grace_used }} grace conversation{{ 's' if grace_used != 1 else '' }} used</span> of {{ plan_limits.grace_conversations }}
+                    {% elif plan_limits.conversations_per_month %}Resets {{ usage_reset_date.strftime('%B %-d') }}
                     {% else %}Answering customer questions{% endif %}
                 </div>
             </div>
             <div class="stat-card">
                 <div class="stat-label">
-                    <div class="stat-icon-box" style="background:var(--warning-lt);"><svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg></div>
-                    Current Plan
+                    <div class="stat-icon-box" style="background:#fdf2f8;"><svg viewBox="0 0 24 24" fill="none" stroke="#9d174d" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                    Leads Captured
                 </div>
-                <div class="stat-value-row"><span class="stat-value" style="font-size:20px;text-transform:capitalize;">{{ plan_type or user.plan_type }}</span></div>
-                <div class="stat-sub"><a href="/upgrade" style="color:var(--gold);text-decoration:none;font-weight:600;">Upgrade →</a></div>
+                <div class="stat-value-row"><span class="stat-value">{{ leads_today }}</span>{% if clients %}<span class="stat-trend up">Today</span>{% endif %}</div>
+                <div class="stat-sub">{{ leads_total }} all-time</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-label">
+                    <div class="stat-icon-box" style="background:#eff6ff;"><svg viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+                    AI Resolution Rate
+                </div>
+                <div class="stat-value-row"><span class="stat-value">{% if resolution_rate_today is not none %}{{ resolution_rate_today }}%{% else %}—{% endif %}</span></div>
+                <div class="stat-sub">{% if resolution_rate_today is none %}No conversations yet today{% else %}of today's questions answered{% endif %}</div>
+            </div>
+        </div>
+
+        {% if clients and (conversations_today > 0 or leads_today > 0) %}
+        <!-- NOTIFICATIONS -->
+        <div class="section" style="margin-bottom:20px;">
+            <div class="section-head"><span class="section-title">Today</span></div>
+            <div class="section-body" style="padding:0;">
+                {% if resolution_rate_today is not none %}
+                <div class="attention-item attention-item-divider">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2" style="width:16px;height:16px;flex-shrink:0;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <span class="attention-text">AI answered {{ resolution_rate_today }}% of today's {{ conversations_today }} conversation{{ 's' if conversations_today != 1 else '' }}.</span>
+                </div>
+                {% endif %}
+                {% if leads_today > 0 %}
+                <div class="attention-item attention-item-divider">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#B8924A" stroke-width="2" style="width:16px;height:16px;flex-shrink:0;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                    <span class="attention-text">{{ leads_today }} new lead{{ 's' if leads_today != 1 else '' }} captured today.</span>
+                </div>
+                {% endif %}
+                {% if unanswered_today > 0 %}
+                <div class="attention-item attention-item-divider">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" style="width:16px;height:16px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span class="attention-text">{{ unanswered_today }} unanswered question{{ 's' if unanswered_today != 1 else '' }} today.</span>
+                    <a href="/analytics?client_id={{ clients[0].client_id }}" class="attention-link">View →</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- AI HEALTH -->
+        <div class="section" style="margin-bottom:20px;">
+            <div class="section-head"><span class="section-title">AI Health</span></div>
+            <div class="section-body">
+                <div class="health-grid">
+                    <div class="health-item">
+                        <span class="health-dot {{ 'ok' if ai_health.store_connected else 'bad' }}"></span>
+                        Store Connected
+                    </div>
+                    <div class="health-item">
+                        <span class="health-dot {{ 'ok' if ai_health.ai_online else 'bad' }}"></span>
+                        AI Online
+                    </div>
+                    <div class="health-item">
+                        <span class="health-dot {{ 'ok' if ai_health.knowledge_ready else 'bad' }}"></span>
+                        Knowledge Base Ready
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if needs_attention %}
+        <!-- NEEDS ATTENTION -->
+        <div class="section" style="margin-bottom:20px;">
+            <div class="section-head"><span class="section-title">Needs Attention</span></div>
+            <div class="section-body" style="padding:0;">
+                {% for item in needs_attention %}
+                <div class="attention-item{% if not loop.last %} attention-item-divider{% endif %}">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" style="width:16px;height:16px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    <span class="attention-text">{{ item.message }}</span>
+                    {% if item.action == 'connect' %}
+                    <button class="attention-link" onclick="openNewClientModal()">Connect →</button>
+                    {% elif item.link %}
+                    <a href="{{ item.link }}" class="attention-link">View →</a>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- QUICK ACTIONS -->
+        <div class="quick-actions">
+            <button class="quick-action-btn" onclick="openNewClientModal()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                {% if clients %}Reconnect Store{% else %}Connect Store{% endif %}
+            </button>
+            {% if clients %}
+            <a href="/analytics?client_id={{ clients[0].client_id }}" class="quick-action-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                View Conversations
+            </a>
+            <a href="/faq-manager?client_id={{ clients[0].client_id }}" class="quick-action-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Train AI
+            </a>
+            {% if plan_limits.customization %}
+            <a href="/customize?client_id={{ clients[0].client_id }}" class="quick-action-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                Customize AI
+            </a>
+            {% endif %}
+            {% endif %}
         </div>
         <div class="section-header">
             <span class="section-title">Your Store</span>
         </div>
         {% if clients %}
         {% set client = clients[0] %}
-        <div class="clients-table-wrap">
-            <table class="clients-table">
-                <thead><tr><th>Store</th><th>Platform</th><th>Status</th><th>Actions</th></tr></thead>
-                <tbody>
-                    <tr id="row-{{ client.client_id }}">
-                        <td><div class="client-cell"><div class="client-avatar-sm">{{ client.company_name[0]|upper }}</div><div class="client-cell-name">{{ client.company_name }}</div></div></td>
-                        <!-- TODO(backend): populate client.platform ('shopify' | 'woocommerce') from the store connection record -->
-                        <td>
-                            {% if client.platform == 'woocommerce' %}
-                            <span class="platform-badge woocommerce"><span class="platform-badge-dot"></span>WooCommerce</span>
-                            {% else %}
-                            <span class="platform-badge shopify"><span class="platform-badge-dot"></span>Shopify</span>
-                            {% endif %}
-                        </td>
-                        <td><span class="status-badge active">Active</span></td>
-                        <td>
-                            <div class="table-actions">
-                                <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Knowledge</a>
-                                <a href="/article-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>Articles</a>
-                                <button onclick="openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="btn-xs btn-xs-logins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Dashboard</button>
-                                {% if plan_limits.webhooks or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="btn-xs btn-xs-integrations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Integrations</a>{% endif %}
-                                <button onclick="showEmbedCode('{{ client.client_id }}')" class="btn-xs btn-xs-embed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>Install</button>
-                                {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Analytics</a><a href="/client-report?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics" style="margin-left:2px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Report</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Analytics</button>{% endif %}
-                                {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="btn-xs btn-xs-theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>Customize AI</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Customize AI</button>{% endif %}
-                                <button class="btn-xs btn-xs-delete" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="confirmDelete(this.dataset.clientId, this.dataset.clientName)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-            <div class="client-cards-mobile">
-                <div class="client-card" id="card-{{ client.client_id }}">
-                    <div class="client-card-top">
-                        <div class="client-avatar-sm">{{ client.company_name[0]|upper }}</div>
-                        <div><div class="client-card-name">{{ client.company_name }}</div>
-                            {% if client.platform == 'woocommerce' %}
-                            <span class="platform-badge woocommerce" style="margin-top:3px;"><span class="platform-badge-dot"></span>WooCommerce</span>
-                            {% else %}
-                            <span class="platform-badge shopify" style="margin-top:3px;"><span class="platform-badge-dot"></span>Shopify</span>
-                            {% endif %}
-                        </div>
-                        <span class="status-badge active" style="margin-left:auto;">Active</span>
-                    </div>
-                    <div class="client-card-actions">
-                        <a href="/faq-manager?client_id={{ client.client_id }}" class="btn-xs btn-xs-manage">Knowledge</a>
-                        {% if plan_limits.webhooks or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="btn-xs btn-xs-integrations">Integrations</a>{% endif %}
-                        {% if plan_limits.analytics %}<a href="/analytics?client_id={{ client.client_id }}" class="btn-xs btn-xs-analytics">Analytics</a>{% else %}<button class="btn-xs btn-xs-locked" disabled>Analytics</button>{% endif %}
-                        <div class="card-menu">
-                            <button class="btn-xs card-menu-btn" onclick="toggleCardMenu(event, '{{ client.client_id }}')" aria-label="More actions">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-                            </button>
-                            <div class="card-menu-dropdown" id="cardMenu-{{ client.client_id }}">
-                                <a href="/article-manager?client_id={{ client.client_id }}" class="card-menu-item">Articles</a>
-                                <button onclick="closeAllCardMenus();openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="card-menu-item">Dashboard</button>
-                                <button onclick="closeAllCardMenus();showEmbedCode('{{ client.client_id }}')" class="card-menu-item">Install</button>
-                                {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="card-menu-item">Customize AI</a>{% endif %}
-                                <button class="card-menu-item card-menu-item-danger" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="closeAllCardMenus();confirmDelete(this.dataset.clientId, this.dataset.clientName)">Disconnect</button>
-                            </div>
-                        </div>
+        <div class="store-card">
+            <div class="store-card-header">
+                <div class="client-avatar-sm">{{ client.company_name[0]|upper }}</div>
+                <div class="store-card-info">
+                    <div class="store-card-name">{{ client.company_name }}</div>
+                    <div class="store-card-badges">
+                        <!-- client.platform is populated in blueprints/auth.py's dashboard()
+                             from client_integrations (see webhooks.list_integrations) —
+                             it isn't a column on clients itself. None is a real state
+                             (a client can exist mid-onboarding with no store connected
+                             yet), not just "must be Shopify". -->
+                        {% if client.platform == 'woocommerce' %}
+                        <span class="platform-badge woocommerce"><span class="platform-badge-dot"></span>WooCommerce</span>
+                        {% elif client.platform == 'shopify' %}
+                        <span class="platform-badge shopify"><span class="platform-badge-dot"></span>Shopify</span>
+                        {% else %}
+                        <span class="platform-badge unconnected"><span class="platform-badge-dot"></span>Not connected</span>
+                        {% endif %}
+                        {% if ai_health.ai_online %}
+                        <span class="status-badge active">Active</span>
+                        {% else %}
+                        <span class="status-badge paused">Paused</span>
+                        {% endif %}
                     </div>
                 </div>
+                <div class="card-menu">
+                    <button class="btn-xs card-menu-btn" onclick="toggleCardMenu(event, '{{ client.client_id }}')" aria-label="More actions">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+                    </button>
+                    <div class="card-menu-dropdown" id="cardMenu-{{ client.client_id }}">
+                        <a href="/faq-manager?client_id={{ client.client_id }}" class="card-menu-item">Knowledge</a>
+                        <a href="/article-manager?client_id={{ client.client_id }}" class="card-menu-item">Articles</a>
+                        <button onclick="closeAllCardMenus();showEmbedCode('{{ client.client_id }}')" class="card-menu-item">Install</button>
+                        {% if plan_limits.webhooks or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="card-menu-item">Integrations</a>{% endif %}
+                        {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="card-menu-item">Customize AI</a>{% endif %}
+                        {% if plan_limits.analytics %}<a href="/client-report?client_id={{ client.client_id }}" class="card-menu-item">Report</a>{% endif %}
+                        <button class="card-menu-item card-menu-item-danger" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="closeAllCardMenus();confirmDelete(this.dataset.clientId, this.dataset.clientName)">Disconnect</button>
+                    </div>
+                </div>
+            </div>
+            <div class="store-card-stats">
+                <div class="store-card-stat">
+                    <div class="store-card-stat-value">{{ conversations_today }}</div>
+                    <div class="store-card-stat-label">Conversations today</div>
+                </div>
+                <div class="store-card-stat">
+                    <div class="store-card-stat-value">{{ leads_today }}</div>
+                    <div class="store-card-stat-label">Leads today</div>
+                </div>
+                <div class="store-card-stat">
+                    <div class="store-card-stat-value">{% if resolution_rate_today is not none %}{{ resolution_rate_today }}%{% else %}—{% endif %}</div>
+                    <div class="store-card-stat-label">Resolution rate</div>
+                </div>
+            </div>
+            <div class="store-card-actions">
+                <button onclick="openClientDashPanel('{{ client.client_id }}','{{ client.company_name }}')" class="btn btn-primary" style="flex:1;justify-content:center;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                    Open Dashboard
+                </button>
+                {% if plan_limits.analytics %}
+                <a href="/analytics?client_id={{ client.client_id }}" class="btn btn-secondary" style="flex:1;justify-content:center;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    Analytics
+                </a>
+                {% else %}
+                <button class="btn btn-secondary" style="flex:1;justify-content:center;" disabled>Analytics</button>
+                {% endif %}
             </div>
         </div>
         {% else %}
@@ -443,6 +633,49 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                 <h2>No Store Connected Yet</h2>
                 <p>Connect your Shopify or WooCommerce store to bring your AI employee online</p>
                 <button class="btn btn-primary" onclick="openNewClientModal()">Connect Your Store</button>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if clients %}
+        <!-- RECENT ACTIVITY -->
+        <div class="section" style="margin-top:20px;">
+            <div class="section-head"><span class="section-title">Recent Activity</span></div>
+            <div class="section-body" style="padding:0;display:grid;grid-template-columns:1.4fr 1fr;">
+                <div style="padding:18px 20px;border-right:1px solid var(--border);">
+                    <div style="font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">Conversations</div>
+                    {% if recent_conversations %}
+                    {% for c in recent_conversations %}
+                    <div style="padding:10px 0;{% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}">
+                        <div style="font-size:13px;color:var(--dark);line-height:1.5;margin-bottom:3px;">
+                            {{ c.user_message[:80] }}{% if c.user_message|length > 80 %}…{% endif %}
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--sub);">
+                            <span style="color:{{ '#16A34A' if c.matched else '#D97706' }};font-weight:600;">
+                                {{ 'Answered' if c.matched else 'Unanswered' }}
+                            </span>
+                            <span>·</span>
+                            <span>{{ c.timestamp }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div style="font-size:13px;color:var(--sub);padding:8px 0;">No conversations yet.</div>
+                    {% endif %}
+                </div>
+                <div style="padding:18px 20px;">
+                    <div style="font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;">Recent Leads</div>
+                    {% if recent_leads %}
+                    {% for l in recent_leads %}
+                    <div style="padding:10px 0;{% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}">
+                        <div style="font-size:13px;font-weight:600;color:var(--dark);">{{ l.name or l.email or 'New lead' }}</div>
+                        <div style="font-size:11.5px;color:var(--sub);margin-top:2px;">{{ l.created_at }}</div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div style="font-size:13px;color:var(--sub);padding:8px 0;">No leads yet.</div>
+                    {% endif %}
+                </div>
             </div>
         </div>
         {% endif %}
@@ -470,6 +703,17 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         <div class="form-group" id="dashStoreUrlGroup" style="display:none;">
             <label id="dashStoreUrlLabel">Store URL</label>
             <input type="text" id="dashStoreUrl" placeholder="your-store.myshopify.com">
+        </div>
+        <div id="dashWooKeyFields" style="display:none;">
+            <div class="form-group">
+                <label>Consumer Key</label>
+                <input type="text" id="dashWooKey" placeholder="ck_xxxxxxxxxxxxxxxxxxxx">
+            </div>
+            <div class="form-group">
+                <label>Consumer Secret</label>
+                <input type="password" id="dashWooSecret" placeholder="cs_xxxxxxxxxxxxxxxxxxxx">
+            </div>
+            <p style="color:var(--sub);font-size:12px;margin:-8px 0 14px;">Found under WooCommerce → Settings → Advanced → REST API.</p>
         </div>
         <button type="button" class="btn btn-primary" id="dashConnectBtn" style="width:100%;justify-content:center;" disabled onclick="startDashConnect()">Continue</button>
     </div>
@@ -534,34 +778,54 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         const urlGroup = document.getElementById('dashStoreUrlGroup');
         const label    = document.getElementById('dashStoreUrlLabel');
         const input    = document.getElementById('dashStoreUrl');
+        const wooFields = document.getElementById('dashWooKeyFields');
         urlGroup.style.display = 'block';
         if (platform === 'shopify') {
             label.textContent = 'Shopify Store URL';
             input.placeholder = 'your-store.myshopify.com';
+            wooFields.style.display = 'none';
         } else {
             label.textContent = 'Store URL';
             input.placeholder = 'yourstore.com';
+            wooFields.style.display = 'block';
         }
         document.getElementById('dashConnectBtn').disabled = false;
     }
-    // TODO(backend): reuses the same /connect/shopify/start and /connect/woocommerce/start
-    // endpoints introduced for onboarding.html — see that file's comments for the expected contract.
+    // Shopify: real OAuth install flow (redirect, same as onboarding.html).
+    // WooCommerce: manual key entry against /connect/woocommerce/manual
+    // (already validates the keys server-side before saving).
     async function startDashConnect() {
         const url = document.getElementById('dashStoreUrl').value.trim();
         if (!url || !dashSelectedPlatform) return;
         const btn = document.getElementById('dashConnectBtn');
+
+        if (dashSelectedPlatform === 'shopify') {
+            btn.disabled = true;
+            btn.textContent = 'Redirecting to Shopify…';
+            const domain = url.trim().replace(/\.myshopify\.com$/i, '');
+            window.location.href = `/connect/shopify/install?shop_domain=${encodeURIComponent(domain)}.myshopify.com&return_to=dashboard`;
+            return;
+        }
+
+        const key    = document.getElementById('dashWooKey').value.trim();
+        const secret = document.getElementById('dashWooSecret').value.trim();
+        if (!key || !secret) {
+            showToast('Please fill in your store URL and both API keys.', 'error');
+            return;
+        }
         btn.disabled = true;
         btn.textContent = 'Connecting…';
         try {
-            const endpoint = dashSelectedPlatform === 'shopify' ? '/connect/shopify/start' : '/connect/woocommerce/start';
-            const payload   = dashSelectedPlatform === 'shopify' ? { shop_domain: url } : { store_url: url };
-            const res  = await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+            const res  = await fetch('/connect/woocommerce/manual', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ store_url: url, consumer_key: key, consumer_secret: secret }),
+            });
             const data = await res.json();
-            const authUrl = data.auth_url || data.authorize_url;
-            if (authUrl) { window.location.href = authUrl; }
-            else { throw new Error(data.error || 'Could not start connection.'); }
+            if (!data.success) throw new Error(data.error || 'Could not connect.');
+            window.location.reload();
         } catch (e) {
-            showToast("Couldn't reach that store — check the URL and try again.", 'error');
+            showToast(e.message || "Couldn't reach that store — check the URL and keys.", 'error');
             btn.disabled = false;
             btn.textContent = 'Continue';
         }
@@ -581,6 +845,28 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
     function closeDeleteModal(){pendingDeleteId=null;document.getElementById('delete-modal').style.display='none';}
     async function executeDelete(){if(!pendingDeleteId)return;const btn=document.getElementById('confirm-delete-btn');btn.textContent='Disconnecting…';btn.disabled=true;try{const res=await fetch(`/api/clients/${pendingDeleteId}/delete`,{method:'DELETE',headers:{'Content-Type':'application/json'}});const data=await res.json();if(data.success){['row-','card-'].forEach(p=>{const el=document.getElementById(p+pendingDeleteId);if(el){el.style.transition='opacity 0.3s';el.style.opacity='0';setTimeout(()=>el.remove(),300);}});closeDeleteModal();showToast('Store disconnected','success');const badge=document.querySelector('.nav-badge');if(badge){const c=parseInt(badge.textContent)||0;if(c-1<=0)badge.remove();else badge.textContent=c-1;}}else{showToast(data.error||'Disconnect failed','error');btn.textContent='Disconnect';btn.disabled=false;}}catch{showToast('Network error','error');btn.textContent='Disconnect';btn.disabled=false;}}
     function showToast(msg,type='success'){const t=document.getElementById('toast');t.textContent=msg;t.className=`toast ${type} show`;setTimeout(()=>{t.className='toast';},3500);}
+    (function handleConnectRedirect(){
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('connected') === '1') {
+            showToast('Store connected successfully!', 'success');
+            // Shopify app embeds are off by default on every store, for
+            // every app — platform behavior, not something the OAuth flow
+            // can skip. activate_embed_url is only present for a Shopify
+            // connection (set in app.py's connect_shopify_callback); it's
+            // a deep link straight to the theme editor with the embed
+            // already toggled, so this is a one-click "Save" from here.
+            const activateUrl = params.get('activate_embed_url');
+            if (activateUrl) {
+                document.getElementById('activateEmbedBtn').href = activateUrl;
+                const banner = document.getElementById('activateEmbedBanner');
+                banner.style.display = 'flex';
+            }
+            history.replaceState({}, '', window.location.pathname);
+        } else if (params.get('error')) {
+            showToast(params.get('error'), 'error');
+            history.replaceState({}, '', window.location.pathname);
+        }
+    })();
     document.addEventListener('click',function(e){if(e.target===document.getElementById('embedModal'))closeEmbedModal();if(e.target===document.getElementById('new-client-modal'))closeModal();if(e.target===document.getElementById('delete-modal'))closeDeleteModal();});
     document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeEmbedModal();closeModal();closeDeleteModal();closeSidebar();}});
 </script>

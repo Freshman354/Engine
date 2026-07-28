@@ -1,0 +1,291 @@
+--- /mnt/user-data/uploads/integrations.html	2026-07-27 11:30:52.583704000 +0000
++++ ../templates/integrations.html	2026-07-27 21:51:20.607729722 +0000
+@@ -476,6 +476,20 @@
+ .btn[disabled] { opacity: 0.45; pointer-events: none; }
+ .btn-sm { padding: 6px 12px; font-size: 12px; }
+ .btn-full { width: 100%; justify-content: center; }
++.btn-link-manual {
++  display: block;
++  width: 100%;
++  text-align: center;
++  background: none;
++  border: none;
++  color: var(--sub);
++  font-size: 11.5px;
++  font-family: 'DM Sans', sans-serif;
++  cursor: pointer;
++  padding: 6px 0 0;
++  text-decoration: underline;
++}
++.btn-link-manual:hover { color: var(--mid); }
+ 
+ /* ── ACTIVITY LOG ────────────────────────────────────────────── */
+ .log-section {
+@@ -890,6 +904,29 @@
+ }
+ .card-last-event svg { flex-shrink: 0; }
+ .card-last-event.stale { color: var(--warning); }
++
++/* Distinguishes a native Shopify App (OAuth) connection from the legacy
++   manual client-credentials setup — same underlying "Connected" status,
++   different install method, different available actions (no webhook URL
++   to paste, no secret to update — see setCardState's shopify branch). */
++.card-connection-method {
++  display: inline-flex;
++  align-items: center;
++  gap: 5px;
++  font-size: 11px;
++  font-weight: 600;
++  padding: 3px 9px;
++  border-radius: 5px;
++  margin-bottom: 12px;
++}
++.card-connection-method.native {
++  background: var(--gold-lt);
++  color: var(--gold-dk);
++}
++.card-connection-method.manual {
++  background: var(--panel);
++  color: var(--sub);
++}
+ </style>
+ <!-- Jinja2 template variables — populated by Flask's render_template() -->
+ <script>
+@@ -969,6 +1006,26 @@
+       </div>
+     </div>
+ 
++    <!-- ── SHOPIFY THEME ACTIVATION BANNER ──
++         Hidden by default; shown only right after a Shopify OAuth connect
++         completes (see handleShopifyOAuthReturn in the script below).
++         App embed blocks are off by default on every Shopify store for
++         every app — that's platform behavior, not something the install
++         flow can skip — so this is the one click still needed after
++         connecting, made as short as possible with a deep link straight
++         to the theme editor with the embed pre-toggled. -->
++    <div id="activateEmbedBanner" style="display:none;background:var(--warning-lt);border:1.5px solid rgba(217,119,6,0.35);border-radius:var(--radius-sm);padding:16px 18px;margin-bottom:16px;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
++      <div style="display:flex;align-items:center;gap:12px;min-width:0;">
++        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
++        <span style="font-size:13.5px;color:var(--dark);line-height:1.5;">
++          <strong>One last step —</strong> Shopify keeps new app widgets off by default on every store. Turn it on for this client's theme; it's already toggled, just needs Save.
++        </span>
++      </div>
++      <a id="activateEmbedBtn" href="#" target="_blank" rel="noopener" style="flex-shrink:0;padding:10px 18px;background:var(--warning);color:#fff;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;white-space:nowrap;">
++        Activate on their store →
++      </a>
++    </div>
++
+     <!-- ── ONBOARDING BANNER ──────────────────────────────────── -->
+     <div class="onboarding-banner" id="onboardingBanner">
+       <div class="onboarding-top">
+@@ -1440,12 +1497,40 @@
+     if (sel) sel.value = linkedId;
+   }
+ 
++  handleShopifyOAuthReturn(params);
++
+   if (!currentClient) { showEmptyState(); return; }
+   loadIntegrations(currentClient);
+   loadLog(currentClient);
+   checkOnboarding();
+ });
+ 
++// Handles the redirect back from /connect/shopify/callback when this page
++// initiated the connect (return_to=integrations — see the Shopify card's
++// "Connect Shopify" button, and app.py's connect_shopify_install/callback).
++// client_id in the URL (handled above, by the existing deep-link support)
++// already makes sure the right client is selected; this just adds the
++// success/error messaging and the theme-activation banner on top.
++function handleShopifyOAuthReturn(params) {
++  if (params.get('connected') === '1') {
++    showToast('Shopify connected successfully!', 'success');
++    const activateUrl = params.get('activate_embed_url');
++    if (activateUrl) {
++      document.getElementById('activateEmbedBtn').href = activateUrl;
++      document.getElementById('activateEmbedBanner').style.display = 'flex';
++    }
++    history.replaceState({}, '', window.location.pathname + (linkedIdParam(params) ? `?client_id=${linkedIdParam(params)}` : ''));
++  } else if (params.get('error')) {
++    showToast(params.get('error'), 'error');
++    history.replaceState({}, '', window.location.pathname + (linkedIdParam(params) ? `?client_id=${linkedIdParam(params)}` : ''));
++  }
++}
++
++function linkedIdParam(params) {
++  const id = params.get('client_id');
++  return (id && CLIENTS.some(c => c.client_id === id)) ? id : null;
++}
++
+ /* ── ONBOARDING STEPS — reflect real integration state ───────── */
+ function updateOnboardingSteps() {
+   const hasAny = Object.values(integrationCache).some(c =>
+@@ -1642,6 +1727,19 @@
+ 
+   card.classList.toggle('connected', connected);
+ 
++  // Shopify only: has_access_token (already exposed by the redacted
++  // GET /api/integrations/<client_id> response — see webhooks.py's
++  // _redact_platform_config) means this was connected via the native
++  // Shopify App / OAuth install, not the legacy manual client-credentials
++  // flow below. connect_shopify_callback (app.py) always strips
++  // shopify_client_id/shopify_client_secret on an OAuth connect, so the
++  // two are mutually exclusive — this flag alone is enough to tell them
++  // apart, no need to also check for the absence of the legacy fields.
++  const cfg = (configCache[clientId] && configCache[clientId][platform]) || {};
++  const isNativeShopify = platform === 'shopify' && !!cfg.has_access_token;
++
++  let methodBadge = document.getElementById(`${platform}-method-badge`);
++
+   if (connected) {
+     status.className   = 'platform-status connected';
+     status.textContent = 'Connected';
+@@ -1658,33 +1756,68 @@
+       top.insertAdjacentElement('afterend', lastEventSlot);
+     }
+ 
++    if (platform === 'shopify') {
++      if (!methodBadge) {
++        methodBadge = document.createElement('div');
++        methodBadge.id = `${platform}-method-badge`;
++        const lastEvent = document.getElementById(`${platform}-last-event`);
++        lastEvent.insertAdjacentElement('afterend', methodBadge);
++      }
++      methodBadge.className = `card-connection-method ${isNativeShopify ? 'native' : 'manual'}`;
++      methodBadge.textContent = isNativeShopify ? '🛍️ Installed via Shopify App' : 'Manual setup';
++    } else if (methodBadge) {
++      methodBadge.remove();
++    }
++
+     let urlRow = document.getElementById(`${platform}-url-row`);
+-    if (!urlRow) {
+-      urlRow    = document.createElement('div');
+-      urlRow.id = `${platform}-url-row`;
+-      urlRow.className = 'platform-webhook-url';
+-      const actions = card.querySelector('.platform-actions');
+-      card.insertBefore(urlRow, actions);
++    if (isNativeShopify) {
++      // No webhook URL to show — Shopify's own app-install webhooks are
++      // auto-registered (ShopifyAdapter.register_webhooks, commerce_
++      // adapters.py), there's nothing for anyone to paste anywhere.
++      // Showing this box here would suggest a manual step that doesn't
++      // exist for this connection type.
++      if (urlRow) urlRow.remove();
++    } else {
++      if (!urlRow) {
++        urlRow    = document.createElement('div');
++        urlRow.id = `${platform}-url-row`;
++        urlRow.className = 'platform-webhook-url';
++        const actions = card.querySelector('.platform-actions');
++        card.insertBefore(urlRow, actions);
++      }
++      urlRow.innerHTML = `
++        <span class="webhook-url-label">Webhook URL</span>
++        <span class="webhook-url-value" id="${platform}-url">${url}</span>
++        <button class="copy-btn" onclick="copyUrl('${platform}-url', this)">Copy</button>
++      `;
+     }
+-    urlRow.innerHTML = `
+-      <span class="webhook-url-label">Webhook URL</span>
+-      <span class="webhook-url-value" id="${platform}-url">${url}</span>
+-      <button class="copy-btn" onclick="copyUrl('${platform}-url', this)">Copy</button>
+-    `;
+ 
+     const actions = card.querySelector('.platform-actions');
+     if (actions) {
+       actions.id = `${platform}-actions`;
+-      actions.innerHTML = `
+-        <button class="btn btn-secondary btn-sm" onclick="openEditModal('${platform}')">
+-          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+-          Update Secret
+-        </button>
+-        <button class="btn btn-danger btn-sm" onclick="openDisconnectModal('${platform}')">
+-          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+-          Disconnect
+-        </button>
+-      `;
++      if (isNativeShopify) {
++        actions.innerHTML = `
++          <button class="btn btn-secondary btn-sm" onclick="reconnectShopifyNative('${clientId}')">
++            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
++            Reconnect
++          </button>
++          <button class="btn btn-danger btn-sm" onclick="openDisconnectModal('${platform}')">
++            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
++            Disconnect
++          </button>
++        `;
++      } else {
++        actions.innerHTML = `
++          <button class="btn btn-secondary btn-sm" onclick="openEditModal('${platform}')">
++            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
++            Update Secret
++          </button>
++          <button class="btn btn-danger btn-sm" onclick="openDisconnectModal('${platform}')">
++            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
++            Disconnect
++          </button>
++        `;
++      }
+     }
+ 
+   } else {
+@@ -1692,21 +1825,53 @@
+     status.textContent = 'Not connected';
+     const lastEvent = document.getElementById(`${platform}-last-event`);
+     if (lastEvent) lastEvent.remove();
++    if (methodBadge) methodBadge.remove();
+     const urlRow = document.getElementById(`${platform}-url-row`);
+     if (urlRow) urlRow.remove();
+     const actions = card.querySelector('.platform-actions');
+     if (actions) {
+       actions.id = `${platform}-actions`;
+-      actions.innerHTML = `
+-        <button class="btn btn-primary btn-sm btn-full" onclick="openModal('${platform}')">
+-          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+-          Connect ${displayName(platform)}
+-        </button>
+-      `;
++      if (platform === 'shopify') {
++        // Native install is the primary path now — no copy/paste, no
++        // manual webhook secret, matches the client_id currently selected
++        // above (see connectShopifyNative). Manual entry (openModal) stays
++        // available as a fallback, just no longer the default.
++        actions.innerHTML = `
++          <button class="btn btn-primary btn-sm btn-full" onclick="connectShopifyNative('${clientId}')">
++            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
++            Connect Shopify
++          </button>
++          <button class="btn-link-manual" onclick="openModal('shopify')">or connect manually</button>
++        `;
++      } else {
++        actions.innerHTML = `
++          <button class="btn btn-primary btn-sm btn-full" onclick="openModal('${platform}')">
++            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
++            Connect ${displayName(platform)}
++          </button>
++        `;
++      }
+     }
+   }
+ }
+ 
++// Redirects to the OAuth install flow for the CURRENTLY SELECTED client —
++// return_to=integrations + client_id is how app.py's connect_shopify_install
++// knows to attach the connection to this specific client (verified via
++// models.verify_client_ownership) rather than "whichever client the logged
++// -in user happens to own first", which matters here since one agency user
++// can manage several.
++function connectShopifyNative(clientId) {
++  window.location.href = `/connect/shopify/install?client_id=${encodeURIComponent(clientId)}&return_to=integrations`;
++}
++
++// Same OAuth flow, used to refresh an existing native connection's token/
++// scopes rather than a fresh connect — Shopify's install screen just shows
++// "update" instead of "install" when scopes already match.
++function reconnectShopifyNative(clientId) {
++  connectShopifyNative(clientId);
++}
++
+ /* ── COPY ────────────────────────────────────────────────────── */
+ function copyUrl(elemId, btn) {
+   const text = document.getElementById(elemId)?.textContent || '';

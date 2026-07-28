@@ -1,0 +1,67 @@
+--- /mnt/user-data/uploads/dashboard.html	2026-07-27 06:07:49.211293000 +0000
++++ ../templates/dashboard.html	2026-07-27 21:51:20.588240761 +0000
+@@ -125,6 +125,7 @@
+ .platform-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:20px;font-size:11.5px;font-weight:700;}
+ .platform-badge.shopify{background:rgba(149,191,71,0.14);color:#5C7A2E;}
+ .platform-badge.woocommerce{background:rgba(127,84,179,0.12);color:#7F54B3;}
++.platform-badge.unconnected{background:var(--panel);color:var(--mid);}
+ .platform-badge-dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+ .table-actions{display:flex;gap:5px;flex-wrap:wrap;}
+ .btn-xs{padding:5px 10px;font-size:11.5px;border-radius:7px;border:none;cursor:pointer;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px;transition:all 0.15s;font-family:'DM Sans',sans-serif;white-space:nowrap;}
+@@ -383,6 +384,17 @@
+                 {% endif %}
+             </div>
+         </div>
++        <div id="activateEmbedBanner" style="display:none;background:#FFFBEB;border:1.5px solid #FCD34D;border-radius:12px;padding:16px 18px;margin-bottom:16px;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
++            <div style="display:flex;align-items:center;gap:12px;min-width:0;">
++                <svg viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2" style="width:22px;height:22px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
++                <span style="font-size:13.5px;color:#78350F;line-height:1.5;">
++                    <strong>One last step —</strong> Shopify keeps new app widgets off by default on every store. Turn yours on in the theme editor; it's already toggled, just needs Save.
++                </span>
++            </div>
++            <a id="activateEmbedBtn" href="#" target="_blank" rel="noopener" style="flex-shrink:0;padding:10px 20px;background:#D97706;color:#fff;border-radius:8px;font-weight:700;font-size:13px;text-decoration:none;white-space:nowrap;">
++                Activate on my store →
++            </a>
++        </div>
+         {% if latest_usage_notification %}
+         {% set _th = latest_usage_notification.threshold %}
+         <div style="background:{{ '#FEF2F2' if _th == 100 else '#FFFBEB' }};border:1.5px solid {{ '#FCA5A5' if _th == 100 else '#FCD34D' }};border-radius:12px;padding:16px 18px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+@@ -551,11 +563,17 @@
+                 <div class="store-card-info">
+                     <div class="store-card-name">{{ client.company_name }}</div>
+                     <div class="store-card-badges">
+-                        <!-- TODO(backend): populate client.platform ('shopify' | 'woocommerce') from the store connection record -->
++                        <!-- client.platform is populated in blueprints/auth.py's dashboard()
++                             from client_integrations (see webhooks.list_integrations) —
++                             it isn't a column on clients itself. None is a real state
++                             (a client can exist mid-onboarding with no store connected
++                             yet), not just "must be Shopify". -->
+                         {% if client.platform == 'woocommerce' %}
+                         <span class="platform-badge woocommerce"><span class="platform-badge-dot"></span>WooCommerce</span>
+-                        {% else %}
++                        {% elif client.platform == 'shopify' %}
+                         <span class="platform-badge shopify"><span class="platform-badge-dot"></span>Shopify</span>
++                        {% else %}
++                        <span class="platform-badge unconnected"><span class="platform-badge-dot"></span>Not connected</span>
+                         {% endif %}
+                         {% if ai_health.ai_online %}
+                         <span class="status-badge active">Active</span>
+@@ -831,6 +849,18 @@
+         const params = new URLSearchParams(window.location.search);
+         if (params.get('connected') === '1') {
+             showToast('Store connected successfully!', 'success');
++            // Shopify app embeds are off by default on every store, for
++            // every app — platform behavior, not something the OAuth flow
++            // can skip. activate_embed_url is only present for a Shopify
++            // connection (set in app.py's connect_shopify_callback); it's
++            // a deep link straight to the theme editor with the embed
++            // already toggled, so this is a one-click "Save" from here.
++            const activateUrl = params.get('activate_embed_url');
++            if (activateUrl) {
++                document.getElementById('activateEmbedBtn').href = activateUrl;
++                const banner = document.getElementById('activateEmbedBanner');
++                banner.style.display = 'flex';
++            }
+             history.replaceState({}, '', window.location.pathname);
+         } else if (params.get('error')) {
+             showToast(params.get('error'), 'error');

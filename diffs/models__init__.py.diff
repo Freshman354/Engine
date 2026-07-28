@@ -1,0 +1,10 @@
+--- /home/claude/models/__init__.py	2026-07-25 23:31:04.000000000 +0000
++++ ../models/__init__.py	2026-07-27 21:51:20.574362977 +0000
+@@ -76,6 +76,7 @@
+     get_user_by_email,
+     get_user_by_google_id,
+     create_or_link_google_user,
++    create_or_link_shopify_user,
+     save_password_reset_token,
+     get_password_reset_token,
+     delete_password_reset_token,

@@ -51,6 +51,7 @@ from flask_login import (current_user, login_required,
 from flask_mail import Message
 
 import models
+import webhooks as _webhooks
 
 # ── Blueprint ────────────────────────────────────────────────────────────────
 
@@ -339,6 +340,17 @@ def dashboard():
     for client in clients:
         if client['branding_settings']:
             client['branding_settings'] = json.loads(client['branding_settings'])
+        # dashboard_enterprise.html's store-card badge branches on this — it isn't a
+        # column on `clients` itself, since a client's connected commerce
+        # platform lives in client_integrations (webhooks.py). None is a
+        # real, valid state (a client can exist mid-onboarding with no
+        # store connected yet) — dashboard_enterprise.html now shows "Not connected"
+        # for that case instead of the previous default-to-Shopify guess.
+        client['platform'] = None
+        for integration in _webhooks.list_integrations(client['client_id'], redact=True):
+            if integration['is_active'] and integration['platform'] in ('shopify', 'woocommerce'):
+                client['platform'] = integration['platform']
+                break
 
     fresh_user = models.get_user_by_id(current_user.id)
 
@@ -457,6 +469,7 @@ def dashboard():
         usage_reset_date            = usage_reset_date,
         latest_usage_notification   = latest_usage_notification,
         conversations_today         = daily_stats['total'],
+        unanswered_today            = unanswered_today,
         resolution_rate_today       = resolution_rate_today,
         leads_today                 = leads_today,
         leads_total                 = leads_total,

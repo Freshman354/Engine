@@ -1,0 +1,127 @@
+--- /mnt/user-data/uploads/commerce_adapters.py	2026-07-26 18:08:37.183007000 +0000
++++ ../commerce_adapters.py	2026-07-27 21:51:11.526883015 +0000
+@@ -403,6 +403,124 @@
+         except Exception:
+             return False
+ 
++    # Topics this app needs, in the GraphQL WebhookSubscriptionTopic enum's
++    # naming (ORDERS_CREATE, not the REST-style 'orders/create') — verified
++    # against https://shopify.dev/docs/api/admin-graphql/latest/enums/webhooksubscriptiontopic
++    # rather than assumed, since the REST-style names webhooks.py's
++    # handle_shopify_webhook() matches against turned out to have a bug
++    # (orders/create was stored as 'orders/created') that this call would
++    # otherwise have silently inherited.
++    #
++    # NOT included here: customers/data_request, customers/redact,
++    # shop/redact. Those three aren't part of this enum at all — Shopify
++    # requires them configured once, app-wide, in the Partner Dashboard's
++    # "Compliance webhooks" section, not per-shop through this mutation.
++    # See webhooks.py's handle_shopify_compliance_webhook for the receiver.
++    _WEBHOOK_TOPICS = (
++        'ORDERS_CREATE', 'ORDERS_UPDATED', 'ORDERS_CANCELLED',
++        'ORDERS_FULFILLED', 'ORDERS_PAID',
++        'CHECKOUTS_CREATE', 'CHECKOUTS_UPDATE',
++        'APP_UNINSTALLED',
++    )
++
++    def register_webhooks(self, webhook_url: str) -> Dict[str, bool]:
++        """
++        Registers _WEBHOOK_TOPICS for this shop via the Admin GraphQL API —
++        called once, right after OAuth token exchange (see app.py's
++        connect_shopify_callback). One webhookSubscriptionCreate call per
++        topic; Shopify's API doesn't support registering several topics in
++        a single mutation.
++
++        webhook_url should be the existing per-client inbound receiver —
++        POST /webhooks/shopify/<client_id>, i.e. whatever
++        url_for('shopify_webhook', client_id=..., _external=True) returns.
++        handle_shopify_webhook() already knows how to route every topic in
++        _WEBHOOK_TOPICS to the right handling (including APP_UNINSTALLED,
++        as of this change).
++
++        Returns {topic: True|False}. Callers should treat a False for
++        APP_UNINSTALLED as worth surfacing (a revoked integration would
++        never get cleaned up) — the order/checkout topics failing
++        individually is lower-stakes; search/order-lookup still works fine
++        either way, just without live webhook-driven order sync for
++        whichever topic didn't register.
++
++        NOTE: 'protected customer data' topics (orders/* and checkouts/*
++        both fall under this since their payloads include customer PII)
++        require Shopify's Partner Dashboard 'Protected customer data
++        access' approval before subscriptions actually deliver data, even
++        in development — see https://shopify.dev/docs/apps/launch/protected-customer-data.
++        Registration itself (this call) succeeds either way; delivery
++        doesn't, until that's approved.
++        """
++        results: Dict[str, bool] = {}
++        if not self._has_credentials():
++            return {topic: False for topic in self._WEBHOOK_TOPICS}
++
++        import requests
++        url = f'https://{self.shop_domain}/admin/api/{self.API_VERSION}/graphql.json'
++        gql = '''
++        mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
++          webhookSubscriptionCreate(topic: $topic, webhookSubscription: $webhookSubscription) {
++            webhookSubscription { id }
++            userErrors { field message }
++          }
++        }
++        '''
++        try:
++            access_token = self._get_access_token()
++        except ShopifyAuthError as e:
++            logger.error(f'[ShopifyAdapter] register_webhooks auth error shop={self.shop_domain}: {e}')
++            return {topic: False for topic in self._WEBHOOK_TOPICS}
++
++        for topic in self._WEBHOOK_TOPICS:
++            try:
++                resp = requests.post(
++                    url,
++                    json={
++                        'query': gql,
++                        'variables': {
++                            'topic': topic,
++                            'webhookSubscription': {
++                                'callbackUrl': webhook_url,
++                                'format': 'JSON',
++                            },
++                        },
++                    },
++                    headers={'X-Shopify-Access-Token': access_token},
++                    timeout=10,
++                )
++                if resp.status_code != 200:
++                    logger.warning(f'[ShopifyAdapter] webhook registration http_{resp.status_code} '
++                                   f'topic={topic} shop={self.shop_domain}')
++                    results[topic] = False
++                    continue
++
++                data = resp.json()
++                errors = (((data.get('data') or {}).get('webhookSubscriptionCreate') or {})
++                          .get('userErrors') or [])
++                if errors:
++                    # A topic already subscribed (reinstall) shows up as a
++                    # userError, not a hard failure — treat it as success
++                    # rather than retrying/alerting on something already
++                    # in the state we wanted.
++                    already_exists = any('already' in (e.get('message') or '').lower() for e in errors)
++                    if already_exists:
++                        results[topic] = True
++                    else:
++                        logger.warning(f'[ShopifyAdapter] webhook registration userErrors '
++                                       f'topic={topic} shop={self.shop_domain}: {errors}')
++                        results[topic] = False
++                else:
++                    results[topic] = True
++
++            except requests.exceptions.RequestException as e:
++                logger.error(f'[ShopifyAdapter] webhook registration request failed '
++                             f'topic={topic} shop={self.shop_domain}: {e}')
++                results[topic] = False
++
++        return results
++
+ 
+ # ── WooCommerce adapter ────────────────────────────────────────────────
+ # Auth: REST API Consumer Key/Secret, generated in WP Admin → WooCommerce →

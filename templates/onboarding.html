@@ -287,6 +287,23 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 .btn-preview-store:hover{border-color:var(--mid);}
 .btn-preview-store svg{width:15px;height:15px;stroke:currentColor;stroke-width:2;fill:none;}
 
+/* ── SHOPIFY THEME ACTIVATION BANNER ──
+   Shown only when a Shopify OAuth install just completed. App embed
+   blocks are off by default on every Shopify store for every app —
+   that's platform behavior, not something Lumvi's install flow can skip.
+   This is the one remaining click, made as short as possible with a
+   deep link straight to the theme editor with the embed pre-toggled. */
+.activate-embed-banner{display:flex;align-items:center;gap:14px;padding:16px 18px;
+  background:var(--gold-lt);border:1px solid var(--gold-glow);border-radius:12px;margin-bottom:8px;}
+.activate-embed-text{flex:1;font-size:13.5px;color:var(--dark);line-height:1.5;}
+.activate-embed-text strong{color:var(--gold-dk);}
+.btn-activate-embed{flex-shrink:0;padding:11px 18px;background:var(--gold);color:#fff;
+  border:none;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;
+  font-family:'DM Sans',sans-serif;text-decoration:none;display:flex;align-items:center;
+  gap:6px;white-space:nowrap;transition:all 0.15s;}
+.btn-activate-embed:hover{background:var(--gold-dk);}
+.btn-activate-embed svg{width:14px;height:14px;}
+
 /* ── NAVIGATION BUTTONS ── */
 .nav-btns{display:flex;align-items:center;justify-content:space-between;margin-top:24px;}
 .btn-back{padding:10px 20px;background:var(--white);color:var(--mid);border:1.5px solid var(--border);
@@ -636,8 +653,18 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
       <div class="ready-row">
         <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
         <div class="ready-row-label">Live chat ready</div>
-        <div class="ready-row-detail">Installed on your storefront</div>
+        <div class="ready-row-detail" id="readyLiveChatDetail">Installed on your storefront</div>
       </div>
+    </div>
+
+    <div class="activate-embed-banner" id="activateEmbedBanner" style="display:none;">
+      <div class="activate-embed-text">
+        <strong>One last step —</strong> Shopify keeps new app widgets off by default on every store. Turn yours on in the theme editor; it's already toggled, just needs Save.
+      </div>
+      <a class="btn-activate-embed" id="activateEmbedBtn" href="#" target="_blank" rel="noopener">
+        Activate on my store
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </a>
     </div>
 
     <div class="go-live-actions">
@@ -671,6 +698,7 @@ let currentStep     = 1;
 let selectedPlatform = null;
 let selectedTone     = 'friendly';
 let createdClientId  = null;
+let activateEmbedUrl = null;  // theme-editor deep link — set only for a headless/dashboard Shopify OAuth return, see handleReturnFromOAuth() below
 let storeData        = { products: 0, collections: 0 };
 let faqs             = [];
 let uploadedFiles     = [];
@@ -993,6 +1021,20 @@ function populateReadySummary() {
 
   const embedCode = `<script>\n(function(){\n  var s=document.createElement('script');\n  s.src='https://lumvi.net/static/widget.js';\n  s.setAttribute('data-client-id','${createdClientId || ''}');\n  document.body.appendChild(s);\n})();\n<\/script>`;
   document.getElementById('embedCode').textContent = embedCode;
+
+  // Shopify via OAuth: the theme's app embed is off by default (Shopify
+  // platform behavior — see the CSS comment above .activate-embed-banner)
+  // until the merchant clicks through and saves. Say so accurately rather
+  // than the "Installed on your storefront" copy that's true for the
+  // manual-snippet/WooCommerce path but not yet true here.
+  const banner = document.getElementById('activateEmbedBanner');
+  if (activateEmbedUrl) {
+    document.getElementById('readyLiveChatDetail').textContent = 'Ready to activate';
+    document.getElementById('activateEmbedBtn').href = activateEmbedUrl;
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
 }
 
 async function goLive() {
@@ -1051,6 +1093,7 @@ function esc(s) {
   if (params.get('connected') === '1') {
     createdClientId  = params.get('client_id');
     selectedPlatform = params.get('platform') || 'shopify';
+    activateEmbedUrl = params.get('activate_embed_url') || null;
     startImport();
   } else if (params.get('error')) {
     toast(params.get('error'), 'error');

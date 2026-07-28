@@ -76,6 +76,7 @@ from .users import (
     get_user_by_email,
     get_user_by_google_id,
     create_or_link_google_user,
+    create_or_link_shopify_user,
     save_password_reset_token,
     get_password_reset_token,
     delete_password_reset_token,

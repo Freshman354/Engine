@@ -1,0 +1,12 @@
+# extensions/lumvi-chat-embed/shopify.extension.toml
+#
+# Same caveat as the root shopify.app.toml: I can't run
+# `shopify app generate extension --type theme_app_extension` from here to
+# confirm this against a live scaffold. This matches the file structure and
+# fields documented at
+# https://shopify.dev/docs/apps/build/online-store/theme-app-extensions/configuration
+# as of this migration, but running the generator once you have the CLI set
+# up is worth doing to confirm nothing's drifted.
+
+name = "lumvi-chat-embed"
+type = "theme"

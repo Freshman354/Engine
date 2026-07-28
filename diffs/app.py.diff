@@ -1,0 +1,456 @@
+--- /mnt/user-data/uploads/app.py	2026-07-26 18:08:37.396418000 +0000
++++ app.py	2026-07-28 05:23:32.942068959 +0000
+@@ -38,7 +38,7 @@
+ import requests
+ from authlib.integrations.flask_client import OAuth as _OAuth
+ from dotenv import load_dotenv
+-from flask import (Flask, jsonify, redirect, render_template,
++from flask import (Flask, flash, jsonify, redirect, render_template,
+                    request, session, url_for)
+ from flask_cors import CORS
+ from flask_limiter import Limiter
+@@ -50,6 +50,7 @@
+ 
+ # ── Local ─────────────────────────────────────────────────────────────────────
+ import cache_utils
++import commerce_adapters
+ import models
+ import shopify_connect
+ import webhooks as _webhooks
+@@ -1254,6 +1255,43 @@
+         return jsonify({'success': False, 'error': 'Failed to load configuration'}), 500
+ 
+ 
++@app.route('/api/shopify/resolve-client', methods=['GET'])
++def shopify_resolve_client():
++    """
++    shop domain -> client_id, for the Theme App Embed's bootstrap script
++    (extensions/lumvi-chat-embed/blocks/*.liquid) to find its client_id
++    with zero merchant configuration — the block only ever renders
++    {{ shop.permanent_domain }}, which Shopify provides automatically, so
++    there's nothing for the merchant to paste or pick.
++
++    Once resolved, the bootstrap script creates widget.js's own <script>
++    tag with data-client-id set, which is exactly how the manual embed
++    already worked — see widget.js's currentScript/data-client-id
++    resolution. widget.js itself needed no changes for this migration.
++
++    client_id isn't sensitive at this exposure level — it's already
++    visible in the storefront's rendered page source via that same script
++    tag, same as it always has been with the manual snippet. No new
++    disclosure here, just automating what a merchant used to copy/paste.
++
++    No rate limit — matches /api/config just above, the same kind of
++    cheap, public, read-only lookup already called on every widget load.
++    """
++    shop = (request.args.get('shop') or '').strip().lower()
++    if not shop:
++        return jsonify({'success': False, 'error': 'Missing shop parameter'}), 400
++
++    client_id = _webhooks.get_client_id_by_shopify_shop(shop)
++    if not client_id:
++        # Not an error the merchant can act on from here — most likely the
++        # embed is turned on in a theme but the OAuth install hasn't
++        # completed (or was uninstalled). The bootstrap script just skips
++        # rendering the widget rather than showing a broken chat button.
++        return jsonify({'success': False, 'error': 'No connected Lumvi account for this shop'}), 404
++
++    return jsonify({'success': True, 'client_id': client_id})
++
++
+ @app.route('/api/user/info')
+ @login_required
+ def user_info():
+@@ -1972,6 +2010,19 @@
+ # WooCommerce: still the manual key-entry flow (no centrally-registered
+ # app needed — WooCommerce's REST API keys are just per-site credentials).
+ #
++# This same flow now serves two entry points, not just one:
++#   1. Logged-in dashboard user clicking "Connect Shopify" (original use
++#      case — return_to=dashboard|onboarding, current_user already set).
++#   2. Shopify itself initiating an install with no Lumvi session at all —
++#      the merchant found/installed the app from Shopify (App Store listing
++#      or a direct install link) rather than starting from Lumvi's own
++#      onboarding wizard. There is no user_id to attach a client to yet.
++# connect_shopify_callback() branches on current_user.is_authenticated to
++# tell these apart, rather than splitting into two routes/callback URLs —
++# Shopify's OAuth redirect_uri is registered once in the Partner Dashboard,
++# so a single callback that handles both cases is less to keep in sync than
++# two callbacks that must independently be kept correct.
++#
+ # Both create the client record AND the platform credentials, since at
+ # this point in onboarding no client exists yet — except when the user
+ # already has one (reconnecting, or switching platforms), in which case
+@@ -1982,6 +2033,7 @@
+ SHOPIFY_APP_CLIENT_ID     = os.environ.get('SHOPIFY_APP_CLIENT_ID', '')
+ SHOPIFY_APP_CLIENT_SECRET = os.environ.get('SHOPIFY_APP_CLIENT_SECRET', '')
+ SHOPIFY_APP_SCOPES        = 'read_products,read_orders'
++SHOPIFY_API_VERSION       = '2026-07'  # matches commerce_adapters.ShopifyAdapter.API_VERSION
+ 
+ 
+ def _get_or_create_client_for_user(user_id, company_name, vertical='ecommerce'):
+@@ -1997,34 +2049,128 @@
+     return models.create_client(user_id, company_name, vertical=vertical)
+ 
+ 
++def _fetch_shopify_shop_email(shop_domain: str, access_token: str) -> str:
++    """
++    Fetch the store's contact email via the Admin API, right after a
++    headless install's token exchange — used to find-or-create the Lumvi
++    account that owns this store (see models.create_or_link_shopify_user).
++    Returns '' on any failure; the caller falls back to a synthetic
++    placeholder rather than blocking account creation on it.
++    """
++    try:
++        resp = requests.get(
++            f'https://{shop_domain}/admin/api/{SHOPIFY_API_VERSION}/shop.json',
++            headers={'X-Shopify-Access-Token': access_token},
++            timeout=10,
++        )
++        if resp.status_code != 200:
++            return ''
++        shop_data = (resp.json() or {}).get('shop', {}) or {}
++        return (shop_data.get('email') or shop_data.get('customer_email') or '').strip().lower()
++    except requests.exceptions.RequestException as e:
++        app.logger.warning(f'[Shopify OAuth] shop.json fetch failed for {shop_domain}: {e}')
++        return ''
++
++
++def _shopify_oauth_error_redirect(message: str, return_to: str, authenticated: bool, client_id: str = None):
++    """
++    Routes a Shopify OAuth failure to a safe destination.
++
++    A logged-in user's flow keeps the existing behaviour — bounce back to
++    wherever they started (dashboard, onboarding, or now integrations.html
++    for an agency user connecting a specific managed client), with ?error=
++    for that page's own JS to display. A headless (Shopify-initiated)
++    install has no session yet, so those pages would just redirect to
++    login and the error message would be lost — flash it and land on the
++    login page instead, the same pattern blueprints/auth.py's
++    google_callback already uses for its own OAuth failures.
++
++    client_id (when known) is threaded back into the integrations.html
++    redirect so the right client stays selected on error — that page reads
++    ?client_id= as a deep-link preselect already (see its DOMContentLoaded
++    handler), this just reuses it.
++    """
++    if not authenticated:
++        flash(message, 'error')
++        return redirect(url_for('auth.login'))
++    if return_to == 'integrations':
++        from urllib.parse import urlencode
++        url = url_for('integrations_page')
++        params = {'error': message}
++        if client_id:
++            params['client_id'] = client_id
++        return redirect(f'{url}?{urlencode(params)}')
++    return_endpoint = 'auth.dashboard' if return_to == 'dashboard' else 'auth.onboarding'
++    return redirect(url_for(return_endpoint, error=message))
++
++
+ @app.route('/connect/shopify/install')
+-@login_required
+ def connect_shopify_install():
+     """
+     Step 1 of the OAuth flow — redirect the merchant's browser to
+     Shopify's install/consent screen. Shopify redirects back to
+     connect_shopify_callback() below after they approve.
+ 
+-    return_to=dashboard|onboarding controls where the merchant lands
+-    afterward — set by whichever page's "Connect" button initiated this
+-    (dashboard.html's reconnect modal vs onboarding.html's wizard), so
+-    someone connecting later from the dashboard doesn't get bounced into
+-    the onboarding wizard they specifically skipped.
++    No longer @login_required — this is now Lumvi's Shopify App URL, which
++    Shopify itself opens (App Store listing, or a direct install link) with
++    no Lumvi session in play at all, not just a link a logged-in dashboard
++    user clicks. current_user.is_authenticated (checked here and again in
++    the callback) is what tells the two cases apart; see the module comment
++    above _get_or_create_client_for_user for why one shared route handles
++    both instead of splitting into two.
++
++    return_to=dashboard|onboarding|integrations controls where a logged-in
++    user lands afterward — set by whichever page's "Connect" button
++    initiated this (dashboard_enterprise.html's reconnect modal, onboarding.html's
++    wizard, or integrations.html for an agency user managing several
++    clients), so someone connecting later doesn't get bounced somewhere
++    they didn't come from. Meaningless for a headless install (nobody's
++    logged in yet) — _shopify_oauth_error_redirect and the callback's
++    success path both check is_authenticated independently rather than
++    trusting return_to to imply it.
++
++    client_id (optional) lets an authenticated user target a SPECIFIC
++    client they already own — integrations.html's client selector passes
++    this, since an agency user can own several. Without it, the
++    authenticated branch falls back to _get_or_create_client_for_user
++    (their first/only client) — correct for dashboard_enterprise.html and
++    onboarding.html, which only ever operate on "the current user's one
++    store", but wrong for integrations.html's multi-client case. Ownership
++    is verified here (models.verify_client_ownership) rather than trusted
++    from the query string, and a bad client_id fails loudly rather than
++    silently falling back to "their first client" — connecting the wrong
++    agency client's store to Shopify is the kind of mistake that should be
++    visible immediately, not guessed around.
++
++    shop_domain (existing param, from onboarding/dashboard/integrations'
++    own forms) and shop (Shopify's standard param name, used when Shopify
++    itself opens this URL) are both accepted — same validation either way.
+     """
+-    return_to = 'dashboard' if request.args.get('return_to') == 'dashboard' else 'onboarding'
+-    return_endpoint = 'auth.dashboard' if return_to == 'dashboard' else 'auth.onboarding'
++    authenticated = current_user.is_authenticated
++    return_to_raw = request.args.get('return_to')
++    return_to = return_to_raw if return_to_raw in ('dashboard', 'integrations') else 'onboarding'
++
++    requested_client_id = (request.args.get('client_id') or '').strip()
++    verified_client_id = None
++    if authenticated and requested_client_id:
++        if models.verify_client_ownership(current_user.id, requested_client_id):
++            verified_client_id = requested_client_id
++        else:
++            app.logger.warning(f'[Shopify OAuth] user={current_user.id} requested '
++                               f'client_id={requested_client_id} they do not own')
++            return _shopify_oauth_error_redirect("That client wasn't found on your account.", return_to, authenticated)
+ 
+-    shop_domain = (request.args.get('shop_domain') or '').strip().lower()
++    shop_domain = (request.args.get('shop_domain') or request.args.get('shop') or '').strip().lower()
+     if not shop_domain:
+-        return redirect(url_for(return_endpoint, error="Please enter your store's domain first."))
++        return _shopify_oauth_error_redirect("Please enter your store's domain first.", return_to, authenticated, verified_client_id)
+     if not shop_domain.endswith('.myshopify.com'):
+         shop_domain = f'{shop_domain}.myshopify.com'
+     if not re.match(r'^[a-z0-9][a-z0-9\-]*\.myshopify\.com$', shop_domain):
+-        return redirect(url_for(return_endpoint, error="That doesn't look like a valid Shopify store domain."))
++        return _shopify_oauth_error_redirect("That doesn't look like a valid Shopify store domain.", return_to, authenticated, verified_client_id)
+ 
+     if not SHOPIFY_APP_CLIENT_ID:
+         app.logger.error('[Shopify OAuth] SHOPIFY_APP_CLIENT_ID not set')
+-        return redirect(url_for(return_endpoint, error='Shopify connection is not configured yet. Contact support@lumvi.net.'))
++        return _shopify_oauth_error_redirect('Shopify connection is not configured yet. Contact support@lumvi.net.', return_to, authenticated, verified_client_id)
+ 
+     # CSRF protection — Shopify echoes this back on callback; must match
+     # what we stored in the session for this same browser/user.
+@@ -2032,6 +2178,7 @@
+     session['shopify_oauth_state']     = state
+     session['shopify_oauth_shop']      = shop_domain
+     session['shopify_oauth_return_to'] = return_to
++    session['shopify_oauth_client_id'] = verified_client_id
+ 
+     redirect_uri = url_for('connect_shopify_callback', _external=True)
+     authorize_url = (
+@@ -2045,15 +2192,20 @@
+ 
+ 
+ @app.route('/connect/shopify/callback')
+-@login_required
+ def connect_shopify_callback():
+     """
+     Step 2 — Shopify redirects here after the merchant approves (or
+     denies) the install. Verifies the request actually came from
+     Shopify (HMAC) and matches the install we started (state), exchanges
+-    the one-time code for a permanent access token, and saves the
+-    connection.
++    the one-time code for a permanent access token, resolves which Lumvi
++    account owns it (see the account-resolution block below), and saves
++    the connection.
++
++    No longer @login_required, for the same reason connect_shopify_install
++    no longer is — see that route's docstring.
+     """
++    authenticated = current_user.is_authenticated
++
+     shop  = (request.args.get('shop') or '').strip().lower()
+     code  = request.args.get('code')
+     state = request.args.get('state')
+@@ -2062,16 +2214,16 @@
+     expected_state = session.pop('shopify_oauth_state', None)
+     expected_shop  = session.pop('shopify_oauth_shop', None)
+     return_to      = session.pop('shopify_oauth_return_to', 'onboarding')
+-    return_endpoint = 'auth.dashboard' if return_to == 'dashboard' else 'auth.onboarding'
++    target_client_id = session.pop('shopify_oauth_client_id', None)  # set only by integrations.html's client-scoped connect — see connect_shopify_install
+ 
+     if not code or not shop:
+-        return redirect(url_for(return_endpoint, error='Shopify did not return the expected connection details. Please try again.'))
++        return _shopify_oauth_error_redirect('Shopify did not return the expected connection details. Please try again.', return_to, authenticated, target_client_id)
+     if not expected_state or not secrets.compare_digest(state or '', expected_state):
+         app.logger.warning(f'[Shopify OAuth] state mismatch for shop={shop}')
+-        return redirect(url_for(return_endpoint, error='This connection link expired or was already used. Please try connecting again.'))
++        return _shopify_oauth_error_redirect('This connection link expired or was already used. Please try connecting again.', return_to, authenticated, target_client_id)
+     if expected_shop and shop != expected_shop:
+         app.logger.warning(f'[Shopify OAuth] shop mismatch: expected={expected_shop} got={shop}')
+-        return redirect(url_for(return_endpoint, error='Something looked off with that connection. Please try again.'))
++        return _shopify_oauth_error_redirect('Something looked off with that connection. Please try again.', return_to, authenticated, target_client_id)
+ 
+     # Verify Shopify actually signed this callback — without this, anyone
+     # could forge a request to this URL with an arbitrary shop/code.
+@@ -2088,7 +2240,7 @@
+     ).hexdigest()
+     if not hmac_param or not hmac.compare_digest(computed_hmac, hmac_param):
+         app.logger.error(f'[Shopify OAuth] HMAC verification failed for shop={shop}')
+-        return redirect(url_for(return_endpoint, error='Could not verify that connection request. Please try again.'))
++        return _shopify_oauth_error_redirect('Could not verify that connection request. Please try again.', return_to, authenticated, target_client_id)
+ 
+     # Exchange the one-time code for a permanent access token.
+     try:
+@@ -2108,13 +2260,83 @@
+             raise ValueError('token exchange response had no access_token')
+     except Exception as e:
+         app.logger.error(f'[Shopify OAuth] token exchange failed for shop={shop}: {e}')
+-        return redirect(url_for(return_endpoint, error="Couldn't complete the connection with Shopify. Please try again."))
++        return _shopify_oauth_error_redirect("Couldn't complete the connection with Shopify. Please try again.", return_to, authenticated, target_client_id)
+ 
++    # ── Account resolution ──────────────────────────────────────────────
++    # Four cases:
++    #  1. A logged-in user connecting a SPECIFIC client they already own —
++    #     integrations.html's client selector (an agency user can own
++    #     several clients; see connect_shopify_install's docstring for why
++    #     this needs its own case rather than falling through to #2).
++    #  2. A logged-in dashboard/onboarding user connecting/reconnecting
++    #     their own (single) store — unchanged from before.
++    #  3. A headless install of a shop Lumvi already knows (reinstall, or
++    #     the merchant re-approving after uninstalling) — reuse that same
++    #     client and log in whichever user already owns it, rather than
++    #     creating a duplicate account for the same store.
++    #  4. A headless install of a brand-new shop — find-or-create a Lumvi
++    #     account by the store's contact email (mirrors
++    #     create_or_link_google_user's shape) and log them straight in,
++    #     no password step at install time.
+     try:
+         company_name = shop.replace('.myshopify.com', '').replace('-', ' ').title()
+-        client_id = _get_or_create_client_for_user(current_user.id, company_name)
+ 
++        if authenticated and target_client_id:
++            client_id = target_client_id  # ownership already verified in connect_shopify_install
++        elif authenticated:
++            client_id = _get_or_create_client_for_user(current_user.id, company_name)
++        else:
++            existing_client_id = _webhooks.get_client_id_by_shopify_shop(shop)
++            if existing_client_id:
++                owner_client = models.get_client_by_id(existing_client_id)
++                owner_user   = models.get_user_by_id(owner_client['user_id']) if owner_client else None
++                if not owner_user:
++                    raise RuntimeError(f'shop={shop} maps to client={existing_client_id} but its owning user was not found')
++                login_user(User(owner_user), remember=True)
++                session.permanent = True
++                session['_user_cache'] = dict(owner_user)
++                client_id = existing_client_id
++            else:
++                shop_email = _fetch_shopify_shop_email(shop, access_token)
++                user_data  = models.create_or_link_shopify_user(shop_email)
++                if not user_data:
++                    raise RuntimeError('create_or_link_shopify_user returned None')
++                login_user(User(user_data), remember=True)
++                session.permanent = True
++                session['_user_cache'] = dict(user_data)
++                client_id = _get_or_create_client_for_user(user_data['id'], company_name)
++
++        # Same per-plan integration cap create_platform_integration() (the
++        # legacy manual-connect endpoint) already enforces — see the
++        # PLAN_LIMITS comment block above ('integrations_limit': 1 on
++        # free/starter, 5 on growth, None/unlimited on scale). Reconnecting
++        # Shopify itself never counts against the cap, only connecting a
++        # genuinely NEW platform to a client that's already at its limit —
++        # same rule create_platform_integration uses.
++        #
++        # Deliberately NOT using create_platform_integration's exact
++        # current_count expression here: despite list_integrations()'s
++        # docstring ("List all active integrations"), it doesn't actually
++        # filter is_active — every row counts, including ones deactivated
++        # by a prior disconnect or (as of this migration) an app/uninstalled
++        # webhook. That's a latent bug in the legacy endpoint's identical
++        # check too (not fixed here — out of scope for this specific fix),
++        # but it matters more now: app/uninstalled actively creates
++        # deactivated rows on every Shopify uninstall, so a merchant
++        # reinstalling their OWN store could otherwise be wrongly blocked
++        # by their own prior (inactive) connection. Counting only
++        # is_active rows avoids inheriting that here.
+         existing = _webhooks.get_integration(client_id, 'shopify')
++        if not existing:
++            plan_limits = PLAN_LIMITS.get(current_user.plan_type, PLAN_LIMITS['free'])
++            integrations_limit = plan_limits.get('integrations_limit')
++            if integrations_limit is not None:
++                active_count = sum(1 for i in _webhooks.list_integrations(client_id) if i['is_active'])
++                if active_count >= integrations_limit:
++                    return _shopify_oauth_error_redirect(
++                        f'Your plan allows up to {integrations_limit} connected integration(s). '
++                        f'Upgrade to connect more.', return_to, authenticated, target_client_id)
++
+         merged_config = dict((existing or {}).get('platform_config') or {})
+         merged_config.update({
+             'shop_domain':          shop,
+@@ -2127,17 +2349,70 @@
+         merged_config.pop('shopify_client_id', None)
+         merged_config.pop('shopify_client_secret', None)
+ 
+-        ok = _webhooks.upsert_integration(client_id, 'shopify', secrets.token_hex(32), merged_config)
++        # webhook_secret: SHOPIFY_APP_CLIENT_SECRET, not a random per-client
++        # value. Once webhooks are auto-registered (next phase), Shopify
++        # signs every webhook it sends this app with the app's OWN client
++        # secret — a single value shared across every merchant's store, not
++        # something scoped per shop. _verify_shopify_signature() (webhooks.py)
++        # already compares against whatever's stored here, so storing the
++        # app secret is the only change needed to make that check correct;
++        # a random secret would make every auto-registered webhook fail
++        # verification. (client_integrations.webhook_secret is NOT NULL, so
++        # this column still needs a value even though it isn't merchant-
++        # specific for Shopify the way it is for the other platforms.)
++        ok = _webhooks.upsert_integration(client_id, 'shopify', SHOPIFY_APP_CLIENT_SECRET, merged_config)
+         if not ok:
+             raise RuntimeError('upsert_integration returned False')
+     except Exception as e:
+         app.logger.error(f'[Shopify OAuth] save failed for shop={shop}: {e}')
+-        return redirect(url_for(return_endpoint, error='Connected to Shopify, but saving the connection failed. Please try again.'))
++        return _shopify_oauth_error_redirect('Connected to Shopify, but saving the connection failed. Please try again.', return_to, authenticated, target_client_id)
++
++    # Auto-register webhooks — the actual point of this migration (no more
++    # "go paste this URL into Settings → Notifications"). Deliberately a
++    # separate try/except from the save above: a registration hiccup here
++    # shouldn't undo an otherwise-successful connection — search/order-
++    # lookup already work via direct API calls (commerce_adapters.py) with
++    # no webhooks involved at all. A merchant just won't get live webhook-
++    # driven order sync until this is retried (worth building a retry/
++    # alerting mechanism as a follow-up, not blocking install on it now).
++    try:
++        adapter = commerce_adapters.ShopifyAdapter({'shop_domain': shop, 'access_token': access_token})
++        webhook_url = url_for('shopify_webhook', client_id=client_id, _external=True)
++        webhook_results = adapter.register_webhooks(webhook_url)
++        failed_topics = [t for t, success in webhook_results.items() if not success]
++        if failed_topics:
++            app.logger.warning(f'[Shopify OAuth] webhook registration incomplete shop={shop} '
++                               f'client={client_id} failed_topics={failed_topics}')
++        else:
++            app.logger.info(f'[Shopify OAuth] webhooks registered shop={shop} client={client_id}')
++    except Exception as e:
++        app.logger.error(f'[Shopify OAuth] webhook registration failed shop={shop} client={client_id}: {e}')
++
++    app.logger.info(f'[Shopify OAuth] connected shop={shop} client={client_id} user={current_user.id} headless={not authenticated}')
++
++    # Deep link straight to the theme editor with the chat embed block
++    # already toggled on and previewed — app embed blocks are OFF by
++    # default for every app on every store (Shopify platform behavior, not
++    # something this app can change), so there's still one merchant click
++    # after OAuth: Save. This link is how Shopify's own docs recommend
++    # closing that gap — see "App embed block deep linking" at
++    # https://shopify.dev/docs/apps/build/online-store/theme-app-extensions/configuration
++    # {handle} is the liquid filename (chat-embed.liquid -> "chat-embed"),
++    # {api_key} is SHOPIFY_APP_CLIENT_ID. Passed through as a query param
++    # rather than redirecting straight to it — that's a dashboard/
++    # onboarding.html UI decision (a button/banner, not a forced redirect
++    # away from Lumvi), which I don't have those templates in hand to wire
++    # up yet.
++    activate_embed_url = (
++        f'https://{shop}/admin/themes/current/editor'
++        f'?context=apps&template=index&activateAppId={SHOPIFY_APP_CLIENT_ID}/chat-embed'
++    )
+ 
+-    app.logger.info(f'[Shopify OAuth] connected shop={shop} client={client_id} user={current_user.id}')
+     if return_to == 'dashboard':
+-        return redirect(url_for('auth.dashboard', connected=1))
+-    return redirect(url_for('auth.onboarding', step=2, connected=1, client_id=client_id))
++        return redirect(url_for('auth.dashboard', connected=1, activate_embed_url=activate_embed_url))
++    if return_to == 'integrations':
++        return redirect(url_for('integrations_page', client_id=client_id, connected=1, activate_embed_url=activate_embed_url))
++    return redirect(url_for('auth.onboarding', step=2, connected=1, client_id=client_id, activate_embed_url=activate_embed_url))
+ 
+ 
+ @app.route('/connect/woocommerce/manual', methods=['POST'])

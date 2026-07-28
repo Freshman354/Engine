@@ -1,0 +1,52 @@
+# shopify.app.toml — root app configuration
+#
+# I can't run the Shopify CLI or create/inspect a live Partner Dashboard app
+# object from here, so I can't generate or verify this the normal way
+# (`shopify app config link` pulls this down from a real app record). Treat
+# this as a well-informed draft built from the confirmed values already in
+# app.py/commerce_adapters.py, not a verified CLI scaffold — reconcile it
+# against `shopify app config push` once you've created the app in the
+# Partner Dashboard.
+
+name = "Lumvi"
+client_id = ""  # same value as SHOPIFY_APP_CLIENT_ID in app.py's environment — fill in from Partner Dashboard
+application_url = "https://app.lumvi.net/connect/shopify/install"
+
+# Deliberately non-embedded: Lumvi's own dashboard is the merchant-facing
+# UI (branding, integrations, conversations), not an embedded Admin iframe.
+# This gets everything the migration asked for — OAuth install, auto
+# webhooks, no copy-paste embed, multi-tenant — without the much larger
+# App Bridge/session-token project that embedding would mean. Revisit only
+# if you want full Shopify App Store search-listing placement later
+# (flagged as a separate, optional phase earlier in this migration).
+embedded = false
+
+[access_scopes]
+# Keep this in sync with SHOPIFY_APP_SCOPES in app.py by hand — nothing
+# reads this TOML file to generate that constant or vice versa.
+scopes = "read_products,read_orders"
+
+[auth]
+redirect_urls = [ "https://app.lumvi.net/connect/shopify/callback" ]
+
+[webhooks]
+# Matches commerce_adapters.ShopifyAdapter.API_VERSION / app.py's
+# SHOPIFY_API_VERSION — keep all three in sync if you ever bump it.
+api_version = "2026-07"
+
+# orders/checkouts/app-uninstalled are registered per-shop at OAuth-connect
+# time via ShopifyAdapter.register_webhooks() (commerce_adapters.py) — NOT
+# declared here. webhookSubscriptionCreate doesn't have a TOML-declarative
+# equivalent that fires per-install the way this app needs (a merchant
+# install happens long after this file is deployed), so that stays in code.
+#
+# The three mandatory compliance topics are different — they're shop-
+# agnostic and app-wide, so some Shopify CLI versions let you declare them
+# here instead of the Partner Dashboard UI. If yours does, uncomment:
+#
+# [[webhooks.subscriptions]]
+# compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+# uri = "https://app.lumvi.net/webhooks/shopify/compliance"
+#
+# If your CLI version doesn't support that block, configure the same URL
+# manually instead: Partner Dashboard → App setup → Compliance webhooks.
