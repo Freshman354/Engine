@@ -78,7 +78,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 
 import models
@@ -155,8 +155,50 @@ def migrate_integrations():
             "ON webhook_log (client_id, created_at DESC)"
         )
 
+        # shopify_compliance_requests — durable audit trail + processing
+        # state for the three mandatory GDPR topics (customers/data_request,
+        # customers/redact, shop/redact). See handle_shopify_compliance_
+        # webhook() for why this exists: Shopify's review process tests
+        # that these topics actually DO something, not just return 200 —
+        # this table is both the mechanism (tracks what still needs
+        # processing) and the evidence (a queryable record of what was
+        # found/done for any given request).
+        #
+        # result_summary is deliberately a count/description ("3 order(s)
+        # redacted"), never the raw customer data itself — this table is
+        # an operational/audit record, not a second copy of the PII it's
+        # tracking the handling of.
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS shopify_compliance_requests (
+                id                    SERIAL      PRIMARY KEY,
+                topic                 TEXT        NOT NULL,
+                shop_domain           TEXT        NOT NULL,
+                client_id             TEXT,
+                customer_email        TEXT,
+                customer_shopify_id   TEXT,
+                status                TEXT        NOT NULL DEFAULT 'received',
+                result_summary        TEXT,
+                received_at           TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+                processed_at          TIMESTAMP,
+                scheduled_for         TIMESTAMP
+            )
+        ''')
+
+        # Used by process_due_shopify_shop_redactions() (the cron job) to
+        # find shop/redact rows whose grace period has elapsed.
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_compliance_requests_due "
+            "ON shopify_compliance_requests (status, scheduled_for) "
+            "WHERE status = 'scheduled'"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_compliance_requests_client "
+            "ON shopify_compliance_requests (client_id)"
+        )
+
         conn.commit()
-        print('✅ migrate_integrations: client_integrations + webhook_log ready')
+        print('✅ migrate_integrations: client_integrations + webhook_log + '
+              'shopify_compliance_requests ready')
 
     except Exception as e:
         print(f'⚠️  migrate_integrations error: {e}')
@@ -849,11 +891,252 @@ def _verify_shopify_app_signature(raw_body: bytes, hmac_header: str) -> bool:
     return _verify_shopify_signature(raw_body, hmac_header, secret)
 
 
-def handle_shopify_compliance_webhook(raw_body: bytes, hmac_header: str, topic: str) -> tuple[dict, int]:
+# Shopify's own compliance deadline is 30 days from receiving the request
+# (per https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance).
+# This grace period is Lumvi's OWN internal safety window before actually
+# executing a shop/redact purge — short enough to comfortably clear that
+# 30-day deadline with room to spare, long enough to catch a catastrophic
+# bug (wrong client_id, a bad deploy) before an irreversible whole-client
+# delete runs. customers/redact (much narrower blast radius — deletes only
+# matching order rows) does NOT use this delay; it executes synchronously,
+# see handle_shopify_compliance_webhook below.
+SHOPIFY_SHOP_REDACT_GRACE_DAYS = 3
+
+
+def _get_client_owner_email(client_id: str) -> str:
+    """Resolves the Lumvi account email that owns this client — used to
+    notify a merchant when a customers/data_request export is ready."""
+    try:
+        client = models.get_client_by_id(client_id)
+        if not client:
+            return ''
+        owner = models.get_user_by_id(client['user_id'])
+        return (owner or {}).get('email', '')
+    except Exception as e:
+        logger.error(f'[Shopify Compliance] could not resolve owner email for client={client_id}: {e}')
+        return ''
+
+
+def _find_orders_by_email(client_id: str, customer_email: str) -> list:
+    """
+    Orders matching this client + customer email. Deliberately matches on
+    email, not Shopify's numeric order IDs from orders_to_redact/
+    orders_requested — Lumvi's own orders.order_id column stores Shopify's
+    human-readable order NAME ("1001"), not the raw numeric id ("299938")
+    those arrays contain (see _normalise_shopify_order: `str(payload.get
+    ('name') or payload.get('id') ...)`). Matching against the numeric IDs
+    directly would silently match zero rows in the common case — looking
+    like a successful, empty redaction rather than the wrong query. Email
+    is the field both sides of this actually share.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute(
+            "SELECT order_id, status, total_amount, currency, items_json, created_at "
+            "FROM orders WHERE client_id = %s AND customer_email = %s",
+            (client_id, customer_email)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f'[Shopify Compliance] order lookup failed client={client_id}: {e}')
+        return []
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+
+def _redact_orders_by_email(client_id: str, customer_email: str) -> int:
+    """Deletes matching order rows. Returns the number of rows removed."""
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute(
+            "DELETE FROM orders WHERE client_id = %s AND customer_email = %s",
+            (client_id, customer_email)
+        )
+        count = cursor.rowcount
+        conn.commit()
+        return count
+    except Exception as e:
+        logger.error(f'[Shopify Compliance] order redaction failed client={client_id}: {e}')
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        return 0
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+
+def hard_delete_shopify_integration(client_id: str) -> bool:
+    """
+    Permanently removes client_integrations and webhook_log rows for this
+    client. NOT a soft delete — see delete_integration() for that (used by
+    app/uninstalled). Only ever called by process_due_shopify_shop_
+    redactions(), below.
+
+    This exists as its own function because models.delete_client() does
+    NOT cover either table: client_integrations has no FK relationship to
+    clients at all (checked directly — its CREATE TABLE has
+    `client_id TEXT NOT NULL` with no REFERENCES clause), and neither
+    table is in delete_client's explicit per-table DELETE list. Without
+    this, a shop/redact "complete" deletion would leave the encrypted
+    Shopify access token and shop_domain sitting in the database
+    indefinitely — exactly the kind of gap Shopify's review process tests
+    for.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute('DELETE FROM client_integrations WHERE client_id = %s', (client_id,))
+        cursor.execute('DELETE FROM webhook_log WHERE client_id = %s', (client_id,))
+        conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f'[Shopify] hard_delete_shopify_integration failed client={client_id}: {e}')
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        return False
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+
+def _record_compliance_request(topic: str, shop_domain: str, client_id: str = None,
+                               customer_email: str = None, customer_shopify_id: str = None,
+                               status: str = 'received', scheduled_for=None):
+    """Insert one row into shopify_compliance_requests. Returns the new row's id, or None on failure."""
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute(
+            """
+            INSERT INTO shopify_compliance_requests
+                (topic, shop_domain, client_id, customer_email, customer_shopify_id, status, scheduled_for)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (topic, shop_domain, client_id, customer_email, customer_shopify_id, status, scheduled_for)
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        return row['id'] if row else None
+    except Exception as e:
+        logger.error(f'[Shopify Compliance] failed to record request: {e}')
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        return None
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+
+def _complete_compliance_request(request_id, status: str, result_summary: str):
+    """Marks a compliance request row processed. No-ops if request_id is None
+    (the row failed to insert in the first place — nothing to update)."""
+    if not request_id:
+        return
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute(
+            "UPDATE shopify_compliance_requests SET status=%s, result_summary=%s, processed_at=NOW() WHERE id=%s",
+            (status, result_summary, request_id)
+        )
+        conn.commit()
+    except Exception as e:
+        logger.error(f'[Shopify Compliance] failed to update request id={request_id}: {e}')
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+
+def get_due_shopify_shop_redactions() -> list:
+    """shop/redact rows whose grace period has elapsed — used by the cron job."""
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute(
+            "SELECT id, client_id, shop_domain FROM shopify_compliance_requests "
+            "WHERE status = 'scheduled' AND scheduled_for <= NOW()"
+        )
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f'[Shopify Compliance] get_due_shopify_shop_redactions failed: {e}')
+        return []
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+
+def process_due_shopify_shop_redactions() -> dict:
+    """
+    Called by a cron job (blueprints/cron.py's /cron/shopify-redactions,
+    mirroring cron_hard_delete_accounts' exact pattern for scheduled user
+    deletion). Performs the actual shop/redact purge for every request
+    whose grace period (SHOPIFY_SHOP_REDACT_GRACE_DAYS) has elapsed:
+    models.delete_client() for the comprehensive per-table cascade
+    (conversations, leads, faqs, knowledge_base, orders, etc.), plus
+    hard_delete_shopify_integration() for the two tables that function
+    doesn't cover.
+
+    Note on models.delete_client()'s contract, since it's easy to get
+    wrong: it does NOT return a success boolean — it returns None
+    implicitly on success and RE-RAISES on failure (see its `except
+    Exception: conn.rollback(); raise`). Treating its return value as a
+    truthy success flag would silently treat every successful call as a
+    failure. It's called inside its own try/except here specifically
+    because of that.
+    """
+    due = get_due_shopify_shop_redactions()
+    processed = 0
+    failed = 0
+    for row in due:
+        client_id = row['client_id']
+        if not client_id:
+            # Already-unresolvable shop at request time — nothing to
+            # delete. Mark it done rather than leaving it stuck in
+            # 'scheduled' forever with nothing that will ever process it.
+            _complete_compliance_request(row['id'], 'completed', 'No matching client — nothing to redact')
+            processed += 1
+            continue
+        try:
+            models.delete_client(client_id)
+            client_ok = True
+        except Exception as e:
+            logger.error(f'[Shopify Compliance] delete_client failed client={client_id}: {e}')
+            client_ok = False
+
+        integration_ok = hard_delete_shopify_integration(client_id)
+
+        if client_ok and integration_ok:
+            _complete_compliance_request(row['id'], 'completed',
+                'Client data (conversations, leads, FAQs, orders, knowledge base) and '
+                'Shopify integration credentials permanently deleted')
+            processed += 1
+            logger.info(f'[Shopify Compliance] shop/redact completed client={client_id}')
+        else:
+            _complete_compliance_request(row['id'], 'failed',
+                f'delete_client_ok={client_ok} hard_delete_integration_ok={integration_ok}')
+            failed += 1
+            logger.error(f'[Shopify Compliance] shop/redact INCOMPLETE client={client_id} '
+                         f'delete_client_ok={client_ok} hard_delete_integration_ok={integration_ok} '
+                         f'— needs manual follow-up')
+    return {'processed': processed, 'failed': failed, 'total_due': len(due)}
+
+
+def handle_shopify_compliance_webhook(raw_body: bytes, hmac_header: str, topic: str,
+                                      mail=None) -> tuple[dict, int]:
     """
     Handles Shopify's three mandatory compliance topics: customers/data_request,
     customers/redact, shop/redact — required for any Shopify app, listed or
-    custom-distributed. See https://shopify.dev/docs/apps/build/privacy-law-compliance.
+    custom-distributed. See https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance.
 
     These are NOT registered per-shop via webhookSubscriptionCreate the way
     orders/checkouts/app-uninstalled are (see ShopifyAdapter.register_webhooks
@@ -863,27 +1146,27 @@ def handle_shopify_compliance_webhook(raw_body: bytes, hmac_header: str, topic: 
     mounts below. That Partner Dashboard step is a manual one-time setup
     action, not something this function or its caller can do.
 
-    IMPORTANT — this verifies the request, logs it durably, and returns 200
-    promptly (satisfying Shopify's delivery requirement). It does NOT
-    perform automated data export or deletion. That's a deliberate
-    boundary, not an oversight:
-      - customers/data_request and customers/redact are scoped to ONE
-        customer, identified by email/id in the payload. Lumvi's orders
-        table isn't indexed for a customer-scoped lookup today, so
-        answering these automatically needs that built as its own task,
-        not guessed at here against a schema I haven't seen.
-      - shop/redact could reuse models.delete_client(client_id), but that
-        wipes the WHOLE client — every conversation/lead/FAQ, not just
-        Shopify-derived data. Firing an irreversible cascade delete
-        automatically off an inbound webhook, with no review step, isn't
-        something to wire up as a side effect of adding webhook support —
-        that's a decision worth making deliberately.
-    A cron reading unactioned rows here — mirroring the delayed,
-    auditable pattern users.py already uses for account-deletion requests
-    (request_account_deletion / get_users_due_for_hard_delete /
-    hard_delete_user) — is the natural next step once the redaction scope
-    itself (what to purge from conversations/leads for one customer,
-    specifically) has been decided.
+    Every request is recorded in shopify_compliance_requests regardless of
+    outcome — durable, queryable evidence of what was found/done, which is
+    what Shopify's review process specifically checks for (a 200 response
+    that didn't actually do anything is documented as the single most
+    common first-submission rejection reason).
+
+    Payload shapes (confirmed against Shopify's own docs, not assumed):
+      customers/data_request: {shop_domain, customer: {id, email, phone},
+                                orders_requested: [...], data_request: {id}}
+      customers/redact:       {shop_domain, customer: {id, email, phone},
+                                orders_to_redact: [...]}
+      shop/redact:            {shop_domain}  — no customer, shop-scoped
+
+    mail is optional (Flask-Mail's Mail instance, passed through from
+    app.py via register_webhook_routes) — used only for the best-effort
+    customers/data_request notification email. Every mail.send() call is
+    wrapped so a failed/unconfigured email never affects the webhook
+    response — Shopify only needs the 200 and the durable record above;
+    email is a delivery-convenience layer on top; the merchant/Prosper can
+    always retrieve the same data directly via the orders table or the
+    shopify_compliance_requests audit row.
     """
     phash = _payload_hash(raw_body)
 
@@ -898,30 +1181,131 @@ def handle_shopify_compliance_webhook(raw_body: bytes, hmac_header: str, topic: 
 
     shop_domain = (payload.get('shop_domain') or '').strip().lower()
     client_id = get_client_id_by_shopify_shop(shop_domain) if shop_domain else None
+    customer = payload.get('customer') or {}
+    customer_email = (customer.get('email') or '').strip().lower() or None
+    customer_shopify_id = str(customer.get('id')) if customer.get('id') else None
 
-    logger.info(f'[Shopify Compliance] {topic} shop={shop_domain} client={client_id or "unresolved"} '
-                f'payload={json.dumps(payload)[:2000]}')
-    if client_id:
-        _log_webhook(client_id, 'shopify', topic, 'ok', phash,
-                     'compliance request logged — needs manual/automated follow-up, see handler docstring')
+    logger.info(f'[Shopify Compliance] {topic} shop={shop_domain} client={client_id or "unresolved"}')
 
+    if not client_id:
+        # Shop already fully offboarded (or never actually connected — a
+        # test ping). Nothing to act on, but still a legitimate Shopify
+        # request that must be acknowledged — Shopify must not get a
+        # failure response just because the shop is long gone.
+        _record_compliance_request(topic, shop_domain, None, customer_email,
+                                   customer_shopify_id, status='completed')
+        return {'status': 'ok'}, 200
+
+    # ── customers/data_request ──────────────────────────────────────────
+    if topic == 'customers/data_request':
+        request_id = _record_compliance_request(topic, shop_domain, client_id,
+                                                 customer_email, customer_shopify_id)
+        if not customer_email:
+            _complete_compliance_request(request_id, 'completed',
+                'No customer email in payload — nothing to compile')
+            return {'status': 'ok'}, 200
+
+        orders = _find_orders_by_email(client_id, customer_email)
+        summary = f'{len(orders)} order(s) found'
+        _complete_compliance_request(request_id, 'completed', summary)
+        logger.info(f'[Shopify Compliance] data_request client={client_id} {summary}')
+
+        if mail and orders:
+            try:
+                from flask_mail import Message as MailMessage
+                owner_email = _get_client_owner_email(client_id)
+                if owner_email:
+                    order_lines = '\n'.join(
+                        f"- Order {o['order_id']}: {o['status']}, "
+                        f"{o['total_amount']} {o['currency']}, placed {o['created_at']}"
+                        for o in orders
+                    )
+                    msg = MailMessage(
+                        subject=f'Shopify customer data request — {shop_domain}',
+                        recipients=[owner_email],
+                        body=(f"Shopify sent a customer data request for {customer_email} "
+                              f"on {shop_domain}.\n\n{summary}:\n\n{order_lines}\n\n"
+                              f"You are required to provide this to the customer if requested."),
+                        sender=os.environ.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
+                    )
+                    mail.send(msg)
+                    logger.info(f'[Shopify Compliance] data_request email sent to {owner_email}')
+            except Exception as e:
+                # Best-effort — the compiled data is already durably
+                # queryable (orders table + the audit row above) even if
+                # this notification email fails.
+                logger.error(f'[Shopify Compliance] data_request email failed client={client_id}: {e}')
+
+        return {'status': 'ok'}, 200
+
+    # ── customers/redact ─────────────────────────────────────────────────
+    if topic == 'customers/redact':
+        request_id = _record_compliance_request(topic, shop_domain, client_id,
+                                                 customer_email, customer_shopify_id)
+        if not customer_email:
+            _complete_compliance_request(request_id, 'completed',
+                'No customer email in payload — nothing to redact')
+            return {'status': 'ok'}, 200
+
+        redacted_count = _redact_orders_by_email(client_id, customer_email)
+        summary = f'{redacted_count} order(s) redacted'
+        _complete_compliance_request(request_id, 'completed', summary)
+        logger.info(f'[Shopify Compliance] customers/redact client={client_id} {summary}')
+        return {'status': 'ok'}, 200
+
+    # ── shop/redact ──────────────────────────────────────────────────────
+    if topic == 'shop/redact':
+        scheduled_for = datetime.utcnow() + timedelta(days=SHOPIFY_SHOP_REDACT_GRACE_DAYS)
+        request_id = _record_compliance_request(topic, shop_domain, client_id,
+                                                 status='scheduled', scheduled_for=scheduled_for)
+        logger.info(f'[Shopify Compliance] shop/redact scheduled client={client_id} '
+                    f'for={scheduled_for.isoformat()}')
+        return {'status': 'ok'}, 200
+
+    # Unknown/future compliance topic — acknowledge, don't fail the
+    # webhook, but make sure it's visible rather than silently dropped.
+    logger.warning(f'[Shopify Compliance] unrecognized compliance topic={topic} shop={shop_domain}')
+    _record_compliance_request(topic, shop_domain, client_id, customer_email,
+                               customer_shopify_id, status='completed')
     return {'status': 'ok'}, 200
 
 
-def handle_shopify_webhook(client_id: str, raw_body: bytes,
-                           hmac_header: str, topic: str) -> tuple[dict, int]:
+def handle_shopify_webhook(client_id: str, raw_body: bytes, hmac_header: str,
+                           topic: str, shop_domain_header: str = '') -> tuple[dict, int]:
     """
     Verify and process one inbound Shopify webhook.
 
     Args:
-        client_id:    From the URL path parameter
-        raw_body:     request.get_data() — raw bytes before any parsing
-        hmac_header:  request.headers.get('X-Shopify-Hmac-Sha256')
-        topic:        request.headers.get('X-Shopify-Topic')
-                      e.g. 'orders/create', 'orders/updated', 'orders/cancelled'
+        client_id:           From the URL path parameter
+        raw_body:            request.get_data() — raw bytes before any parsing
+        hmac_header:         request.headers.get('X-Shopify-Hmac-Sha256')
+        topic:                request.headers.get('X-Shopify-Topic')
+                              e.g. 'orders/create', 'orders/updated', 'orders/cancelled'
+        shop_domain_header:  request.headers.get('X-Shopify-Shop-Domain') — sent on
+                              every Shopify webhook topic, confirmed directly by a
+                              Shopify developer (not assumed): always the
+                              *.myshopify.com domain, unaffected by custom storefront
+                              domains. See the shop-domain cross-check below for why
+                              this parameter exists.
 
     Returns:
         (response_dict, http_status_code)
+
+    SECURITY — shop-domain cross-check (fixes a cross-tenant replay gap):
+    webhook_secret is now the same SHOPIFY_APP_CLIENT_SECRET for every
+    Shopify-connected client (see upsert_integration's callers — this was a
+    deliberate Phase 0 fix, since that's genuinely what Shopify signs
+    app-registered webhooks with). A side effect nobody caught at the time:
+    HMAC verification alone no longer proves a webhook belongs to the
+    client_id in the URL — only that Shopify signed it for *some* shop on
+    this app. Any legitimately-signed webhook, replayed against a
+    *different* client's URL, would still pass. The check below closes
+    that: after the signature verifies, the shop the payload actually came
+    from (per Shopify's own header, not anything in the body a forged
+    request could set) must match what's on file for this specific
+    client_id, or the request is rejected before any processing —
+    including before JSON parsing, so a replayed-but-mismatched payload
+    never reaches order/checkout persistence at all.
     """
     phash = _payload_hash(raw_body)
 
@@ -939,6 +1323,23 @@ def handle_shopify_webhook(client_id: str, raw_body: bytes,
         _log_webhook(client_id, 'shopify', topic, 'sig_fail', phash,
                      'HMAC signature mismatch')
         return {'error': 'Invalid signature'}, 401
+
+    # 2b. Verify the shop this webhook actually came from matches this
+    # client's registration — see the security note in this function's
+    # docstring. Deliberately strict: no fuzzy matching, no fallback if the
+    # header is missing (fails closed, not open) — a webhook with a valid
+    # signature but no shop-domain header, or a mismatched one, is treated
+    # identically to a forged one, because from this client's perspective
+    # that's exactly what it is.
+    expected_shop = ((integration.get('platform_config') or {}).get('shop_domain') or '').strip().lower()
+    actual_shop = (shop_domain_header or '').strip().lower()
+    if not actual_shop or actual_shop != expected_shop:
+        logger.error(f'[Shopify SECURITY] shop-domain mismatch client={client_id} '
+                     f'expected={expected_shop!r} got={actual_shop!r} topic={topic} — '
+                     f'rejected as a possible cross-tenant replay')
+        _log_webhook(client_id, 'shopify', topic, 'shop_mismatch', phash,
+                     f'X-Shopify-Shop-Domain mismatch: expected={expected_shop!r} got={actual_shop!r}')
+        return {'error': 'Shop domain does not match this integration'}, 401
 
     # 3. Parse payload
     try:
@@ -1671,14 +2072,21 @@ def handle_square_webhook(client_id: str, raw_body: bytes,
 # All webhook routes are mounted under /webhooks/.
 # =====================================================================
 
-def register_webhook_routes(app):
+def register_webhook_routes(app, mail=None):
     """
     Mount all webhook receiver routes onto the Flask app.
 
     Call once in app.py after creating the Flask app:
         from webhooks import register_webhook_routes, migrate_integrations
         migrate_integrations()
-        register_webhook_routes(app)
+        register_webhook_routes(app, mail=mail)
+
+    mail (optional): a Flask-Mail Mail instance, already bound to this app
+    (app.py creates it via `mail = Mail(app)`). Used only by the
+    customers/data_request compliance handler to notify the merchant their
+    export is ready — best-effort, never blocks or fails the webhook
+    response if omitted or if sending fails. See handle_shopify_compliance_
+    webhook's docstring.
 
     Routes mounted:
         POST /webhooks/shopify/<client_id>
@@ -1698,10 +2106,11 @@ def register_webhook_routes(app):
 
     @app.route('/webhooks/shopify/<client_id>', methods=['POST'])
     def shopify_webhook(client_id):
-        raw_body    = request.get_data()
-        hmac_header = request.headers.get('X-Shopify-Hmac-Sha256', '')
-        topic       = request.headers.get('X-Shopify-Topic', '')
-        result, status = handle_shopify_webhook(client_id, raw_body, hmac_header, topic)
+        raw_body     = request.get_data()
+        hmac_header  = request.headers.get('X-Shopify-Hmac-Sha256', '')
+        topic        = request.headers.get('X-Shopify-Topic', '')
+        shop_domain  = request.headers.get('X-Shopify-Shop-Domain', '')
+        result, status = handle_shopify_webhook(client_id, raw_body, hmac_header, topic, shop_domain)
         return jsonify(result), status
 
     @app.route('/webhooks/shopify/compliance', methods=['POST'])
@@ -1709,7 +2118,7 @@ def register_webhook_routes(app):
         raw_body    = request.get_data()
         hmac_header = request.headers.get('X-Shopify-Hmac-Sha256', '')
         topic       = request.headers.get('X-Shopify-Topic', '')
-        result, status = handle_shopify_compliance_webhook(raw_body, hmac_header, topic)
+        result, status = handle_shopify_compliance_webhook(raw_body, hmac_header, topic, mail=mail)
         return jsonify(result), status
 
     @app.route('/webhooks/acuity/<client_id>', methods=['POST'])

@@ -10,6 +10,9 @@ def get_db():
 def get_client_by_id(client_id):
     raise NotImplementedError("stub — patch this per-test")
 
+def delete_client(client_id):
+    raise NotImplementedError("stub — patch this per-test")
+
 def upsert_abandoned_cart(*args, **kwargs):
     raise NotImplementedError("stub — patch this per-test")
 

@@ -21,6 +21,9 @@ crypto_utils.py                      → NOT a deliverable — unmodified, inclu
 models/__init__.py                  → models/
 models/users.py                     → models/
 blueprints/auth.py                  → blueprints/
+blueprints/cron.py                  → blueprints/ (new this round — adds the
+                                       /cron/shopify-redactions job for B3's
+                                       delayed shop/redact processing)
 templates/dashboard_enterprise.html  → wherever render_template('dashboard_enterprise.html')
                                         looks (this is your actual template name —
                                         confirmed from blueprints/auth.py's own
@@ -31,8 +34,14 @@ shopify-extension/                  → a SEPARATE Shopify CLI project — see b
                                        this is NOT part of your Flask app
 testing/                             → wherever you keep test scripts, not deployed
   test_pure_logic.py                   18 tests: encryption, HMAC verification
-  test_webhook_routing.py              17 tests: webhook topic routing, both handlers
-  models_stub.py                       rename to models.py before running either test
+  test_webhook_routing.py              41 tests: webhook topic routing, B1 shop-domain
+                                        cross-check, B3 compliance handling, both handlers
+  test_register_webhooks.py            12 tests: W1 retry/backoff — this is the suite
+                                        that caught the NameError bug, see the follow-up report
+  models_stub.py                       rename to models.py before running any test
+  utils_stub.py                        rename to utils.py before running any test —
+                                        only needed for test_register_webhooks.py
+                                        (commerce_adapters.py imports utils.get_logger)
   phase5-test-plan.md                  manual dev-store checklist (needs live Shopify/DB)
 diffs/                              → not deployed — reference only, one .diff per
                                        modified file, against exactly what you
@@ -55,6 +64,34 @@ draft, not a CLI-verified scaffold. Before deploying: create the app in your Par
 Dashboard, run `shopify app config link` in a real CLI project, and reconcile these
 files against what that generates — don't push them blind.
 
+## Read this first
+
+`production-readiness-report.md` — the original audit.
+`followup-production-readiness-report.md` — **read this one too, not instead of** —
+covers the B1/B3/W1/W3/W4 fixes applied on top of the original report, written as an
+independent re-review of those specific changes. It documents three real bugs found
+and fixed *during* this round, including one (a `NameError` that would have crashed
+every webhook registration attempt) that only running the tests caught — code review
+alone would very likely have missed it.
+
+### What changed in this round
+
+- **B1 fixed** — `webhooks.py` now cross-checks Shopify's `X-Shopify-Shop-Domain`
+  header against the client's registered shop before processing any webhook,
+  closing a cross-tenant replay gap.
+- **B3 fixed** — `customers/data_request`, `customers/redact`, `shop/redact` now
+  actually do something (compile/redact order data, schedule full client deletion)
+  instead of verifying, logging, and returning 200. New table
+  (`shopify_compliance_requests`), new cron job (`blueprints/cron.py`:
+  `/cron/shopify-redactions`), new functions in `webhooks.py`.
+- **W1/W3/W4 addressed** — `register_webhooks()` now retries on 429 with backoff
+  (honoring Shopify's `Retry-After` header); registration runs in a background
+  thread instead of blocking the OAuth redirect; the fixed topic set is now also
+  declared in `shopify.app.toml` as the primary mechanism, with the imperative call
+  kept as a self-healing backup (the file explains why order/checkout topics
+  couldn't fully move to declarative-only — a real URL-scheme conflict with
+  per-client routing, not an oversight).
+
 ## Suggested deploy order
 
 1. **Env vars first** — `SHOPIFY_APP_CLIENT_ID`, `SHOPIFY_APP_CLIENT_SECRET`,
@@ -72,18 +109,24 @@ files against what that generates — don't push them blind.
 
 ## Before you trust any of this in production
 
-- Run the automated tests yourself — same 35 tests I ran (`test_pure_logic.py`,
-  `test_webhook_routing.py`), against your real files, but you should see them pass
-  on your own machine too, not just take my word for it:
+- Run the automated tests yourself — same 71 tests I ran across three suites
+  (`test_pure_logic.py`, `test_webhook_routing.py`, `test_register_webhooks.py`),
+  against your real files, but you should see them pass on your own machine too,
+  not just take my word for it:
   ```
   cd testing/
   cp models_stub.py models.py   # stands in for the real DB-backed models package
-                                  # just for this test run — see the comment at the
-                                  # top of each test file for exactly what it stubs
+  cp utils_stub.py utils.py     # stands in for utils.py (commerce_adapters.py's
+                                  # logger import) — only test_register_webhooks.py
+                                  # needs this one
+                                  # both are just for this test run — see the comment
+                                  # at the top of each test file for exactly what
+                                  # they stub
   python3 test_pure_logic.py
   python3 test_webhook_routing.py
-  rm models.py                   # remove it after — don't leave it shadowing the
-                                  # real models/ package for anything else
+  python3 test_register_webhooks.py
+  rm models.py utils.py          # remove them after — don't leave them shadowing
+                                  # the real packages for anything else
   ```
   `crypto_utils.py` is included in this package *only* so these tests run
   out-of-the-box — it was never modified, don't treat it as a deliverable to deploy

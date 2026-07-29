@@ -457,7 +457,6 @@ class ShopifyAdapter(CommerceAdapter):
         if not self._has_credentials():
             return {topic: False for topic in self._WEBHOOK_TOPICS}
 
-        import requests
         url = f'https://{self.shop_domain}/admin/api/{self.API_VERSION}/graphql.json'
         gql = '''
         mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
@@ -474,6 +473,24 @@ class ShopifyAdapter(CommerceAdapter):
             return {topic: False for topic in self._WEBHOOK_TOPICS}
 
         for topic in self._WEBHOOK_TOPICS:
+            results[topic] = self._register_one_webhook_topic(url, gql, topic, webhook_url, access_token)
+
+        return results
+
+    # W1 fix: registering 8 topics back-to-back with zero spacing meant a
+    # single 429 on the first call would very likely cascade through the
+    # rest — Shopify's rate limiter doesn't recover in the gap between two
+    # requests fired immediately after each other. This retries a 429
+    # specifically (not other failure types — a genuine auth error or a
+    # malformed request retrying won't fix itself), honoring Shopify's own
+    # Retry-After header when present rather than guessing at a delay.
+    _MAX_RETRIES = 3
+    _BASE_BACKOFF_SECONDS = 2.0
+
+    def _register_one_webhook_topic(self, url: str, gql: str, topic: str,
+                                    webhook_url: str, access_token: str) -> bool:
+        import requests
+        for attempt in range(self._MAX_RETRIES + 1):
             try:
                 resp = requests.post(
                     url,
@@ -490,36 +507,51 @@ class ShopifyAdapter(CommerceAdapter):
                     headers={'X-Shopify-Access-Token': access_token},
                     timeout=10,
                 )
+
+                if resp.status_code == 429:
+                    if attempt >= self._MAX_RETRIES:
+                        logger.warning(f'[ShopifyAdapter] webhook registration rate-limited '
+                                       f'topic={topic} shop={self.shop_domain}, out of retries '
+                                       f'({self._MAX_RETRIES})')
+                        return False
+                    retry_after = resp.headers.get('Retry-After')
+                    delay = float(retry_after) if retry_after else self._BASE_BACKOFF_SECONDS * (2 ** attempt)
+                    logger.warning(f'[ShopifyAdapter] webhook registration rate-limited '
+                                   f'topic={topic} shop={self.shop_domain}, retrying in {delay:.1f}s '
+                                   f'(attempt {attempt + 1}/{self._MAX_RETRIES})')
+                    time.sleep(delay)
+                    continue
+
                 if resp.status_code != 200:
                     logger.warning(f'[ShopifyAdapter] webhook registration http_{resp.status_code} '
                                    f'topic={topic} shop={self.shop_domain}')
-                    results[topic] = False
-                    continue
+                    return False
 
                 data = resp.json()
                 errors = (((data.get('data') or {}).get('webhookSubscriptionCreate') or {})
                           .get('userErrors') or [])
                 if errors:
-                    # A topic already subscribed (reinstall) shows up as a
-                    # userError, not a hard failure — treat it as success
-                    # rather than retrying/alerting on something already
-                    # in the state we wanted.
+                    # A topic already subscribed (reinstall, or already
+                    # covered by shopify.app.toml's declarative managed
+                    # webhooks — see the TOML file's comments) shows up as
+                    # a userError, not a hard failure — treat it as
+                    # success rather than retrying/alerting on something
+                    # already in the state we wanted.
                     already_exists = any('already' in (e.get('message') or '').lower() for e in errors)
                     if already_exists:
-                        results[topic] = True
-                    else:
-                        logger.warning(f'[ShopifyAdapter] webhook registration userErrors '
-                                       f'topic={topic} shop={self.shop_domain}: {errors}')
-                        results[topic] = False
-                else:
-                    results[topic] = True
+                        return True
+                    logger.warning(f'[ShopifyAdapter] webhook registration userErrors '
+                                   f'topic={topic} shop={self.shop_domain}: {errors}')
+                    return False
+
+                return True
 
             except requests.exceptions.RequestException as e:
                 logger.error(f'[ShopifyAdapter] webhook registration request failed '
                              f'topic={topic} shop={self.shop_domain}: {e}')
-                results[topic] = False
+                return False
 
-        return results
+        return False
 
 
 # ── WooCommerce adapter ────────────────────────────────────────────────

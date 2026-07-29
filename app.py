@@ -1197,7 +1197,7 @@ from blueprints.blog import blog_bp
 app.register_blueprint(blog_bp)
 
 # Platform webhook routes (Shopify, Acuity)
-_webhooks.register_webhook_routes(app)
+_webhooks.register_webhook_routes(app, mail=mail)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # AFTER-REQUEST HOOK
@@ -2072,6 +2072,42 @@ def _fetch_shopify_shop_email(shop_domain: str, access_token: str) -> str:
         return ''
 
 
+def _register_shopify_webhooks_background(shop_domain: str, access_token: str,
+                                          client_id: str, webhook_url: str):
+    """
+    Runs in a background thread — see the call site in
+    connect_shopify_callback for why (W3 fix: registering 8 topics
+    synchronously inside the OAuth callback added 1.5-4s of sequential
+    Shopify API calls to the redirect the merchant is waiting on;
+    Shopify's own guidance is that a merchant should land in the app UI
+    immediately after approving, not wait on it).
+
+    Safe to background: this only makes outbound HTTPS calls to Shopify's
+    API (via ShopifyAdapter.register_webhooks -> requests.post) — no
+    Flask request context, no app context, no DB access, so nothing
+    request-scoped needs to survive past the point this thread starts.
+    app.logger is a plain, thread-safe logging.Logger and works fine
+    called this way (current_app.logger would NOT — that needs an active
+    app context this thread doesn't have, which is why this uses the
+    module-level `app` object directly instead).
+
+    webhook_url must already be resolved (via url_for) by the caller,
+    before this function is invoked — url_for() itself needs a request
+    context, which a spawned thread doesn't have.
+    """
+    try:
+        adapter = commerce_adapters.ShopifyAdapter({'shop_domain': shop_domain, 'access_token': access_token})
+        webhook_results = adapter.register_webhooks(webhook_url)
+        failed_topics = [t for t, success in webhook_results.items() if not success]
+        if failed_topics:
+            app.logger.warning(f'[Shopify OAuth] webhook registration incomplete shop={shop_domain} '
+                               f'client={client_id} failed_topics={failed_topics}')
+        else:
+            app.logger.info(f'[Shopify OAuth] webhooks registered shop={shop_domain} client={client_id}')
+    except Exception as e:
+        app.logger.error(f'[Shopify OAuth] webhook registration failed shop={shop_domain} client={client_id}: {e}')
+
+
 def _shopify_oauth_error_redirect(message: str, return_to: str, authenticated: bool, client_id: str = None):
     """
     Routes a Shopify OAuth failure to a safe destination.
@@ -2368,25 +2404,39 @@ def connect_shopify_callback():
         return _shopify_oauth_error_redirect('Connected to Shopify, but saving the connection failed. Please try again.', return_to, authenticated, target_client_id)
 
     # Auto-register webhooks — the actual point of this migration (no more
-    # "go paste this URL into Settings → Notifications"). Deliberately a
-    # separate try/except from the save above: a registration hiccup here
-    # shouldn't undo an otherwise-successful connection — search/order-
-    # lookup already work via direct API calls (commerce_adapters.py) with
-    # no webhooks involved at all. A merchant just won't get live webhook-
-    # driven order sync until this is retried (worth building a retry/
-    # alerting mechanism as a follow-up, not blocking install on it now).
-    try:
-        adapter = commerce_adapters.ShopifyAdapter({'shop_domain': shop, 'access_token': access_token})
-        webhook_url = url_for('shopify_webhook', client_id=client_id, _external=True)
-        webhook_results = adapter.register_webhooks(webhook_url)
-        failed_topics = [t for t, success in webhook_results.items() if not success]
-        if failed_topics:
-            app.logger.warning(f'[Shopify OAuth] webhook registration incomplete shop={shop} '
-                               f'client={client_id} failed_topics={failed_topics}')
-        else:
-            app.logger.info(f'[Shopify OAuth] webhooks registered shop={shop} client={client_id}')
-    except Exception as e:
-        app.logger.error(f'[Shopify OAuth] webhook registration failed shop={shop} client={client_id}: {e}')
+    # "go paste this URL into Settings → Notifications"). Two things
+    # changed here versus the original Phase 2 version, both addressing
+    # findings from the production readiness audit:
+    #
+    #  - W4: order/checkout/app-uninstalled topics are now ALSO declared
+    #    in shopify.app.toml's [[webhooks.subscriptions]] blocks, which
+    #    Shopify auto-manages on install/uninstall with zero app code —
+    #    that's the primary mechanism now, per Shopify's current
+    #    recommendation for a topic set that's fixed and known at build
+    #    time (it never varies per merchant). This call is a self-healing
+    #    backup: if the TOML-declared subscriptions aren't active for some
+    #    reason (e.g. deployed before the TOML config was verified against
+    #    a real CLI scaffold — see that file's own caveat), this still
+    #    ensures coverage. Calling it in ADDITION to the TOML declarations
+    #    is harmless — Shopify reports an already-exists userError for
+    #    anything already covered, which register_webhooks() already
+    #    treats as success, not a failure to retry or alert on.
+    #  - W3: this used to run synchronously inside this request — 8
+    #    sequential Shopify API calls, 1.5-4s added to the redirect the
+    #    merchant is waiting on. Now backgrounded (daemon thread): the
+    #    merchant lands in the app UI immediately, registration finishes a
+    #    moment later. Deliberately not awaited/joined — a registration
+    #    hiccup shouldn't undo an otherwise-successful connection, and
+    #    search/order-lookup already work via direct API calls with no
+    #    webhooks involved at all either way. url_for() is resolved here,
+    #    before handing off to the thread, since it needs this request's
+    #    context and the background thread won't have one.
+    webhook_url = url_for('shopify_webhook', client_id=client_id, _external=True)
+    threading.Thread(
+        target=_register_shopify_webhooks_background,
+        args=(shop, access_token, client_id, webhook_url),
+        daemon=True,
+    ).start()
 
     app.logger.info(f'[Shopify OAuth] connected shop={shop} client={client_id} user={current_user.id} headless={not authenticated}')
 

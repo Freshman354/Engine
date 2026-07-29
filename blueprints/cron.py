@@ -54,6 +54,7 @@ from flask_login import current_user, login_required
 from flask_mail import Message as MailMessage
 
 import models
+import webhooks
 
 # ── Blueprint ────────────────────────────────────────────────────────────────
 
@@ -957,6 +958,42 @@ def cron_hard_delete_accounts():
         duration_ms=duration_ms, triggered_by='http',
     )
     current_app.logger.info(f'[HardDeleteAccounts] {result} dur={duration_ms}ms')
+    return jsonify({
+        'success': True,
+        'ran_at':  datetime.utcnow().isoformat(),
+        **result,
+    })
+
+
+@cron_bp.route('/cron/shopify-redactions', methods=['GET', 'POST'])
+def cron_shopify_redactions():
+    """
+    Processes any shop/redact request whose grace period
+    (webhooks.SHOPIFY_SHOP_REDACT_GRACE_DAYS, currently 3 days) has
+    elapsed — see webhooks.py's handle_shopify_compliance_webhook (which
+    schedules these on receipt) and process_due_shopify_shop_redactions
+    (which does the actual deletion here).
+
+    Deliberately more frequent than the account-deletion cron above:
+    Shopify's own compliance deadline is 30 days from receiving the
+    request, but there's no reason to sit on a scheduled redaction for
+    that long once the safety window has passed — recommended schedule:
+    hourly, not daily, so a shop/redact received today is actually
+    complete well within days, not weeks.
+    """
+    _, err = _check_cron_secret()
+    if err:
+        return err
+
+    t0 = time.time()
+    result = webhooks.process_due_shopify_shop_redactions()
+    duration_ms = int((time.time() - t0) * 1000)
+
+    models.log_cron_run(
+        'shopify_redactions', success=(result.get('failed', 0) == 0), result=result,
+        duration_ms=duration_ms, triggered_by='http',
+    )
+    current_app.logger.info(f'[ShopifyRedactions] {result} dur={duration_ms}ms')
     return jsonify({
         'success': True,
         'ran_at':  datetime.utcnow().isoformat(),
