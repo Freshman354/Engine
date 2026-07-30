@@ -469,6 +469,15 @@ def delete_client(client_id):
         cursor.execute('DELETE FROM poor_answers           WHERE client_id = %s', (client_id,))
         cursor.execute('DELETE FROM webhook_configs        WHERE client_id = %s', (client_id,))
         cursor.execute('DELETE FROM webhook_logs           WHERE client_id = %s', (client_id,))
+        # orders — added here because it was missing entirely: this table
+        # holds customer_email/customer_name (Shopify order data synced via
+        # webhooks.py's _upsert_order) and had no FK relationship to clients
+        # and wasn't in this function's DELETE list, meaning it survived
+        # account deletion undetected. That's a real gap against this
+        # policy's own "right to erasure" promise (privacy-policy.html
+        # section 16), not just a Shopify-specific issue — found while
+        # building the retention system tied to account lifecycle.
+        cursor.execute('DELETE FROM orders                 WHERE client_id = %s', (client_id,))
         # Client row last
         cursor.execute('DELETE FROM clients               WHERE client_id = %s', (client_id,))
         conn.commit()

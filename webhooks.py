@@ -196,9 +196,36 @@ def migrate_integrations():
             "ON shopify_compliance_requests (client_id)"
         )
 
+        # personal_data_access_log — answers Shopify's Data Protection
+        # Details questionnaire question "Do you log access to personal
+        # data?" (previously answered No — see the Partner Dashboard
+        # rejection this was built in response to). Deliberately does NOT
+        # store the raw customer_email/name being accessed — record_ref is
+        # a truncated SHA-256 hash instead (see _hash_pii_ref below), so
+        # this audit table doesn't become a second live copy of the exact
+        # PII it exists to track access to. Still lets you answer "was
+        # there unusual access to this specific customer's data" by
+        # hashing the same email and comparing, without the log itself
+        # being a new place that PII leaks from.
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS personal_data_access_log (
+                id            SERIAL      PRIMARY KEY,
+                client_id     TEXT        NOT NULL,
+                data_type     TEXT        NOT NULL,
+                purpose       TEXT        NOT NULL,
+                accessor      TEXT        NOT NULL DEFAULT 'system',
+                record_ref    TEXT,
+                accessed_at   TIMESTAMP   DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_personal_data_access_client "
+            "ON personal_data_access_log (client_id, accessed_at DESC)"
+        )
+
         conn.commit()
         print('✅ migrate_integrations: client_integrations + webhook_log + '
-              'shopify_compliance_requests ready')
+              'shopify_compliance_requests + personal_data_access_log ready')
 
     except Exception as e:
         print(f'⚠️  migrate_integrations error: {e}')
@@ -902,6 +929,76 @@ def _verify_shopify_app_signature(raw_body: bytes, hmac_header: str) -> bool:
 # see handle_shopify_compliance_webhook below.
 SHOPIFY_SHOP_REDACT_GRACE_DAYS = 3
 
+# Retention policy: data is purged when a merchant disconnects/uninstalls,
+# per the explicit decision to tie retention to account lifecycle rather
+# than a fixed calendar window. Longer than SHOPIFY_SHOP_REDACT_GRACE_DAYS
+# above on purpose — that one fires off Shopify's own shop/redact webhook,
+# 48 hours after uninstall already, driven by Shopify's compliance
+# deadline; this one fires immediately on uninstall (see the app/uninstalled
+# handling in handle_shopify_webhook), so it needs its own buffer to give a
+# merchant who uninstalled by mistake real time to reinstall before their
+# data is purged, without that buffer riding on Shopify's separate timeline.
+SHOPIFY_UNINSTALL_RETENTION_GRACE_DAYS = 30
+
+
+def _hash_pii_ref(value: str) -> str:
+    """
+    Truncated SHA-256 of a PII value (email, phone, etc.), for use as a
+    traceable-but-non-reversible reference in personal_data_access_log.
+    Not a security control (hashes of low-entropy values like emails are
+    guessable) — just keeps the access log from being a second live copy
+    of the exact data it's tracking access to. 16 hex chars is enough to
+    correlate repeated access to the same value without being mistaken
+    for a real secret.
+    """
+    if not value:
+        return ''
+    return hashlib.sha256(value.strip().lower().encode('utf-8')).hexdigest()[:16]
+
+
+def log_personal_data_access(client_id: str, data_type: str, purpose: str,
+                             accessor: str = 'system', record_ref: str = None):
+    """
+    Records one access to personal/protected customer data. Best-effort —
+    never raises, never blocks the access it's logging (a logging failure
+    shouldn't take down order lookup).
+
+    Args:
+        client_id:  whose data was accessed
+        data_type:  what kind — e.g. 'shopify_order', 'shopify_customer_email'
+        purpose:    why — e.g. 'order_status_lookup', 'gdpr_data_request',
+                    'gdpr_redaction'
+        accessor:   'system' for automated/AI access (the common case —
+                    the chatbot answering "where's my order"), or a
+                    specific staff user id for a human dashboard view
+        record_ref: an already-hashed reference (see _hash_pii_ref) — pass
+                    the hash, not the raw value, this function does not
+                    hash it for you (callers should be explicit about
+                    what's going into the log, not rely on this function
+                    to remember to protect it)
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute(
+            """
+            INSERT INTO personal_data_access_log
+                (client_id, data_type, purpose, accessor, record_ref)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (client_id, data_type, purpose, accessor, record_ref)
+        )
+        conn.commit()
+    except Exception as e:
+        logger.error(f'[PersonalDataAccess] failed to log access client={client_id} '
+                     f'data_type={data_type}: {e}')
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
 
 def _get_client_owner_email(client_id: str) -> str:
     """Resolves the Lumvi account email that owns this client — used to
@@ -1206,6 +1303,8 @@ def handle_shopify_compliance_webhook(raw_body: bytes, hmac_header: str, topic: 
             return {'status': 'ok'}, 200
 
         orders = _find_orders_by_email(client_id, customer_email)
+        log_personal_data_access(client_id, 'shopify_order', 'gdpr_data_request',
+                                 record_ref=_hash_pii_ref(customer_email))
         summary = f'{len(orders)} order(s) found'
         _complete_compliance_request(request_id, 'completed', summary)
         logger.info(f'[Shopify Compliance] data_request client={client_id} {summary}')
@@ -1248,6 +1347,8 @@ def handle_shopify_compliance_webhook(raw_body: bytes, hmac_header: str, topic: 
             return {'status': 'ok'}, 200
 
         redacted_count = _redact_orders_by_email(client_id, customer_email)
+        log_personal_data_access(client_id, 'shopify_order', 'gdpr_redaction',
+                                 record_ref=_hash_pii_ref(customer_email))
         summary = f'{redacted_count} order(s) redacted'
         _complete_compliance_request(request_id, 'completed', summary)
         logger.info(f'[Shopify Compliance] customers/redact client={client_id} {summary}')
@@ -1361,6 +1462,36 @@ def handle_shopify_webhook(client_id: str, raw_body: bytes, hmac_header: str,
         ok = delete_integration(client_id, 'shopify')
         logger.info(f'[Shopify] app/uninstalled client={client_id} deactivated={ok}')
         _log_webhook(client_id, 'shopify', topic, 'ok' if ok else 'error', phash)
+
+        # Retention: schedule the full purge now, tied to this observed
+        # lifecycle event, rather than waiting on Shopify's separate
+        # shop/redact compliance webhook (which needs its own Partner
+        # Dashboard configuration and has no guarantee of ever arriving if
+        # that's not set up — see the production readiness follow-up for
+        # why relying on it alone left a real gap). Reuses the exact same
+        # scheduled-deletion pathway shop/redact already uses
+        # (process_due_shopify_shop_redactions) — same table, same cron
+        # job, just a second trigger for it. A merchant who reinstalls
+        # within the grace period is unaffected: reinstalling reactivates
+        # the same client_integrations row rather than creating a new one
+        # (see get_client_id_by_shopify_shop), and if a shop/redact row is
+        # still 'scheduled' at that point it just processes against a
+        # client that's active again — delete_client() on an active
+        # client is exactly what a merchant who WANTED to leave should get,
+        # so this only matters if they explicitly meant to disconnect.
+        # SHOPIFY_UNINSTALL_RETENTION_GRACE_DAYS is intentionally longer
+        # than SHOPIFY_SHOP_REDACT_GRACE_DAYS (Shopify's compliance-driven
+        # 3-day window): this trigger fires immediately on uninstall, not
+        # 48 hours later like Shopify's own shop/redact, so a longer
+        # window here gives a merchant who uninstalled by mistake more
+        # real time to reinstall before their data is purged.
+        shop_domain = ((integration or {}).get('platform_config') or {}).get('shop_domain', '')
+        scheduled_for = datetime.utcnow() + timedelta(days=SHOPIFY_UNINSTALL_RETENTION_GRACE_DAYS)
+        _record_compliance_request('shop/redact', shop_domain, client_id,
+                                   status='scheduled', scheduled_for=scheduled_for)
+        logger.info(f'[Shopify] retention purge scheduled client={client_id} '
+                    f'for={scheduled_for.isoformat()} (uninstall-triggered)')
+
         return {'status': 'ok'}, 200
 
     order_topics    = {'orders/create', 'orders/updated', 'orders/cancelled',
@@ -1392,6 +1523,9 @@ def handle_shopify_webhook(client_id: str, raw_body: bytes, hmac_header: str,
             if not result.get('success'):
                 raise RuntimeError(result.get('error', 'upsert_abandoned_cart failed'))
 
+            log_personal_data_access(client_id, 'shopify_checkout', 'cart_recovery',
+                                     record_ref=_hash_pii_ref(checkout_data.get('customer_email') or ''))
+
             logger.info(
                 f'[Shopify] {topic} → cart={checkout_data["checkout_token"]} client={client_id}'
             )
@@ -1414,6 +1548,14 @@ def handle_shopify_webhook(client_id: str, raw_body: bytes, hmac_header: str,
         success = _upsert_order(client_id, order_data)
         if not success:
             raise RuntimeError('DB upsert failed')
+
+        # Access logging: this is the primary ONGOING access channel for
+        # customer order data once Protected Customer Data access is
+        # approved (the compliance-request paths above are the occasional
+        # GDPR-driven ones). Logged as 'system' — this is automated sync,
+        # not a specific staff member choosing to look at a record.
+        log_personal_data_access(client_id, 'shopify_order', 'order_sync',
+                                 record_ref=_hash_pii_ref(order_data.get('customer_email', '')))
 
         if order_data.get('checkout_token'):
             models.mark_cart_recovered(client_id, order_data['checkout_token'])

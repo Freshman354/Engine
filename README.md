@@ -20,6 +20,8 @@ crypto_utils.py                      → NOT a deliverable — unmodified, inclu
                                         so testing/ runs out-of-the-box; skip this one
 models/__init__.py                  → models/
 models/users.py                     → models/
+models/clients.py                   → models/ (new this round — the delete_client
+                                       orders-table fix, see above)
 blueprints/auth.py                  → blueprints/
 blueprints/cron.py                  → blueprints/ (new this round — adds the
                                        /cron/shopify-redactions job for B3's
@@ -67,14 +69,16 @@ files against what that generates — don't push them blind.
 ## Read this first
 
 `production-readiness-report.md` — the original audit.
-`followup-production-readiness-report.md` — **read this one too, not instead of** —
-covers the B1/B3/W1/W3/W4 fixes applied on top of the original report, written as an
-independent re-review of those specific changes. It documents three real bugs found
-and fixed *during* this round, including one (a `NameError` that would have crashed
-every webhook registration attempt) that only running the tests caught — code review
-alone would very likely have missed it.
+`followup-production-readiness-report.md` — covers the B1/B3/W1/W3/W4 fixes applied
+on top of the original report, written as an independent re-review of those specific
+changes. It documents three real bugs found and fixed *during* that round, including
+one (a `NameError` that would have crashed every webhook registration attempt) that
+only running the tests caught — code review alone would very likely have missed it.
+`privacy-policy-draft-addition.md` — **new this round**, read this if you're working
+through the Shopify Partner Dashboard rejection. Not legal advice, have an actual
+lawyer review it.
 
-### What changed in this round
+### What changed in the B1/B3/W1/W3/W4 round
 
 - **B1 fixed** — `webhooks.py` now cross-checks Shopify's `X-Shopify-Shop-Domain`
   header against the client's registered shop before processing any webhook,
@@ -91,6 +95,34 @@ alone would very likely have missed it.
   kept as a self-healing backup (the file explains why order/checkout topics
   couldn't fully move to declarative-only — a real URL-scheme conflict with
   per-client routing, not an oversight).
+
+### What changed in this round (Shopify Protected Customer Data remediation)
+
+Built in direct response to a Partner Dashboard rejection — the Data Protection
+Details questionnaire was answered "No" to both "do you have retention periods"
+and "do you log access to personal data," because neither system existed.
+
+- **Retention, tied to account lifecycle** (your choice) — `app/uninstalled` now
+  schedules a full data purge 30 days after disconnect (`SHOPIFY_UNINSTALL_
+  RETENTION_GRACE_DAYS` in `webhooks.py`), independent of whether Shopify's own
+  separate `shop/redact` webhook is even configured.
+- **A real gap found while building that**: `models/clients.py`'s `delete_client()`
+  — used by both this new retention system and Lumvi's existing self-service
+  account deletion — never actually deleted the `orders` table. Customer order
+  data (email, name) survived every account deletion until now. Fixed directly in
+  `delete_client()`, not just the Shopify-specific path, since this affects any
+  account deletion, not only Shopify-connected ones.
+- **Access logging** — new `personal_data_access_log` table (`webhooks.py`), logs
+  every read of Shopify customer order/checkout data (webhook sync, live lookup
+  compliance requests) with a hashed reference, not the raw PII itself, so the audit
+  log doesn't become a second copy of what it's protecting.
+- **Privacy policy** — a draft addition, not yet merged into your actual policy.
+  See `privacy-policy-draft-addition.md`.
+
+**Still needed, not done here:** logging access on the *live* GraphQL order-lookup
+path (`commerce_adapters.py`'s `get_order`, called from wherever the AI actually
+invokes it in `tools.py`/`ai_helper.py`) — those files weren't available when this
+was built. The webhook-sync path is fully covered; the live-lookup path isn't yet.
 
 ## Suggested deploy order
 

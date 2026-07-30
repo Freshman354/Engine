@@ -34,6 +34,7 @@ import hashlib
 import hmac as hmac_module
 import base64
 import json
+from datetime import datetime
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))  # project root: webhooks.py, crypto_utils.py
@@ -99,11 +100,16 @@ order_body = json.dumps({
 order_sig = sign(order_body, WEBHOOK_SECRET)
 
 with patch.object(webhooks, 'get_integration', return_value=FAKE_INTEGRATION), \
-     patch.object(webhooks, '_upsert_order', return_value=True) as mock_upsert:
+     patch.object(webhooks, '_upsert_order', return_value=True) as mock_upsert, \
+     patch.object(webhooks, 'log_personal_data_access') as mock_access_log:
     result, status = webhooks.handle_shopify_webhook('client_test123', order_body, order_sig, 'orders/create', CLIENT_A_SHOP)
     check("real Shopify topic string 'orders/create' is recognized (not silently ignored)",
           status == 200 and result.get('status') == 'ok')
     check('_upsert_order was actually invoked for a recognized order topic', mock_upsert.called)
+    check("access is logged for the order-sync path (fix: Shopify's Data Protection "
+          "questionnaire was answered 'No' to 'do you log access to personal data' — "
+          "this is why), tagged as 'system'/'order_sync', not left unlogged",
+          mock_access_log.called and mock_access_log.call_args[0][2] == 'order_sync')
 
 with patch.object(webhooks, 'get_integration', return_value=FAKE_INTEGRATION), \
      patch.object(webhooks, '_upsert_order', return_value=True) as mock_upsert:
@@ -125,6 +131,25 @@ with patch.object(webhooks, 'get_integration', return_value=FAKE_INTEGRATION), \
     check('app/uninstalled returns 200', status == 200)
     check('app/uninstalled calls delete_integration(client_id, "shopify") — not upsert, not a hard delete',
           mock_delete.call_args == (('client_test123', 'shopify'),))
+
+print()
+print('handle_shopify_webhook — app/uninstalled ALSO schedules retention purge '
+      '(fix: tie retention to account lifecycle, not solely Shopify\'s separate shop/redact webhook)')
+with patch.object(webhooks, 'get_integration', return_value=FAKE_INTEGRATION), \
+     patch.object(webhooks, 'delete_integration', return_value=True), \
+     patch.object(webhooks, '_record_compliance_request', return_value=1) as mock_record:
+    result, status = webhooks.handle_shopify_webhook('client_test123', uninstall_body, uninstall_sig, 'app/uninstalled', CLIENT_A_SHOP)
+    check('app/uninstalled schedules a shop/redact-topic purge, independent of whether Shopify\'s '
+          'own shop/redact compliance webhook is even configured',
+          mock_record.called and mock_record.call_args[0][0] == 'shop/redact')
+    check('the purge is scheduled with status=scheduled and a future scheduled_for timestamp',
+          mock_record.call_args.kwargs.get('status') == 'scheduled'
+          and mock_record.call_args.kwargs.get('scheduled_for') is not None)
+    check('the retention grace period used is SHOPIFY_UNINSTALL_RETENTION_GRACE_DAYS (30), '
+          'not the shorter Shopify-compliance-driven 3-day window — this is Lumvi\'s own policy, '
+          'not Shopify\'s deadline',
+          (mock_record.call_args.kwargs['scheduled_for'] - datetime.utcnow()).days
+          >= webhooks.SHOPIFY_UNINSTALL_RETENTION_GRACE_DAYS - 1)
 
 print()
 print('handle_shopify_webhook — security boundaries (HMAC)')
@@ -207,10 +232,13 @@ with patch.object(webhooks, 'get_integration', return_value=FAKE_INTEGRATION), \
 
 with patch.object(webhooks, 'get_integration', return_value=FAKE_INTEGRATION), \
      patch.object(models, 'get_client_by_id', return_value={'client_id': 'client_test123', 'cart_recovery_enabled': True}), \
-     patch.object(models, 'upsert_abandoned_cart', return_value={'success': True}) as mock_cart:
+     patch.object(models, 'upsert_abandoned_cart', return_value={'success': True}) as mock_cart, \
+     patch.object(webhooks, 'log_personal_data_access') as mock_access_log:
     result, status = webhooks.handle_shopify_webhook('client_test123', checkout_body, checkout_sig, 'checkouts/create', CLIENT_A_SHOP)
     check('checkout topic is processed (200) when cart_recovery_enabled is True', status == 200)
     check('models.upsert_abandoned_cart was actually invoked', mock_cart.called)
+    check("access is logged for checkout/cart-recovery data too, not just orders",
+          mock_access_log.called and mock_access_log.call_args[0][2] == 'cart_recovery')
 
 print()
 print('handle_shopify_compliance_webhook — GDPR topics (B3 fix: real handling, not just 200+log)')
@@ -243,13 +271,17 @@ print('customers/redact — actually deletes matching orders now, not just logs'
 with patch.object(webhooks, 'get_client_id_by_shopify_shop', return_value='client_test123'), \
      patch.object(webhooks, '_record_compliance_request', return_value=42) as mock_record, \
      patch.object(webhooks, '_complete_compliance_request') as mock_complete, \
-     patch.object(webhooks, '_redact_orders_by_email', return_value=3) as mock_redact:
+     patch.object(webhooks, '_redact_orders_by_email', return_value=3) as mock_redact, \
+     patch.object(webhooks, 'log_personal_data_access') as mock_access_log:
     result, status = webhooks.handle_shopify_compliance_webhook(compliance_body, compliance_sig, 'customers/redact')
     check('customers/redact returns 200', status == 200)
     check('_redact_orders_by_email is actually called with the client_id and customer email from the payload',
           mock_redact.called and mock_redact.call_args[0] == ('client_test123', 'shopper@example.com'))
     check('the request is marked completed with a count-based summary (not raw PII) once redaction runs',
           mock_complete.called and '3' in mock_complete.call_args[0][2])
+    check("the redaction itself is logged as an access event too ('gdpr_redaction'), not just "
+          "recorded in the compliance-requests audit table", mock_access_log.called
+          and mock_access_log.call_args[0][2] == 'gdpr_redaction')
 
 print()
 print('customers/data_request — actually compiles order data now, and best-effort emails it')
@@ -262,7 +294,8 @@ with patch.object(webhooks, 'get_client_id_by_shopify_shop', return_value='clien
      patch.object(webhooks, '_record_compliance_request', return_value=43), \
      patch.object(webhooks, '_complete_compliance_request') as mock_complete, \
      patch.object(webhooks, '_find_orders_by_email', return_value=fake_orders) as mock_find, \
-     patch.object(webhooks, '_get_client_owner_email', return_value='merchant@example.com'):
+     patch.object(webhooks, '_get_client_owner_email', return_value='merchant@example.com'), \
+     patch.object(webhooks, 'log_personal_data_access') as mock_access_log:
     result, status = webhooks.handle_shopify_compliance_webhook(
         compliance_body, compliance_sig, 'customers/data_request', mail=mock_mail)
     check('customers/data_request returns 200', status == 200)
@@ -270,6 +303,8 @@ with patch.object(webhooks, 'get_client_id_by_shopify_shop', return_value='clien
     check('a notification email is sent when mail is provided and matching orders exist',
           mock_mail.send.called)
     check('the request is marked completed with a count-based summary', mock_complete.called)
+    check("the compiled-data lookup is logged as an access event ('gdpr_data_request')",
+          mock_access_log.called and mock_access_log.call_args[0][2] == 'gdpr_data_request')
 
 with patch.object(webhooks, 'get_client_id_by_shopify_shop', return_value='client_test123'), \
      patch.object(webhooks, '_record_compliance_request', return_value=44), \
