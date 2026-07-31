@@ -2093,7 +2093,7 @@ def build_embed_activation_urls(shop: str) -> dict:
     if SHOPIFY_APP_CLIENT_ID:
         activate_embed_url = (
             f'https://{shop}/admin/themes/current/editor'
-            f'?context=apps&template=index&activateAppId={SHOPIFY_APP_CLIENT_ID}/lumvi-chat-embed'
+            f'?context=apps&template=index&activateAppId={SHOPIFY_APP_CLIENT_ID}/chat-embed'
         )
     else:
         app.logger.warning('[Shopify OAuth] SHOPIFY_APP_CLIENT_ID not set — omitting '
