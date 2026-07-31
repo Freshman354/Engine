@@ -299,7 +299,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 <body>
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 <aside class="sidebar" id="sidebar">
-    <a href="{{ url_for('account.settings_page') }}" class="sidebar-logo" title="Account settings">
+    <a href="{{ url_for('account.settings') }}" class="sidebar-logo" title="Account settings">
         <img src="{{ url_for('static', filename='logo.jpg') }}" alt="Lumvi" class="logo-img">
         <span class="logo-text">Lumvi</span>
     </a>
@@ -766,6 +766,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
     </div>
 </div>
 {% endif %}
+<script src="{{ url_for('static', filename='js/embed-activation.js') }}"></script>
 <script>
     function openSidebar(){document.getElementById('sidebar').classList.add('open');document.getElementById('sidebarOverlay').classList.add('open');}
     function closeSidebar(){document.getElementById('sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('open');}
@@ -855,12 +856,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
             // connection (set in app.py's connect_shopify_callback); it's
             // a deep link straight to the theme editor with the embed
             // already toggled, so this is a one-click "Save" from here.
-            const activateUrl = params.get('activate_embed_url');
-            if (activateUrl) {
-                document.getElementById('activateEmbedBtn').href = activateUrl;
-                const banner = document.getElementById('activateEmbedBanner');
-                banner.style.display = 'flex';
-            }
+            LumviEmbedActivation.render(params);
             history.replaceState({}, '', window.location.pathname);
         } else if (params.get('error')) {
             showToast(params.get('error'), 'error');

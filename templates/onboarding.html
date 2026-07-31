@@ -692,6 +692,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
 
 <div class="toast" id="toast"></div>
 
+<script src="{{ url_for('static', filename='js/embed-activation.js') }}"></script>
 <script>
 // ── State ────────────────────────────────────────────────────────────
 let currentStep     = 1;
@@ -699,6 +700,7 @@ let selectedPlatform = null;
 let selectedTone     = 'friendly';
 let createdClientId  = null;
 let activateEmbedUrl = null;  // theme-editor deep link — set only for a headless/dashboard Shopify OAuth return, see handleReturnFromOAuth() below
+let manualActivationUrl = null;  // plain theme editor link (no activateAppId) — fallback for Shopify's known deep-link flakiness, always shown alongside the button above rather than only on failure, since a failed deep link can't be detected client-side
 let storeData        = { products: 0, collections: 0 };
 let faqs             = [];
 let uploadedFiles     = [];
@@ -1023,18 +1025,13 @@ function populateReadySummary() {
   document.getElementById('embedCode').textContent = embedCode;
 
   // Shopify via OAuth: the theme's app embed is off by default (Shopify
-  // platform behavior — see the CSS comment above .activate-embed-banner)
-  // until the merchant clicks through and saves. Say so accurately rather
-  // than the "Installed on your storefront" copy that's true for the
-  // manual-snippet/WooCommerce path but not yet true here.
-  const banner = document.getElementById('activateEmbedBanner');
-  if (activateEmbedUrl) {
+  // platform behavior) until the merchant clicks through and saves. Say so
+  // accurately rather than the "Installed on your storefront" copy that's
+  // true for the manual-snippet/WooCommerce path but not yet true here.
+  if (activateEmbedUrl || manualActivationUrl) {
     document.getElementById('readyLiveChatDetail').textContent = 'Ready to activate';
-    document.getElementById('activateEmbedBtn').href = activateEmbedUrl;
-    banner.style.display = 'flex';
-  } else {
-    banner.style.display = 'none';
   }
+  LumviEmbedActivation.apply(activateEmbedUrl, manualActivationUrl);
 }
 
 async function goLive() {
@@ -1093,7 +1090,9 @@ function esc(s) {
   if (params.get('connected') === '1') {
     createdClientId  = params.get('client_id');
     selectedPlatform = params.get('platform') || 'shopify';
-    activateEmbedUrl = params.get('activate_embed_url') || null;
+    const embed = LumviEmbedActivation.parse(params);
+    activateEmbedUrl = embed.activateUrl;
+    manualActivationUrl = embed.manualUrl;
     startImport();
   } else if (params.get('error')) {
     toast(params.get('error'), 'error');

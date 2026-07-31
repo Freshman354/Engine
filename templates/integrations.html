@@ -1464,6 +1464,7 @@ a { text-decoration: none; color: inherit; }
 <!-- ── TOASTS ─────────────────────────────────────────────────── -->
 <div class="toast-container" id="toastContainer"></div>
 
+<script src="{{ url_for('static', filename='js/embed-activation.js') }}"></script>
 <script>
 /* ── CONFIG ────────────────────────────────────────────────────── */
 // Populated by Flask via Jinja — falls back to window vars for demo
@@ -1515,10 +1516,8 @@ function handleShopifyOAuthReturn(params) {
   if (params.get('connected') === '1') {
     showToast('Shopify connected successfully!', 'success');
     const activateUrl = params.get('activate_embed_url');
-    if (activateUrl) {
-      document.getElementById('activateEmbedBtn').href = activateUrl;
-      document.getElementById('activateEmbedBanner').style.display = 'flex';
-    }
+    const manualUrl = params.get('manual_activation_url');
+    LumviEmbedActivation.apply(activateUrl, manualUrl);
     history.replaceState({}, '', window.location.pathname + (linkedIdParam(params) ? `?client_id=${linkedIdParam(params)}` : ''));
   } else if (params.get('error')) {
     showToast(params.get('error'), 'error');
