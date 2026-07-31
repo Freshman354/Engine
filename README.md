@@ -68,6 +68,17 @@ files against what that generates — don't push them blind.
 
 ## Read this first
 
+**"App embed does not exist" fix (most recent):** the activation URL was using
+`SHOPIFY_APP_CLIENT_ID` (the app's own identity) where Shopify actually needs a
+separate, extension-specific UUID that only exists after `shopify app deploy` runs.
+Fixed in `app.py` to read a new `SHOPIFY_EXTENSION_UUID` env var instead — **you need
+to set this** after deploying the extension (get it via `shopify app info`). Until
+it's set, the app now correctly omits the activation link rather than sending
+merchants to a broken one (verified this behavior directly against real Flask, not
+assumed). See the code comments in `app.py` right above `activate_embed_url` for the
+full trace.
+
+
 `production-readiness-report.md` — the original audit.
 `followup-production-readiness-report.md` — covers the B1/B3/W1/W3/W4 fixes applied
 on top of the original report, written as an independent re-review of those specific

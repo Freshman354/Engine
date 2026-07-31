@@ -1,72 +1,18 @@
-# shopify.app.toml — root app configuration
-#
-# I can't run the Shopify CLI or create/inspect a live Partner Dashboard app
-# object from here, so I can't generate or verify this the normal way
-# (`shopify app config link` pulls this down from a real app record). Treat
-# this as a well-informed draft built from the confirmed values already in
-# app.py/commerce_adapters.py, not a verified CLI scaffold — reconcile it
-# against `shopify app config push` once you've created the app in the
-# Partner Dashboard.
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
+client_id = "b161de749f019637a0689fb592b4c4b8"
+application_url = "https://lumvi.net"
+embedded = true
 name = "Lumvi"
-client_id = ""  # same value as SHOPIFY_APP_CLIENT_ID in app.py's environment — fill in from Partner Dashboard
-application_url = "https://app.lumvi.net/connect/shopify/install"
-
-# Deliberately non-embedded: Lumvi's own dashboard is the merchant-facing
-# UI (branding, integrations, conversations), not an embedded Admin iframe.
-# This gets everything the migration asked for — OAuth install, auto
-# webhooks, no copy-paste embed, multi-tenant — without the much larger
-# App Bridge/session-token project that embedding would mean. Revisit only
-# if you want full Shopify App Store search-listing placement later
-# (flagged as a separate, optional phase earlier in this migration).
-embedded = false
-
-[access_scopes]
-# Keep this in sync with SHOPIFY_APP_SCOPES in app.py by hand — nothing
-# reads this TOML file to generate that constant or vice versa.
-scopes = "read_products,read_orders"
-
-[auth]
-redirect_urls = [ "https://app.lumvi.net/connect/shopify/callback" ]
 
 [webhooks]
-# Matches commerce_adapters.ShopifyAdapter.API_VERSION / app.py's
-# SHOPIFY_API_VERSION — keep all three in sync if you ever bump it.
 api_version = "2026-07"
 
-# orders/checkouts/app-uninstalled: registered per-shop at OAuth-connect
-# time via ShopifyAdapter.register_webhooks() (commerce_adapters.py), NOT
-# declared here — and this is a considered decision, not an oversight.
-#
-# Shopify's declarative "managed webhooks" (the [[webhooks.subscriptions]]
-# block below, used for the compliance topics) require ONE FIXED uri for
-# every shop using the app — Shopify identifies which shop a webhook is
-# for via the X-Shopify-Shop-Domain header, not the URL. Lumvi's webhook
-# routing is per-client instead: /webhooks/shopify/<client_id>, a URL that
-# doesn't exist until OAuth actually completes and a client_id is
-# assigned. Using managed webhooks for these topics would mean the
-# receiving route itself would need to change — from trusting client_id in
-# the URL path to resolving it from the shop-domain header, the same
-# pattern the compliance endpoint below already uses. That's a bigger,
-# riskier change than "add a TOML block": it means re-touching the exact
-# request-verification logic that was just hardened against a cross-tenant
-# replay issue (see webhooks.py's handle_shopify_webhook — the shop-domain
-# cross-check), for a benefit (removing ~8 imperative API calls per
-# install) that's already substantially addressed by making those calls
-# backgrounded and retry-aware instead (see ShopifyAdapter.register_
-# webhooks and its caller in app.py's connect_shopify_callback). Revisit
-# this as a deliberate, separately-tested piece of work — not as a TOML
-# edit made alongside other changes.
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_inventory,read_orders,read_products"
+optional_scopes = [ ]
+use_legacy_install_flow = false
 
-[[webhooks.subscriptions]]
-compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
-uri = "https://app.lumvi.net/webhooks/shopify/compliance"
-# This one has no URL-scheme conflict — /webhooks/shopify/compliance was
-# built as a single fixed URL from the start (see webhooks.py's
-# handle_shopify_compliance_webhook), resolving client_id from the shop_
-# domain in the payload rather than trusting a URL path. Uncommented now
-# that the handler actually does something with these (previously just
-# verified + logged + returned 200 — see the production readiness audit's
-# B3 finding). If your CLI/Partner Dashboard version doesn't support this
-# block, configure the same URL manually instead: Partner Dashboard →
-# App setup → Compliance webhooks.
+[auth]
+redirect_urls = [ "https://lumvi.net/connect/shopify/callback" ]
