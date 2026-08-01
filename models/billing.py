@@ -350,7 +350,8 @@ def get_all_users(limit=500):
                   billing_provider, billing_cycle, is_annual,
                   subscription_id, cancel_at_period_end,
                   subscription_expires_at, grace_period_ends_at,
-                  created_at, upgraded_at, cancelled_at
+                  created_at, upgraded_at, cancelled_at,
+                  last_login_at, login_count, last_activity_at
            FROM users
            ORDER BY created_at DESC
            LIMIT %s''',
@@ -361,7 +362,8 @@ def get_all_users(limit=500):
     conn.close()
     for r in rows:
         for col in ('created_at', 'upgraded_at', 'cancelled_at',
-                    'subscription_expires_at', 'grace_period_ends_at'):
+                    'subscription_expires_at', 'grace_period_ends_at',
+                    'last_login_at', 'last_activity_at'):
             if r.get(col):
                 r[col] = r[col].isoformat()
     return rows

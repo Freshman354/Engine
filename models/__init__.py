@@ -320,6 +320,7 @@ from .analytics import (
     get_user_detail,
     get_user_security_activity,
     get_admin_overview_metrics,
+    get_users_for_admin_table,
 )
 
 # ── Tags (conversation tagging) ───────────────────────────────────────────────

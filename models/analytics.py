@@ -7,6 +7,7 @@ API cost tracking, DB stats, and admin-level reporting queries.
 import json
 from datetime import datetime
 from .db import get_db
+from .billing import get_all_users
 
 # ── Per-token pricing, by provider ─────────────────────────────────────────
 # Source: provider list prices. OpenRouter aggregates multiple hosting
@@ -586,6 +587,29 @@ def get_conversion_funnel(days=30):
 
 
 # =====================================================================
+# SHARED — Shopify connection lookup
+# =====================================================================
+# One query, reused everywhere something needs "which users currently
+# have Shopify connected": suspicion scoring, dashboard overview
+# metrics, and the Users table (component 6). Takes an already-open
+# cursor from the caller's own connection, so this never opens a
+# second DB connection or re-runs the join more than once per caller.
+
+def _shopify_connected_user_ids(cursor):
+    """
+    client_integrations.client_id references clients.client_id (the
+    TEXT public identifier), not clients.id.
+    """
+    cursor.execute("""
+        SELECT DISTINCT c.user_id
+        FROM clients c
+        JOIN client_integrations ci ON ci.client_id = c.client_id
+        WHERE ci.platform = 'shopify' AND ci.is_active = TRUE
+    """)
+    return {int(r['user_id']) for r in cursor.fetchall()}
+
+
+# =====================================================================
 # BOT / FRAUD SUSPICION SCORING  (admin dashboard — component 3/6)
 # =====================================================================
 # Each signal below adds fixed points toward a 0-100+ score:
@@ -636,13 +660,19 @@ def _looks_random(local_part: str) -> bool:
     return False
 
 
-def get_user_suspicion_scores(user_ids=None):
+def get_user_suspicion_scores(user_ids=None, shopify_connected_user_ids=None):
     """
     Compute {user_id: {'score', 'level', 'signals': [str, ...]}} for
     every user, or a subset via user_ids. A handful of cheap aggregate
     queries plus pure-Python scoring — fine to run on every admin
     dashboard/Users-table load, no scheduled job needed.
     Never used to block or restrict a user — display only.
+
+    shopify_connected_user_ids: pass in an already-fetched set (from
+    _shopify_connected_user_ids()) when the caller fetched it anyway
+    for another reason — e.g. the Users table also showing a Shopify
+    column — so this function doesn't run that query a second time.
+    If not given, fetches it itself, same as before.
     """
     try:
         conn, cursor = get_db()
@@ -674,15 +704,8 @@ def get_user_suspicion_scores(user_ids=None):
         """)
         event_counts = {int(r['user_id']): int(r['event_count']) for r in cursor.fetchall()}
 
-        # client_integrations.client_id references clients.client_id
-        # (the TEXT public identifier), not clients.id.
-        cursor.execute("""
-            SELECT c.user_id
-            FROM clients c
-            JOIN client_integrations ci ON ci.client_id = c.client_id
-            WHERE ci.platform = 'shopify' AND ci.is_active = TRUE
-        """)
-        shopify_connected_user_ids = {int(r['user_id']) for r in cursor.fetchall()}
+        if shopify_connected_user_ids is None:
+            shopify_connected_user_ids = _shopify_connected_user_ids(cursor)
 
         cursor.close()
         conn.close()
@@ -897,16 +920,11 @@ def get_admin_overview_metrics():
         cursor.execute("SELECT COUNT(*) AS c FROM users WHERE last_activity_at >= NOW() - INTERVAL '30 days'")
         active_30d = int(cursor.fetchone()['c'] or 0)
 
-        # client_integrations.client_id references clients.client_id
-        # (the TEXT public identifier), not clients.id — same join used
-        # by get_user_suspicion_scores() above.
-        cursor.execute("""
-            SELECT COUNT(DISTINCT c.user_id) AS c
-            FROM clients c
-            JOIN client_integrations ci ON ci.client_id = c.client_id
-            WHERE ci.platform = 'shopify' AND ci.is_active = TRUE
-        """)
-        shopify_connected = int(cursor.fetchone()['c'] or 0)
+        # Same shared query get_user_suspicion_scores() and the Users
+        # table (get_users_for_admin_table()) use — written once in
+        # _shopify_connected_user_ids().
+        shopify_connected_ids = _shopify_connected_user_ids(cursor)
+        shopify_connected = len(shopify_connected_ids)
 
         cursor.execute("""
             SELECT COUNT(DISTINCT user_id) AS c
@@ -958,3 +976,68 @@ def get_admin_overview_metrics():
             'first_conversation_rate': 0.0, 'signup_to_shopify_rate': 0.0,
             'shopify_to_conversation_rate': 0.0,
         }
+
+
+# =====================================================================
+# USERS TABLE  (admin dashboard — component 6/6)
+# =====================================================================
+
+def get_users_for_admin_table(limit=500):
+    """
+    Everything the Users table needs — Last Login, Last Activity,
+    Shopify Connected, Suspicion score/level/signals, plus a 30-day
+    Active flag for the Active/Inactive filter — in a fixed, small
+    number of queries, not one per user:
+
+      1. get_all_users()                — 1 query (already existed;
+         now also selects last_login_at/login_count/last_activity_at,
+         so this adds zero extra queries, just 3 extra columns)
+      2. _shopify_connected_user_ids()   — 1 query, shared with
+         get_user_suspicion_scores() and get_admin_overview_metrics()
+         rather than duplicated a third time
+      3. get_user_suspicion_scores()     — reuses the existing
+         function as-is (same one the per-user detail modal calls),
+         passing in the set from #2 so it doesn't re-run that query
+
+    Sorting and filtering on the result happen entirely client-side
+    (per spec) — this function's job is just to hand the browser a
+    complete, pre-computed row per user in one page load.
+    """
+    users = get_all_users(limit)
+    if not users:
+        return []
+
+    try:
+        conn, cursor = get_db()
+        shopify_ids = _shopify_connected_user_ids(cursor)
+        cursor.close()
+        conn.close()
+    except Exception:
+        shopify_ids = set()
+
+    user_ids = [u['id'] for u in users]
+    suspicion = get_user_suspicion_scores(
+        user_ids=user_ids, shopify_connected_user_ids=shopify_ids
+    )
+
+    now = datetime.utcnow()
+    for u in users:
+        u['shopify_connected'] = u['id'] in shopify_ids
+
+        s = suspicion.get(u['id'], {'score': 0, 'level': 'low', 'signals': []})
+        u['suspicion_score']   = s['score']
+        u['suspicion_level']   = s['level']
+        u['suspicion_signals'] = s['signals']
+
+        last_activity = u.get('last_activity_at')
+        if last_activity:
+            # last_activity_at was already .isoformat()'d by get_all_users()
+            try:
+                delta_days = (now - datetime.fromisoformat(last_activity)).total_seconds() / 86400
+                u['active_30d'] = delta_days <= 30
+            except Exception:
+                u['active_30d'] = False
+        else:
+            u['active_30d'] = False
+
+    return users

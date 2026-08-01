@@ -118,7 +118,10 @@ def dashboard():
 def users():
     search = request.args.get('search', '').strip()
 
-    all_users = _safe(models.get_all_users, [], 500)
+    # get_users_for_admin_table() is get_all_users() plus Shopify status
+    # and suspicion scoring for every row, in a fixed small number of
+    # queries (not one per user) — see its docstring in analytics.py.
+    all_users = _safe(models.get_users_for_admin_table, [], 500)
 
     # Client-side search filter (avoids a second DB call)
     if search:
@@ -129,7 +132,7 @@ def users():
             or sl in (u.get('plan_type') or '').lower()
         ]
 
-    # Per-user AI cost dict for the new column
+    # Per-user AI cost dict for the existing column
     user_ai_costs = _safe(models.get_user_ai_costs_dict, {})
 
     ctx = _base_context()

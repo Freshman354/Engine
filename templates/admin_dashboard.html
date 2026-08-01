@@ -194,6 +194,8 @@
         table { width:100%; border-collapse:collapse; }
         thead tr { background:rgba(255,255,255,0.015); border-bottom:1px solid var(--border); }
         th { padding:9px 15px; text-align:left; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); white-space:nowrap; }
+        th.sortable:hover { color:var(--gold); }
+        .sort-arrow { color:var(--gold); font-size:9px; }
         td { padding:12px 15px; font-size:13px; border-bottom:1px solid var(--border); vertical-align:middle; }
         tbody tr:last-child td { border-bottom:none; }
         tbody tr:hover { background:rgba(255,255,255,0.018); }
@@ -207,6 +209,8 @@
         .badge { display:inline-flex; align-items:center; padding:2px 9px; border-radius:999px; font-size:10.5px; font-weight:700; }
         .badge-free { background:rgba(90,90,90,0.2); color:#777; }
         .badge-starter { background:var(--primary-dim); color:var(--gold); }
+        .badge-growth { background:var(--success-dim); color:var(--success); }
+        .badge-scale { background:var(--purple-dim); color:var(--purple); }
         .badge-pro { background:var(--purple-dim); color:var(--purple); }
         .badge-agency { background:var(--warning-dim); color:var(--warning); }
         .badge-enterprise { background:var(--danger-dim); color:var(--danger); }
@@ -523,21 +527,26 @@
         </div>
     </div>
 
-    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:22px;">
+    <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:22px;">
         <div class="stat-card">
             <div class="label">🆓 Free Users</div>
             <div class="val">{{ free_users }}</div>
             <div class="sub">On free plan</div>
         </div>
         <div class="stat-card">
-            <div class="label">⚡ Pro Users</div>
-            <div class="val">{{ by_plan.get('pro', 0) }}</div>
-            <div class="sub">$99/mo each</div>
+            <div class="label">🌱 Starter Users</div>
+            <div class="val">{{ by_plan.get('starter', 0) }}</div>
+            <div class="sub">$29/mo each</div>
         </div>
         <div class="stat-card">
-            <div class="label">🏢 Agency Users</div>
-            <div class="val">{{ by_plan.get('agency', 0) }}</div>
-            <div class="sub">$299/mo each</div>
+            <div class="label">📈 Growth Users</div>
+            <div class="val">{{ by_plan.get('growth', 0) }}</div>
+            <div class="sub">$79/mo each</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">🚀 Scale Users</div>
+            <div class="val">{{ by_plan.get('scale', 0) }}</div>
+            <div class="sub">$199/mo each</div>
         </div>
         <div class="stat-card">
             <div class="label">🤖 Total Chatbots</div>
@@ -647,8 +656,20 @@
         }
     });
 
-    // Plan distribution pie
-    const planColors = {'free':'#3a3a3a','starter':'#C9A84C','pro':'#a78bfa','agency':'#f59e0b','enterprise':'#ef4444'};
+    // Plan distribution pie — colors pulled from the same theme vars the
+    // Users-table badges use (gold/success/purple), so a tier looks the
+    // same color here as it does everywhere else in the dashboard.
+    // Legacy pro/agency/enterprise kept mapped too, in case any older
+    // rows still carry those values.
+    const planColors = {
+        free:       '#3a3a3a',
+        starter:    '#C9A84C',
+        growth:     '#22c55e',
+        scale:      '#a78bfa',
+        pro:        '#a78bfa',
+        agency:     '#f59e0b',
+        enterprise: '#ef4444',
+    };
     const planLabels = Object.keys(byPlan);
     const planVals = Object.values(byPlan);
     new Chart(document.getElementById('planChart'), {
@@ -713,8 +734,35 @@
         <div class="table-card-header">
             <h3>All Users</h3>
             <div class="search-bar">
-                <input class="input" id="userSearch" placeholder="Search by email…" oninput="filterUsers(this.value)">
+                <input class="input" id="userSearch" placeholder="Search by email…" oninput="applyUserFilters()">
             </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 20px 16px;">
+            <select class="select" id="filterShopify" onchange="applyUserFilters()" style="width:auto;">
+                <option value="">All Shopify</option>
+                <option value="1">🛍️ Connected</option>
+                <option value="0">Not Connected</option>
+            </select>
+            <select class="select" id="filterSuspicion" onchange="applyUserFilters()" style="width:auto;">
+                <option value="">All Suspicion</option>
+                <option value="low">🟢 Low</option>
+                <option value="medium">🟡 Medium</option>
+                <option value="high">🔴 High</option>
+            </select>
+            <select class="select" id="filterActive" onchange="applyUserFilters()" style="width:auto;">
+                <option value="">All Activity</option>
+                <option value="1">⚡ Active (30d)</option>
+                <option value="0">Inactive</option>
+            </select>
+            <select class="select" id="filterAdmin" onchange="applyUserFilters()" style="width:auto;">
+                <option value="">All Roles</option>
+                <option value="1">Admin</option>
+                <option value="0">Non-admin</option>
+            </select>
+            <select class="select" id="filterPlan" onchange="applyUserFilters()" style="width:auto;">
+                <option value="">All Plans</option>
+            </select>
+            <button class="btn btn-sm btn-ghost" onclick="clearUserFilters()">Clear filters</button>
         </div>
         <div class="table-wrap">
             <table id="usersTable">
@@ -723,21 +771,49 @@
                         <th>Email</th>
                         <th>Plan</th>
                         <th>Status</th>
+                        <th class="sortable" onclick="sortUsersTable('shopify')" style="cursor:pointer;">Shopify <span class="sort-arrow" data-col="shopify"></span></th>
+                        <th class="sortable" onclick="sortUsersTable('suspicion')" style="cursor:pointer;">Suspicion <span class="sort-arrow" data-col="suspicion"></span></th>
+                        <th class="sortable" onclick="sortUsersTable('lastlogin')" style="cursor:pointer;">Last Login <span class="sort-arrow" data-col="lastlogin"></span></th>
+                        <th class="sortable" onclick="sortUsersTable('lastactivity')" style="cursor:pointer;">Last Activity <span class="sort-arrow" data-col="lastactivity"></span></th>
                         <th>AI Cost/Mo</th>
                         <th>Admin</th>
-                        <th>Joined</th>
+                        <th class="sortable" onclick="sortUsersTable('signup')" style="cursor:pointer;">Joined <span class="sort-arrow" data-col="signup"></span></th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                 {% for u in users %}
-                <tr data-email="{{ u.email }}" id="userrow-{{ u.id }}" onclick="openUserDetail({{ u.id }})" style="cursor:pointer;">
+                <tr data-email="{{ u.email }}"
+                    data-plan="{{ u.plan_type }}"
+                    data-admin="{{ '1' if u.is_admin else '0' }}"
+                    data-shopify="{{ '1' if u.shopify_connected else '0' }}"
+                    data-suspicion-level="{{ u.suspicion_level }}"
+                    data-suspicion-score="{{ u.suspicion_score }}"
+                    data-active="{{ '1' if u.active_30d else '0' }}"
+                    data-lastlogin="{{ u.last_login_at or '' }}"
+                    data-lastactivity="{{ u.last_activity_at or '' }}"
+                    data-signup="{{ u.created_at or '' }}"
+                    id="userrow-{{ u.id }}" onclick="openUserDetail({{ u.id }})" style="cursor:pointer;">
                     <td>
                         <div style="font-weight:600;">{{ u.email }}</div>
                         <div style="font-size:11px;color:var(--muted);">ID: {{ u.id }}</div>
                     </td>
                     <td><span class="badge badge-{{ u.plan_type }}">{{ u.plan_type }}</span></td>
                     <td><span class="badge badge-{{ u.subscription_status or 'active' }}">{{ u.subscription_status or 'active' }}</span></td>
+                    <td>
+                        {% if u.shopify_connected %}
+                            <span class="badge" style="background:var(--success-dim);color:var(--success);">🛍️ Connected</span>
+                        {% else %}
+                            <span style="color:var(--muted);font-size:12px;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% set _sus_meta = {'low': ('🟢','suspicion-low'), 'medium': ('🟡','suspicion-medium'), 'high': ('🔴','suspicion-high')} %}
+                        {% set _emoji, _cls = _sus_meta.get(u.suspicion_level, _sus_meta['low']) %}
+                        <span class="suspicion-badge {{ _cls }}" style="font-size:11px;padding:2px 8px;">{{ _emoji }} {{ u.suspicion_level|capitalize }}</span>
+                    </td>
+                    <td style="color:var(--muted);font-size:12px;">{{ u.last_login_at[:10] if u.last_login_at else 'Never' }}</td>
+                    <td style="color:var(--muted);font-size:12px;">{{ u.last_activity_at[:10] if u.last_activity_at else '—' }}</td>
                     <td>
                         {% set ucost = user_ai_costs.get(u.id, 0) if user_ai_costs is defined else 0 %}
                         {% if ucost == 0 %}
@@ -860,11 +936,92 @@
     let editingUserId = null;
     let deletingUserId = null;
 
-    function filterUsers(q) {
-        const rows = document.querySelectorAll('#usersTable tbody tr');
-        rows.forEach(r => {
-            r.style.display = r.dataset.email.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+    // ── Users table: search + filters (combined, AND logic) ──────────────
+    // Search behaves exactly as it did before (matches email — plan text
+    // is also matched now, which only ever *adds* matches, never removes
+    // any that used to show) — it's just one more condition ANDed with
+    // whichever filter dropdowns are set, instead of the only condition.
+    function applyUserFilters() {
+        const q          = (document.getElementById('userSearch').value || '').toLowerCase();
+        const fShopify   = document.getElementById('filterShopify').value;
+        const fSuspicion = document.getElementById('filterSuspicion').value;
+        const fActive    = document.getElementById('filterActive').value;
+        const fAdmin     = document.getElementById('filterAdmin').value;
+        const fPlan      = document.getElementById('filterPlan').value;
+
+        document.querySelectorAll('#usersTable tbody tr').forEach(r => {
+            let show = true;
+            if (q && !r.dataset.email.toLowerCase().includes(q) && !(r.dataset.plan || '').toLowerCase().includes(q)) show = false;
+            if (show && fShopify   !== '' && r.dataset.shopify        !== fShopify)   show = false;
+            if (show && fSuspicion !== '' && r.dataset.suspicionLevel !== fSuspicion) show = false;
+            if (show && fActive    !== '' && r.dataset.active         !== fActive)    show = false;
+            if (show && fAdmin     !== '' && r.dataset.admin          !== fAdmin)     show = false;
+            if (show && fPlan      !== '' && r.dataset.plan           !== fPlan)      show = false;
+            r.style.display = show ? '' : 'none';
         });
+    }
+
+    function clearUserFilters() {
+        document.getElementById('userSearch').value = '';
+        ['filterShopify', 'filterSuspicion', 'filterActive', 'filterAdmin', 'filterPlan']
+            .forEach(id => document.getElementById(id).value = '');
+        applyUserFilters();
+    }
+
+    // Plan filter options are built from what's actually in the table
+    // (each row's data-plan) rather than a hardcoded tier list — so this
+    // never goes stale if plan tiers are renamed or added later.
+    function initPlanFilterOptions() {
+        const select = document.getElementById('filterPlan');
+        const plans = new Set();
+        document.querySelectorAll('#usersTable tbody tr').forEach(r => {
+            if (r.dataset.plan) plans.add(r.dataset.plan);
+        });
+        Array.from(plans).sort().forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = p.charAt(0).toUpperCase() + p.slice(1);
+            select.appendChild(opt);
+        });
+    }
+    initPlanFilterOptions();
+
+    // ── Users table: client-side sorting ──────────────────────────────────
+    const _sortState = {field: null, dir: 1};
+    const _sortNumericFields = new Set(['shopify', 'suspicion', 'active']);
+
+    function sortUsersTable(field) {
+        const tbody = document.querySelector('#usersTable tbody');
+        const rows  = Array.from(tbody.querySelectorAll('tr'));
+
+        _sortState.dir   = (_sortState.field === field) ? _sortState.dir * -1 : 1;
+        _sortState.field = field;
+
+        const attr = field === 'suspicion' ? 'suspicionScore'
+                   : field === 'lastlogin' ? 'lastlogin'
+                   : field === 'lastactivity' ? 'lastactivity'
+                   : field;
+
+        rows.sort((a, b) => {
+            let va = a.dataset[attr] || '';
+            let vb = b.dataset[attr] || '';
+            if (_sortNumericFields.has(field) || field === 'suspicion') {
+                va = parseFloat(va) || 0;
+                vb = parseFloat(vb) || 0;
+                return (va - vb) * _sortState.dir;
+            }
+            // Dates/strings — empty values sort first ascending (e.g. "Never
+            // logged in" users group at the start, not scattered randomly).
+            if (va < vb) return -1 * _sortState.dir;
+            if (va > vb) return  1 * _sortState.dir;
+            return 0;
+        });
+
+        rows.forEach(r => tbody.appendChild(r));
+
+        document.querySelectorAll('#usersTable th .sort-arrow').forEach(el => el.textContent = '');
+        const arrow = document.querySelector(`#usersTable th .sort-arrow[data-col="${field}"]`);
+        if (arrow) arrow.textContent = _sortState.dir === 1 ? ' ▲' : ' ▼';
     }
 
     function openEditModal(id, email, plan, status) {
@@ -1759,7 +1916,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                {% set plan_prices = {'free':0,'starter':29,'pro':99,'agency':299,'enterprise':499} %}
+                {% set plan_prices = {'free':0,'starter':29,'growth':79,'scale':199,'pro':99,'agency':299,'enterprise':499} %}
                 {% for row in user_cost_breakdown %}
                 {% set price = plan_prices.get(row.plan_type, 0) %}
                 {% set net = price - row.ai_cost %}
