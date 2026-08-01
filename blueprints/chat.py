@@ -77,12 +77,37 @@ def init_chat(limiter, ai_helper, plan_limits, vertical_prompts,
     _ai_helper               = ai_helper
     _plan_limits             = plan_limits
     _vertical_prompts        = vertical_prompts
-    _log_conversation        = log_conversation
     _find_best_match         = find_best_match
     _get_cached_client_owner = get_cached_client_owner
     _fire_webhook            = fire_webhook
     _notify_handoff          = notify_handoff
     _notify_usage_threshold  = notify_usage_threshold
+
+    def _log_conversation_and_track_first(client_id, *args, **kwargs):
+        """
+        Wraps the injected log_conversation so every one of this file's
+        7 call sites gets first-AI-conversation tracking for free, instead
+        of repeating the same check at each site. Fires 'first_ai_conversation'
+        exactly once per client — right after the row that makes the
+        lifetime count hit 1 — using the existing
+        get_conversation_message_count() (no new table/column needed).
+        Never lets tracking failure affect the actual chat response.
+        """
+        result = log_conversation(client_id, *args, **kwargs)
+        if client_id and client_id != 'demo':
+            try:
+                if models.get_conversation_message_count(client_id) == 1:
+                    owner = get_cached_client_owner(client_id)
+                    if owner and owner.get('id'):
+                        models.track_event(
+                            'first_ai_conversation', user_id=owner['id'],
+                            metadata={'client_id': client_id},
+                        )
+            except Exception:
+                pass
+        return result
+
+    _log_conversation = _log_conversation_and_track_first
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────

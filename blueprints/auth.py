@@ -52,6 +52,7 @@ from flask_mail import Message
 
 import models
 import webhooks as _webhooks
+from bot_protection import get_client_ip as _client_ip
 
 # ── Blueprint ────────────────────────────────────────────────────────────────
 
@@ -135,8 +136,11 @@ def signup():
         user           = _User(user_data)
         session.permanent = True
         login_user(user, remember=True)
+        _ip, _ua = _client_ip(), request.headers.get('User-Agent', '')
         models.track_event('signup', user_id=user_id,
-                           metadata={'email': email, 'plan': intended_plan})
+                           metadata={'email': email, 'plan': intended_plan},
+                           ip_address=_ip, user_agent=_ua)
+        models.set_signup_ip(user_id, _ip)
         if _send_welcome_email:
             _send_welcome_email(email)
 
@@ -260,16 +264,29 @@ def google_callback():
             flash('Google sign-in failed: no email returned.', 'error')
             return redirect(url_for('auth.login'))
 
-        user_data = models.create_or_link_google_user(google_id, email)
+        user_data, is_new = models.create_or_link_google_user(
+            google_id, email, return_is_new=True
+        )
         if not user_data:
             flash('Google sign-in failed. Please try again.', 'error')
             return redirect(url_for('auth.login'))
 
-        is_new = user_data.get('plan_type') == 'free'
         user   = _User(user_data)
         login_user(user, remember=True)
         session.permanent = True
         session['_user_cache'] = dict(user_data)
+
+        _ip, _ua = _client_ip(), request.headers.get('User-Agent', '')
+        if is_new:
+            models.track_event('signup', user_id=user_data['id'],
+                               metadata={'email': email, 'provider': 'google'},
+                               ip_address=_ip, user_agent=_ua)
+            models.set_signup_ip(user_data['id'], _ip)
+        else:
+            models.track_event('login', user_id=user_data['id'],
+                               metadata={'email': email, 'provider': 'google'},
+                               ip_address=_ip, user_agent=_ua)
+            models.record_login(user_data['id'])
 
         if is_new and _send_welcome_email:
             try:
@@ -294,6 +311,7 @@ def login():
         email     = request.form.get('email')
         password  = request.form.get('password')
         user_data = models.verify_user(email, password)
+        _ip, _ua  = _client_ip(), request.headers.get('User-Agent', '')
 
         if user_data:
             if not user_data.get('is_admin') and _get_subscription_status:
@@ -310,7 +328,9 @@ def login():
             session.permanent = True
             login_user(user, remember=True)
             models.track_event('login', user_id=user_data['id'],
-                               metadata={'email': email})
+                               metadata={'email': email},
+                               ip_address=_ip, user_agent=_ua)
+            models.record_login(user_data['id'])
 
             fresh = models.get_user_by_id(user_data['id'])
             sub   = _get_subscription_status(fresh) if _get_subscription_status else {}
@@ -318,6 +338,8 @@ def login():
 
             return redirect(url_for('auth.dashboard'))
 
+        models.track_event('failed_login', metadata={'email': email},
+                           ip_address=_ip, user_agent=_ua)
         return render_template('login.html', error='Invalid email or password')
 
     return render_template('login.html')
@@ -326,6 +348,9 @@ def login():
 @auth_bp.route('/logout')
 @login_required
 def logout():
+    models.track_event('logout', user_id=current_user.id,
+                       ip_address=_client_ip(),
+                       user_agent=request.headers.get('User-Agent', ''))
     session.pop('_user_cache', None)
     logout_user()
     return redirect(url_for('auth.login'))

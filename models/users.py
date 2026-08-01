@@ -158,11 +158,17 @@ def get_user_by_google_id(google_id):
             except Exception: pass
 
 
-def create_or_link_google_user(google_id, email):
+def create_or_link_google_user(google_id, email, return_is_new: bool = False):
     """
     Find an existing user by email and link their Google ID,
     or create a brand-new free account if no match is found.
     Returns the user dict on success, None on failure.
+
+    return_is_new: if True, returns (user_dict, is_new) instead of just
+    user_dict. Added so callers can tell "brand-new account" from
+    "existing account signing back in" reliably — plan_type == 'free' is
+    NOT a safe proxy for this (a returning free-plan user looks "new"
+    every time). Defaults to False so any existing caller is unaffected.
     """
     conn = cursor = None
     try:
@@ -172,7 +178,7 @@ def create_or_link_google_user(google_id, email):
         cursor.execute('SELECT * FROM users WHERE google_id = %s', (google_id,))
         user = cursor.fetchone()
         if user:
-            return dict(user)
+            return (dict(user), False) if return_is_new else dict(user)
 
         # 2. Existing account matched by email — link the Google ID
         cursor.execute('SELECT * FROM users WHERE email = %s', (email,))
@@ -184,7 +190,7 @@ def create_or_link_google_user(google_id, email):
                     (google_id, email)
                 )
                 conn.commit()
-            return dict(user)
+            return (dict(user), False) if return_is_new else dict(user)
 
         # 3. Brand-new user — store a random bcrypt hash so password_hash
         #    NOT NULL is satisfied, but this account can never be accessed
@@ -204,7 +210,10 @@ def create_or_link_google_user(google_id, email):
         )
         user = cursor.fetchone()
         conn.commit()
-        return dict(user) if user else None
+        result = dict(user) if user else None
+        if return_is_new:
+            return (result, True) if result else (None, False)
+        return result
 
     except Exception as e:
         import logging
@@ -212,7 +221,7 @@ def create_or_link_google_user(google_id, email):
         if conn:
             try: conn.rollback()
             except Exception: pass
-        return None
+        return (None, False) if return_is_new else None
     finally:
         if cursor:
             try: cursor.close()

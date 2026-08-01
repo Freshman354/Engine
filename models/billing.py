@@ -169,17 +169,73 @@ def downgrade_single_user(user_id):
 # PLAN ENFORCEMENT
 # =====================================================================
 
-def track_event(event_name, user_id=None, metadata=None):
+def track_event(event_name, user_id=None, metadata=None, ip_address=None, user_agent=None):
     """
     Log a named event to analytics_events.
-    Fails silently so it never disrupts the main request.
-    Usage: track_event('login', user_id=5, metadata={'plan': 'pro'})
+    Also bumps users.last_activity_at for any event tied to a known
+    user_id — one place that updates it, rather than every call site
+    remembering to. Fails silently so it never disrupts the main request.
+    Usage: track_event('login', user_id=5, metadata={'plan': 'pro'},
+                        ip_address=request.remote_addr,
+                        user_agent=request.headers.get('User-Agent'))
+    ip_address/user_agent are optional — existing call sites that don't
+    pass them keep working exactly as before.
     """
     try:
         conn, cursor = get_db()
         cursor.execute(
-            'INSERT INTO analytics_events (user_id, event_name, metadata) VALUES (%s, %s, %s)',
-            (user_id, event_name, json.dumps(metadata) if metadata else None)
+            'INSERT INTO analytics_events (user_id, event_name, metadata, ip_address, user_agent) '
+            'VALUES (%s, %s, %s, %s, %s)',
+            (user_id, event_name, json.dumps(metadata) if metadata else None,
+             ip_address, user_agent)
+        )
+        if user_id:
+            cursor.execute(
+                'UPDATE users SET last_activity_at = NOW() WHERE id = %s',
+                (user_id,)
+            )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+
+
+def record_login(user_id):
+    """
+    Bump users.last_login_at and login_count. Called once per successful
+    login (password or Google) — separate from track_event() because
+    these two columns are login-specific, unlike last_activity_at which
+    every event type updates.
+    Fails silently, same as track_event.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            'UPDATE users SET last_login_at = NOW(), login_count = login_count + 1 WHERE id = %s',
+            (user_id,)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
+
+
+def set_signup_ip(user_id, ip_address):
+    """
+    Record the IP a user first signed up from. Only ever sets it once —
+    WHERE signup_ip IS NULL means a later call (there shouldn't be one,
+    but just in case) can't overwrite the original.
+    Fails silently, same as track_event.
+    """
+    if not ip_address:
+        return
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            'UPDATE users SET signup_ip = %s WHERE id = %s AND signup_ip IS NULL',
+            (ip_address, user_id)
         )
         conn.commit()
         cursor.close()

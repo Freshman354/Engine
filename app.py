@@ -980,6 +980,7 @@ try:
         'migrate_ai_employee_plan_rename',     # Shopify/WooCommerce pivot: agency -> ai_scale (one-time)
         'migrate_cart_recovery',               # abandoned_carts table + clients.cart_recovery_enabled
         'migrate_usage_notifications',         # usage_notifications table + clients.ai_unavailable_mode/human_support_contact
+        'migrate_admin_activity_tracking',     # admin dashboard: users activity cols + analytics_events IP/UA
     ]
     for _fn in _optional_migrations:
         if hasattr(models, _fn):

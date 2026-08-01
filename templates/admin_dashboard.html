@@ -270,6 +270,31 @@
         .form-row label { display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:5px; }
         .form-row .input, .form-row .select { width:100%; }
 
+        /* ── LARGE MODAL (user detail view) ── */
+        .modal-lg { max-width:760px; max-height:85vh; overflow-y:auto; }
+        .detail-section { margin-bottom:22px; }
+        .detail-section h4 {
+            font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em;
+            color:var(--gold); margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border);
+        }
+        .detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 20px; }
+        .detail-row { font-size:13px; }
+        .detail-row .k { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:2px; }
+        .detail-row .v { font-weight:600; }
+        .suspicion-badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:700; }
+        .suspicion-low { background:rgba(22,163,74,0.15); color:#16a34a; }
+        .suspicion-medium { background:rgba(217,164,6,0.15); color:var(--gold); }
+        .suspicion-high { background:var(--danger-dim); color:var(--danger); }
+        .timeline-item { display:flex; gap:12px; padding:8px 0; border-bottom:1px solid var(--border); font-size:12.5px; }
+        .timeline-item:last-child { border-bottom:none; }
+        .timeline-item .t-dot { width:7px; height:7px; border-radius:50%; background:var(--gold); margin-top:5px; flex-shrink:0; }
+        .timeline-item .t-time { color:var(--muted); font-size:11px; white-space:nowrap; }
+        .ip-chip, .ua-chip {
+            display:inline-block; font-family:'DM Mono',monospace; font-size:11px;
+            background:var(--surface3); border:1px solid var(--border); border-radius:6px;
+            padding:3px 8px; margin:0 6px 6px 0;
+        }
+
         /* ── TOAST ── */
         .toast {
             position:fixed; bottom:22px; right:22px;
@@ -521,6 +546,54 @@
         </div>
     </div>
 
+    <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:4px 0 10px;">User Activity</p>
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:22px;">
+        <div class="stat-card">
+            <div class="label">🆕 New Today</div>
+            <div class="val">{{ overview_metrics.new_today }}</div>
+            <div class="sub">Signed up today</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">📅 New This Week</div>
+            <div class="val">{{ overview_metrics.new_this_week }}</div>
+            <div class="sub">Last 7 days</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">⚡ Active (7d)</div>
+            <div class="val">{{ overview_metrics.active_7d }}</div>
+            <div class="sub">Any activity in 7 days</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">📊 Active (30d)</div>
+            <div class="val">{{ overview_metrics.active_30d }}</div>
+            <div class="sub">Any activity in 30 days</div>
+        </div>
+    </div>
+
+    <p style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:4px 0 10px;">Shopify &amp; AI Engagement</p>
+    <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:22px;">
+        <div class="stat-card">
+            <div class="label">🛍️ Shopify Connected</div>
+            <div class="val">{{ overview_metrics.shopify_connection_rate }}%</div>
+            <div class="sub">{{ overview_metrics.shopify_connected }} of {{ overview_metrics.total_users }} users</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">💬 1st AI Conversation</div>
+            <div class="val">{{ overview_metrics.first_conversation_rate }}%</div>
+            <div class="sub">{{ overview_metrics.first_conversation_users }} of {{ overview_metrics.total_users }} users</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">🔀 Signup → Shopify</div>
+            <div class="val">{{ overview_metrics.signup_to_shopify_rate }}%</div>
+            <div class="sub">Last 30 days' signups who connected</div>
+        </div>
+        <div class="stat-card">
+            <div class="label">🔀 Shopify → AI Chat</div>
+            <div class="val">{{ overview_metrics.shopify_to_conversation_rate }}%</div>
+            <div class="sub">Connected users who chatted</div>
+        </div>
+    </div>
+
     <div class="charts-row">
         <div class="chart-card">
             <h3>📈 Revenue Over Time</h3>
@@ -658,7 +731,7 @@
                 </thead>
                 <tbody>
                 {% for u in users %}
-                <tr data-email="{{ u.email }}" id="userrow-{{ u.id }}">
+                <tr data-email="{{ u.email }}" id="userrow-{{ u.id }}" onclick="openUserDetail({{ u.id }})" style="cursor:pointer;">
                     <td>
                         <div style="font-weight:600;">{{ u.email }}</div>
                         <div style="font-size:11px;color:var(--muted);">ID: {{ u.id }}</div>
@@ -685,7 +758,7 @@
                         {% endif %}
                     </td>
                     <td style="color:var(--muted);font-size:12px;">{{ u.created_at[:10] if u.created_at else '—' }}</td>
-                    <td>
+                    <td onclick="event.stopPropagation();">
                         <div style="display:flex;gap:6px;">
                             <button class="btn btn-sm btn-ghost" onclick="openEditModal({{ u.id }}, '{{ u.email }}', '{{ u.plan_type }}', '{{ u.subscription_status or 'active' }}')">✏️ Edit</button>
                             <button class="btn btn-sm btn-danger" onclick="confirmDeleteUser({{ u.id }}, '{{ u.email }}')">🗑️</button>
@@ -752,6 +825,25 @@
     <!-- Generic Confirm Modal — replaces native browser confirm() everywhere,
          and is the confirmation step for actions (like Grant Admin) that
          previously had none at all. -->
+    <!-- User Detail Modal -->
+    <div class="modal-overlay" id="userDetailModal">
+        <div class="modal modal-lg">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div>
+                    <h2 id="udEmail">—</h2>
+                    <p id="udSubhead" style="margin-bottom:0;">Loading…</p>
+                </div>
+                <span id="udSuspicionBadge" class="suspicion-badge suspicion-low">🟢 Low</span>
+            </div>
+            <div id="udBody" style="margin-top:18px;">
+                <p style="color:var(--muted);font-size:13px;">Loading user details…</p>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeModal('userDetailModal')" style="flex:1;justify-content:center;">Close</button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="genericConfirmModal">
         <div class="modal" style="text-align:center;">
             <div id="gcIcon" style="font-size:40px;margin-bottom:12px;">⚠️</div>
@@ -839,6 +931,121 @@
             showToast('❌ ' + (data.error || 'Delete failed'), 'error');
         }
         btn.textContent = 'Delete Forever'; btn.disabled = false;
+    }
+
+    const SUSPICION_META = {
+        low:    {emoji:'🟢', label:'Low',    cls:'suspicion-low'},
+        medium: {emoji:'🟡', label:'Medium', cls:'suspicion-medium'},
+        high:   {emoji:'🔴', label:'High',   cls:'suspicion-high'},
+    };
+    const EVENT_LABELS = {
+        signup: 'Signed up', login: 'Logged in', logout: 'Logged out',
+        failed_login: 'Failed login attempt',
+        shopify_connected: 'Connected Shopify', shopify_disconnected: 'Disconnected Shopify',
+        first_ai_conversation: 'First AI conversation',
+        plan_upgrade: 'Upgraded plan', subscription_cancelled: 'Cancelled subscription',
+    };
+    function fmtDate(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        return isNaN(d) ? iso : d.toLocaleString();
+    }
+
+    async function openUserDetail(userId) {
+        document.getElementById('userDetailModal').classList.add('open');
+        document.getElementById('udEmail').textContent = 'Loading…';
+        document.getElementById('udSubhead').textContent = '';
+        document.getElementById('udBody').innerHTML = '<p style="color:var(--muted);font-size:13px;">Loading user details…</p>';
+
+        let data;
+        try {
+            const res = await fetch(`/admin/api/users/${userId}/detail`);
+            data = await res.json();
+        } catch (e) {
+            data = {success: false, error: 'Network error'};
+        }
+
+        if (!data.success) {
+            document.getElementById('udEmail').textContent = 'Error';
+            document.getElementById('udBody').innerHTML =
+                `<p style="color:var(--danger);">${data.error || 'Failed to load user'}</p>`;
+            return;
+        }
+
+        const a = data.account, s = data.shopify, sec = data.security, sus = data.suspicion;
+
+        document.getElementById('udEmail').textContent = a.email;
+        document.getElementById('udSubhead').textContent =
+            `ID ${a.id} · ${a.plan_type} · ${a.subscription_status || 'active'}`;
+
+        const meta = SUSPICION_META[sus.level] || SUSPICION_META.low;
+        const badge = document.getElementById('udSuspicionBadge');
+        badge.className = 'suspicion-badge ' + meta.cls;
+        badge.textContent = `${meta.emoji} ${meta.label}`;
+
+        const ipsHtml = (sec.recent_ips || []).length
+            ? sec.recent_ips.map(ip => `<span class="ip-chip">${ip}</span>`).join('')
+            : '<span style="color:var(--muted);font-size:12px;">None recorded</span>';
+        const uasHtml = (sec.user_agents || []).length
+            ? sec.user_agents.map(ua => `<span class="ua-chip">${ua}</span>`).join('')
+            : '<span style="color:var(--muted);font-size:12px;">None recorded</span>';
+
+        const timelineHtml = (sec.timeline || []).length
+            ? sec.timeline.map(ev => `
+                <div class="timeline-item">
+                    <div class="t-dot"></div>
+                    <div style="flex:1;">${EVENT_LABELS[ev.event_name] || ev.event_name}</div>
+                    <div class="t-time">${fmtDate(ev.created_at)}</div>
+                </div>
+            `).join('')
+            : '<p style="color:var(--muted);font-size:12px;">No activity recorded yet.</p>';
+
+        const signalsHtml = (sus.signals || []).length
+            ? `<ul style="margin:8px 0 0 18px;font-size:12.5px;color:var(--muted);">${sus.signals.map(sig => `<li>${sig}</li>`).join('')}</ul>`
+            : '<p style="color:var(--muted);font-size:12px;margin-top:6px;">No suspicious signals detected.</p>';
+
+        document.getElementById('udBody').innerHTML = `
+            <div class="detail-section">
+                <h4>Account</h4>
+                <div class="detail-grid">
+                    <div class="detail-row"><div class="k">Email</div><div class="v">${a.email}</div></div>
+                    <div class="detail-row"><div class="k">Plan</div><div class="v">${a.plan_type}</div></div>
+                    <div class="detail-row"><div class="k">Status</div><div class="v">${a.subscription_status || 'active'}</div></div>
+                    <div class="detail-row"><div class="k">Signup Date</div><div class="v">${fmtDate(a.created_at)}</div></div>
+                    <div class="detail-row"><div class="k">Last Login</div><div class="v">${fmtDate(a.last_login_at)}</div></div>
+                    <div class="detail-row"><div class="k">Login Count</div><div class="v">${a.login_count ?? 0}</div></div>
+                    <div class="detail-row"><div class="k">Last Activity</div><div class="v">${fmtDate(a.last_activity_at)}</div></div>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h4>Shopify</h4>
+                <div class="detail-grid">
+                    <div class="detail-row"><div class="k">Store Connected</div><div class="v">${s.connected ? '✅ Yes' : '❌ No'}</div></div>
+                    <div class="detail-row"><div class="k">Store Name</div><div class="v">${s.store_name || '—'}</div></div>
+                    <div class="detail-row"><div class="k">Connection Date</div><div class="v">${fmtDate(s.connected_at)}</div></div>
+                    <div class="detail-row"><div class="k">Installation Status</div><div class="v">${s.installation_status}</div></div>
+                    <div class="detail-row"><div class="k">First Sync Date</div><div class="v">${fmtDate(s.first_sync_at)}</div></div>
+                </div>
+            </div>
+
+            <div class="detail-section">
+                <h4>Security &amp; Activity</h4>
+                <div class="detail-row" style="margin-bottom:10px;"><div class="k">Signup IP Address</div><div class="v">${a.signup_ip || '—'}</div></div>
+                <div class="detail-row" style="margin-bottom:6px;"><div class="k">Recent IP Addresses</div></div>
+                <div style="margin-bottom:12px;">${ipsHtml}</div>
+                <div class="detail-row" style="margin-bottom:6px;"><div class="k">User-Agent(s)</div></div>
+                <div style="margin-bottom:12px;">${uasHtml}</div>
+                <div class="detail-row" style="margin-bottom:10px;"><div class="k">Failed Login Attempts</div><div class="v">${sec.failed_login_count || 0}</div></div>
+                <div class="detail-row" style="margin-bottom:8px;"><div class="k">Activity Timeline</div></div>
+                <div>${timelineHtml}</div>
+            </div>
+
+            <div class="detail-section" style="margin-bottom:0;">
+                <h4>Bot Detection Signals</h4>
+                ${signalsHtml}
+            </div>
+        `;
     }
     </script>
 

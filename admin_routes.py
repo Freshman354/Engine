@@ -18,6 +18,7 @@ from functools import wraps
 import json
 import os
 import models
+import webhooks as _webhooks
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -96,6 +97,14 @@ def dashboard():
         'past_due_count':    _safe(models.get_past_due_count, 0),
         # Profit card
         'estimated_monthly_ai_cost': cost_summary.get('cost_this_month', 0),
+        # User Management Enhancements widgets
+        'overview_metrics': _safe(models.get_admin_overview_metrics, {
+            'total_users': 0, 'new_today': 0, 'new_this_week': 0,
+            'active_7d': 0, 'active_30d': 0, 'shopify_connected': 0,
+            'shopify_connection_rate': 0.0, 'first_conversation_users': 0,
+            'first_conversation_rate': 0.0, 'signup_to_shopify_rate': 0.0,
+            'shopify_to_conversation_rate': 0.0,
+        }),
     })
     return render_template('admin_dashboard.html', **ctx)
 
@@ -425,6 +434,63 @@ def api_delete_user():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@admin_bp.route('/api/users/<int:user_id>/detail', methods=['GET'])
+@admin_required
+def api_user_detail(user_id):
+    """
+    Full profile for the user-detail modal: account info, Shopify
+    connection, security/activity, and suspicion score. One call, so
+    the modal shows a single loading state instead of four.
+    """
+    detail = _safe(models.get_user_detail, None, user_id)
+    if not detail:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    security = _safe(
+        models.get_user_security_activity, {
+            'recent_ips': [], 'user_agents': [], 'timeline': [],
+            'failed_login_count': 0, 'failed_logins': [],
+        },
+        user_id, detail['email']
+    )
+
+    suspicion = _safe(models.get_user_suspicion_scores, {}, user_ids=[user_id]) \
+        .get(user_id, {'score': 0, 'level': 'low', 'signals': []})
+
+    # Shopify — "one connected store per account" in the current pricing
+    # model, so the first client with an active/ever-connected shopify
+    # integration is the one to show.
+    shopify = {
+        'connected':            False,
+        'store_name':           None,
+        'connected_at':         None,
+        'installation_status':  'not connected',
+        'first_sync_at':        None,
+    }
+    for c in _safe(models.get_user_clients, [], user_id):
+        integrations = _safe(_webhooks.list_integrations, [], c['client_id'], redact=True)
+        match = next((i for i in integrations if i['platform'] == 'shopify'), None)
+        if match:
+            cfg = match.get('platform_config') or {}
+            first_sync = _safe(_webhooks.get_first_sync_at, None, c['client_id'], 'shopify')
+            shopify = {
+                'connected':            bool(match.get('is_active')),
+                'store_name':           cfg.get('shop_domain') or c.get('company_name'),
+                'connected_at':         match.get('created_at'),
+                'installation_status':  'active' if match.get('is_active') else 'uninstalled',
+                'first_sync_at':        first_sync.isoformat() if first_sync else None,
+            }
+            break
+
+    return jsonify({
+        'success':  True,
+        'account':  detail,
+        'shopify':  shopify,
+        'security': security,
+        'suspicion': suspicion,
+    })
+
+
 # =====================================================================
 # API: LEADS
 # =====================================================================
@@ -466,6 +532,7 @@ def api_run_migrations():
         ('client status',            models.migrate_client_status),
         ('onboarding',               models.migrate_onboarding),
         ('api_usage_log',            models.migrate_api_usage_log),
+        ('admin activity tracking',  models.migrate_admin_activity_tracking),
     ]
 
     for entry in migration_fns:

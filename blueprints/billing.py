@@ -43,6 +43,7 @@ from flask_login import current_user, login_required
 from flask_mail import Message
 
 import models
+from bot_protection import get_client_ip
 
 # ── Blueprint ────────────────────────────────────────────────────────────────
 
@@ -298,7 +299,9 @@ def flutterwave_callback():
         metadata={
             'plan': plan, 'provider': 'flutterwave',
             'cycle': cycle, 'amount': paid_amount, 'tx_ref': tx_ref,
-        }
+        },
+        ip_address=get_client_ip(),
+        user_agent=request.headers.get('User-Agent', ''),
     )
 
     current_app.logger.info(
@@ -551,7 +554,9 @@ def cancel_subscription():
                         f"PayPal cancel API call failed: {_e}"
                     )
 
-            models.track_event('subscription_cancelled', user_id=current_user.id)
+            models.track_event('subscription_cancelled', user_id=current_user.id,
+                               ip_address=get_client_ip(),
+                               user_agent=request.headers.get('User-Agent', ''))
 
             # Send cancellation confirmation email
             try:

@@ -170,6 +170,12 @@ def _client_ip() -> str:
     )
 
 
+# Public alias — auth.py/billing.py reuse this exact resolution order for
+# analytics event logging (signup/login/subscription IPs), instead of each
+# reimplementing the same CF-Connecting-IP / X-Forwarded-For fallback chain.
+get_client_ip = _client_ip
+
+
 def check_bot_request() -> None:
     """
     Flask before_request hook. Call abort(403) for anything that

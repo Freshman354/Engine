@@ -583,3 +583,378 @@ def get_conversion_funnel(days=30):
             'daily': [], 'total_views': 0,
             'total_signups': 0, 'overall_rate': 0.0, 'days': days,
         }
+
+
+# =====================================================================
+# BOT / FRAUD SUSPICION SCORING  (admin dashboard — component 3/6)
+# =====================================================================
+# Each signal below adds fixed points toward a 0-100+ score:
+#   extremely fast repeated registrations (same IP, <10 min apart)   +40
+#   multiple signups from the same IP within 24h                    +20  (mutually exclusive with the above — fast implies loose)
+#   disposable email domain                                         +25
+#   random-looking email username                                   +15
+#   no activity after signup (3+ days old, no event but the signup) +15
+#   never connected Shopify (account 3+ days old)                   +10
+# Bands: score >= 50 -> high, >= 20 -> medium, else low.
+# Display only, per spec — nothing here blocks or restricts an account.
+
+_DISPOSABLE_EMAIL_DOMAINS = frozenset({
+    '10minutemail.com', '10minutemail.net', '20minutemail.com',
+    'guerrillamail.com', 'guerrillamail.net', 'guerrillamail.org',
+    'guerrillamailblock.com', 'sharklasers.com', 'grr.la',
+    'mailinator.com', 'mailinator.net', 'mailinator.org',
+    'yopmail.com', 'yopmail.net', 'yopmail.fr',
+    'tempmail.com', 'temp-mail.org', 'temp-mail.io', 'tempmail.net', 'tempinbox.com',
+    'throwawaymail.com', 'trashmail.com', 'trashmail.net', 'trash-mail.com',
+    'getnada.com', 'nada.email', 'dispostable.com', 'mohmal.com',
+    'emailondeck.com', 'fakeinbox.com', 'maildrop.cc', 'moakt.com',
+    'mintemail.com', 'mytemp.email', 'inboxkitten.com', 'tempr.email',
+    'discard.email', 'discardmail.com', 'spamgourmet.com', 'mailnesia.com',
+    'mailcatch.com', 'jetable.org', 'burnermail.io',
+    'fakemailgenerator.com', 'crazymailing.com', 'emailfake.com',
+    'mailsac.com', 'tempmailo.com', 'luxusmail.org', '33mail.com',
+})
+
+
+def _looks_random(local_part: str) -> bool:
+    """
+    Cheap heuristic for a bot-generated-looking email username, e.g.
+    'xk29fj0331' or 'qzxvbnpz'. One signal among several — never used
+    alone, and false positives here are fine since nothing auto-blocks.
+    """
+    s = (local_part or '').lower()
+    if len(s) < 6:
+        return False
+    letters = [c for c in s if c.isalpha()]
+    digits  = [c for c in s if c.isdigit()]
+    vowels  = sum(1 for c in letters if c in 'aeiou')
+    digit_ratio = len(digits) / len(s)
+    if digit_ratio >= 0.35:
+        return True
+    if len(letters) >= 6 and vowels == 0:
+        return True
+    return False
+
+
+def get_user_suspicion_scores(user_ids=None):
+    """
+    Compute {user_id: {'score', 'level', 'signals': [str, ...]}} for
+    every user, or a subset via user_ids. A handful of cheap aggregate
+    queries plus pure-Python scoring — fine to run on every admin
+    dashboard/Users-table load, no scheduled job needed.
+    Never used to block or restrict a user — display only.
+    """
+    try:
+        conn, cursor = get_db()
+
+        where, params = "", ()
+        if user_ids:
+            where, params = "WHERE id = ANY(%s)", (list(user_ids),)
+        cursor.execute(f"SELECT id, email, created_at FROM users {where}", params)
+        users = cursor.fetchall()
+        if not users:
+            cursor.close(); conn.close()
+            return {}
+
+        # Every signup event's IP + timestamp — used for the two
+        # IP-clustering signals below.
+        cursor.execute("""
+            SELECT user_id, ip_address, created_at
+            FROM analytics_events
+            WHERE event_name = 'signup' AND ip_address IS NOT NULL
+            ORDER BY ip_address, created_at
+        """)
+        signup_events = cursor.fetchall()
+
+        cursor.execute("""
+            SELECT user_id, COUNT(*) AS event_count
+            FROM analytics_events
+            WHERE user_id IS NOT NULL
+            GROUP BY user_id
+        """)
+        event_counts = {int(r['user_id']): int(r['event_count']) for r in cursor.fetchall()}
+
+        # client_integrations.client_id references clients.client_id
+        # (the TEXT public identifier), not clients.id.
+        cursor.execute("""
+            SELECT c.user_id
+            FROM clients c
+            JOIN client_integrations ci ON ci.client_id = c.client_id
+            WHERE ci.platform = 'shopify' AND ci.is_active = TRUE
+        """)
+        shopify_connected_user_ids = {int(r['user_id']) for r in cursor.fetchall()}
+
+        cursor.close()
+        conn.close()
+
+        by_ip = {}
+        for r in signup_events:
+            by_ip.setdefault(r['ip_address'], []).append(r)
+
+        fast_cluster_users, loose_cluster_users = set(), set()
+        for ip, events in by_ip.items():
+            if len(events) < 2:
+                continue
+            events.sort(key=lambda r: r['created_at'])
+            for i in range(1, len(events)):
+                delta = (events[i]['created_at'] - events[i - 1]['created_at']).total_seconds()
+                if delta <= 600:
+                    fast_cluster_users.add(events[i]['user_id'])
+                    fast_cluster_users.add(events[i - 1]['user_id'])
+            if len(events) >= 3:
+                span = (events[-1]['created_at'] - events[0]['created_at']).total_seconds()
+                if span <= 86400:
+                    for e in events:
+                        loose_cluster_users.add(e['user_id'])
+
+        # DB columns are TIMESTAMP (no tz) — compare against a naive
+        # "now" to match, same convention as the rest of this module.
+        now = datetime.utcnow()
+        results = {}
+        for u in users:
+            uid = u['id']
+            signals, score = [], 0
+
+            if uid in fast_cluster_users:
+                signals.append('Extremely fast repeated registrations from this IP')
+                score += 40
+            elif uid in loose_cluster_users:
+                signals.append('Multiple signups from the same IP in a short time')
+                score += 20
+
+            email = u['email'] or ''
+            domain = email.split('@')[-1].lower() if '@' in email else ''
+            local_part = email.split('@')[0] if '@' in email else email
+            if domain in _DISPOSABLE_EMAIL_DOMAINS:
+                signals.append('Disposable email domain')
+                score += 25
+            if _looks_random(local_part):
+                signals.append('Random-looking email username')
+                score += 15
+
+            created_at = u['created_at']
+            account_age_days = (now - created_at).total_seconds() / 86400 if created_at else 0
+
+            if account_age_days >= 3 and event_counts.get(uid, 0) <= 1:
+                signals.append('No activity after signup')
+                score += 15
+
+            if account_age_days >= 3 and uid not in shopify_connected_user_ids:
+                signals.append('Never connected Shopify')
+                score += 10
+
+            level = 'high' if score >= 50 else 'medium' if score >= 20 else 'low'
+            results[uid] = {'score': score, 'level': level, 'signals': signals}
+
+        return results
+    except Exception:
+        return {}
+
+
+# =====================================================================
+# USER DETAIL VIEW  (admin dashboard — component 4/6)
+# =====================================================================
+
+def get_user_detail(user_id):
+    """
+    Account-panel data for one user: base account fields plus the
+    activity-summary columns added by migrate_admin_activity_tracking().
+    Returns None if the user doesn't exist.
+    """
+    try:
+        conn, cursor = get_db()
+        cursor.execute("""
+            SELECT id, email, plan_type, subscription_status, is_admin,
+                   created_at, last_login_at, login_count, last_activity_at,
+                   signup_ip
+            FROM users WHERE id = %s
+        """, (user_id,))
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not row:
+            return None
+        d = dict(row)
+        for k in ('created_at', 'last_login_at', 'last_activity_at'):
+            if d.get(k):
+                d[k] = d[k].isoformat()
+        return d
+    except Exception:
+        return None
+
+
+def get_user_security_activity(user_id, email, limit=50):
+    """
+    Security & Activity panel data for one user: recent IPs, User-Agent(s),
+    the activity timeline, and failed login attempts.
+
+    Failed logins aren't tied to user_id — a failed attempt might not
+    even match a real account — so they're matched by the attempted
+    email in analytics_events.metadata instead of a join.
+    """
+    try:
+        conn, cursor = get_db()
+
+        cursor.execute("""
+            SELECT event_name, created_at, metadata, ip_address, user_agent
+            FROM analytics_events
+            WHERE user_id = %s
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (user_id, limit))
+        own_events = cursor.fetchall()
+
+        cursor.execute("""
+            SELECT created_at, ip_address, user_agent
+            FROM analytics_events
+            WHERE event_name = 'failed_login'
+              AND metadata IS NOT NULL
+              AND metadata::json->>'email' = %s
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (email, limit))
+        failed_logins = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        recent_ips, seen_ips = [], set()
+        user_agents, seen_uas = [], set()
+        for e in own_events:
+            if e['ip_address'] and e['ip_address'] not in seen_ips:
+                seen_ips.add(e['ip_address'])
+                recent_ips.append(e['ip_address'])
+            if e['user_agent'] and e['user_agent'] not in seen_uas:
+                seen_uas.add(e['user_agent'])
+                user_agents.append(e['user_agent'])
+
+        timeline = []
+        for e in own_events:
+            meta = None
+            if e['metadata']:
+                try: meta = json.loads(e['metadata'])
+                except Exception: meta = None
+            timeline.append({
+                'event_name': e['event_name'],
+                'created_at': e['created_at'].isoformat() if e['created_at'] else None,
+                'metadata':   meta,
+            })
+
+        return {
+            'recent_ips':         recent_ips[:10],
+            'user_agents':        user_agents[:5],
+            'timeline':           timeline,
+            'failed_login_count': len(failed_logins),
+            'failed_logins': [
+                {
+                    'created_at': f['created_at'].isoformat() if f['created_at'] else None,
+                    'ip_address': f['ip_address'],
+                }
+                for f in failed_logins
+            ],
+        }
+    except Exception:
+        return {
+            'recent_ips': [], 'user_agents': [], 'timeline': [],
+            'failed_login_count': 0, 'failed_logins': [],
+        }
+
+
+# =====================================================================
+# DASHBOARD ANALYTICS WIDGETS  (admin dashboard — component 5/6)
+# =====================================================================
+
+def get_admin_overview_metrics():
+    """
+    User Management Enhancements — dashboard widgets. One function, a
+    handful of queries, everything the new stats-grid needs: signup
+    pace, activity (last_activity_at, from migrate_admin_activity_
+    tracking + track_event's auto-bump), a snapshot Shopify connection
+    rate, and two real cohort conversions:
+      - signup_to_shopify_rate: of users who signed up in the last 30
+        days, % who have Shopify connected now (a funnel, not just the
+        all-time snapshot rate)
+      - shopify_to_conversation_rate: of users with Shopify connected
+        (ever), % who've had a first AI conversation
+    Email verification rate is intentionally omitted — no verification
+    system exists in the codebase yet.
+    """
+    try:
+        conn, cursor = get_db()
+
+        cursor.execute("SELECT COUNT(*) AS c FROM users")
+        total_users = int(cursor.fetchone()['c'] or 0)
+
+        cursor.execute("SELECT COUNT(*) AS c FROM users WHERE created_at >= CURRENT_DATE")
+        new_today = int(cursor.fetchone()['c'] or 0)
+
+        cursor.execute("SELECT COUNT(*) AS c FROM users WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'")
+        new_this_week = int(cursor.fetchone()['c'] or 0)
+
+        cursor.execute("SELECT COUNT(*) AS c FROM users WHERE last_activity_at >= NOW() - INTERVAL '7 days'")
+        active_7d = int(cursor.fetchone()['c'] or 0)
+
+        cursor.execute("SELECT COUNT(*) AS c FROM users WHERE last_activity_at >= NOW() - INTERVAL '30 days'")
+        active_30d = int(cursor.fetchone()['c'] or 0)
+
+        # client_integrations.client_id references clients.client_id
+        # (the TEXT public identifier), not clients.id — same join used
+        # by get_user_suspicion_scores() above.
+        cursor.execute("""
+            SELECT COUNT(DISTINCT c.user_id) AS c
+            FROM clients c
+            JOIN client_integrations ci ON ci.client_id = c.client_id
+            WHERE ci.platform = 'shopify' AND ci.is_active = TRUE
+        """)
+        shopify_connected = int(cursor.fetchone()['c'] or 0)
+
+        cursor.execute("""
+            SELECT COUNT(DISTINCT user_id) AS c
+            FROM analytics_events WHERE event_name = 'first_ai_conversation'
+        """)
+        first_conversation_users = int(cursor.fetchone()['c'] or 0)
+
+        cursor.execute("""
+            SELECT
+                COUNT(*) AS total,
+                COUNT(*) FILTER (
+                    WHERE EXISTS (
+                        SELECT 1 FROM clients c
+                        JOIN client_integrations ci ON ci.client_id = c.client_id
+                        WHERE c.user_id = users.id AND ci.platform = 'shopify' AND ci.is_active = TRUE
+                    )
+                ) AS converted
+            FROM users
+            WHERE created_at >= NOW() - INTERVAL '30 days'
+        """)
+        cohort = cursor.fetchone()
+        recent_signups = int(cohort['total'] or 0)
+        recent_converted = int(cohort['converted'] or 0)
+
+        cursor.close()
+        conn.close()
+
+        def pct(n, d):
+            return round(n / d * 100, 1) if d > 0 else 0.0
+
+        return {
+            'total_users':                   total_users,
+            'new_today':                     new_today,
+            'new_this_week':                 new_this_week,
+            'active_7d':                     active_7d,
+            'active_30d':                    active_30d,
+            'shopify_connected':             shopify_connected,
+            'shopify_connection_rate':       pct(shopify_connected, total_users),
+            'first_conversation_users':      first_conversation_users,
+            'first_conversation_rate':       pct(first_conversation_users, total_users),
+            'signup_to_shopify_rate':        pct(recent_converted, recent_signups),
+            'shopify_to_conversation_rate':  pct(first_conversation_users, shopify_connected),
+        }
+    except Exception:
+        return {
+            'total_users': 0, 'new_today': 0, 'new_this_week': 0,
+            'active_7d': 0, 'active_30d': 0, 'shopify_connected': 0,
+            'shopify_connection_rate': 0.0, 'first_conversation_users': 0,
+            'first_conversation_rate': 0.0, 'signup_to_shopify_rate': 0.0,
+            'shopify_to_conversation_rate': 0.0,
+        }

@@ -257,10 +257,26 @@ def upsert_integration(client_id: str, platform: str,
         platform:         'shopify' | 'acuity'
         webhook_secret:   The HMAC secret from the platform
         platform_config:  Optional JSON blob (e.g. {'shop_domain': 'mystore.myshopify.com'})
+
+    Fires a '{platform}_connected' analytics event (e.g. 'shopify_connected')
+    the moment this integration goes from missing/inactive to active — not
+    on every credential/config refresh of an already-active integration —
+    so the admin dashboard's activity timeline reflects real connect
+    actions, not re-saves.
     """
     conn = cursor = None
     try:
         conn, cursor = models.get_db()
+
+        # Was it active before this call? Determines whether this is a
+        # genuine connect/reconnect (fire event) or just a config refresh.
+        cursor.execute(
+            "SELECT is_active FROM client_integrations WHERE client_id = %s AND platform = %s",
+            (client_id, platform)
+        )
+        _existing = cursor.fetchone()
+        _was_active = bool(_existing and _existing.get('is_active'))
+
         encrypted_config = _encrypt_platform_config(platform_config or {})
         cursor.execute(
             """
@@ -280,6 +296,18 @@ def upsert_integration(client_id: str, platform: str,
         )
         conn.commit()
         logger.info(f'[Integration] upserted client={client_id} platform={platform}')
+
+        if not _was_active:
+            try:
+                owner_id = models.get_client_owner_id(client_id)
+                if owner_id:
+                    models.track_event(
+                        f'{platform}_connected', user_id=owner_id,
+                        metadata={'client_id': client_id},
+                    )
+            except Exception:
+                pass  # analytics logging must never fail the connection itself
+
         return True
     except Exception as e:
         logger.error(f'[Integration] upsert_integration error: {e}')
@@ -447,6 +475,32 @@ def list_integrations(client_id: str, redact: bool = True) -> list:
         if conn:   conn.close()
 
 
+def get_first_sync_at(client_id: str, platform: str = 'shopify'):
+    """
+    Timestamp of the first successfully-processed webhook for this
+    client/platform — used by the admin dashboard's user detail view as
+    "first sync date". No new table: webhook_log is the existing audit
+    trail every webhook handler already writes to.
+    Returns None if no successful webhook has ever been logged.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = models.get_db()
+        cursor.execute(
+            "SELECT MIN(created_at) AS first_sync FROM webhook_log "
+            "WHERE client_id = %s AND platform = %s AND status = 'ok'",
+            (client_id, platform)
+        )
+        row = cursor.fetchone()
+        return row['first_sync'] if row else None
+    except Exception as e:
+        logger.error(f'[Integration] get_first_sync_at error: {e}')
+        return None
+    finally:
+        if cursor: cursor.close()
+        if conn:   conn.close()
+
+
 def get_client_id_by_shopify_shop(shop_domain: str) -> str | None:
     """
     Returns the client_id already connected to this Shopify shop domain, or
@@ -484,16 +538,37 @@ def get_client_id_by_shopify_shop(shop_domain: str) -> str | None:
 
 
 def delete_integration(client_id: str, platform: str) -> bool:
-    """Soft-delete (deactivate) an integration. Webhook events are rejected after this."""
+    """
+    Soft-delete (deactivate) an integration. Webhook events are rejected
+    after this.
+
+    Fires a '{platform}_disconnected' analytics event when this actually
+    deactivates a previously-active row — covers both the dashboard
+    "disconnect" button and the app/uninstalled webhook handler, since
+    both call this same function.
+    """
     conn = cursor = None
     try:
         conn, cursor = models.get_db()
         cursor.execute(
             "UPDATE client_integrations SET is_active = FALSE, updated_at = NOW() "
-            "WHERE client_id = %s AND platform = %s",
+            "WHERE client_id = %s AND platform = %s AND is_active = TRUE",
             (client_id, platform)
         )
+        _deactivated = cursor.rowcount > 0
         conn.commit()
+
+        if _deactivated:
+            try:
+                owner_id = models.get_client_owner_id(client_id)
+                if owner_id:
+                    models.track_event(
+                        f'{platform}_disconnected', user_id=owner_id,
+                        metadata={'client_id': client_id},
+                    )
+            except Exception:
+                pass
+
         return True
     except Exception as e:
         logger.error(f'[Integration] delete_integration error: {e}')

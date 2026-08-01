@@ -2344,3 +2344,79 @@ def migrate_usage_notifications():
         if conn:
             try: conn.close()
             except Exception: pass
+
+
+def migrate_admin_activity_tracking():
+    """
+    Admin dashboard — User Management enhancements (component 1/6).
+
+    Adds denormalized activity columns to `users` (same pattern as
+    client_users.last_login — a fast column updated at write time,
+    rather than aggregating analytics_events on every dashboard page
+    load) so the Users table can sort/filter without a join:
+      last_login_at    — updated by auth.py on successful login
+      login_count      — incremented alongside last_login_at
+      last_activity_at — updated on any tracked user action (broader
+                          than last_login_at — signup, login, Shopify
+                          connect, AI conversation, subscription change)
+      signup_ip         — captured once, at signup, never overwritten
+
+    Adds ip_address/user_agent to analytics_events so the per-user
+    Security & Activity panel (recent IPs, User-Agent(s), activity
+    timeline) and the bot-suspicion scoring (component 3) can be built
+    entirely from the existing event log instead of a second table.
+    Both columns are nullable — existing rows and existing
+    track_event() call sites are unaffected until component 2 starts
+    passing them in.
+
+    Idempotent — safe to run on every startup/migrate click.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+
+        # users — denormalized activity summary
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP")
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS login_count INTEGER NOT NULL DEFAULT 0")
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMP")
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_ip TEXT")
+
+        # analytics_events — IP/User-Agent capture, going forward
+        cursor.execute("ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS ip_address TEXT")
+        cursor.execute("ALTER TABLE analytics_events ADD COLUMN IF NOT EXISTS user_agent TEXT")
+
+        # Indexes for the queries component 3/4/5 will run:
+        #   - per-user activity timeline (user_id, newest first)
+        #   - suspicion scoring: events grouped by IP within a time window
+        #   - suspicion scoring: counting a given event type in a window
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_analytics_events_user_created "
+            "ON analytics_events (user_id, created_at DESC)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_analytics_events_ip_created "
+            "ON analytics_events (ip_address, created_at) WHERE ip_address IS NOT NULL"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_analytics_events_name_created "
+            "ON analytics_events (event_name, created_at)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_users_last_activity "
+            "ON users (last_activity_at DESC)"
+        )
+
+        conn.commit()
+        print("✅ migrate_admin_activity_tracking complete")
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        print(f"⚠️  migrate_admin_activity_tracking: {e}")
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass

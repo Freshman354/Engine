@@ -101,6 +101,8 @@ from .billing import (
     downgrade_expired_users,
     downgrade_single_user,
     track_event,
+    record_login,
+    set_signup_ip,
     record_payment,
     get_all_payments,
     get_mrr,
@@ -314,6 +316,10 @@ from .analytics import (
     get_analytics_events,
     get_event_counts,
     get_conversion_funnel,
+    get_user_suspicion_scores,
+    get_user_detail,
+    get_user_security_activity,
+    get_admin_overview_metrics,
 )
 
 # ── Tags (conversation tagging) ───────────────────────────────────────────────
@@ -361,6 +367,7 @@ from .migrations import (
     migrate_seat_subscriptions,     # agency per-seat purchase subscriptions
     migrate_ai_employee_plan_rename,  # Shopify/WooCommerce pivot: agency -> ai_scale
     migrate_cart_recovery,          # abandoned_carts table + clients.cart_recovery_enabled
+    migrate_admin_activity_tracking,  # admin dashboard: users activity cols + analytics_events IP/UA
 )
 
 # ── Cart recovery ─────────────────────────────────────────────────────────────
