@@ -205,7 +205,14 @@ def send_weekly_digest():
                 subject    = f"Your bot report: {len(questions)} questions it couldn't answer this week",
                 recipients = [email],
                 html       = html,
-                sender     = os.environ.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
+                # FIX: was os.environ.get('MAIL_DEFAULT_SENDER', ...) — a raw
+                # OS env var that nothing actually sets, so this silently sent
+                # from the 'hello@lumvi.net' fallback instead of the real
+                # sender. app.py sets MAIL_DEFAULT_SENDER on app.config
+                # directly (not via os.environ), so current_app.config is the
+                # one place that's actually populated — same source support@
+                # emails already use via Flask-Mail's own default.
+                sender     = current_app.config.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
             )
             if _mail:
                 _mail.send(msg)
@@ -758,7 +765,7 @@ def bill_agency_overages():
                 subject    = f'Lumvi invoice: {extra_seats} extra seat(s) — ${amount:.2f} due {due_date.strftime("%b %d")}',
                 recipients = [email],
                 html       = html,
-                sender     = os.environ.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
+                sender     = current_app.config.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
             )
             if _mail:
                 _mail.send(msg)
@@ -1242,7 +1249,7 @@ def renew_seat_subscriptions():
                     subject    = f'Action required: Lumvi seat renewal failed — ${amount:.2f}',
                     recipients = [email],
                     html       = html,
-                    sender     = os.environ.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
+                    sender     = current_app.config.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
                 )
                 if _mail:
                     _mail.send(msg)
@@ -1296,7 +1303,7 @@ def renew_seat_subscriptions():
                 subject    = f'Lumvi seat renewal: ${amount:.2f} due today',
                 recipients = [email],
                 html       = html,
-                sender     = os.environ.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
+                sender     = current_app.config.get('MAIL_DEFAULT_SENDER', 'hello@lumvi.net'),
             )
             if _mail:
                 _mail.send(msg)

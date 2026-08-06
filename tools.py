@@ -95,6 +95,11 @@ def lookup_order(client_id: str, order_id: str, customer_email: str = "") -> dic
     if not order_id:
         return {'success': False, 'error': 'order_id is required'}
 
+    logger.info(
+        f'[Tool:lookup_order] start client={client_id} order={order_id} '
+        f'has_email={bool(customer_email)}'
+    )
+
     # FIX: this used to query Lumvi's own `orders` table exclusively —
     # which is only ever as fresh as the last inbound webhook (see
     # webhooks.py) and can't see anything that happened before the
@@ -114,12 +119,14 @@ def lookup_order(client_id: str, order_id: str, customer_email: str = "") -> dic
         # anything Lumvi's own copy could say, so this does NOT fall
         # through to the internal table below.
         if live.order is None:
+            logger.info(f'[Tool:lookup_order] live resolved, not found client={client_id} order={order_id}')
             return {
                 'success': False,
                 'error': f'Order {order_id} not found.',
                 'order_id': order_id,
             }
         o = live.order
+        logger.info(f'[Tool:lookup_order] live resolved, found client={client_id} order={order_id} status={o.status}')
         return {
             'success': True,
             'order': {
@@ -149,6 +156,7 @@ def lookup_order(client_id: str, order_id: str, customer_email: str = "") -> dic
     # live.error == 'no_adapter_connected') — fall back to Lumvi's own
     # webhook-synced copy. Still useful, just not guaranteed current for
     # anything that happened before the integration was configured.
+    logger.info(f'[Tool:lookup_order] falling back to internal orders table client={client_id} order={order_id}')
     conn = cursor = None
     try:
         conn, cursor = models.get_db()
@@ -171,6 +179,7 @@ def lookup_order(client_id: str, order_id: str, customer_email: str = "") -> dic
         row = cursor.fetchone()
 
         if not row:
+            logger.info(f'[Tool:lookup_order] fallback not found client={client_id} order={order_id}')
             return {
                 'success': False,
                 'error': f'Order {order_id} not found.',
@@ -184,6 +193,7 @@ def lookup_order(client_id: str, order_id: str, customer_email: str = "") -> dic
         except Exception:
             pass
 
+        logger.info(f'[Tool:lookup_order] fallback found client={client_id} order={order_id} status={row.get("status", "unknown")}')
         return {
             'success': True,
             'order': {

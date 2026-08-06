@@ -162,6 +162,24 @@ app.config['MAIL_MAX_EMAILS']        = None
 app.config['MAIL_ASCII_ATTACHMENTS'] = False
 mail = Mail(app)
 
+# Startup config check — MAIL_USERNAME/MAIL_PASSWORD and INBOUND_EMAIL_SECRET
+# all default to '' when unset, so a missing one causes silent failures deep
+# inside a cron job or webhook handler rather than an obvious error at boot.
+# Checked together here (even though INBOUND_EMAIL_SECRET is consumed by
+# inbound_email.py, registered later) so there's one place that shouts at
+# startup instead of three separate first-request failures.
+if not app.config['MAIL_USERNAME'] or not app.config['MAIL_PASSWORD']:
+    app.logger.warning(
+        '[Startup] MAIL_USERNAME/MAIL_PASSWORD not set — outbound email '
+        '(signup, password reset, cart recovery, etc.) will fail silently '
+        'until these are configured.'
+    )
+if not os.environ.get('INBOUND_EMAIL_SECRET', '').strip():
+    app.logger.warning(
+        '[Startup] INBOUND_EMAIL_SECRET not set — the cart recovery reply '
+        'forwarding endpoint (/webhooks/inbound-email/<secret>) is disabled.'
+    )
+
 # ── Google OAuth ──────────────────────────────────────────────────────────────
 
 _oauth       = _OAuth(app)

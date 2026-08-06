@@ -358,11 +358,13 @@ class ShopifyAdapter(CommerceAdapter):
 
             data  = resp.json()
             edges = (((data.get('data') or {}).get('orders') or {}).get('edges') or [])
+            logger.info(f'[ShopifyAdapter] get_order http_200 shop={self.shop_domain} edges={len(edges)}')
             if not edges:
                 return OrderLookupResult(resolved=True, order=None)  # genuinely not found
 
             node = edges[0].get('node', {})
             if customer_email and (node.get('email') or '').lower() != customer_email.lower():
+                logger.info(f'[ShopifyAdapter] get_order ownership mismatch shop={self.shop_domain}')
                 return OrderLookupResult(resolved=True, order=None)  # exists, but not theirs
 
             status = 'cancelled' if node.get('cancelledAt') else (
@@ -631,6 +633,7 @@ class WooCommerceAdapter(CommerceAdapter):
                 timeout=5,
             )
             if resp.status_code == 404:
+                logger.info(f'[WooCommerceAdapter] get_order http_404 store={self.store_url}')
                 return OrderLookupResult(resolved=True, order=None)  # genuinely not found
             if resp.status_code == 401:
                 return OrderLookupResult(resolved=False, error='unauthorized')
@@ -638,8 +641,10 @@ class WooCommerceAdapter(CommerceAdapter):
                 return OrderLookupResult(resolved=False, error=f'http_{resp.status_code}')
 
             data = resp.json()
+            logger.info(f'[WooCommerceAdapter] get_order http_200 store={self.store_url}')
             order_email = ((data.get('billing') or {}).get('email') or '')
             if customer_email and order_email.lower() != customer_email.lower():
+                logger.info(f'[WooCommerceAdapter] get_order ownership mismatch store={self.store_url}')
                 return OrderLookupResult(resolved=True, order=None)  # exists, but not theirs
 
             return OrderLookupResult(resolved=True, order=OrderInfo(
@@ -804,10 +809,12 @@ def _get_order_integration(client_id: str) -> Optional[Dict]:
 
         if platform == 'shopify':
             if cfg.get('order_lookup_enabled') and _shopify_has_auth(cfg):
+                logger.info(f'[CommerceAdapters] order integration matched client={client_id} platform=shopify')
                 return {'platform': 'shopify', 'credentials': _shopify_credentials(cfg)}
 
         elif platform == 'woocommerce':
             if cfg.get('consumer_key') and cfg.get('consumer_secret'):
+                logger.info(f'[CommerceAdapters] order integration matched client={client_id} platform=woocommerce')
                 return {
                     'platform':    'woocommerce',
                     'credentials': {
@@ -817,6 +824,7 @@ def _get_order_integration(client_id: str) -> Optional[Dict]:
                     },
                 }
 
+    logger.info(f'[CommerceAdapters] no order integration configured client={client_id}')
     return None
 
 
@@ -922,13 +930,20 @@ def lookup_order_live(client_id: str, order_id: str, customer_email: str = "") -
     cache_key = f'{client_id}:{order_id.lower().strip()}:{customer_email.lower().strip()}'
     cached = _ORDER_CACHE.get(cache_key)
     if cached and cached[1] > time.time():
+        logger.info(f'[CommerceAdapters] lookup_order_live cache hit client={client_id} order={order_id}')
         return cached[0]
 
     adapter = get_order_adapter_for_client(client_id)
     if not adapter:
+        logger.info(f'[CommerceAdapters] lookup_order_live no adapter client={client_id} order={order_id}')
         return OrderLookupResult(resolved=False, error='no_adapter_connected')
 
     result = adapter.get_order(order_id, customer_email)
+    logger.info(
+        f'[CommerceAdapters] lookup_order_live result client={client_id} order={order_id} '
+        f'platform={adapter.platform_name} resolved={result.resolved} '
+        f'found={bool(result.order)} error={result.error}'
+    )
     if result.resolved:
         _ORDER_CACHE[cache_key] = (result, time.time() + _CACHE_TTL_SEC)
     return result
