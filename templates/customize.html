@@ -1058,17 +1058,25 @@ async function save() {
 
   let ok = true;
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     const r = await fetch('/api/admin/customize', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
     const d = await r.json();
     ok = !!d.success;
     if (!ok) toast('Save failed: ' + (d.error || 'Unknown error'), 'error');
   } catch (err) {
     ok = false;
-    toast('Network error — please check your connection and retry', 'error');
+    if (err.name === 'AbortError') {
+      toast('Save timed out — please check your connection and try again', 'error');
+    } else {
+      toast('Network error — please check your connection and retry', 'error');
+    }
   }
 
   if (ok) {

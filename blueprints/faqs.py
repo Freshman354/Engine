@@ -123,7 +123,40 @@ def _bg_enrich_and_save(client_id: str, valid_faqs: list):
                 f"[Upload/BG] starting enrich for client={client_id} items={len(valid_faqs)}"
             )
             if _ai_helper and _ai_helper.enabled:
-                chunks = _ai_helper.enrich_and_chunk(valid_faqs, client_id)
+                # enrich_and_chunk() takes a single (question, answer) pair —
+                # it must be called once per FAQ, not once for the whole list.
+                # (Passing valid_faqs/client_id straight through here used to
+                # crash in _quality_score's question.split() with 'list'
+                # object has no attribute 'split', since it received the
+                # list and the client_id string instead of one question/
+                # answer pair.)
+                try:
+                    vertical = json.loads(
+                        (models.get_client_by_id(client_id) or {}).get('branding_settings') or '{}'
+                    ).get('vertical', 'general')
+                except Exception:
+                    vertical = 'general'
+
+                chunks = []
+                for item in valid_faqs:
+                    question = item.get('question', '')
+                    answer   = item.get('answer', '')
+                    if not question or not answer:
+                        continue
+                    sub_chunks = _ai_helper.enrich_and_chunk(question, answer, vertical, client_id)
+                    kb_id = item.get('kb_id') or item.get('faq_id') or str(uuid.uuid4())
+                    for sc in sub_chunks:
+                        chunks.append({
+                            'kb_id':     f"{kb_id}-{sc.get('chunk_index', 0)}",
+                            'title':     sc.get('question', question),
+                            'content':   sc.get('answer', answer),
+                            'type':      'faq',
+                            'category':  item.get('category', 'General'),
+                            'tags':      (sc.get('tags', '') or '').split() if isinstance(sc.get('tags'), str) else sc.get('tags', []),
+                            'embedding': sc.get('embedding', []),
+                            'metadata':  {'source': 'upload', 'topic': sc.get('topic', '')},
+                            'quality':   sc.get('quality', item.get('quality_score', 0.75)),
+                        })
             else:
                 chunks = [
                     {
