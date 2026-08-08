@@ -24,6 +24,8 @@ Routes
   GET         /cron/status                            cron_status
   GET/POST    /cron/agency-overage                    cron_agency_overage
   GET/POST    /cron/cart-recovery                      cron_cart_recovery
+  GET         /api/client/cart-recovery/preview        cart_recovery_preview
+  POST        /api/client/cart-recovery/test-email     cart_recovery_test_email
   GET         /api/admin/training/stats               admin_training_stats
   GET         /api/admin/training/export              admin_training_export
   POST        /api/admin/training/assign-splits       admin_assign_splits
@@ -43,6 +45,7 @@ import hmac
 import io
 import json
 import os
+import re
 import time
 
 import requests as _requests
@@ -1073,6 +1076,107 @@ def cron_cart_recovery():
         'ran_at':  datetime.utcnow().isoformat(),
         **result,
     })
+
+
+# Same set client_settings.py uses to gate cart_recovery_enabled — kept
+# local rather than imported for the same reason noted there (app.py
+# imports this blueprint, not the other way around).
+_CART_RECOVERY_PLANS = {'ai_growth', 'ai_scale'}
+
+# Fake cart contents for the settings-page preview/test-send — these two
+# routes never touch a real abandoned_carts row, so there's nothing to
+# pull real line items from. Deliberately generic ("Sample Product") so
+# it reads as an obvious placeholder, not a real order.
+_SAMPLE_LINE_ITEMS = [
+    {'title': 'Sample Product A', 'quantity': 1, 'price': '$38.00'},
+    {'title': 'Sample Product B', 'quantity': 2, 'price': '$24.00'},
+]
+_SAMPLE_CART_TOTAL = 86.00
+
+
+def _cart_recovery_entitled_or_error():
+    """Shared ownership + plan check for the two routes below.
+    Returns (client, None) on success, or (None, (json, status)) on failure."""
+    client_id = (request.args.get('client_id') or (request.get_json(silent=True) or {}).get('client_id') or '').strip()
+    if not client_id:
+        return None, (jsonify({'success': False, 'error': 'client_id is required'}), 400)
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return None, (jsonify({'success': False, 'error': 'Client not found'}), 404)
+    owner = models.get_user_by_id(current_user.id)
+    plan  = (owner or {}).get('plan_type', 'free')
+    if plan not in _CART_RECOVERY_PLANS:
+        return None, (jsonify({'success': False, 'error': 'Cart recovery requires the Growth or Scale plan.'}), 403)
+    client = models.get_client_by_id(client_id) or {}
+    return client, None
+
+
+@cron_bp.route('/api/client/cart-recovery/preview', methods=['GET'])
+@login_required
+def cart_recovery_preview():
+    """
+    Renders the exact same email HTML send_cart_recovery_emails() sends,
+    with sample line items, so the settings page preview can never drift
+    from what customers actually receive.
+    """
+    client, error = _cart_recovery_entitled_or_error()
+    if error:
+        return error
+
+    html = _build_cart_recovery_email_html(
+        business_name = client.get('company_name') or 'Your Store',
+        line_items    = _SAMPLE_LINE_ITEMS,
+        cart_total    = _SAMPLE_CART_TOTAL,
+        currency      = 'USD',
+        checkout_url  = '#',
+    )
+    return jsonify({'success': True, 'html': html})
+
+
+@cron_bp.route('/api/client/cart-recovery/test-email', methods=['POST'])
+@login_required
+def cart_recovery_test_email():
+    """
+    Sends a one-off real email to the merchant's own login address, using
+    whatever Business Email is currently in the settings form (not
+    necessarily saved yet). Reply-To goes straight to that same address —
+    unlike a real cart recovery send, there's no cart row to link a reply
+    back to, so this skips the reply_local_part/CART_RECOVERY_REPLY_DOMAIN
+    machinery entirely and forwards directly.
+    """
+    client, error = _cart_recovery_entitled_or_error()
+    if error:
+        return error
+
+    data           = request.get_json(silent=True) or {}
+    business_email = (data.get('notification_email') or '').strip()
+    if not business_email or not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', business_email):
+        return jsonify({'success': False, 'error': 'Enter a valid Business Email first'}), 400
+
+    business_name = client.get('company_name') or 'Your Store'
+    html = _build_cart_recovery_email_html(
+        business_name = business_name,
+        line_items    = _SAMPLE_LINE_ITEMS,
+        cart_total    = _SAMPLE_CART_TOTAL,
+        currency      = 'USD',
+        checkout_url  = '#',
+    )
+    try:
+        msg = MailMessage(
+            subject    = f"[Test] You left something in your cart at {business_name}",
+            sender     = f"{business_name} via Lumvi <{CART_RECOVERY_SENDER}>",
+            reply_to   = business_email,
+            recipients = [current_user.email],
+            html       = html,
+        )
+        if _mail:
+            _mail.send(msg)
+        current_app.logger.info(
+            f'[CartRecovery] test email sent client={client.get("client_id")} to={current_user.email}'
+        )
+        return jsonify({'success': True, 'sent_to': current_user.email})
+    except Exception as e:
+        current_app.logger.error(f'[CartRecovery] test email failed client={client.get("client_id")}: {e}')
+        return jsonify({'success': False, 'error': 'Could not send test email — try again'}), 500
 
 
 @cron_bp.route('/cron/status', methods=['GET'])

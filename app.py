@@ -1475,10 +1475,11 @@ def widget():
         client['bot_name']          = bot_settings.get('bot_name')         or client.get('company_name') or 'Support'
         client['bot_avatar']        = bot_settings.get('bot_avatar')        or ''
         client['bot_avatar_url']    = bot_settings.get('bot_avatar_url')    or ''
-        client['tagline']           = branding.get('tagline')               or 'Typically replies instantly'
+        client['tagline']           = bot_settings.get('status_line')       or 'Typically replies instantly'
         client['welcome_message']   = bot_settings.get('welcome_message')   or client.get('welcome_message') or 'Hi! How can I help you today?'
         client['fallback_message']  = bot_settings.get('fallback_message')  or ''
         client['quick_replies']     = [r for r in (bot_settings.get('quick_replies') or []) if r and str(r).strip()]
+        client['featured_product']  = bot_settings.get('featured_product')  or {}
         client['lead_q3']           = bot_settings.get('lead_q3', '').strip()
         client['lead_q4']           = bot_settings.get('lead_q4', '').strip()
         client['widget_color']      = branding.get('primary_color')         or client.get('widget_color') or '#B8924A'
@@ -1487,9 +1488,16 @@ def widget():
         client['custom_css']        = client.get('custom_css')              or ''
         client['contact']           = contact
         client['branding_settings'] = branding_settings
-        client['widget_theme']      = branding.get('widget_theme',  'lumvi')
+        # Color Mode (light/dark/auto) is the only mode picker exposed in
+        # customize.html. Map it straight onto widget_theme — chat.html's
+        # existing theme system already has 'light' and 'dark' branches;
+        # 'auto' is a thin addition that starts from 'light' and lets a
+        # prefers-color-scheme media query swap in 'dark's values.
+        _cm = branding.get('color_mode', 'light')
+        client['widget_theme']      = _cm if _cm in ('light', 'dark', 'auto') else 'light'
         client['widget_font']       = branding.get('widget_font',   'dm_sans')
         client['bubble_style']      = branding.get('bubble_style',  'rounded')
+        client['corner_radius']     = branding.get('corner_radius', 'balanced')
         client['header_color']      = branding.get('header_color',  '')
         client['bubble_radius']     = branding.get('bubble_radius')
         client['bot_bubble_color']  = branding.get('bot_bubble_color',  '')
@@ -1895,6 +1903,28 @@ def save_customization():
     except Exception as e:
         app.logger.error(f'Error saving customization: {e}')
         return jsonify({'success': False, 'error': 'Failed to save customization'}), 500
+
+
+# ── Cart Recovery ────────────────────────────────────────────────────────────
+
+@app.route('/cart-recovery')
+@login_required
+def cart_recovery_page():
+    client_id = request.args.get('client_id')
+    if not client_id or not models.verify_client_ownership(current_user.id, client_id):
+        return 'Unauthorized', 403
+    fresh_user  = models.get_user_by_id(current_user.id)
+    plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
+    plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
+    client      = models.get_client_by_id(client_id) or {}
+    return render_template(
+        'cart_recovery.html',
+        user        = current_user,
+        client_id   = client_id,
+        client      = client,
+        plan_type   = plan_type,
+        plan_limits = plan_limits,
+    )
 
 
 # ── Webhooks (outbound config) ────────────────────────────────────────────────

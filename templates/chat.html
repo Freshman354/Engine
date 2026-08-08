@@ -164,8 +164,11 @@
   --toast-bg:       #F2F2F0;
   --toast-text:     #191919;
 
-  {% elif theme == 'light' %}
-  {# ── Light theme — soft gray header, clean white body ── #}
+  {% elif theme == 'light' or theme == 'auto' %}
+  {# ── Light theme — soft gray header, clean white body ──
+     Also the base/default appearance for 'auto': the media-query
+     block right after this :root closes swaps these tokens for
+     dark's when the visitor's OS is in dark mode. ── #}
   --header-bg:      {% if hcolor %}{{ hcolor }}{% else %}#F0EDE7{% endif %};
   --header-text:    #1A1814;
   --header-sub:     rgba(26,24,20,0.45);
@@ -335,6 +338,47 @@
   --t2: 200ms;
   --t3: 340ms;
 
+  {# ══ REDESIGN LAYER — structural tokens ══
+     Theme-agnostic radius/spacing/shadow scale for the premium
+     redesign. Layered on top of the palette above; every theme
+     still supplies its own surface/ink/border colors.
+     Container roundness follows customize.html's "Corner Radius"
+     setting (client.corner_radius: subtle/balanced/rounded) — the
+     same field that already drove the admin-page preview panel but
+     never reached the live widget. "balanced" = the default premium
+     scale from the redesign brief. ── #}
+  {%- set cradius = client.corner_radius or 'balanced' -%}
+  {% if cradius == 'subtle' %}
+  --radius-container: 16px;
+  --radius-hero:       14px;
+  --radius-card:        12px;
+  --radius-input:       18px;
+  {% elif cradius == 'rounded' %}
+  --radius-container: 32px;
+  --radius-hero:       24px;
+  --radius-card:        20px;
+  --radius-input:       28px;
+  {% else %}
+  --radius-container: 26px;
+  --radius-hero:       20px;
+  --radius-card:        16px;
+  --radius-input:       24px;
+  {% endif %}
+  --radius-pill:       999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --shadow-xs: 0 1px 2px rgba(15,15,15,0.04);
+  --shadow-sm: 0 2px 8px rgba(15,15,15,0.05);
+  --shadow-md: 0 6px 20px rgba(15,15,15,0.07);
+  --shadow-lg: 0 16px 40px rgba(15,15,15,0.10);
+  --shadow-float: 0 8px 22px var(--brand-glow);
+
   {# ── Per-client color overrides (set in customize page) ── #}
   {% if client.bot_bubble_color %}
   --bot-bubble-bg: {{ client.bot_bubble_color }};
@@ -347,6 +391,61 @@
   --brand-border:  {{ client.user_bubble_color }}28;
   {% endif %}
 }
+
+{% if theme == 'auto' %}
+{# 'auto' starts from the light tokens above; this swaps in dark's
+   surface/ink/bubble/tab/input/etc. tokens when the visitor's OS
+   is set to dark. Brand tokens (--brand*, set from widget_color
+   above) are intentionally not repeated here — brand color doesn't
+   change with light/dark. Values copied straight from the 'dark'
+   branch above, so both stay in sync by inspection. ── #}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --header-bg:      {% if hcolor %}{{ hcolor }}{% else %}#0D0D0D{% endif %};
+    --header-text:    #FFFFFF;
+    --header-sub:     rgba(255,255,255,0.38);
+    --header-border:  rgba(255,255,255,0.06);
+    --header-btn-bg:  rgba(255,255,255,0.07);
+    --header-ring:    rgba(255,255,255,0.08);
+    --chat-bg:        #191919;
+    --surface:        #222222;
+    --surface-2:      #2C2C2C;
+    --border:         #303030;
+    --border-2:       #282828;
+    --ink:            #F2F2F0;
+    --ink-2:          #C0BDB8;
+    --ink-3:          #888480;
+    --ink-4:          #555250;
+    --bot-bubble-bg:  #2C2C2C;
+    --bot-bubble-bd:  #383838;
+    --bot-bubble-sh:  0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
+    --user-bubble-sh: 0 2px 10px var(--brand-glow);
+    --tab-bg:         #1D1D1D;
+    --tab-border:     #2A2A2A;
+    --tab-active:     #F2F2F0;
+    --input-area-bg:  #1D1D1D;
+    --input-wrap-bg:  #282828;
+    --input-wrap-bd:  #383838;
+    --powered-bg:     #1D1D1D;
+    --powered-bd:     #2A2A2A;
+    --qr-bg:          #191919;
+    --qr-btn-bg:      #2C2C2C;
+    --qr-btn-bd:      #383838;
+    --qr-btn-text:    #C0BDB8;
+    --hc-header-bg:   #1D1D1D;
+    --hc-list-bg:     #191919;
+    --hc-art-bg:      #222222;
+    --hc-art-bd:      #303030;
+    --hc-cat-bg:      #191919;
+    --toast-bg:       #F2F2F0;
+    --toast-text:     #191919;
+    --shadow-xs: 0 1px 2px rgba(0,0,0,0.3);
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.35);
+    --shadow-md: 0 6px 20px rgba(0,0,0,0.4);
+    --shadow-lg: 0 16px 40px rgba(0,0,0,0.45);
+  }
+}
+{% endif %}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration:0.01ms!important; transition-duration:0.01ms!important; }
@@ -365,124 +464,75 @@ body {
   color: var(--ink);
 }
 
-/* ════════════════ HEADER ════════════════ */
-.header {
-  background: var(--header-bg);
-  position: relative;
-  flex-shrink: 0;
-  isolation: isolate;
-  overflow: hidden;
-}
-
-.header-accent {
-  height: 2px;
-  background: var(--brand);
-  opacity: 0.85;
-  position: relative;
-  z-index: 2;
-}
-
-.header::before {
-  content: '';
-  position: absolute;
-  top: -40px; left: -40px;
-  width: 240px; height: 180px;
-  background: radial-gradient(ellipse, var(--brand) 0%, transparent 70%);
-  opacity: 0.07;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.header::after {
-  content: '';
-  position: absolute;
-  bottom: -1px; left: 0; right: 0;
-  height: 22px;
-  background: var(--chat-bg);
-  border-radius: 16px 16px 0 0;
-  z-index: 2;
-}
-
-.header-inner {
-  padding: 14px 16px 30px;
-  position: relative;
-  z-index: 1;
-}
-
-.header-top {
+/* ════════════════ HERO ════════════════ */
+/* Compact welcome section: slim top bar + avatar/name/status/greeting.
+   Replaces the old brand-colored header band — brand color is now used
+   only as an accent (avatar ring, status dot, welcome text link color),
+   not as a dominant background fill. */
+.header-wrap { display:flex; flex-direction:column; flex-shrink:0; }
+.topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 18px;
+  padding: var(--space-3) var(--space-4) 0;
+  flex-shrink: 0;
+  background: var(--surface);
 }
-
-.header-brand {
+.topbar-label {
   font-size: 9.5px;
   font-weight: 600;
-  color: var(--header-sub);
+  color: var(--ink-4);
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
-
-.header-actions { display: flex; gap: 4px; }
-
 .hbtn {
-  width: 26px; height: 26px;
+  width: 28px; height: 28px;
   border-radius: 50%;
-  background: var(--header-btn-bg);
-  border: 1px solid var(--header-border);
-  color: var(--header-sub);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--ink-3);
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   transition: background var(--t1), color var(--t1);
   outline: none;
 }
-.hbtn:hover { background: rgba(128,128,128,0.2); color: var(--header-text); }
+.hbtn:hover { background: var(--border); color: var(--ink); }
 .hbtn:focus-visible { box-shadow: 0 0 0 2px var(--brand); }
 .hbtn svg { width: 12px; height: 12px; pointer-events: none; }
 
-.header-profile { display: flex; align-items: center; gap: 13px; }
-
-.header-avatar-wrap { position: relative; flex-shrink: 0; }
-
-.header-avatar-ring {
-  position: absolute;
-  inset: -3px;
-  border-radius: 18px;
-  background: linear-gradient(135deg, var(--brand) 0%, transparent 60%);
-  opacity: 0.5;
-  z-index: 0;
+.hero {
+  flex-shrink: 0;
+  background: var(--surface);
+  padding: var(--space-3) var(--space-5) var(--space-4);
 }
+.hero-profile { display: flex; align-items: center; gap: 14px; }
 
-.header-avatar {
-  position: relative; z-index: 1;
-  width: 48px; height: 48px;
-  border-radius: 14px;
-  background: var(--header-ring);
-  border: 1px solid var(--header-border);
+.hero-avatar-wrap { position: relative; flex-shrink: 0; }
+.hero-avatar {
+  width: 52px; height: 52px;
+  border-radius: var(--radius-card);
+  background: var(--brand-soft);
+  border: 1px solid var(--brand-border);
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
-.header-avatar img { width:100%; height:100%; object-fit:cover; }
+.hero-avatar img { width:100%; height:100%; object-fit:cover; }
 
-.header-name {
+.hero-name {
   font-family: var(--font-head);
-  font-size: 19px;
   {% if wfont == 'dm_sans' %}font-style: italic;{% endif %}
+  font-size: 19px;
   font-weight: {% if wfont == 'dm_sans' %}400{% else %}600{% endif %};
-  color: var(--header-text);
+  color: var(--ink);
   letter-spacing: -0.2px;
-  line-height: 1.15;
+  line-height: 1.2;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
-.header-status {
+.hero-status {
   display: inline-flex; align-items: center; gap: 6px;
-  background: var(--header-btn-bg);
-  border: 1px solid var(--header-border);
-  border-radius: 20px;
-  padding: 3px 10px 3px 7px;
 }
 .status-dot {
   width: 6px; height: 6px; border-radius: 50%;
@@ -490,38 +540,78 @@ body {
   animation: sdPulse 2.6s ease-in-out infinite;
 }
 @keyframes sdPulse {
-  0%,100% { box-shadow: 0 0 0 0 rgba(74,222,128,.55); }
+  0%,100% { box-shadow: 0 0 0 0 rgba(74,222,128,.45); }
   50%      { box-shadow: 0 0 0 4px rgba(74,222,128,0); }
 }
-.header-status span:last-child {
-  font-size: 11px; color: var(--header-sub); font-weight:400;
+.hero-status span:last-child {
+  font-size: 11.5px; color: var(--ink-4); font-weight: 500;
 }
+
+.hero-welcome {
+  margin-top: var(--space-3);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  max-width: 92%;
+}
+
+/* Optional featured product/company image card */
+.hero-featured {
+  margin-top: var(--space-3);
+  display: flex; align-items: center; gap: 11px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-card);
+  padding: 9px;
+  text-decoration: none;
+}
+.hero-featured-img {
+  width: 40px; height: 40px; border-radius: 11px;
+  object-fit: cover; flex-shrink: 0;
+  background: var(--surface);
+}
+.hero-featured-body { min-width: 0; flex: 1; }
+.hero-featured-eyebrow {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--brand);
+}
+.hero-featured-title {
+  font-size: 12.5px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 1px;
+}
+.hero-featured-price {
+  font-size: 11.5px; font-weight: 600; color: var(--brand);
+  margin-top: 1px;
+}
+.hero-featured-arrow { color: var(--ink-4); flex-shrink: 0; }
+.hero-featured-arrow svg { width: 13px; height: 13px; }
 
 /* ════════════════ TABS ════════════════ */
 .tabs {
   display: flex;
-  background: var(--tab-bg);
-  border-bottom: 1px solid var(--tab-border);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-2);
   flex-shrink: 0;
-  padding: 4px 10px 0;
-  gap: 2px;
+  padding: 0 var(--space-5);
+  gap: var(--space-5);
 }
 .tab {
-  flex: 1; padding: 8px 6px 10px;
-  font-size: 11.5px; font-weight: 600;
+  padding: 0 0 10px;
+  font-size: 12px; font-weight: 600;
   color: var(--ink-4);
   cursor: pointer; border: none;
   background: none;
   border-bottom: 2px solid transparent;
   transition: color var(--t1), border-color var(--t1);
-  display: flex; align-items: center; justify-content: center; gap: 5px;
-  outline: none; letter-spacing: 0.02em; position: relative;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  outline: none; letter-spacing: 0.01em; position: relative;
   font-family: var(--font-body);
 }
-.tab svg { width: 11px; height: 11px; flex-shrink: 0; }
-.tab.active { color: var(--tab-active); border-bottom-color: var(--brand); }
+.tab svg { width: 12px; height: 12px; flex-shrink: 0; }
+.tab.active { color: var(--ink); border-bottom-color: var(--brand); }
 .tab:focus-visible::after {
-  content: ''; position: absolute; inset: 4px 2px;
+  content: ''; position: absolute; inset: -2px -4px 4px;
   border: 2px solid var(--brand); border-radius: 5px;
 }
 .tab-panel { display: none; flex: 1; flex-direction: column; overflow: hidden; }
@@ -530,8 +620,8 @@ body {
 /* ════════════════ MESSAGES ════════════════ */
 .messages {
   flex: 1; overflow-y: auto;
-  padding: 20px 14px 12px;
-  display: flex; flex-direction: column; gap: 3px;
+  padding: var(--space-4) var(--space-4) var(--space-2);
+  display: flex; flex-direction: column; gap: var(--space-3);
   background: var(--chat-bg);
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
@@ -559,7 +649,7 @@ body {
   border: 1.5px solid var(--border);
   display: flex; align-items: center; justify-content: center;
   font-size: 9px; overflow: hidden;
-  align-self: flex-end; margin-bottom: 18px;
+  align-self: flex-end; margin-bottom: 20px;
 }
 .msg-avatar img { width:100%; height:100%; object-fit:cover; }
 .msg-avatar.user-av {
@@ -568,7 +658,7 @@ body {
 
 .msg-col {
   display: flex; flex-direction: column;
-  max-width: 74%; gap: 2px; min-width: 0;
+  max-width: 76%; gap: 3px; min-width: 0;
 }
 .msg-row.user .msg-col { align-items: flex-end; }
 
@@ -578,10 +668,12 @@ body {
   text-transform: uppercase; margin-bottom: 1px;
 }
 
-/* Bubbles — radius driven by --r-* vars */
+/* Bubbles — radius still driven by the --r-* vars (bubble_style /
+   bubble_radius customization), just roomier padding + type for a
+   more premium, spacious feel. */
 .bubble {
-  padding: 10px 14px;
-  font-size: 13.5px; line-height: 1.65;
+  padding: 12px 16px;
+  font-size: 14px; line-height: 1.65;
   word-break: break-word; position: relative;
 }
 .bubble.bot {
@@ -646,7 +738,7 @@ body {
   background: var(--bot-bubble-bg);
   border: 1px solid var(--bot-bubble-bd);
   border-radius: var(--r-bot-tl) var(--r-bot-tr) var(--r-bot-br) var(--r-bot-bl);
-  padding:12px 16px; display:flex; gap:5px; align-items:center;
+  padding:13px 17px; display:flex; gap:5px; align-items:center;
   box-shadow: var(--bot-bubble-sh);
 }
 .td {
@@ -662,15 +754,22 @@ body {
 }
 
 /* ════════════════ QUICK REPLIES ════════════════ */
+/* Horizontal scrollable strip of suggested-question pills, sitting
+   just above the input area. */
 .qr-wrap {
-  display:flex; flex-wrap:wrap; gap:6px;
-  padding:8px 14px 6px; flex-shrink:0;
-  background: var(--qr-bg);
+  display:flex; flex-wrap:nowrap; gap:8px;
+  padding:0 var(--space-4) var(--space-3);
+  flex-shrink:0;
+  background: var(--chat-bg);
+  overflow-x:auto;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
 }
+.qr-wrap::-webkit-scrollbar { display:none; }
 .qr-btn {
-  padding:6px 14px;
+  padding:8px 16px;
   border: 1.5px solid var(--qr-btn-bd);
-  border-radius: 20px;
+  border-radius: var(--radius-pill);
   font-size:12.5px; font-weight:500;
   color: var(--qr-btn-text);
   background: var(--qr-btn-bg);
@@ -678,6 +777,7 @@ body {
   transition: all var(--t1);
   font-family: var(--font-body);
   white-space:nowrap;
+  flex-shrink:0;
   -webkit-tap-highlight-color:transparent;
   touch-action:manipulation;
 }
@@ -688,10 +788,11 @@ body {
 .qr-btn:active { transform:translateY(0) scale(0.97); }
 .qr-btn:focus-visible { outline:2px solid var(--brand); outline-offset:2px; }
 
+
 /* ════════════════ LEAD FORM ════════════════ */
 .lead-form-card {
   background: var(--surface-2); border:1px solid var(--border);
-  border-radius: var(--r-md); padding:14px; margin:2px 0;
+  border-radius: var(--radius-card); padding:14px; margin:2px 0;
 }
 .lead-form-card h4 {
   font-family: var(--font-head);
@@ -702,9 +803,9 @@ body {
 .lead-form-card p { font-size:12px; color:var(--ink-4); line-height:1.5; }
 
 .lead-input {
-  width:100%; padding:10px 13px;
+  width:100%; padding:11px 14px;
   border:1.5px solid var(--border);
-  border-radius: var(--r-xs);
+  border-radius: 14px;
   font-size:13.5px; font-family:var(--font-body);
   color:var(--ink); background:var(--surface);
   outline:none;
@@ -719,9 +820,9 @@ body {
 .lead-input-error.show { display:block; }
 
 .lead-submit {
-  margin-top:10px; width:100%; padding:10px;
+  margin-top:10px; width:100%; padding:11px;
   background:var(--ink); color:#fff;
-  border:none; border-radius:var(--r-xs);
+  border:none; border-radius:14px;
   font-size:13px; font-weight:600; font-family:var(--font-body);
   cursor:pointer; letter-spacing:0.03em;
   transition: background var(--t1), transform var(--t1);
@@ -731,7 +832,7 @@ body {
 .lead-submit:active { transform:scale(.98); }
 .lead-submit:disabled { opacity:.4; cursor:not-allowed; }
 
-.lead-success { display:flex; flex-direction:column; align-items:center; gap:8px; padding:20px; text-align:center; }
+.lead-success { display:flex; flex-direction:column; align-items:center; gap:8px; padding:22px 16px; text-align:center; }
 .lead-success-icon {
   width:42px; height:42px; border-radius:50%; background:#16A34A;
   display:flex; align-items:center; justify-content:center;
@@ -747,20 +848,75 @@ body {
 }
 .lead-success p { font-size:12.5px; color:var(--ink-4); line-height:1.5; }
 
+/* ════════════════ PRODUCT CARD ════════════════ */
+/* Styled and ready for future integration (product recommendations,
+   cart recovery). Not wired to any data yet — no renderer calls this
+   markup today. Intended shape for whoever builds the JS next:
+
+   <div class="product-card">
+     <img class="product-card-img" src="..." alt="...">
+     <div class="product-card-body">
+       <div class="product-card-title">Product name</div>
+       <div class="product-card-price">$00.00</div>
+       <div class="product-card-desc">One-line description…</div>
+       <a class="product-card-cta" href="...">View product</a>
+     </div>
+   </div>
+*/
+.product-card {
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  max-width: 240px;
+}
+.product-card-img {
+  width: 100%; aspect-ratio: 1 / 1; object-fit: cover;
+  background: var(--surface-2);
+  display: block;
+}
+.product-card-body { padding: 12px 13px 13px; }
+.product-card-title {
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  line-height: 1.35; margin-bottom: 3px;
+}
+.product-card-price {
+  font-size: 13px; font-weight: 700; color: var(--brand);
+  margin-bottom: 5px;
+}
+.product-card-desc {
+  font-size: 11.5px; color: var(--ink-4); line-height: 1.5;
+  margin-bottom: 10px;
+}
+.product-card-cta {
+  display: block; text-align: center;
+  padding: 9px; border-radius: var(--radius-pill);
+  background: var(--brand); color: #fff;
+  font-size: 12.5px; font-weight: 600;
+  text-decoration: none;
+  transition: transform var(--t1) var(--spring), box-shadow var(--t1);
+  box-shadow: 0 2px 8px var(--brand-glow);
+}
+.product-card-cta:hover { transform: translateY(-1px); box-shadow: 0 4px 14px var(--brand-glow); }
+
 /* ════════════════ INPUT AREA ════════════════ */
 .input-area {
-  padding:10px 12px;
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  padding: var(--space-3) var(--space-4);
+  padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
   background: var(--input-area-bg);
-  border-top: 1px solid var(--border);
-  flex-shrink:0; display:flex; gap:8px; align-items:flex-end;
+  border-top: 1px solid var(--border-2);
+  flex-shrink:0; display:flex; gap:10px; align-items:flex-end;
 }
 .input-wrap {
   flex:1; min-width:0;
   background: var(--input-wrap-bg);
   border: 1.5px solid var(--input-wrap-bd);
-  border-radius:22px; padding:9px 14px;
+  border-radius: var(--radius-input);
+  padding:12px 18px;
   display:flex; align-items:center;
+  box-shadow: var(--shadow-xs);
   transition: border-color var(--t1), box-shadow var(--t1), background var(--t1);
 }
 .input-wrap:focus-within {
@@ -769,31 +925,31 @@ body {
 }
 .chat-input {
   flex:1; min-width:0; border:none; background:transparent; outline:none;
-  font-size:13.5px; font-family:var(--font-body); color:var(--ink);
+  font-size:14px; font-family:var(--font-body); color:var(--ink);
   resize:none; max-height:96px; line-height:1.5; overflow:hidden; display:block;
 }
 .chat-input::placeholder { color:var(--ink-4); }
 .send-btn {
-  width:38px; height:38px; min-width:38px; border-radius:50%;
+  width:44px; height:44px; min-width:44px; border-radius:50%;
   background:var(--brand); border:none; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
   flex-shrink:0;
   transition: transform var(--t1) var(--spring), box-shadow var(--t1), opacity var(--t1);
-  box-shadow: 0 2px 10px var(--brand-glow);
+  box-shadow: var(--shadow-float);
   -webkit-tap-highlight-color:transparent; touch-action:manipulation; outline:none;
 }
-.send-btn:hover { transform:scale(1.08); box-shadow:0 4px 16px var(--brand-glow); }
-.send-btn:active { transform:scale(.92); }
+.send-btn:hover { transform:scale(1.07); box-shadow:0 10px 26px var(--brand-glow); }
+.send-btn:active { transform:scale(.93); }
 .send-btn:disabled { opacity:.35; transform:none; cursor:not-allowed; box-shadow:none; }
 .send-btn:focus-visible { box-shadow:0 0 0 3px var(--brand-glow); }
-.send-btn svg { width:14px; height:14px; color:#fff; pointer-events:none; }
+.send-btn svg { width:16px; height:16px; color:#fff; pointer-events:none; }
 
 .powered {
-  text-align:center; padding:6px;
+  text-align:center; padding:8px;
   font-size:9.5px; color:var(--ink-4);
   background:var(--powered-bg);
-  border-top:1px solid var(--powered-bd);
   flex-shrink:0; letter-spacing:0.05em;
+  border-radius: 0 0 var(--radius-container) var(--radius-container);
 }
 .powered a { color:var(--brand); text-decoration:none; font-weight:600; }
 .powered a:hover { text-decoration:underline; }
@@ -801,22 +957,22 @@ body {
 
 /* ════════════════ HELP CENTER ════════════════ */
 .hc-header {
-  padding:16px 14px 14px;
+  padding: var(--space-4) var(--space-5) var(--space-3);
   background:var(--hc-header-bg);
-  border-bottom:1px solid var(--border);
+  border-bottom:1px solid var(--border-2);
   flex-shrink:0;
 }
 .hc-title {
   font-family:var(--font-head);
   {% if wfont == 'dm_sans' %}font-style:italic;{% endif %}
   font-size:18px; font-weight:{% if wfont == 'dm_sans' %}400{% else %}600{% endif %};
-  color:var(--ink); margin-bottom:12px; letter-spacing:-0.2px;
+  color:var(--ink); margin-bottom:14px; letter-spacing:-0.2px;
 }
 .search-wrap { position:relative; }
-.search-wrap svg { position:absolute; left:11px; top:50%; transform:translateY(-50%); width:13px; height:13px; color:var(--ink-4); pointer-events:none; }
+.search-wrap svg { position:absolute; left:13px; top:50%; transform:translateY(-50%); width:13px; height:13px; color:var(--ink-4); pointer-events:none; }
 .hc-search {
-  width:100%; padding:9px 12px 9px 32px;
-  border:1.5px solid var(--border); border-radius:20px;
+  width:100%; padding:11px 14px 11px 34px;
+  border:1.5px solid var(--border); border-radius:var(--radius-pill);
   font-size:13px; font-family:var(--font-body);
   background:var(--input-wrap-bg); color:var(--ink); outline:none;
   transition: border-color var(--t1), box-shadow var(--t1), background var(--t1);
@@ -835,15 +991,16 @@ body {
 }
 
 .hc-art {
-  padding:12px 14px;
+  padding:13px 14px;
   cursor:pointer;
   transition: background var(--t1), border-color var(--t1);
   display:flex; align-items:center; justify-content:space-between; gap:10px;
   min-width:0;
   background: var(--hc-art-bg);
-  margin:0 8px 4px;
-  border-radius:var(--r-sm);
+  margin:0 var(--space-3) var(--space-2);
+  border-radius:var(--radius-card);
   border:1px solid var(--hc-art-bd);
+  box-shadow: var(--shadow-xs);
   contain:layout style;
 }
 .hc-art:hover { background:var(--surface-2); border-color:var(--brand-border); }
@@ -883,9 +1040,9 @@ body {
 .art-body::-webkit-scrollbar { width:2px; }
 .art-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:4px; }
 .art-cat-tag {
-  display:inline-block; padding:2px 9px;
+  display:inline-block; padding:3px 10px;
   background:var(--brand-soft); color:var(--brand);
-  border:1px solid var(--brand-border); border-radius:20px;
+  border:1px solid var(--brand-border); border-radius:var(--radius-pill);
   font-size:10px; font-weight:700; margin-bottom:10px;
   letter-spacing:0.06em; text-transform:uppercase;
 }
@@ -899,7 +1056,7 @@ body {
 .art-footer { margin-top:20px; padding-top:14px; border-top:1px solid var(--border); }
 .art-helpful { font-size:12px; color:var(--ink-4); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .helpful-btn {
-  padding:5px 12px; border:1.5px solid var(--border); border-radius:20px;
+  padding:6px 13px; border:1.5px solid var(--border); border-radius:var(--radius-pill);
   font-size:12px; font-weight:500; color:var(--ink-3);
   cursor:pointer; background:none;
   transition:all var(--t1); font-family:var(--font-body); touch-action:manipulation;
@@ -910,14 +1067,14 @@ body {
 
 /* ════════════════ TOAST ════════════════ */
 .toast {
-  position:fixed; bottom:72px; left:50%;
+  position:fixed; bottom:84px; left:50%;
   transform:translateX(-50%) translateY(14px);
   background:var(--toast-bg); color:var(--toast-text);
-  font-size:12px; font-weight:500; padding:8px 16px;
-  border-radius:20px; pointer-events:none; opacity:0;
+  font-size:12px; font-weight:500; padding:9px 17px;
+  border-radius:var(--radius-pill); pointer-events:none; opacity:0;
   transition: opacity var(--t2), transform var(--t2) var(--ease);
   z-index:9999; white-space:nowrap; max-width:calc(100% - 32px);
-  letter-spacing:0.01em; box-shadow:0 4px 16px rgba(0,0,0,0.18);
+  letter-spacing:0.01em; box-shadow:var(--shadow-lg);
 }
 .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
@@ -926,62 +1083,84 @@ body {
 
 /* ════════════════ RESPONSIVE ════════════════ */
 @media (max-width:420px) {
-  .header-inner { padding:13px 14px 28px; }
-  .header-name { font-size:17px; }
-  .messages { padding:16px 10px 8px; }
-  .input-area { padding:9px 10px; padding-bottom:max(9px,env(safe-area-inset-bottom)); }
-  .send-btn { width:36px; height:36px; min-width:36px; }
-  .msg-col { max-width:80%; }
-  .bubble { font-size:13px; padding:9px 13px; }
+  /* Full-bleed on phones — the rounded floating-card look is for
+     wider (desktop/tablet launcher) contexts. */
+  body { border-radius:0; box-shadow:none; }
+  .hero { padding: var(--space-3) var(--space-4) var(--space-3); }
+  .hero-name { font-size:17px; }
+  .hero-welcome { max-width:100%; }
+  .tabs { padding: 0 var(--space-4); }
+  .messages { padding: var(--space-3) var(--space-3) var(--space-2); }
+  .qr-wrap { padding: 0 var(--space-3) var(--space-2); }
+  .input-area { padding: var(--space-2) var(--space-3); padding-bottom:max(var(--space-2),env(safe-area-inset-bottom)); }
+  .send-btn { width:40px; height:40px; min-width:40px; }
+  .msg-col { max-width:82%; }
+  .bubble { font-size:13.5px; padding:11px 14px; }
   .hc-art { margin:0 6px 4px; }
+  .powered { border-radius:0; }
 }
 </style>
 </head>
 <body>
 <main role="main" style="display:contents;">
 
-<!-- HEADER -->
-<header class="header" role="banner">
-  <div class="header-accent"></div>
-  <div class="header-inner">
-    <div class="header-top">
-      <span class="header-brand">{% if not client.remove_branding %}Powered by Lumvi{% else %}{{ client.company_name or '' }}{% endif %}</span>
-      <div class="header-actions">
-        <button class="hbtn" aria-label="Minimize chat" onclick="closePanelSecure()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        </button>
-      </div>
-    </div>
-    <div class="header-profile">
-      <div class="header-avatar-wrap" aria-hidden="true">
-        <div class="header-avatar-ring"></div>
-        <div class="header-avatar">
+<!-- HEADER: slim topbar + compact hero (avatar, name, status, greeting) -->
+<header class="header-wrap" role="banner">
+  <div class="topbar">
+    <span class="topbar-label">{% if not client.remove_branding %}Powered by Lumvi{% else %}{{ client.company_name or '' }}{% endif %}</span>
+    <button class="hbtn" aria-label="Minimize chat" onclick="closePanelSecure()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+  </div>
+
+  <div class="hero">
+    <div class="hero-profile">
+      <div class="hero-avatar-wrap" aria-hidden="true">
+        <div class="hero-avatar">
           {% if client.bot_avatar_url %}<img src="{{ client.bot_avatar_url }}" alt="{{ client.bot_name }}" loading="lazy">
           {% elif client.logo_url %}<img src="{{ client.logo_url }}" alt="{{ client.bot_name }}" loading="lazy">
-          {% else %}<svg viewBox="0 0 40 40" fill="none" style="width:100%;height:100%;"><circle cx="20" cy="20" r="20" fill="rgba(255,255,255,0.1)"/><circle cx="20" cy="15" r="7" fill="rgba(255,255,255,0.35)"/><path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(255,255,255,0.35)"/></svg>
-          {% endif %}
+          {% else %}<svg viewBox="0 0 40 40" fill="none" style="width:100%;height:100%;"><circle cx="20" cy="20" r="20" fill="rgba(128,128,128,0.15)"/><circle cx="20" cy="15" r="7" fill="rgba(128,128,128,0.35)"/><path d="M6 34c0-7.732 6.268-14 14-14s14 6.268 14 14" fill="rgba(128,128,128,0.35)"/></svg>{% endif %}
         </div>
       </div>
-      <div class="header-info">
-        <div class="header-name" role="heading" aria-level="1">{{ client.bot_name or client.company_name or 'Support' }}</div>
-        <div class="header-status" aria-label="Status: online">
+      <div class="hero-info">
+        <div class="hero-name" role="heading" aria-level="1">{{ client.bot_name or client.company_name or 'Support' }}</div>
+        <div class="hero-status" aria-label="Status: online">
           <span class="status-dot" aria-hidden="true"></span>
-          <span>{{ client.tagline or 'Typically replies instantly' }}</span>
+          <span>{{ client.status_line or client.tagline or 'Online • Typically replies instantly' }}</span>
         </div>
       </div>
     </div>
-  </div>
-</header>
 
-<!-- TABS -->
-<nav class="tabs" role="tablist" aria-label="Support options">
-  <button class="tab active" id="tab-chat" role="tab" aria-selected="true" aria-controls="panel-chat" onclick="switchTab('chat')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat
-  </button>
-  <button class="tab" id="tab-help" role="tab" aria-selected="false" aria-controls="panel-help" onclick="switchTab('help')">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Help Center
-  </button>
-</nav>
+    {% if client.welcome_message %}
+    <p class="hero-welcome">{{ client.welcome_message }}</p>
+    {% endif %}
+
+    {%- set fp = client.featured_product or {} -%}
+    {% if fp.enabled and fp.name %}
+    <a class="hero-featured" href="{{ fp.url or '#' }}" target="_blank" rel="noopener noreferrer">
+      {% if fp.image %}<img class="hero-featured-img" src="{{ fp.image }}" alt="" loading="lazy">{% endif %}
+      <div class="hero-featured-body">
+        <div class="hero-featured-eyebrow">Featured</div>
+        <div class="hero-featured-title">{{ fp.name }}</div>
+        {% if fp.price %}<div class="hero-featured-price">{{ fp.price }}</div>{% endif %}
+      </div>
+      <div class="hero-featured-arrow" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </a>
+    {% endif %}
+  </div>
+
+  <!-- TABS -->
+  <nav class="tabs" role="tablist" aria-label="Support options">
+    <button class="tab active" id="tab-chat" role="tab" aria-selected="true" aria-controls="panel-chat" onclick="switchTab('chat')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Chat
+    </button>
+    <button class="tab" id="tab-help" role="tab" aria-selected="false" aria-controls="panel-help" onclick="switchTab('help')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Help Center
+    </button>
+  </nav>
+</header>
 
 <!-- CHAT PANEL -->
 <section class="tab-panel active" id="panel-chat" role="tabpanel" aria-labelledby="tab-chat">
@@ -1010,11 +1189,12 @@ body {
   </div>
 
   {%- set _raw_qr = client.quick_replies if client.quick_replies else [] -%}
-  {%- set qr = [] -%}
-  {%- for btn in _raw_qr -%}{%- if btn and btn|string|trim -%}{%- set qr = qr + [btn|string|trim] -%}{%- endif -%}{%- endfor -%}
+  {%- set ns = namespace(qr=[]) -%}
+  {%- for btn in _raw_qr -%}{%- if btn and btn|string|trim -%}{%- set ns.qr = ns.qr + [btn|string|trim] -%}{%- endif -%}{%- endfor -%}
+  {%- set qr = ns.qr -%}
   {% if qr %}
   <div class="qr-wrap" id="qrWrap" role="group" aria-label="Quick replies">
-    {% for btn in qr[:5] %}<button class="qr-btn" onclick="sendQR(this, {{ btn|tojson }})">{{ btn }}</button>{% endfor %}
+    {% for btn in qr[:5] %}<button class="qr-btn" onclick="sendQR(this, {{ (btn|tojson|string)|replace('"', '&quot;')|safe }})">{{ btn }}</button>{% endfor %}
   </div>
   {% else %}<div id="qrWrap" style="display:none;" aria-hidden="true"></div>{% endif %}
 
@@ -1588,8 +1768,8 @@ function addLeadFormMsg() {
       <div class="sender-label" aria-hidden="true">${esc(BNAME)}</div>
       <div class="bubble bot" style="padding:14px;">
         <div class="lead-form-card" style="border:none;background:none;padding:0;">
-          <div style="font-size:13px;font-weight:600;color:var(--dark);margin-bottom:4px;">Let's connect you with our team</div>
-          <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">What's your name?</div>
+          <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:4px;">Let's connect you with our team</div>
+          <div style="font-size:12px;color:var(--ink-4);margin-bottom:10px;">What's your name?</div>
           <input class="lead-input" data-lead-input type="text"
             placeholder="Your name…" autocomplete="name"
             aria-label="Your name"
@@ -1632,7 +1812,7 @@ function addLeadStepMsg(label, inputType) {
     <div class="msg-col" style="max-width:85%;">
       <div class="sender-label" aria-hidden="true">${esc(BNAME)}</div>
       <div class="bubble bot" style="padding:14px;">
-        <div style="font-size:12px;color:var(--sub);margin-bottom:8px;">${esc(label)}</div>
+        <div style="font-size:12px;color:var(--ink-4);margin-bottom:8px;">${esc(label)}</div>
         ${inputHTML}
         <div class="lead-input-error"></div>
         <button class="lead-submit" onclick="submitLeadStep(this.previousElementSibling.previousElementSibling)">Continue →</button>

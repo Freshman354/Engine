@@ -591,6 +591,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                         <a href="/article-manager?client_id={{ client.client_id }}" class="card-menu-item">Articles</a>
                         <button onclick="closeAllCardMenus();showEmbedCode('{{ client.client_id }}')" class="card-menu-item">Install</button>
                         {% if plan_limits.webhooks or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="card-menu-item">Integrations</a>{% endif %}
+                        {% if plan_limits.cart_recovery %}<a href="/cart-recovery?client_id={{ client.client_id }}" class="card-menu-item">Cart Recovery</a>{% endif %}
                         {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="card-menu-item">Customize AI</a>{% endif %}
                         {% if plan_limits.analytics %}<a href="/client-report?client_id={{ client.client_id }}" class="card-menu-item">Report</a>{% endif %}
                         <button class="card-menu-item card-menu-item-danger" data-client-id="{{ client.client_id }}" data-client-name="{{ client.company_name }}" onclick="closeAllCardMenus();confirmDelete(this.dataset.clientId, this.dataset.clientName)">Disconnect</button>
