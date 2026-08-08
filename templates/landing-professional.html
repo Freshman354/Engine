@@ -1265,6 +1265,24 @@ footer p{color:var(--sub);font-size:12px;}
         <p>© 2026 Lumvi · Building the AI Operating System for Shopify &amp; WooCommerce Stores · lumvi.net</p>
     </div>
 </footer>
+<script>
+    window.addEventListener('scroll', function() {
+        document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 40);
+    });
 
+    const observer = new IntersectionObserver(
+        entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); }),
+        { threshold: 0.1 }
+    );
+    document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+    (function() {
+        window.LUMVI_CLIENT_ID = 'lumvi-ff52c90f';
+        var s = document.createElement('script');
+        s.src = '/static/widget.js';
+        s.setAttribute('data-client-id', 'lumvi-ff52c90f');
+        document.body.appendChild(s);
+    })();
+</script>
 </body>
 </html>
