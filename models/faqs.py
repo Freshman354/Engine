@@ -8,6 +8,7 @@ import json
 import re
 import uuid
 from datetime import datetime
+from psycopg2.extras import execute_values
 from .db import get_db
 
 def _extract_keywords(text: str, limit: int = 8) -> list:
@@ -219,14 +220,38 @@ def get_leads_this_month_bulk(client_ids: list) -> dict:
 # FAQ FUNCTIONS
 # =====================================================================
 
-def save_faqs(client_id: str, faqs: list) -> int:
+# Explicit DB batch size for save_faqs()'s bulk upsert. execute_values()'s
+# own page_size already chunks the actual SQL sent per statement, but that's
+# an easy-to-miss implementation detail — this makes the bound visible and
+# tunable, and keeps peak per-call payload size bounded for very large
+# uploads (tens of thousands of rows) rather than relying solely on an
+# internal kwarg. All batches for one save_faqs() call still run inside a
+# single transaction/connection — commit once at the end, so a very large
+# upload's initial save is still all-or-nothing.
+SAVE_FAQS_BATCH_SIZE = 500
+
+
+def save_faqs(client_id: str, faqs: list, import_batch_id: str = None,
+              embedding_status: str = None) -> int:
     """
-    Upsert FAQs for a client.
+    Bulk-upsert FAQs for a client, batched in chunks of SAVE_FAQS_BATCH_SIZE
+    (psycopg2.extras.execute_values per chunk — a handful of round trips for
+    the whole list instead of one INSERT per row, and never one unbounded
+    statement regardless of how large the upload is).
 
     ON CONFLICT behaviour (when faq_id already exists):
       - question / answer / category / triggers / tags / quality_score → always updated
-      - embedding   → preserved via COALESCE (don't wipe a stored vector on re-save)
-      - last_indexed → preserved via COALESCE (don't reset the indexing timestamp)
+      - embedding        → preserved via COALESCE (don't wipe a stored vector on re-save)
+      - last_indexed     → preserved via COALESCE (don't reset the indexing timestamp)
+      - import_batch_id  → set only when the caller passes one, else preserved via
+                            COALESCE. Manual FAQ edits (manage_faqs()) call this
+                            without it and must not clobber an in-flight bulk-upload
+                            job's tracking column on an existing row.
+      - embedding_status → same COALESCE behaviour as import_batch_id
+
+    import_batch_id / embedding_status are optional, used only by the bulk
+    upload flow (blueprints/faqs.py) to tag rows for Stage A progress
+    tracking — manage_faqs() calls this exactly as before, with neither.
 
     triggers and tags are normalised to JSON strings regardless of whether
     they arrive as Python lists, JSON strings, or comma-separated strings.
@@ -236,77 +261,88 @@ def save_faqs(client_id: str, faqs: list) -> int:
     if not faqs:
         return 0
 
+    def _clean(val) -> str:
+        return str(val).replace('\x00', '').strip()
+
+    rows = []
+    for faq in faqs:
+        faq_id = str(faq.get('id') or faq.get('faq_id') or uuid.uuid4())
+
+        # ── Normalise triggers ────────────────────────────────────
+        triggers = faq.get('triggers', [])
+        if isinstance(triggers, str):
+            try:
+                triggers = json.loads(triggers)
+            except Exception:
+                triggers = [t.strip() for t in triggers.split(',') if t.strip()]
+        if not isinstance(triggers, list):
+            triggers = []
+
+        # ── Normalise tags (same pattern as triggers) ─────────────
+        tags = faq.get('tags', [])
+        if isinstance(tags, str):
+            try:
+                tags = json.loads(tags)
+            except Exception:
+                tags = [t.strip() for t in tags.split(',') if t.strip()]
+        if not isinstance(tags, list):
+            tags = []
+
+        # ── Normalise embedding ───────────────────────────────────
+        embedding = faq.get('embedding')
+        if isinstance(embedding, list):
+            embedding_js = json.dumps(embedding)
+        elif isinstance(embedding, str) and embedding.startswith('['):
+            embedding_js = embedding      # already a valid JSON string
+        else:
+            embedding_js = None           # no embedding — DB will keep existing
+
+        quality = float(faq.get('quality_score', 0.0))
+
+        rows.append((
+            client_id, faq_id,
+            _clean(faq.get('question', '')),
+            _clean(faq.get('answer', '')),
+            faq.get('category', 'General'),
+            json.dumps(triggers),
+            json.dumps(tags),
+            quality,
+            embedding_js,
+            True,
+            import_batch_id,
+            embedding_status,
+        ))
+
+    _UPSERT_SQL = """INSERT INTO faqs
+                   (client_id, faq_id, question, answer, category,
+                    triggers, tags, quality_score, embedding, is_active,
+                    import_batch_id, embedding_status)
+               VALUES %s
+               ON CONFLICT (faq_id) DO UPDATE SET
+                   question         = EXCLUDED.question,
+                   answer           = EXCLUDED.answer,
+                   category         = EXCLUDED.category,
+                   triggers         = EXCLUDED.triggers,
+                   tags             = EXCLUDED.tags,
+                   quality_score    = EXCLUDED.quality_score,
+                   embedding        = COALESCE(EXCLUDED.embedding, faqs.embedding),
+                   last_indexed     = COALESCE(faqs.last_indexed, EXCLUDED.last_indexed),
+                   is_active        = TRUE,
+                   import_batch_id  = COALESCE(EXCLUDED.import_batch_id, faqs.import_batch_id),
+                   embedding_status = COALESCE(EXCLUDED.embedding_status, faqs.embedding_status)"""
+
     conn, cursor = get_db()
-    saved = 0
     try:
-        for faq in faqs:
-            faq_id = str(faq.get('id') or faq.get('faq_id') or uuid.uuid4())
-
-            # ── Normalise triggers ────────────────────────────────────
-            triggers = faq.get('triggers', [])
-            if isinstance(triggers, str):
-                try:
-                    triggers = json.loads(triggers)
-                except Exception:
-                    triggers = [t.strip() for t in triggers.split(',') if t.strip()]
-            if not isinstance(triggers, list):
-                triggers = []
-
-            # ── Normalise tags (same pattern as triggers) ─────────────
-            tags = faq.get('tags', [])
-            if isinstance(tags, str):
-                try:
-                    tags = json.loads(tags)
-                except Exception:
-                    tags = [t.strip() for t in tags.split(',') if t.strip()]
-            if not isinstance(tags, list):
-                tags = []
-
-            # ── Normalise embedding ───────────────────────────────────
-            embedding = faq.get('embedding')
-            if isinstance(embedding, list):
-                embedding_js = json.dumps(embedding)
-            elif isinstance(embedding, str) and embedding.startswith('['):
-                embedding_js = embedding      # already a valid JSON string
-            else:
-                embedding_js = None           # no embedding — DB will keep existing
-
-            quality = float(faq.get('quality_score', 0.0))
-
-            # Strip null bytes (0x00) that arrive from PDF/binary uploads
-            # and cause "ValueError: A string literal cannot contain NUL characters"
-            def _clean(val: str) -> str:
-                return str(val).replace('\x00', '').strip()
-
-            cursor.execute(
-                """INSERT INTO faqs
-                       (client_id, faq_id, question, answer, category,
-                        triggers, tags, quality_score, embedding, is_active)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                   ON CONFLICT (faq_id) DO UPDATE SET
-                       question      = EXCLUDED.question,
-                       answer        = EXCLUDED.answer,
-                       category      = EXCLUDED.category,
-                       triggers      = EXCLUDED.triggers,
-                       tags          = EXCLUDED.tags,
-                       quality_score = EXCLUDED.quality_score,
-                       embedding     = COALESCE(EXCLUDED.embedding,   faqs.embedding),
-                       last_indexed  = COALESCE(faqs.last_indexed, EXCLUDED.last_indexed),
-                       is_active     = TRUE""",
-                (
-                    client_id, faq_id,
-                    _clean(faq.get('question', '')),
-                    _clean(faq.get('answer', '')),
-                    faq.get('category', 'General'),
-                    json.dumps(triggers),
-                    json.dumps(tags),
-                    quality,
-                    embedding_js,
-                    True,
-                )
+        for start in range(0, len(rows), SAVE_FAQS_BATCH_SIZE):
+            chunk = rows[start:start + SAVE_FAQS_BATCH_SIZE]
+            execute_values(
+                cursor,
+                _UPSERT_SQL,
+                chunk,
+                template="(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                page_size=SAVE_FAQS_BATCH_SIZE,
             )
-            saved += 1
-
+        saved = len(rows)
         conn.commit()
         return saved
     except Exception as e:

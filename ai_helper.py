@@ -2032,6 +2032,38 @@ class AIHelper:
         client_id: Optional[str] = None,
         vertical: str = 'general',
     ) -> int:
+        """
+        Re-index a list of FAQs into knowledge_base for semantic search.
+
+        REPAIR NOTE: this used to build/query a SQLAlchemy model
+        (models.KbEntry, models.db.session) that does not exist anywhere in
+        this codebase — models/ is pure psycopg2 (see models/db.py). Every
+        call threw AttributeError on the first chunk of the first FAQ,
+        which the per-item except block below swallowed silently; `indexed`
+        never got past 0 and the function returned 0 without ever raising.
+        In practice this meant manage_faqs() has never successfully written
+        a single row to knowledge_base. Fixed below to call the real
+        persistence function, models.save_knowledge_chunks(), unchanged.
+
+        SCOPE NOTE: knowledge_base is not read anywhere in the live chat
+        retrieval path today (that reads models.get_faqs() / faqs.embedding
+        — see blueprints/faqs.py's bulk-upload flow, which writes embeddings
+        there directly). This fix makes index_faqs() functionally correct
+        again and keeps knowledge_base usable/consistent for whoever calls
+        it (currently: manage_faqs(), for manual FAQ edits), but it is
+        intentionally NOT part of the bulk-upload critical path — see
+        blueprints/faqs.py.
+
+        KNOWN LIMITATION (pre-existing, not introduced by this fix): the old
+        ORM code deleted trailing chunk rows left over when an edited answer
+        shrinks (chunk_index >= new chunk count). The real knowledge_base
+        schema has no chunk_index column — chunk position is encoded in
+        kb_id as "{base_kb_id}-{i}" instead — so that cleanup isn't
+        reinstated here. A shrunk answer's old trailing chunks will persist
+        until a follow-up pass adds proper cleanup for the real schema.
+        Since the whole method never ran successfully before, this is not a
+        regression; it's an existing gap that's now at least reachable.
+        """
         import models as _m
         from cache_utils import bump_kb_version
         from itertools import islice
@@ -2046,6 +2078,7 @@ class AIHelper:
             if str(f.get('question', '')).strip() and str(f.get('answer', '')).strip()
         ]
 
+        pending_chunks = []   # accumulated across all FAQs, saved in one call
         indexed = 0
         for batch in _batched(valid_faqs, 5):
             pairs       = [(str(f['question']).strip(), str(f['answer']).strip()) for f in batch]
@@ -2067,56 +2100,50 @@ class AIHelper:
                             f"{enriched.get('summary', '')} {chunk}"
                         ).strip()
                         embedding = _embed(embed_text, task='retrieval_document')
-                        chunk_data = {
-                            'question':    question,
-                            'answer':      chunk,
-                            'chunk_index': i,
-                            'tags':        ' '.join(enriched.get('tags', [])),
-                            'paraphrases': enriched.get('paraphrases', []),
-                            'topic':       enriched.get('topic', ''),
-                            'quality':     self._quality_score(question, chunk),
-                            'embedding':   embedding,
-                            'vertical':    vertical,
-                            'client_id':   client_id,
-                        }
-                        existing = _m.KbEntry.query.filter_by(
-                            client_id=client_id, kb_id=kb_id,
-                            chunk_index=i
-                        ).first()
-                        if existing:
-                            for k, v in chunk_data.items():
-                                setattr(existing, k, v)
-                        else:
-                            _m.db.session.add(_m.KbEntry(kb_id=kb_id, **chunk_data))
 
-                    # FIX: this loop only upserts chunk_index 0..len(chunks)-1
-                    # for the answer as it stands right now. If a previous
-                    # index of this same FAQ produced MORE chunks (longer
-                    # answer) than this one, the old trailing chunk rows
-                    # were never touched — they just sat in the KB forever,
-                    # still fully retrievable, still carrying whatever
-                    # stale/incorrect content the answer used to have before
-                    # it was edited. Delete anything left over beyond the
-                    # current chunk count.
-                    _m.KbEntry.query.filter(
-                        _m.KbEntry.client_id == client_id,
-                        _m.KbEntry.kb_id == kb_id,
-                        _m.KbEntry.chunk_index >= len(chunks),
-                    ).delete(synchronize_session=False)
+                        # models.save_knowledge_chunks() expects
+                        # title/content/type/category/metadata/quality —
+                        # map this method's internal fields onto that real
+                        # shape rather than the nonexistent KbEntry columns.
+                        pending_chunks.append({
+                            'kb_id':     f"{kb_id}-{i}",
+                            'title':     question,
+                            'content':   chunk,
+                            'type':      'faq',
+                            'category':  faq.get('category', 'General'),
+                            'tags':      enriched.get('tags', []),
+                            'embedding': embedding,
+                            'metadata': {
+                                'topic':       enriched.get('topic', ''),
+                                'paraphrases': enriched.get('paraphrases', []),
+                                'chunk_index': i,
+                                'source':      'index_faqs',
+                            },
+                            'quality': self._quality_score(question, chunk),
+                        })
 
                     indexed += 1
                 except Exception as e:
                     log_crash(logger, 'IndexFAQ', e, faq_id=faq.get('kb_id'))
 
-        if indexed:
+        if pending_chunks:
             try:
-                _m.db.session.commit()
+                saved = _m.save_knowledge_chunks(client_id, pending_chunks)
                 if client_id:
                     bump_kb_version(client_id)
-                logger.info(f"[IndexFAQs] indexed={indexed} client={client_id}")
+                logger.info(
+                    f"[IndexFAQs] faqs_indexed={indexed} "
+                    f"chunks_saved={saved}/{len(pending_chunks)} client={client_id}"
+                )
+                if saved != len(pending_chunks):
+                    logger.warning(
+                        f"[IndexFAQs] partial save: expected {len(pending_chunks)} "
+                        f"chunks, save_knowledge_chunks() reported {saved} — check "
+                        f"for a knowledge_base schema mismatch (see migration audit)."
+                    )
             except Exception as e:
-                log_crash(logger, 'IndexFAQ/commit', e, client_id=client_id)
-                _m.db.session.rollback()
+                log_crash(logger, 'IndexFAQ/save', e, client_id=client_id)
+                indexed = 0
 
         return indexed
 

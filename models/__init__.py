@@ -29,6 +29,7 @@ from .migrations import (
     migrate_onboarding,
     migrate_faqs_table,
     migrate_faq_to_knowledge_base,
+    migrate_faqs_import_tracking,
     migrate_google_oauth,
     migrate_password_reset_tokens,
     migrate_lead_custom_fields,
@@ -170,6 +171,20 @@ from .faqs import (
     get_leads_this_month_bulk,
     get_unanswered_questions_for_email,
     get_clients_for_weekly_digest,
+)
+
+# ── FAQ bulk-import job tracking (Stage A) ──────────────────────────────────
+from .faq_imports import (
+    create_import_job,
+    mark_import_job_started,
+    increment_import_job_progress,
+    finalize_import_job,
+    get_import_job,
+    reclaim_stale_import_job,
+    retry_failed_embeddings,
+    delete_import_jobs_for_client,
+    claim_faqs_for_embedding,
+    bulk_update_faq_embeddings,
 )
 
 # ── Leads ─────────────────────────────────────────────────────────────────────

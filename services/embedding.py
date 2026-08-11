@@ -383,6 +383,218 @@ def embed(text: str, task: str = 'retrieval_document') -> List[float]:
     return []  # all retries exhausted
 
 
+# ── Batched embedding ─────────────────────────────────────────────────────────
+#
+# Voyage's HTTP API accepts a list under "input" — embed() above only ever
+# sends a single-element list, so every call pays a full HTTP round trip
+# for one vector. embed_batch() sends many texts per request instead.
+#
+# Batch size: Voyage documents per-request limits around 1,000 texts /
+# ~320K tokens for standard models (docs.voyageai.com/docs/rate-limits) —
+# this module doesn't use their SDK (which caps client-side at 128), so
+# the real ceiling is the raw HTTP API's. Defaulting to a conservative 100
+# texts/request here, well under any documented limit, tunable via
+# VOYAGE_EMBED_BATCH_SIZE without a code change. Not verified against a
+# live call in this environment (no network egress) — see the standalone
+# benchmark script for how to get real numbers against your Voyage account.
+
+VOYAGE_EMBED_BATCH_SIZE = int(os.environ.get('VOYAGE_EMBED_BATCH_SIZE', '100'))
+
+
+def embed_batch(texts: List[str], task: str = 'retrieval_document') -> List[List[float]]:
+    """
+    Embed many texts with far fewer HTTP round trips than calling embed()
+    in a loop.
+
+    Same contract as embed() but for a list: returns a list the same
+    length as `texts`, in the same order, one vector (or [] on failure/
+    blank input) per text. Never raises — a failed sub-batch degrades to
+    [] for just the texts in that sub-batch, same as embed()'s single-item
+    failure contract, so callers can keep going and retry only what's
+    still missing.
+
+    Uses the exact same cache key scheme, L1/L2 cache, and retry/backoff
+    policy as embed() — a text embedded via either function hits the same
+    cache entry.
+    """
+    import urllib.error as _urllib_err
+    import urllib.request as _urllib_req
+
+    if not texts:
+        return []
+    if not VOYAGE_API_KEY:
+        logger.warning("[Embed] VOYAGE_API_KEY missing — embed_batch() returning [] for all")
+        return [[] for _ in texts]
+
+    results: List[Optional[List[float]]] = [None] * len(texts)
+    cache_keys: List[Optional[str]] = [None] * len(texts)
+
+    # ── Resolve blanks + cache hits first, collect the rest as misses ──
+    miss_indices: List[int] = []
+    for i, text in enumerate(texts):
+        if not text or not text.strip():
+            results[i] = []
+            continue
+
+        cache_key = hashlib.sha256(
+            f"voyage:{VOYAGE_MODEL}:{task}:{text.strip()[:2048]}".encode()
+        ).hexdigest()
+        cache_keys[i] = cache_key
+
+        cached = _EMBED_CACHE.get(cache_key)
+        if cached is not None:
+            results[i] = cached
+            continue
+
+        if _redis_client is not None:
+            try:
+                raw = _redis_client.get(_REDIS_EMBED_PREFIX + cache_key)
+                if raw is not None:
+                    n_floats = len(raw) // 4
+                    vec = list(struct.unpack(f'{n_floats}f', raw))
+                    _EMBED_CACHE[cache_key] = vec
+                    results[i] = vec
+                    continue
+            except Exception as _redis_get_err:
+                logger.warning(
+                    f"[EmbedCache] Redis GET failed (non-critical): {_redis_get_err}"
+                )
+
+        miss_indices.append(i)
+
+    if not miss_indices:
+        return results  # type: ignore[return-value]
+
+    _input_type  = 'query' if task == 'retrieval_query' else 'document'
+    _MAX_RETRIES = 3
+    _RETRY_BASE  = 1.0
+
+    # ── Sub-batch the misses and hit Voyage once per sub-batch ─────────
+    for start in range(0, len(miss_indices), VOYAGE_EMBED_BATCH_SIZE):
+        sub_indices = miss_indices[start:start + VOYAGE_EMBED_BATCH_SIZE]
+        sub_texts   = [texts[i].strip()[:2048] for i in sub_indices]
+
+        _payload = json.dumps({
+            'input':      sub_texts,
+            'model':      VOYAGE_MODEL,
+            'input_type': _input_type,
+        }).encode('utf-8')
+
+        _t0 = time.monotonic()
+        _succeeded = False
+
+        for _attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                _req = _urllib_req.Request(
+                    VOYAGE_EMBED_URL,
+                    data    = _payload,
+                    headers = {
+                        'Authorization': f'Bearer {VOYAGE_API_KEY}',
+                        'Content-Type':  'application/json',
+                    },
+                    method  = 'POST',
+                )
+
+                with _urllib_req.urlopen(_req, timeout=30) as _resp:
+                    _body = json.loads(_resp.read().decode('utf-8'))
+
+                # Voyage returns one object per input; sort by its "index"
+                # field if present so a provider that doesn't guarantee
+                # positional order still maps back correctly.
+                _items = _body.get('data', [])
+                _items_sorted = sorted(
+                    enumerate(_items), key=lambda pair: pair[1].get('index', pair[0])
+                )
+                _items_sorted = [item for _, item in _items_sorted]
+
+                if len(_items_sorted) != len(sub_indices):
+                    raise ValueError(
+                        f"Voyage returned {len(_items_sorted)} embeddings "
+                        f"for {len(sub_indices)} inputs"
+                    )
+
+                _elapsed_ms = (time.monotonic() - _t0) * 1000
+                logger.debug(
+                    f"[EmbedBatch/Voyage] task={task} input_type={_input_type} "
+                    f"batch_size={len(sub_indices)} elapsed={_elapsed_ms:.0f}ms"
+                )
+
+                for pos, item in zip(sub_indices, _items_sorted):
+                    vec = normalize(item['embedding'])
+                    results[pos] = vec
+
+                    ck = cache_keys[pos]
+                    if ck:
+                        _EMBED_CACHE[ck] = vec
+                        if _redis_client is not None:
+                            try:
+                                _redis_client.setex(
+                                    _REDIS_EMBED_PREFIX + ck,
+                                    _REDIS_EMBED_TTL_SEC,
+                                    struct.pack(f'{len(vec)}f', *vec),
+                                )
+                            except Exception as _redis_set_err:
+                                logger.warning(
+                                    f"[EmbedCache] Redis SET failed (non-critical): "
+                                    f"{_redis_set_err}"
+                                )
+
+                _succeeded = True
+                break
+
+            except _urllib_err.HTTPError as _http_err:
+                _err_body = ''
+                try:
+                    _err_body = _http_err.read().decode('utf-8')[:300]
+                except Exception:
+                    pass
+
+                if _http_err.code == 429:
+                    _wait = _RETRY_BASE * (2 ** (_attempt - 1))
+                    if _attempt < _MAX_RETRIES:
+                        logger.warning(
+                            f"[EmbedBatch/Voyage] Rate limit (429) on attempt "
+                            f"{_attempt}/{_MAX_RETRIES} — retrying in {_wait:.1f}s."
+                        )
+                        time.sleep(_wait)
+                        continue
+                    else:
+                        logger.error(
+                            f"[EmbedBatch/Voyage] Rate limit (429) — all "
+                            f"{_MAX_RETRIES} attempts exhausted for this sub-batch."
+                        )
+                elif _http_err.code == 401:
+                    logger.error(
+                        "[EmbedBatch/Voyage] Authentication failed (401). "
+                        "Check VOYAGE_API_KEY env var."
+                    )
+
+                _log_crash(
+                    'EmbedBatch/Voyage/HTTP', _http_err,
+                    status=_http_err.code, task=task, attempt=_attempt,
+                    batch_size=len(sub_indices), body=_err_body,
+                )
+                break  # don't retry 401 or exhausted 429s
+
+            except Exception as _e:
+                _log_crash(
+                    'EmbedBatch/Voyage', _e,
+                    task=task, attempt=_attempt, batch_size=len(sub_indices),
+                    elapsed_ms=f"{(time.monotonic() - _t0) * 1000:.0f}",
+                )
+                break
+
+        if not _succeeded:
+            # This sub-batch failed after retries — leave these positions
+            # as [] so the caller can tell exactly which texts still need
+            # embedding (e.g. re-mark them 'pending' for a later retry)
+            # rather than losing track of a partial batch failure.
+            for pos in sub_indices:
+                results[pos] = []
+
+    return results  # type: ignore[return-value]
+
+
 # ── Startup health check ──────────────────────────────────────────────────────
 
 def startup_health_check() -> bool:

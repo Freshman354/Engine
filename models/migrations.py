@@ -1767,6 +1767,78 @@ def migrate_csat():
         if conn:   conn.close()
 
 
+def migrate_faqs_import_tracking():
+    """
+    Bulk-upload (Stage A) progress/state tracking — scoped entirely to the
+    `faqs` table, which is what the live chat retrieval path actually reads
+    (models.get_faqs() -> find_best_match() / generate_response()).
+
+    Deliberately does NOT touch knowledge_base — that table is not part of
+    the live retrieval path today (nothing in the request path calls
+    get_knowledge_chunks()/get_relevant_knowledge()), so it gets no new
+    columns and no job-state coupling here. Treat it as a separate, legacy
+    subsystem until a deliberate decision is made to migrate retrieval onto
+    it.
+
+    Adds:
+      - faqs.import_batch_id  — tags rows written by a given bulk upload
+      - faqs.embedding_status — 'pending' | 'embedded' | 'failed' for rows
+                                 that belong to a tracked import; NULL (and
+                                 untouched) for every pre-existing/manual row
+      - faq_import_jobs       — one row per upload, with total/processed/
+                                 failed counts and a status lifecycle
+                                 (queued -> processing -> completed |
+                                 completed_with_errors | failed)
+
+    Both new faqs columns are nullable with no default, so this is a pure
+    additive change — existing rows, existing queries (get_faqs(),
+    save_faqs(), delete_all_faqs()) are unaffected. Safe to call on every
+    startup.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS import_batch_id TEXT"
+        )
+        cursor.execute(
+            "ALTER TABLE faqs ADD COLUMN IF NOT EXISTS embedding_status TEXT"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_faqs_import_batch "
+            "ON faqs (import_batch_id) WHERE import_batch_id IS NOT NULL"
+        )
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS faq_import_jobs (
+                id            SERIAL PRIMARY KEY,
+                job_id        TEXT NOT NULL UNIQUE,
+                client_id     TEXT NOT NULL,
+                status        TEXT NOT NULL DEFAULT 'queued',
+                total         INTEGER NOT NULL DEFAULT 0,
+                processed     INTEGER NOT NULL DEFAULT 0,
+                failed        INTEGER NOT NULL DEFAULT 0,
+                error_message TEXT,
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                started_at    TIMESTAMP,
+                completed_at  TIMESTAMP
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_faq_import_jobs_client "
+            "ON faq_import_jobs (client_id)"
+        )
+
+        conn.commit()
+        print("✅ FAQ import tracking ready (faqs columns + faq_import_jobs table).")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_faqs_import_tracking: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def migrate_conversation_status():
     """
     Add status + per-status timestamp columns to chat_sessions.

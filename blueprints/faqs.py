@@ -22,7 +22,9 @@ Routes
   GET/POST    /api/faqs                            manage_faqs
   POST        /api/faqs/delete-all                delete_all_faqs
   POST        /api/faq/upload                     upload_faqs
+  GET         /api/faq/upload/status/<job_id>     faq_upload_status
   POST        /api/faq/import-url                 import_faqs_from_url
+  POST        /api/faq/upload/retry/<job_id>      faq_upload_retry
   POST        /api/webhook/faq-import             webhook_faq_import
 
 Registration in app.py:
@@ -42,7 +44,6 @@ import io
 import json
 import os
 import re
-import threading
 import traceback
 import urllib.error
 import urllib.request
@@ -53,6 +54,8 @@ from flask_login import current_user, login_required
 
 import cache_utils
 import models
+from ai_helper import _bg_submit
+from services.embedding import embed_batch
 
 # ── Blueprint ────────────────────────────────────────────────────────────────
 
@@ -77,117 +80,123 @@ def init_faqs(app, plan_limits, ai_helper, extract_keywords):
     _extract_keywords = extract_keywords
 
 
-# ── Background helpers ───────────────────────────────────────────────────────
+# ── Stage A: bulk-upload background helpers ──────────────────────────────────
+#
+# Replaces the old _save_legacy_faqs() / _bg_enrich_and_save() pair, which:
+#   - ran on a raw, unbounded threading.Thread per upload
+#   - called enrich_and_chunk() once per FAQ (one Gemini call each) before
+#     anything was searchable
+#   - wrote embeddings only into knowledge_base, a table the live retrieval
+#     path (models.get_faqs() -> find_best_match() / generate_response())
+#     never reads — so uploaded FAQs were never actually semantically
+#     searchable regardless of how long the background thread ran
+#   - reported success to the user before any of that had even started,
+#     with no way to check what actually happened afterward
+#
+# New flow: parse/validate (unchanged) -> bulk upsert into faqs (fast, no
+# AI) -> background batch-embed straight into faqs.embedding, the column
+# retrieval actually reads. Gemini is not called anywhere in this path.
 
-def _save_legacy_faqs(client_id: str, chunks: list):
-    """Insert enriched chunks into the legacy faqs table (backward compat)."""
-    conn, cursor = models.get_db()
-    saved = 0
-    try:
-        for chunk in chunks:
-            faq_id = str(uuid.uuid4())
-            cursor.execute(
-                '''INSERT INTO faqs (client_id, faq_id, question, answer, category, triggers)
-                   VALUES (%s, %s, %s, %s, %s, %s)''',
-                (
-                    client_id, faq_id,
-                    chunk['title'],
-                    chunk['content'],
-                    chunk.get('category', 'General'),
-                    json.dumps(chunk.get('tags', []))
-                )
-            )
-            saved += 1
-        conn.commit()
-    except Exception as _e:
-        current_app.logger.warning(
-            f"[Upload/BG] Legacy FAQ save error (non-critical): {_e}"
-        )
-        conn.rollback()
-    finally:
-        cursor.close()
-        conn.close()
-    return saved
-
-
-def _bg_enrich_and_save(client_id: str, valid_faqs: list):
+def _start_faq_import_job(client_id: str, valid_faqs: list) -> dict:
     """
-    Background worker: enrich → chunk → embed → save.
-    Runs in a daemon thread so the HTTP response is returned immediately.
-    The entire pipeline (Gemini enrichment + per-item embedding) can take
-    30-120 seconds for a large file — it must never block the request cycle.
+    Shared Stage A entry point for upload_faqs() and import_faqs_from_url().
+
+    1. Creates the job row ('queued').
+    2. Bulk-upserts every FAQ into `faqs` right now, synchronously, with
+       embedding_status='pending'. This is the idempotency anchor: once
+       this call returns, the FAQ records themselves are durable — a crash
+       afterward can only delay embeddings, never lose or duplicate the
+       records.
+    3. Hands the embedding phase to the shared, bounded _BG_EXECUTOR
+       (max 4 concurrent app-wide) instead of a raw thread.
+
+    Returns {'job_id': ..., 'total': ...} for the route to build its response.
+    """
+    job_id = str(uuid.uuid4())
+    models.create_import_job(job_id, client_id, total=len(valid_faqs))
+    models.save_faqs(
+        client_id, valid_faqs,
+        import_batch_id=job_id, embedding_status='pending',
+    )
+    _bg_submit(_run_stage_a_embedding_job, job_id, client_id)
+    return {'job_id': job_id, 'total': len(valid_faqs)}
+
+
+def _run_stage_a_embedding_job(job_id: str, client_id: str) -> None:
+    """
+    Stage A background phase — runs on _BG_EXECUTOR, not a raw thread.
+
+    Batch-embeds every faqs row still marked embedding_status='pending' for
+    this job and writes the vectors straight into faqs.embedding. No Gemini
+    call anywhere in this function — raw question+answer text is embedded
+    directly, which is sufficient for a fully searchable FAQ (deterministic
+    tags/category already came from models.validate_and_enrich_faqs() at
+    upload time). Gemini enrichment stays a separate, deferred stage — not
+    built yet (Stage B).
+
+    Idempotent / resumable / concurrency-safe: each page is claimed
+    atomically via models.claim_faqs_for_embedding() (FOR UPDATE SKIP
+    LOCKED — see that function's docstring), so if this function ever ends
+    up running twice at once for the same job_id (a stale-job reclaim
+    racing a worker that turns out to still be alive, or two near-
+    simultaneous status-poll resubmits), the two runs claim disjoint rows
+    and can't double-embed or double-count progress. A crash mid-run
+    leaves claimed-but-unfinished rows at 'embedding' — reclaim_stale_
+    import_job() resets those back to 'pending' once the job is confirmed
+    stale, and finished rows stay 'embedded'/'failed' — re-running this
+    function picks up wherever it left off. It never re-inserts a faqs
+    row, so it can't duplicate records or require the file to be
+    re-uploaded.
     """
     with _app.app_context():
+        models.mark_import_job_started(job_id)
+        _PAGE = 200  # rows per DB round trip; embed_batch() sub-batches its own HTTP calls
+
         try:
-            current_app.logger.info(
-                f"[Upload/BG] starting enrich for client={client_id} items={len(valid_faqs)}"
-            )
-            if _ai_helper and _ai_helper.enabled:
-                # enrich_and_chunk() takes a single (question, answer) pair —
-                # it must be called once per FAQ, not once for the whole list.
-                # (Passing valid_faqs/client_id straight through here used to
-                # crash in _quality_score's question.split() with 'list'
-                # object has no attribute 'split', since it received the
-                # list and the client_id string instead of one question/
-                # answer pair.)
-                try:
-                    vertical = json.loads(
-                        (models.get_client_by_id(client_id) or {}).get('branding_settings') or '{}'
-                    ).get('vertical', 'general')
-                except Exception:
-                    vertical = 'general'
+            while True:
+                claimed = models.claim_faqs_for_embedding(client_id, job_id, limit=_PAGE)
+                if not claimed:
+                    break
 
-                chunks = []
-                for item in valid_faqs:
-                    question = item.get('question', '')
-                    answer   = item.get('answer', '')
-                    if not question or not answer:
-                        continue
-                    sub_chunks = _ai_helper.enrich_and_chunk(question, answer, vertical, client_id)
-                    kb_id = item.get('kb_id') or item.get('faq_id') or str(uuid.uuid4())
-                    for sc in sub_chunks:
-                        chunks.append({
-                            'kb_id':     f"{kb_id}-{sc.get('chunk_index', 0)}",
-                            'title':     sc.get('question', question),
-                            'content':   sc.get('answer', answer),
-                            'type':      'faq',
-                            'category':  item.get('category', 'General'),
-                            'tags':      (sc.get('tags', '') or '').split() if isinstance(sc.get('tags'), str) else sc.get('tags', []),
-                            'embedding': sc.get('embedding', []),
-                            'metadata':  {'source': 'upload', 'topic': sc.get('topic', '')},
-                            'quality':   sc.get('quality', item.get('quality_score', 0.75)),
-                        })
-            else:
-                chunks = [
-                    {
-                        'kb_id':     str(uuid.uuid4()),
-                        'title':     item['question'],
-                        'content':   item['answer'],
-                        'type':      'faq',
-                        'category':  item.get('category', 'General'),
-                        'tags':      item.get('tags', []),
-                        'embedding': [],
-                        'metadata':  {'source': 'upload'},
-                        'quality':   item.get('quality_score', 0.75),
-                    }
-                    for item in valid_faqs
-                ]
+                texts = [f"{p['question']} {p['answer']}".strip() for p in claimed]
+                vectors = embed_batch(texts, task='retrieval_document')
 
-            if not chunks:
-                current_app.logger.warning(
-                    f"[Upload/BG] enrich returned 0 chunks for client={client_id}"
+                updates = []
+                processed_delta = 0
+                failed_delta = 0
+                for p, vec in zip(claimed, vectors):
+                    if vec:
+                        updates.append((p['faq_id'], json.dumps(vec), 'embedded'))
+                        processed_delta += 1
+                    else:
+                        updates.append((p['faq_id'], None, 'failed'))
+                        failed_delta += 1
+
+                models.bulk_update_faq_embeddings(client_id, updates)
+                models.increment_import_job_progress(job_id, processed_delta, failed_delta)
+
+                current_app.logger.info(
+                    f"[Upload/StageA] job={job_id} client={client_id} "
+                    f"batch_embedded={processed_delta} batch_failed={failed_delta}"
                 )
-                return
 
-            kb_saved  = models.save_knowledge_chunks(client_id, chunks)
-            faq_saved = _save_legacy_faqs(client_id, chunks)
+            models.finalize_import_job(job_id)
             cache_utils.bump_kb_version(client_id)
-            current_app.logger.info(
-                f"[Upload/BG] done client={client_id} kb_saved={kb_saved} faq_saved={faq_saved}"
-            )
+            current_app.logger.info(f"[Upload/StageA] job={job_id} finished")
+
         except Exception as e:
+            # Deliberately not touching job status here beyond what's
+            # already been persisted per-page above — whatever progress
+            # was made stays recorded as 'embedded'/'failed', rows this
+            # run had claimed-but-not-finished stay 'embedding', and the
+            # job stays 'processing' with a now-stale updated_at. The next
+            # poll of GET /api/faq/upload/status/<job_id> detects that
+            # staleness, resets those 'embedding' rows back to 'pending',
+            # and resubmits this same function — safe to resume, nothing
+            # lost or duplicated.
             current_app.logger.error(
-                f"[Upload/BG] error for client={client_id}: {e}", exc_info=True
+                f"[Upload/StageA] job={job_id} client={client_id} error: {e}",
+                exc_info=True,
             )
 
 
@@ -597,6 +606,16 @@ def manage_faqs():
                     'upgrade_required': True,
                 }), 403
 
+            # Pre-assign a stable id to any FAQ the client didn't already
+            # give one, BEFORE save_faqs() — save_faqs() falls back to
+            # generating its own uuid internally for id-less rows, which
+            # the caller would otherwise never see. Doing it here means
+            # faqs_list itself carries the real faq_id afterward, so the
+            # embedding step below can target the exact rows just saved.
+            for _f in faqs_list:
+                if not (_f.get('id') or _f.get('faq_id')):
+                    _f['id'] = str(uuid.uuid4())
+
             models.save_faqs(client_id, faqs_list)
             cache_utils.bump_kb_version(client_id)
             current_app.logger.info(
@@ -637,6 +656,43 @@ def manage_faqs():
                     current_app.logger.warning(
                         f"[index_faqs] non-critical error: {_idx_err}"
                     )
+
+            # Embed straight into faqs.embedding — the column live retrieval
+            # actually reads (see get_faqs()/find_best_match()/
+            # generate_response()) — using the exact same canonical path
+            # Stage A bulk upload uses (embed_batch() + bulk_update_faq_
+            # embeddings()), not the knowledge_base-targeting index_faqs()
+            # call above. Synchronous here: manage_faqs() handles a UI
+            # edit's worth of FAQs (a handful to a few dozen), not a bulk
+            # file, so there's no need for job tracking/background
+            # execution for this — a failure here doesn't fail the save
+            # itself, matching the existing tolerant pattern above.
+            try:
+                _embed_targets = [
+                    f for f in faqs_list
+                    if str(f.get('question', '')).strip() and str(f.get('answer', '')).strip()
+                ]
+                if _embed_targets:
+                    _texts = [
+                        f"{f.get('question', '')} {f.get('answer', '')}".strip()
+                        for f in _embed_targets
+                    ]
+                    _vectors = embed_batch(_texts, task='retrieval_document')
+                    _updates = []
+                    for f, vec in zip(_embed_targets, _vectors):
+                        if vec:
+                            _faq_id = str(f.get('id') or f.get('faq_id'))
+                            _updates.append((_faq_id, json.dumps(vec), 'embedded'))
+                    if _updates:
+                        models.bulk_update_faq_embeddings(client_id, _updates)
+                        current_app.logger.info(
+                            f"[ManageFAQs] embedded {len(_updates)}/{len(_embed_targets)} "
+                            f"FAQs client={client_id}"
+                        )
+            except Exception as _embed_err:
+                current_app.logger.warning(
+                    f"[ManageFAQs] embedding non-critical error: {_embed_err}"
+                )
 
             return jsonify({'success': True, 'message': 'FAQs updated successfully'})
 
@@ -681,6 +737,12 @@ def delete_all_faqs():
             )
 
         cache_utils.bump_kb_version(client_id)
+        try:
+            models.delete_import_jobs_for_client(client_id)
+        except Exception as _job_del_err:
+            current_app.logger.warning(
+                f"[delete_all_faqs] import-job cleanup failed (non-critical): {_job_del_err}"
+            )
         current_app.logger.info(
             f'[Cache] KB invalidated after delete-all: client={client_id}'
         )
@@ -757,20 +819,24 @@ def upload_faqs():
                 'validation_errors': errors[:10],
             }), 400
 
-        t = threading.Thread(
-            target=_bg_enrich_and_save,
-            args=(client_id, valid_faqs),
-            daemon=True,
-        )
-        t.start()
+        # Stage A: bulk-upsert into `faqs` now (fast, durable, no AI), then
+        # hand embedding off to the shared bounded background executor.
+        # FAQs are visible in the FAQ Manager immediately; semantic search
+        # for them finishes a few seconds later once embedding completes.
+        job = _start_faq_import_job(client_id, valid_faqs)
 
         response = {
             'success':    True,
+            'job_id':     job['job_id'],
             'message':    (
-                f'Processing {len(valid_faqs)} items — your knowledge base will be '
-                'ready in about 30–60 seconds. Refresh the FAQ Manager to see them.'
+                f"Saved {len(valid_faqs)} FAQs — they're visible now. "
+                "Generating embeddings for semantic search in the "
+                "background; check /api/faq/upload/status/"
+                f"{job['job_id']} for progress."
             ),
             'count':      len(valid_faqs),
+            'total':      job['total'],
+            'status':     'queued',
             'processing': True,
         }
         # FIX: extraction used to hard-truncate to ~3,000 characters with
@@ -788,7 +854,7 @@ def upload_faqs():
         if errors:
             response['skipped']           = len(errors)
             response['validation_errors'] = errors[:10]
-        return jsonify(response)
+        return jsonify(response), 202
 
     except Exception as e:
         current_app.logger.error(f"[Upload] Error: {e}", exc_info=True)
@@ -884,20 +950,19 @@ def import_faqs_from_url():
                 'validation_errors': errors[:10],
             }), 400
 
-        t = threading.Thread(
-            target=_bg_enrich_and_save,
-            args=(client_id, valid_faqs),
-            daemon=True,
-        )
-        t.start()
+        job = _start_faq_import_job(client_id, valid_faqs)
 
         response = {
             'success':    True,
+            'job_id':     job['job_id'],
             'message':    (
                 f'Found {len(valid_faqs)} FAQ{"s" if len(valid_faqs) != 1 else ""} on that page — '
-                'your knowledge base will be ready in about 30–60 seconds.'
+                "they're saved now; embeddings for semantic search finish "
+                f"shortly in the background (check /api/faq/upload/status/{job['job_id']})."
             ),
             'count':      len(valid_faqs),
+            'total':      job['total'],
+            'status':     'queued',
             'processing': True,
         }
         # FIX: same honesty fix as upload_faqs() — a large FAQ page used to
@@ -911,11 +976,95 @@ def import_faqs_from_url():
         if errors:
             response['skipped']           = len(errors)
             response['validation_errors'] = errors[:10]
-        return jsonify(response)
+        return jsonify(response), 202
 
     except Exception as e:
         current_app.logger.error(f'[ImportURL] Error: {e}', exc_info=True)
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@faqs_bp.route('/api/faq/upload/status/<job_id>', methods=['GET'])
+@login_required
+def faq_upload_status(job_id):
+    """
+    Poll progress for a Stage A bulk-upload job.
+
+    Distinguishes queued / processing / completed / completed_with_errors /
+    failed (requirement: fix the old silent-success behaviour, where the
+    upload endpoint reported success before anything had actually run).
+
+    Self-healing: if the background embedding task died mid-run, the job
+    sits at 'processing' with a stale updated_at. This route detects that
+    (reclaim_stale_import_job) and resubmits the embedding phase — safe,
+    because it only ever touches rows still marked 'pending' for this
+    job_id, so a resubmit can't duplicate faqs rows or redo finished work.
+    """
+    client_id = request.args.get('client_id')
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    job = models.get_import_job(job_id, client_id)
+    if not job:
+        return jsonify({'success': False, 'error': 'Job not found'}), 404
+
+    if job['status'] == 'processing':
+        if models.reclaim_stale_import_job(job_id, stale_minutes=10):
+            _bg_submit(_run_stage_a_embedding_job, job_id, client_id)
+            current_app.logger.warning(
+                f"[Upload/StageA] job={job_id} appeared stale on poll — resubmitted"
+            )
+
+    return jsonify({
+        'success':      True,
+        'job_id':       job['job_id'],
+        'status':       job['status'],
+        'total':        job['total'],
+        'processed':    job['processed'],
+        'failed':       job['failed'],
+        'created_at':   job['created_at'].isoformat()   if job['created_at']   else None,
+        'updated_at':   job['updated_at'].isoformat()   if job['updated_at']   else None,
+        'completed_at': job['completed_at'].isoformat() if job['completed_at'] else None,
+    })
+
+
+@faqs_bp.route('/api/faq/upload/retry/<job_id>', methods=['POST'])
+@login_required
+def faq_upload_retry(job_id):
+    """
+    Explicitly retry a job's failed rows (embedding_status='failed' ->
+    'pending'), then resubmit the embedding phase.
+
+    Deliberately a separate, explicit action rather than automatic —
+    auto-retrying on every status poll risks silently looping forever on a
+    permanently-failing input (e.g. malformed text). This only reprocesses
+    rows still 'failed' or 'pending' for the job; already-'embedded' rows
+    are never touched, so a retry can't re-embed work that already
+    succeeded or duplicate any faqs record.
+    """
+    client_id = request.args.get('client_id')
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    job = models.get_import_job(job_id, client_id)
+    if not job:
+        return jsonify({'success': False, 'error': 'Job not found'}), 404
+
+    reset_count = models.retry_failed_embeddings(job_id, client_id)
+    if reset_count:
+        _bg_submit(_run_stage_a_embedding_job, job_id, client_id)
+        current_app.logger.info(
+            f"[Upload/StageA] job={job_id} retry: {reset_count} failed rows reset, resubmitted"
+        )
+
+    return jsonify({
+        'success':     True,
+        'job_id':      job_id,
+        'retried':     reset_count,
+        'message':     (
+            f"Retrying {reset_count} failed FAQs." if reset_count
+            else "Nothing to retry — no failed FAQs for this job."
+        ),
+    })
 
 
 @faqs_bp.route('/api/webhook/faq-import', methods=['POST'])
