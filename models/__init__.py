@@ -30,6 +30,7 @@ from .migrations import (
     migrate_faqs_table,
     migrate_faq_to_knowledge_base,
     migrate_faqs_import_tracking,
+    migrate_business_knowledge,
     migrate_google_oauth,
     migrate_password_reset_tokens,
     migrate_lead_custom_fields,
@@ -186,6 +187,31 @@ from .faq_imports import (
     claim_faqs_for_embedding,
     bulk_update_faq_embeddings,
 )
+
+# ── Business Knowledge (Phase 1) — isolated from the FAQ pipeline above,
+#    imported with an alias per function so both modules' otherwise-
+#    identically-named functions (create_import_job, claim_*, etc.) are
+#    both reachable without one silently shadowing the other. ─────────────
+from . import business_knowledge as _bk_module
+from . import knowledge_imports as _bk_jobs_module
+
+normalize_url                       = _bk_module.normalize_url
+save_business_knowledge_items       = _bk_module.save_business_knowledge_items
+delete_source_chunks                = _bk_module.delete_source_chunks
+get_by_normalized_url               = _bk_module.get_by_normalized_url
+touch_last_fetched                  = _bk_module.touch_last_fetched
+get_business_knowledge              = _bk_module.get_business_knowledge
+
+create_knowledge_import_job         = _bk_jobs_module.create_import_job
+mark_knowledge_import_job_started   = _bk_jobs_module.mark_import_job_started
+increment_knowledge_import_progress = _bk_jobs_module.increment_import_job_progress
+finalize_knowledge_import_job       = _bk_jobs_module.finalize_import_job
+get_knowledge_import_job            = _bk_jobs_module.get_import_job
+reclaim_stale_knowledge_import_job  = _bk_jobs_module.reclaim_stale_import_job
+retry_failed_knowledge_embeddings   = _bk_jobs_module.retry_failed_embeddings
+delete_knowledge_import_jobs_for_client = _bk_jobs_module.delete_import_jobs_for_client
+claim_knowledge_for_embedding       = _bk_jobs_module.claim_knowledge_for_embedding
+bulk_update_knowledge_embeddings    = _bk_jobs_module.bulk_update_knowledge_embeddings
 
 # ── Leads ─────────────────────────────────────────────────────────────────────
 from .leads import (

@@ -326,14 +326,29 @@ def process_excel_upload(file):
         return [], False
 
 
+def extract_pdf_text(file) -> str:
+    """
+    Generic PDF text extraction — reads every page via PyPDF2 and
+    concatenates it. No FAQ-specific logic at all: reused as-is by
+    Business Knowledge's PDF ingestion (policy/about/terms documents)
+    rather than duplicating PDF-reading logic there.
+
+    Raises on failure — callers decide how to handle/log it, since
+    process_pdf_upload()'s and Business Knowledge's PDF routes want
+    different fallback behavior on error.
+    """
+    import PyPDF2
+    pdf_reader = PyPDF2.PdfReader(io.BytesIO(file.read()))
+    text = ""
+    for page in pdf_reader.pages:
+        text += page.extract_text() + "\n"
+    return text
+
+
 def process_pdf_upload(file):
     """Returns (faqs, truncated) — see extract_faqs_from_text()."""
-    import PyPDF2
     try:
-        pdf_reader = PyPDF2.PdfReader(io.BytesIO(file.read()))
-        text = ""
-        for page in pdf_reader.pages:
-            text += page.extract_text() + "\n"
+        text = extract_pdf_text(file)
         if _ai_helper and _ai_helper.enabled:
             return extract_faqs_from_text(text)
         else:
@@ -863,6 +878,53 @@ def upload_faqs():
 
 @faqs_bp.route('/api/faq/import-url', methods=['POST'])
 @login_required
+def fetch_and_extract_page_text(url: str) -> str:
+    """
+    Generic single-page fetch + HTML-to-text extraction — no FAQ-specific
+    logic. Reused as-is by Business Knowledge's URL ingestion rather than
+    duplicating fetch/strip logic there.
+
+    Raises ValueError with a human-readable message on failure (bad URL,
+    HTTP error, empty content) — callers decide the HTTP response shape
+    themselves, since different callers want different response shapes.
+    """
+    url = (url or '').strip()
+    if not url:
+        raise ValueError("No URL provided")
+    if not re.match(r'^https?://', url):
+        url = 'https://' + url
+
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={'User-Agent': 'Mozilla/5.0 (compatible; LumviBot/1.0)'},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw_bytes = resp.read(500_000)   # cap at 500 KB
+    except urllib.error.HTTPError as e:
+        raise ValueError(f'Could not fetch URL: HTTP {e.code}')
+    except Exception as e:
+        raise ValueError(f'Could not fetch URL: {e}')
+
+    try:
+        html_text = raw_bytes.decode('utf-8', errors='replace')
+    except Exception:
+        html_text = raw_bytes.decode('latin-1', errors='replace')
+
+    html_text = re.sub(
+        r'(?is)<(script|style|nav|footer|header)[^>]*>.*?</\1>', ' ', html_text
+    )
+    html_text = re.sub(r'<[^>]+>', ' ', html_text)
+    html_text = _html.unescape(html_text)
+    html_text = re.sub(r'[ \t]{2,}', ' ', html_text)
+    html_text = re.sub(r'\n{3,}', '\n\n', html_text).strip()
+
+    if len(html_text) < 50:
+        raise ValueError('Page had no readable text content.')
+
+    return html_text
+
+
 def import_faqs_from_url():
     """
     Fetch a webpage by URL, extract visible text, then use AI to parse
@@ -879,47 +941,10 @@ def import_faqs_from_url():
         if not url:
             return jsonify({'success': False, 'error': 'No URL provided'}), 400
 
-        if not re.match(r'^https?://', url):
-            url = 'https://' + url
-
-        # ── Fetch the page ────────────────────────────────────────────
         try:
-            req = urllib.request.Request(
-                url,
-                headers={'User-Agent': 'Mozilla/5.0 (compatible; LumviBot/1.0)'},
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                raw_bytes = resp.read(500_000)   # cap at 500 KB
-        except urllib.error.HTTPError as e:
-            return jsonify({
-                'success': False,
-                'error': f'Could not fetch URL: HTTP {e.code}',
-            }), 400
-        except Exception as e:
-            return jsonify({
-                'success': False,
-                'error': f'Could not fetch URL: {e}',
-            }), 400
-
-        # ── Strip HTML tags → plain text ──────────────────────────────
-        try:
-            html_text = raw_bytes.decode('utf-8', errors='replace')
-        except Exception:
-            html_text = raw_bytes.decode('latin-1', errors='replace')
-
-        html_text = re.sub(
-            r'(?is)<(script|style|nav|footer|header)[^>]*>.*?</\1>', ' ', html_text
-        )
-        html_text = re.sub(r'<[^>]+>', ' ', html_text)
-        html_text = _html.unescape(html_text)
-        html_text = re.sub(r'[ \t]{2,}', ' ', html_text)
-        html_text = re.sub(r'\n{3,}', '\n\n', html_text).strip()
-
-        if len(html_text) < 50:
-            return jsonify({
-                'success': False,
-                'error': 'Page had no readable text content.',
-            }), 400
+            html_text = fetch_and_extract_page_text(url)
+        except ValueError as e:
+            return jsonify({'success': False, 'error': str(e)}), 400
 
         # FIX: was extract_faqs_from_text(html_text[:6000]) — redundant AND
         # counterproductive now that extract_faqs_from_text() does its own

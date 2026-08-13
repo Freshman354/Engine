@@ -975,6 +975,7 @@ try:
         'migrate_faq_to_knowledge_base', 'migrate_subscription_expiry',
         'migrate_to_recurring_subscriptions', 'migrate_conversation_features',
         'migrate_knowledge_base', 'migrate_faqs_import_tracking',
+        'migrate_business_knowledge',
         'migrate_webhooks', 'migrate_white_label',
         'migrate_client_status', 'migrate_onboarding', 'migrate_cron_tables',
         'migrate_api_usage_log', 'migrate_kb_gaps', 'migrate_lead_pipeline',
@@ -1133,6 +1134,12 @@ init_faqs(
     extract_keywords=extract_keywords,
 )
 app.register_blueprint(faqs_bp)
+
+# Business Knowledge (Phase 1) — additive, isolated from the FAQ blueprint
+# above; not wired into live retrieval yet (Phase 2).
+from blueprints.business_knowledge import business_knowledge_bp, init_business_knowledge
+init_business_knowledge(app=app, ai_helper=ai_helper)
+app.register_blueprint(business_knowledge_bp)
 
 # Billing
 # NOTE: billing.py's PLAN_PRICES_FLW (a legacy pricing dict, duplicate of

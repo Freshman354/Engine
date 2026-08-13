@@ -1839,6 +1839,111 @@ def migrate_faqs_import_tracking():
         conn.close()
 
 
+def migrate_business_knowledge():
+    """
+    Business Knowledge Phase 1 — additive, isolated new tables.
+
+    Does NOT touch faqs, knowledge_base, or articles in any way. Entirely
+    new tables, entirely new to the retrieval path (not wired into it
+    yet — Phase 2). Reuses the exact same embedding_status/import_batch_id
+    pattern and claim/reclaim/retry design already proven by Stage A's
+    faqs/faq_import_jobs, just on new tables — see
+    models/business_knowledge.py and models/knowledge_imports.py.
+
+    source_id: every row — including a standalone, single-chunk source —
+    gets a real, non-NULL source_id, self-referential for standalone rows
+    (source_id == its own id). Populated by the application layer (a
+    two-statement insert-then-backfill), not by a DB default, so no
+    trigger/function is needed here — this migration just adds the column.
+
+    Safe to call on every startup, like every other migration here.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS business_knowledge (
+                id               SERIAL PRIMARY KEY,
+                client_id        TEXT NOT NULL,
+                knowledge_type   TEXT NOT NULL,
+                source_type      TEXT NOT NULL,
+                title            TEXT NOT NULL,
+                content          TEXT NOT NULL,
+                category         TEXT DEFAULT 'General',
+                tags             TEXT DEFAULT '[]',
+                embedding        TEXT,
+                embedding_status TEXT DEFAULT 'pending',
+                import_batch_id  TEXT,
+                source_id        INTEGER,
+                chunk_index      INTEGER NOT NULL DEFAULT 0,
+                source_url       TEXT,
+                normalized_url   TEXT,
+                source_filename  TEXT,
+                content_hash     TEXT,
+                quality_score    REAL DEFAULT 0.8,
+                is_active        BOOLEAN DEFAULT TRUE,
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_indexed     TIMESTAMP,
+                last_fetched_at  TIMESTAMP
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bk_client "
+            "ON business_knowledge (client_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bk_client_type "
+            "ON business_knowledge (client_id, knowledge_type)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bk_import_batch "
+            "ON business_knowledge (import_batch_id) WHERE import_batch_id IS NOT NULL"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bk_status "
+            "ON business_knowledge (embedding_status)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bk_normalized_url "
+            "ON business_knowledge (client_id, normalized_url) "
+            "WHERE normalized_url IS NOT NULL"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bk_source_id "
+            "ON business_knowledge (source_id) WHERE source_id IS NOT NULL"
+        )
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS business_knowledge_import_jobs (
+                id             SERIAL PRIMARY KEY,
+                job_id         TEXT NOT NULL UNIQUE,
+                client_id      TEXT NOT NULL,
+                status         TEXT NOT NULL DEFAULT 'queued',
+                total          INTEGER NOT NULL DEFAULT 0,
+                processed      INTEGER NOT NULL DEFAULT 0,
+                failed         INTEGER NOT NULL DEFAULT 0,
+                error_message  TEXT,
+                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                started_at     TIMESTAMP,
+                completed_at   TIMESTAMP
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_bk_import_jobs_client "
+            "ON business_knowledge_import_jobs (client_id)"
+        )
+
+        conn.commit()
+        print("✅ Business Knowledge ready (business_knowledge + business_knowledge_import_jobs tables).")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_business_knowledge: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def migrate_conversation_status():
     """
     Add status + per-status timestamp columns to chat_sessions.

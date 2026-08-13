@@ -1916,6 +1916,66 @@ class AIHelper:
     # ── KB management methods ─────────────────────────────────────────────────
 
     def _split_content(self, text: str, max_chars: int = 1200) -> List[str]:
+        """
+        Split text into embedding-sized chunks, paragraph-aware.
+
+        Paragraphs (separated by a blank line) are packed together
+        greedily, each kept whole, up to max_chars — so a chunk boundary
+        lands between paragraphs/sections wherever possible instead of at
+        an arbitrary sentence position that might sit in the middle of
+        one. Only a single paragraph that itself exceeds max_chars falls
+        back to sentence-level packing, for just that paragraph.
+
+        For text with no blank-line paragraph structure at all — which is
+        every FAQ answer this has ever been exercised against in
+        production — this is a direct pass-through to the original
+        sentence-packing logic (_split_sentences), unchanged. Behavior
+        only differs for genuinely multi-paragraph text, which is exactly
+        the case this was extended for (long policy/about/terms pages).
+        """
+        normalized = text.strip()
+        paragraphs = [p.strip() for p in re.split(r'\n\s*\n', normalized) if p.strip()]
+
+        if len(paragraphs) <= 1:
+            # Forward the ORIGINAL, unstripped `text` — not `normalized` —
+            # so this is a byte-identical call to the pre-existing
+            # function for every single-paragraph input, including its
+            # existing whitespace-only-input quirk (falls back to
+            # text[:max_chars] using the original parameter). No behavior
+            # difference to document here; it's the same call.
+            return self._split_sentences(text, max_chars)
+
+        chunks: List[str] = []
+        current = ''
+        for para in paragraphs:
+            if len(para) > max_chars:
+                if current:
+                    chunks.append(current)
+                    current = ''
+                chunks.extend(self._split_sentences(para, max_chars))
+                continue
+
+            candidate = f"{current}\n\n{para}" if current else para
+            if len(candidate) <= max_chars:
+                current = candidate
+            else:
+                if current:
+                    chunks.append(current)
+                current = para
+
+        if current:
+            chunks.append(current)
+
+        return chunks or [text[:max_chars]]
+
+    def _split_sentences(self, text: str, max_chars: int = 1200) -> List[str]:
+        """
+        Sentence-level packing — the original, complete _split_content()
+        implementation, unchanged, now a standalone helper. _split_content()
+        calls this directly for any text with no paragraph structure (the
+        FAQ case, preserving exact prior behavior) and as its fallback for
+        an individual oversized paragraph (the new policy-page case).
+        """
         sentences = re.split(r'(?<=[.!?])\s+', text.strip())
         chunks, current = [], ''
         for sent in sentences:
