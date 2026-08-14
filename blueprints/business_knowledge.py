@@ -31,14 +31,7 @@ from flask_login import login_required, current_user
 import models
 from ai_helper import _bg_submit
 from services.embedding import embed_batch
-from faqs import extract_pdf_text, fetch_and_extract_page_text, _find_column
-# NOTE: in the real deployment, faqs.py lives at blueprints/faqs.py (a
-# sibling of this file inside the blueprints package) — this import
-# should read `from blueprints.faqs import ...` there, matching exactly
-# how app.py itself imports it (`from blueprints.faqs import faqs_bp,
-# init_faqs`). It's a bare `from faqs import ...` here only because this
-# sandbox happens to have faqs.py sitting flat at the top level rather
-# than inside a blueprints/ package directory.
+from blueprints.faqs import extract_pdf_text, fetch_and_extract_page_text, _find_column
 
 business_knowledge_bp = Blueprint('business_knowledge', __name__)
 
