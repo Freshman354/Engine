@@ -252,6 +252,98 @@ def touch_last_fetched(client_id: str, source_id: int) -> None:
         conn.close()
 
 
+def get_business_knowledge_for_retrieval(client_id: str) -> list:
+    """
+    Business Knowledge Phase 2 — the sole integration point with the
+    existing RAG pipeline (see blueprints/chat.py, where this is merged
+    with models.get_faqs()). Adapts business_knowledge rows into exactly
+    the dict shape models.get_faqs() already produces, so every existing
+    retrieval function (embedding_search, bm25_only_search,
+    find_best_match, hybrid_rerank, cross_encoder_rerank, generation)
+    consumes it with zero changes to any of them:
+
+        {id, faq_id, question, answer, category, triggers, tags,
+         quality_score, embedding, last_indexed}
+
+    plus extra, retrieval-inert metadata (knowledge_type, source_type,
+    source_url, source_id, chunk_index) that no existing function reads
+    but is preserved for future use (e.g. citations) without needing
+    another retrieval or schema change.
+
+    Filters to embedding_status = 'embedded' only — a pending/embedding/
+    failed row is not returned here at all, regardless of whether its
+    text content could still be keyword-matched. This is a deliberate
+    product choice, not a technical necessity (embedding_search() would
+    have gracefully skipped a missing embedding either way): a failed
+    row can stay in that state indefinitely until someone retries it,
+    and Business Knowledge content (shipping/return/privacy/terms) is
+    judged higher-stakes to get right than a typical short FAQ. Note
+    this is stricter than models.get_faqs(), which has no such filter —
+    a deliberate, known divergence between the two systems, not an
+    oversight.
+
+    Returns [] if the client has no embedded Business Knowledge yet —
+    the caller's list-concatenation is then a no-op, so FAQ-only
+    customers see byte-identical behavior to today.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            """SELECT * FROM business_knowledge
+               WHERE client_id = %s AND is_active = TRUE
+                 AND embedding_status = 'embedded'
+               ORDER BY source_id, chunk_index""",
+            (client_id,)
+        )
+        rows = [dict(r) for r in cursor.fetchall()]
+    finally:
+        cursor.close()
+        conn.close()
+
+    result = []
+    for row in rows:
+        tags_raw = row.get('tags') or '[]'
+        try:
+            tags = json.loads(tags_raw) if isinstance(tags_raw, str) else (tags_raw or [])
+        except Exception:
+            tags = []
+
+        embedding_raw = row.get('embedding')
+        if isinstance(embedding_raw, str) and embedding_raw:
+            try:
+                embedding = json.loads(embedding_raw)
+            except Exception:
+                # Defensive only — every row here has embedding_status=
+                # 'embedded', so this should never actually be hit.
+                embedding = []
+        elif isinstance(embedding_raw, list):
+            embedding = embedding_raw
+        else:
+            embedding = []
+
+        row_id = str(row['id'])
+        result.append({
+            'id':             row_id,
+            'faq_id':         row_id,
+            'question':       row.get('title', ''),
+            'answer':         row.get('content', ''),
+            'category':       row.get('category', 'General'),
+            'triggers':       [],
+            'tags':           tags,
+            'quality_score':  float(row.get('quality_score') or 0.0),
+            'embedding':      embedding,
+            'last_indexed':   row.get('last_indexed'),
+            # Extra, retrieval-inert metadata — no existing retrieval
+            # function reads these; preserved for future use.
+            'knowledge_type': row.get('knowledge_type'),
+            'source_type':    row.get('source_type'),
+            'source_url':     row.get('source_url'),
+            'source_id':      row.get('source_id'),
+            'chunk_index':    row.get('chunk_index'),
+        })
+    return result
+
+
 def get_business_knowledge(client_id: str, knowledge_type: str = None) -> list:
     """
     General read, for the manager UI and Phase 1 testing. Not called by

@@ -159,6 +159,23 @@ def chat():
                 config    = (json.loads(client['branding_settings'])
                              if client['branding_settings'] else {})
                 faqs_list = models.get_faqs(client_id)
+
+                # Business Knowledge (Phase 2) — merge alongside FAQs at
+                # the sole point every retrieval mechanism (keyword,
+                # BM25, embedding, RRF, cross-encoder, generation)
+                # draws its candidates from. Isolated in its own
+                # try/except: a Business Knowledge fetch failure must
+                # not take down FAQ retrieval, which is why this is not
+                # folded into the outer except block below. If a client
+                # has no embedded Business Knowledge, this appends []
+                # and faqs_list is unchanged from today's behavior.
+                try:
+                    faqs_list = faqs_list + models.get_business_knowledge_for_retrieval(client_id)
+                except Exception as bk_error:
+                    current_app.logger.warning(
+                        f'[Chat] Business Knowledge fetch error (non-critical, '
+                        f'FAQ-only fallback): {bk_error}'
+                    )
         except Exception as db_error:
             current_app.logger.error(f'Database error: {db_error}')
             faqs_list = []
