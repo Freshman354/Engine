@@ -214,6 +214,24 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
 
 /* ── EMPTY / LOADING ── */
 .empty-wrap { padding:72px 24px;text-align:center; }
+
+/* Business Knowledge — reuses existing tokens/patterns (.stat-card,
+   .kw-tag, .limit-warn) verbatim; no new colors introduced. */
+.bk-section { margin-top:22px; }
+.bk-section-head { display:flex; align-items:baseline; gap:10px; margin-bottom:10px; }
+.bk-section-head h3 { font-size:14.5px; font-weight:700; color:var(--ink); margin:0; }
+.bk-section-hint { font-size:12px; color:var(--sub); }
+.bk-list { display:flex; flex-direction:column; gap:8px; }
+.bk-item { display:flex; align-items:center; gap:12px; background:var(--white); border:1px solid var(--border); border-radius:10px; padding:12px 16px; }
+.bk-item-title { font-size:13.5px; font-weight:600; color:var(--ink); }
+.bk-item-meta { font-size:12px; color:var(--sub); margin-top:2px; }
+.bk-type-tag { display:inline-block; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--sub); background:var(--surface2); border-radius:5px; padding:2px 6px; margin-right:4px; }
+.bk-status { margin-left:auto; font-size:11px; font-weight:700; border-radius:20px; padding:4px 10px; white-space:nowrap; }
+.bk-status-ready      { color:var(--green); background:var(--green-lt); }
+.bk-status-processing { color:var(--amber); background:var(--amber-lt); }
+.bk-status-failed      { color:var(--red);   background:var(--red-lt); }
+.bk-status-partial     { color:var(--amber); background:var(--amber-lt); }
+
 .empty-icon { width:52px;height:52px;background:var(--accent-lt);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px; }
 .empty-icon svg { width:24px;height:24px;color:var(--accent); }
 .empty-wrap h3 { font-size:17px;font-weight:800;color:var(--ink);margin-bottom:8px;letter-spacing:-0.02em; }
@@ -244,11 +262,11 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
 
 .form-group { margin-bottom:16px; }
 .form-group label { display:block;font-size:11.5px;font-weight:700;color:var(--ink2);margin-bottom:6px; }
-.form-group input, .form-group textarea {
+.form-group input, .form-group textarea, .form-group select {
   width:100%;padding:10px 13px;background:var(--surface2);border:1.5px solid var(--border);
   border-radius:var(--radius);font-size:13.5px;font-family:inherit;color:var(--ink);outline:none;transition:all 0.15s;
 }
-.form-group input:focus, .form-group textarea:focus { border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-lt); }
+.form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-lt); }
 .form-group input::placeholder, .form-group textarea::placeholder { color:var(--ink4); }
 .form-group textarea { resize:vertical;min-height:96px;line-height:1.6; }
 .form-hint { font-size:11px;color:var(--ink4);margin-top:5px; }
@@ -497,6 +515,16 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
       </div>
     </div>
 
+    <!-- BUSINESS KNOWLEDGE — hidden until there's something to show, so
+         FAQ-only customers see no visual change at all -->
+    <div class="bk-section" id="bk-section" style="display:none;">
+      <div class="bk-section-head">
+        <h3>What Lumvi knows about your business</h3>
+        <span class="bk-section-hint">Policies, pages, and documents beyond your FAQs</span>
+      </div>
+      <div class="bk-list" id="bk-list"></div>
+    </div>
+
   </div>
 </div>
 
@@ -570,6 +598,19 @@ body { font-family:'Plus Jakarta Sans',sans-serif; background:var(--bg); color:v
       <button class="modal-x" onclick="closeUploadModal()">×</button>
     </div>
     <div class="modal-body">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label>What kind of content is this?</label>
+        <select id="upload-knowledge-type" onchange="_onUploadTypeChange()">
+          <option value="faq" selected>FAQ</option>
+          <option value="general">General</option>
+          <option value="shipping_policy">Shipping policy</option>
+          <option value="return_policy">Return / refund policy</option>
+          <option value="privacy_policy">Privacy policy</option>
+          <option value="terms">Terms &amp; conditions</option>
+          <option value="about">About us</option>
+          <option value="contact">Contact info</option>
+        </select>
+      </div>
       <div class="upload-tabs">
         <button class="upload-tab active" id="utab-file" onclick="switchTab('file')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -642,7 +683,51 @@ let _visible     = 50;
 let _dirty       = false;
 const PS         = 50;
 
-window.onload = () => { loadFAQs(); loadClientInfo(); };
+window.onload = () => { loadFAQs(); loadClientInfo(); loadBusinessKnowledge(); };
+
+// ── BUSINESS KNOWLEDGE (read-only summary — no edit/delete here; see
+//    Phase 3 UX plan for why a full per-chunk manager is deferred) ──────
+const BK_TYPE_LABELS = {
+  shipping_policy: 'Shipping', return_policy: 'Returns', privacy_policy: 'Privacy',
+  terms: 'Terms', about: 'About', contact: 'Contact', website_page: 'Page',
+};
+const BK_STATUS_LABELS = { ready: 'Ready', processing: 'Processing…', failed: 'Failed', partial: 'Partial' };
+
+async function loadBusinessKnowledge() {
+  try {
+    const res  = await fetch(`/api/business-knowledge?client_id=${CLIENT_ID}`);
+    const data = await res.json();
+    if (!data.success) return; // non-critical — FAQ list already loaded independently
+    renderBusinessKnowledge(data.items || []);
+  } catch {
+    /* non-critical — the Business Knowledge panel just stays hidden;
+       existing FAQ functionality is entirely unaffected either way. */
+  }
+}
+
+function renderBusinessKnowledge(items) {
+  const section = document.getElementById('bk-section');
+  const list    = document.getElementById('bk-list');
+  if (!items.length) { section.style.display = 'none'; return; }
+
+  list.innerHTML = items.map(item => {
+    const typeLabel   = BK_TYPE_LABELS[item.knowledge_type] || item.knowledge_type;
+    const statusLabel = BK_STATUS_LABELS[item.status] || item.status;
+    const sourceDetail = item.source_url
+      ? item.source_url
+      : (item.source_filename || (item.source_type === 'manual' ? 'Added manually' : ''));
+    const chunkNote = item.chunk_count > 1 ? ` · ${item.chunk_count} sections` : '';
+    return `
+    <div class="bk-item">
+      <div>
+        <div class="bk-item-title">${escapeHtml(item.title || 'Untitled')}</div>
+        <div class="bk-item-meta"><span class="bk-type-tag">${escapeHtml(typeLabel)}</span>${escapeHtml(sourceDetail)}${chunkNote}</div>
+      </div>
+      <span class="bk-status bk-status-${escapeHtml(item.status)}">${escapeHtml(statusLabel)}</span>
+    </div>`;
+  }).join('');
+  section.style.display = '';
+}
 
 // ── CLIENT INFO (plan + limit) ────────────────────────────────────
 async function loadClientInfo() {
@@ -906,6 +991,8 @@ function _resetUpload() {
   document.getElementById('url-progress-status').textContent='Fetching page…';
   document.getElementById('url-progress-status').style.color='';
   document.getElementById('faq-url-input').value='';
+  document.getElementById('upload-knowledge-type').value='faq';
+  _onUploadTypeChange();
   // Reset to file tab state directly — don't call switchTab to avoid
   // circular dependency and premature DOM reads (Fix 2)
   document.getElementById('utab-file').classList.add('active');
@@ -922,8 +1009,33 @@ function switchTab(tab) {
   document.getElementById('upanel-file').classList.toggle('active',tab==='file');
   document.getElementById('upanel-url').classList.toggle('active',tab==='url');
   const btn=document.getElementById('upload-btn');
-  if (tab==='url') { btn.textContent='Import FAQs'; btn.onclick=startUrlImport; btn.disabled=document.getElementById('faq-url-input').value.trim().length<4; }
+  if (tab==='url') { btn.textContent='Import'; btn.onclick=startUrlImport; btn.disabled=document.getElementById('faq-url-input').value.trim().length<4; }
   else             { btn.textContent='Upload'; btn.onclick=startUpload; btn.disabled=!selectedFile; }
+}
+
+function _isFaqPipelineType() {
+  const t = document.getElementById('upload-knowledge-type').value;
+  return t === 'faq' || t === 'general';
+}
+
+function _onUploadTypeChange() {
+  // The Q:/A: guidance only applies to the FAQ pipeline's AI extraction —
+  // Business Knowledge chunks raw text directly, no Q&A extraction, so
+  // showing that guidance for a policy upload would be actively
+  // misleading rather than just irrelevant.
+  const isFaq = _isFaqPipelineType();
+  const pdfCard = document.querySelector('#upanel-file .format-card:nth-child(2)');
+  if (pdfCard) {
+    pdfCard.innerHTML = isFaq
+      ? '<strong>PDF Document</strong>Use <code>Q:</code> before questions<br>Use <code>A:</code> before answers<br>Or any doc — AI extracts it'
+      : '<strong>PDF Document</strong>The full document is saved and made searchable — no special formatting needed';
+  }
+  const urlTip = document.querySelector('#upanel-url .upload-tip');
+  if (urlTip) {
+    urlTip.innerHTML = isFaq
+      ? '<strong>How it works:</strong> Lumvi fetches the page, strips noise, then uses AI to extract every Q&amp;A pair automatically.'
+      : '<strong>How it works:</strong> Lumvi fetches the page and saves its content directly — re-importing the same unchanged page later won\'t create duplicates.';
+  }
 }
 
 function onUrlInput() {
@@ -980,24 +1092,29 @@ function _buildUploadResultMessage(d) {
 
 async function startUpload() {
   if (!selectedFile) return;
+  const isFaq = _isFaqPipelineType();
   const fill=document.getElementById('progress-fill'), st=document.getElementById('progress-status');
   const area=document.getElementById('progress-area'), btn=document.getElementById('upload-btn');
   area.style.display='block'; fill.style.width='15%'; fill.style.background=''; st.textContent='Validating…'; btn.disabled=true;
   const v=await _validateFile(selectedFile);
   if (!v.ok){fill.style.width='100%';fill.style.background='var(--red)';st.textContent='❌ '+v.error;st.style.color='var(--red)';btn.disabled=false;showError(v.error);return;}
-  fill.style.width='45%'; st.textContent=`Uploading ${v.count||''} FAQs…`;
+  fill.style.width='45%'; st.textContent = isFaq ? `Uploading ${v.count||''} FAQs…` : 'Uploading…';
   const fd=new FormData(); fd.append('file',selectedFile); fd.append('client_id',CLIENT_ID);
+  const endpoint = isFaq ? '/api/faq/upload' : '/api/business-knowledge/upload';
+  if (!isFaq) fd.append('knowledge_type', document.getElementById('upload-knowledge-type').value);
   try {
     fill.style.width='75%'; st.textContent='Processing on server…';
-    const res=await fetch('/api/faq/upload',{method:'POST',body:fd});
+    const res=await fetch(endpoint,{method:'POST',body:fd});
     fill.style.width='100%';
     const d=await res.json();
     if (d.success){
-      const needsWarning = !!(d.truncated || d.skipped);
-      const msg = _buildUploadResultMessage(d);
-      st.textContent=d.message; st.style.color=needsWarning?'var(--amber)':'var(--green)';
+      const needsWarning = isFaq && !!(d.truncated || d.skipped);
+      const msg = isFaq ? _buildUploadResultMessage(d) : (d.message || 'Saved — embedding in the background.');
+      st.textContent = isFaq ? d.message : d.message; st.style.color=needsWarning?'var(--amber)':'var(--green)';
       setTimeout(()=>{
-        closeUploadModal();loadFAQs();
+        closeUploadModal();
+        loadFAQs();
+        if (!isFaq) loadBusinessKnowledge();
         needsWarning ? showWarning(msg) : showSuccess(msg);
       }, needsWarning?2200:1200);
     }
@@ -1007,20 +1124,31 @@ async function startUpload() {
 
 async function startUrlImport() {
   const url=document.getElementById('faq-url-input').value.trim(); if(!url) return;
+  const isFaq = _isFaqPipelineType();
+  const knowledgeType = document.getElementById('upload-knowledge-type').value;
   const fill=document.getElementById('url-progress-fill'), st=document.getElementById('url-progress-status');
   const area=document.getElementById('url-progress-area'), btn=document.getElementById('upload-btn');
   area.style.display='block'; fill.style.width='20%'; fill.style.background=''; st.textContent='Fetching page…'; btn.disabled=true;
   try {
-    fill.style.width='55%'; st.textContent='Extracting FAQs with AI…';
-    const res=await fetch('/api/faq/import-url',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,client_id:CLIENT_ID})});
+    fill.style.width='55%'; st.textContent = isFaq ? 'Extracting FAQs with AI…' : 'Fetching and saving page content…';
+    const endpoint = isFaq ? '/api/faq/import-url' : '/api/business-knowledge/import-url';
+    const payload  = isFaq
+      ? { url, client_id: CLIENT_ID }
+      : { url, client_id: CLIENT_ID, knowledge_type: knowledgeType };
+    const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     fill.style.width='100%';
     const d=await res.json();
     if (d.success){
-      const needsWarning = !!(d.truncated || d.skipped);
-      const msg = _buildUploadResultMessage(d);
-      st.textContent=d.message; st.style.color=needsWarning?'var(--amber)':'var(--green)';
+      const needsWarning = isFaq && !!(d.truncated || d.skipped);
+      const msg = isFaq
+        ? _buildUploadResultMessage(d)
+        : (d.unchanged ? d.message : (d.message || 'Saved — embedding in the background.'));
+      st.textContent = d.message || (d.unchanged ? 'No changes since last import.' : 'Done.');
+      st.style.color = needsWarning ? 'var(--amber)' : 'var(--green)';
       setTimeout(()=>{
-        closeUploadModal();loadFAQs();
+        closeUploadModal();
+        loadFAQs();
+        if (!isFaq) loadBusinessKnowledge();
         needsWarning ? showWarning(msg) : showSuccess(msg);
       }, needsWarning?2200:1400);
     }

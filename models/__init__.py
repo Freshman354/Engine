@@ -202,6 +202,7 @@ get_by_normalized_url               = _bk_module.get_by_normalized_url
 touch_last_fetched                  = _bk_module.touch_last_fetched
 get_business_knowledge              = _bk_module.get_business_knowledge
 get_business_knowledge_for_retrieval = _bk_module.get_business_knowledge_for_retrieval
+get_business_knowledge_sources_summary = _bk_module.get_business_knowledge_sources_summary
 
 create_knowledge_import_job         = _bk_jobs_module.create_import_job
 mark_knowledge_import_job_started   = _bk_jobs_module.mark_import_job_started

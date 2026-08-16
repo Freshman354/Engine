@@ -14,6 +14,7 @@ business_knowledge) and the shared, process-wide Voyage rate limiter
 
 Routes
 ------
+  GET         /api/business-knowledge                        list_business_knowledge
   POST        /api/business-knowledge                        create_business_knowledge_item
   POST        /api/business-knowledge/upload                  upload_business_knowledge
   POST        /api/business-knowledge/import-url               import_business_knowledge_url
@@ -179,6 +180,23 @@ def _run_knowledge_embedding_job(job_id: str, client_id: str) -> None:
 
 
 # ── Routes ────────────────────────────────────────────────────────────────
+
+@business_knowledge_bp.route('/api/business-knowledge', methods=['GET'])
+@login_required
+def list_business_knowledge():
+    """
+    Smallest possible read endpoint for the Knowledge Base page's "what
+    does Lumvi know about your business" display — one row per source
+    (grouped, not per-chunk), with an aggregated status. No edit/delete;
+    full chunk-level CRUD is explicitly deferred to a later phase.
+    """
+    client_id = request.args.get('client_id')
+    if not models.verify_client_ownership(current_user.id, client_id):
+        return jsonify({'success': False, 'error': 'Unauthorized'}), 403
+
+    items = models.get_business_knowledge_sources_summary(client_id)
+    return jsonify({'success': True, 'items': items, 'count': len(items)})
+
 
 @business_knowledge_bp.route('/api/business-knowledge', methods=['POST'])
 @login_required

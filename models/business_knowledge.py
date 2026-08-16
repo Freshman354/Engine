@@ -344,6 +344,73 @@ def get_business_knowledge_for_retrieval(client_id: str) -> list:
     return result
 
 
+def get_business_knowledge_sources_summary(client_id: str) -> list:
+    """
+    One row per logical source (grouped by source_id), for a lightweight
+    "what does Lumvi know about your business" display — deliberately
+    NOT per-chunk, since the frontend for this phase only needs enough
+    to show discoverability/acceptance, not a full chunk-level editor
+    (see the Phase 3 UX plan — CRUD on individual chunks is explicitly
+    out of scope for now).
+
+    Aggregates embedding_status across a source's chunks into one
+    overall status:
+      'processing' — any chunk still pending/embedding
+      'failed'     — no chunk embedded yet, at least one failed
+      'partial'    — some embedded, some failed
+      'ready'      — every chunk embedded
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            """SELECT
+                   source_id,
+                   MIN(knowledge_type)   AS knowledge_type,
+                   MIN(title)            AS title,
+                   MIN(source_type)      AS source_type,
+                   MIN(source_url)       AS source_url,
+                   MIN(source_filename)  AS source_filename,
+                   COUNT(*)              AS chunk_count,
+                   MIN(created_at)       AS created_at,
+                   COUNT(*) FILTER (WHERE embedding_status = 'embedded') AS embedded_count,
+                   COUNT(*) FILTER (WHERE embedding_status = 'failed')   AS failed_count,
+                   COUNT(*) FILTER (WHERE embedding_status IN ('pending','embedding')) AS pending_count
+               FROM business_knowledge
+               WHERE client_id = %s AND is_active = TRUE
+               GROUP BY source_id
+               ORDER BY MIN(created_at) DESC""",
+            (client_id,)
+        )
+        rows = [dict(r) for r in cursor.fetchall()]
+    finally:
+        cursor.close()
+        conn.close()
+
+    result = []
+    for row in rows:
+        if row['pending_count'] > 0:
+            status = 'processing'
+        elif row['embedded_count'] > 0 and row['failed_count'] > 0:
+            status = 'partial'
+        elif row['failed_count'] > 0:
+            status = 'failed'
+        else:
+            status = 'ready'
+        created_at = row.get('created_at')
+        result.append({
+            'source_id':       row['source_id'],
+            'knowledge_type':  row['knowledge_type'],
+            'title':           row['title'],
+            'source_type':     row['source_type'],
+            'source_url':      row['source_url'],
+            'source_filename': row['source_filename'],
+            'chunk_count':     row['chunk_count'],
+            'created_at':      created_at.isoformat() if created_at else None,
+            'status':          status,
+        })
+    return result
+
+
 def get_business_knowledge(client_id: str, knowledge_type: str = None) -> list:
     """
     General read, for the manager UI and Phase 1 testing. Not called by

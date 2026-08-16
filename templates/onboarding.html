@@ -581,10 +581,23 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
       <label style="display:block;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--mid);margin-bottom:6px;">
         Upload Documents
       </label>
+      <div class="field" style="margin-bottom:10px;">
+        <label>What kind of document is this?</label>
+        <select id="fileUploadType">
+          <option value="faq" selected>FAQ</option>
+          <option value="general">General</option>
+          <option value="shipping_policy">Shipping policy</option>
+          <option value="return_policy">Return / refund policy</option>
+          <option value="privacy_policy">Privacy policy</option>
+          <option value="terms">Terms &amp; conditions</option>
+          <option value="about">About us</option>
+          <option value="contact">Contact info</option>
+        </select>
+      </div>
       <div class="dropzone" onclick="document.getElementById('fileInput').click()">
         <svg viewBox="0 0 24 24"><path d="M12 3v12m0-12l-4 4m4-4l4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
         <div class="dropzone-label">Drop PDFs here, or click to upload</div>
-        <div class="dropzone-hint">Product guides, size charts, brand guidelines — anything your AI should reference</div>
+        <div class="dropzone-hint">Product guides, size charts, policies — anything your AI should reference</div>
       </div>
       <input type="file" id="fileInput" accept=".pdf" multiple style="display:none;" onchange="handleFileUpload(event)">
       <div class="upload-list" id="uploadList"></div>
@@ -597,6 +610,19 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
         padding:28px;max-width:480px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.15);">
         <h3 style="font-family:'Fraunces',serif;font-size:18px;font-weight:700;margin-bottom:18px;">Add something your AI should know</h3>
         <div class="field">
+          <label>Type</label>
+          <select id="newFaqType">
+            <option value="faq" selected>FAQ</option>
+            <option value="general">General</option>
+            <option value="shipping_policy">Shipping</option>
+            <option value="return_policy">Returns</option>
+            <option value="privacy_policy">Privacy</option>
+            <option value="terms">Terms</option>
+            <option value="about">About</option>
+            <option value="contact">Contact</option>
+          </select>
+        </div>
+        <div class="field" style="margin-top:12px;">
           <label>Question a customer might ask</label>
           <input type="text" id="newFaqQ" placeholder="e.g. Do you offer gift wrapping?">
         </div>
@@ -703,7 +729,15 @@ let activateEmbedUrl = null;  // theme-editor deep link — set only for a headl
 let manualActivationUrl = null;  // plain theme editor link (no activateAppId) — fallback for Shopify's known deep-link flakiness, always shown alongside the button above rather than only on failure, since a failed deep link can't be detected client-side
 let storeData        = { products: 0, collections: 0 };
 let faqs             = [];
+let businessKnowledgeItems = []; // manually-added, non-FAQ items queued until launchAI() — same deferred rhythm as `faqs`, submitted via /api/business-knowledge instead of /api/faqs
 let uploadedFiles     = [];
+
+const KNOWLEDGE_TYPE_LABELS = {
+  faq: 'FAQ', general: 'General', shipping_policy: 'Shipping',
+  return_policy: 'Returns', privacy_policy: 'Privacy', terms: 'Terms',
+  about: 'About', contact: 'Contact',
+};
+const FAQ_PIPELINE_TYPES = new Set(['faq', 'general']); // routes through the existing, unchanged FAQ endpoints
 
 const TOTAL_STEPS = 5;
 
@@ -922,23 +956,43 @@ function populateFaqEditor() {
 
 function renderFaqEditor() {
   const list = document.getElementById('faqEditList');
-  list.innerHTML = faqs.map((f, i) => `
-    <div class="faq-item-edit" id="faqEdit_${i}">
+  // Merged, read-only-ordered display of both queued FAQ entries and
+  // queued Business Knowledge entries — same list, each tagged with its
+  // type so the user can see everything they've added at a glance.
+  const faqRows = faqs.map((f, i) => ({ kind: 'faq', index: i, item: f }));
+  const bkRows  = businessKnowledgeItems.map((b, i) => ({ kind: 'bk', index: i, item: b }));
+  const rows = [...faqRows, ...bkRows];
+
+  list.innerHTML = rows.map(({ kind, index, item }) => {
+    const question = kind === 'faq' ? item.question : item.title;
+    const answer   = kind === 'faq' ? item.answer   : item.content;
+    const typeLabel = kind === 'faq'
+      ? (item.source === 'imported' ? 'From your store' : null)
+      : (KNOWLEDGE_TYPE_LABELS[item.knowledge_type] || item.knowledge_type);
+    const removeFn = kind === 'faq' ? `removeFaq(${index})` : `removeBusinessKnowledgeItem(${index})`;
+    return `
+    <div class="faq-item-edit">
       <div class="faq-item-edit-top">
         <div style="flex:1;">
-          <div class="faq-q-edit">${esc(f.question)}</div>
-          <div class="faq-a-edit">${esc(f.answer.slice(0,100))}${f.answer.length>100?'…':''}</div>
+          <div class="faq-q-edit">${esc(question)}</div>
+          <div class="faq-a-edit">${esc(answer.slice(0,100))}${answer.length>100?'…':''}</div>
         </div>
-        ${f.source === 'imported' ? '<span class="faq-badge">From your store</span>' : ''}
-        <button class="btn-rm-faq" onclick="removeFaq(${i})" title="Remove">
+        ${typeLabel ? `<span class="faq-badge">${esc(typeLabel)}</span>` : ''}
+        <button class="btn-rm-faq" onclick="${removeFn}" title="Remove">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function removeFaq(i) {
   faqs.splice(i, 1);
+  renderFaqEditor();
+}
+
+function removeBusinessKnowledgeItem(i) {
+  businessKnowledgeItems.splice(i, 1);
   renderFaqEditor();
 }
 
@@ -947,36 +1001,91 @@ function closeAddFaqModal() {
   document.getElementById('addFaqModal').style.display = 'none';
   document.getElementById('newFaqQ').value = '';
   document.getElementById('newFaqA').value = '';
+  document.getElementById('newFaqType').value = 'faq';
 }
 function saveNewFaq() {
   const q = document.getElementById('newFaqQ').value.trim();
   const a = document.getElementById('newFaqA').value.trim();
+  const type = document.getElementById('newFaqType').value;
   if (!q || !a) { toast('Please fill in both fields.', 'error'); return; }
-  faqs.push({ id: `faq_custom_${Date.now()}`, question: q, answer: a, source: 'custom' });
+
+  if (FAQ_PIPELINE_TYPES.has(type)) {
+    // Unchanged existing behavior — same array, same shape, same
+    // eventual /api/faqs submission in launchAI().
+    faqs.push({ id: `faq_custom_${Date.now()}`, question: q, answer: a, source: 'custom' });
+  } else {
+    // Queued the same way as FAQ items (deferred until launchAI()), but
+    // submitted separately via /api/business-knowledge — see launchAI().
+    businessKnowledgeItems.push({ id: `bk_custom_${Date.now()}`, title: q, content: a, knowledge_type: type });
+  }
   closeAddFaqModal();
   renderFaqEditor();
   document.getElementById('faqCountLabel').textContent = faqs.length;
 }
 
 // ── File upload (PDFs) ─────────────────────────────────────────────────
-// TODO(backend): implement /api/training/upload (multipart) to store the file
-// and queue it for ingestion into the AI's knowledge base.
-function handleFileUpload(event) {
+// Uploads immediately on selection — real feedback per file (uploading /
+// queued / failed), not a fake "added to a list" placeholder. FAQ-typed
+// files go through the existing, unchanged /api/faq/upload; every other
+// type goes through /api/business-knowledge/upload.
+async function handleFileUpload(event) {
   const files = Array.from(event.target.files);
-  files.forEach(f => {
-    uploadedFiles.push(f);
-    const list = document.getElementById('uploadList');
-    const item = document.createElement('div');
-    item.className = 'upload-item';
-    item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span>${esc(f.name)}</span>`;
-    list.appendChild(item);
-  });
-  toast(`${files.length} file${files.length > 1 ? 's' : ''} added.`, 'success');
+  const type  = document.getElementById('fileUploadType').value;
+  for (const f of files) {
+    await uploadOneOnboardingFile(f, type);
+  }
+  event.target.value = ''; // allow re-selecting the same file(s) after a failure
+}
+
+async function uploadOneOnboardingFile(file, type) {
+  const list = document.getElementById('uploadList');
+  const item = document.createElement('div');
+  item.className = 'upload-item';
+  item.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg><span>${esc(file.name)}</span><span class="upload-item-status" style="margin-left:auto;font-size:12px;color:var(--sub);">Uploading…</span>`;
+  list.appendChild(item);
+  const statusEl = item.querySelector('.upload-item-status');
+
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('client_id', createdClientId || '');
+  const isFaqType = FAQ_PIPELINE_TYPES.has(type);
+  if (!isFaqType) fd.append('knowledge_type', type);
+
+  try {
+    const res = await fetch(isFaqType ? '/api/faq/upload' : '/api/business-knowledge/upload', {
+      method: 'POST', body: fd,
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Upload failed.');
+    }
+    statusEl.textContent = isFaqType
+      ? `${data.total || data.count || 'Added'}`.trim()
+      : 'Queued for processing';
+    statusEl.style.color = 'var(--green, #1a7f37)';
+    if (isFaqType) {
+      // Existing FAQ list on this page is local-array-based, not
+      // server-refreshed — reflect the newly uploaded count so
+      // "answers ready" stays accurate without a full reload.
+      document.getElementById('faqCountLabel').textContent =
+        parseInt(document.getElementById('faqCountLabel').textContent || '0', 10) + (data.total || data.count || 0);
+    }
+  } catch (e) {
+    statusEl.textContent = e.message || 'Failed';
+    statusEl.style.color = 'var(--red, #c0392b)';
+    item.style.borderColor = 'var(--red, #c0392b)';
+  }
 }
 
 // ── Finalize: save customization + knowledge, then move to Go Live ────
 // Reuses existing /api/admin/customize and /api/faqs routes; payload keys
 // unchanged so no backend changes are required for this step.
+// Reuses existing /api/admin/customize and /api/faqs routes unchanged;
+// also submits any manually-queued Business Knowledge items via the
+// existing (Phase 1) /api/business-knowledge endpoint. A Business
+// Knowledge save failure is surfaced honestly but does not block
+// onboarding from completing — the user's FAQs/branding are already
+// saved and the AI is usable either way.
 async function launchAI() {
   const btn      = document.getElementById('createBtn');
   const botName  = document.getElementById('botName').value.trim() || 'Assistant';
@@ -1004,6 +1113,24 @@ async function launchAI() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ client_id: createdClientId, faqs }),
     });
+
+    if (businessKnowledgeItems.length) {
+      const results = await Promise.allSettled(businessKnowledgeItems.map(item =>
+        fetch('/api/business-knowledge', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: createdClientId,
+            knowledge_type: item.knowledge_type,
+            title: item.title,
+            content: item.content,
+          }),
+        }).then(r => r.json())
+      ));
+      const failedCount = results.filter(r => r.status === 'rejected' || !r.value?.success).length;
+      if (failedCount > 0) {
+        toast(`${failedCount} item${failedCount === 1 ? '' : 's'} couldn't be saved — you can re-add ${failedCount === 1 ? 'it' : 'them'} from the Knowledge Base page.`, 'error');
+      }
+    }
 
     goToStep(5);
   } catch (e) {
