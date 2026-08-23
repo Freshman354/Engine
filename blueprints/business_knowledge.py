@@ -29,6 +29,7 @@ import hashlib
 from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
 
+import cache_utils
 import models
 from ai_helper import _bg_submit
 from services.embedding import embed_batch
@@ -133,9 +134,9 @@ def _run_knowledge_embedding_job(job_id: str, client_id: str) -> None:
     one pacing budget with zero new code), batched write-back, resumable
     via the same stale-job reclaim mechanism.
 
-    Deliberately does NOT call cache_utils.bump_kb_version() — nothing
-    reads business_knowledge yet (Phase 2), so there's no retrieval cache
-    to invalidate for it.
+    After a successful finalize, bumps kb_version so chat.py's RAG
+    response cache cannot keep serving pre-import answers (Phase 2
+    merges this table into faqs_list).
     """
     with _app.app_context():
         models.mark_knowledge_import_job_started(job_id)
@@ -170,6 +171,7 @@ def _run_knowledge_embedding_job(job_id: str, client_id: str) -> None:
                 )
 
             models.finalize_knowledge_import_job(job_id)
+            cache_utils.bump_kb_version(client_id)
             current_app.logger.info(f"[BusinessKnowledge/StageA] job={job_id} finished")
 
         except Exception as e:
@@ -390,6 +392,10 @@ def import_business_knowledge_url():
 
         if existing:
             models.delete_source_chunks(client_id, existing['source_id'])
+            # Old chunks are gone immediately; drop cached answers that
+            # were generated from them so we don't keep quoting stale policy
+            # text until the replacement job finishes embedding.
+            cache_utils.bump_kb_version(client_id)
 
         if not title:
             title = url

@@ -876,8 +876,6 @@ def upload_faqs():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@faqs_bp.route('/api/faq/import-url', methods=['POST'])
-@login_required
 def fetch_and_extract_page_text(url: str) -> str:
     """
     Generic single-page fetch + HTML-to-text extraction — no FAQ-specific
@@ -925,6 +923,8 @@ def fetch_and_extract_page_text(url: str) -> str:
     return html_text
 
 
+@faqs_bp.route('/api/faq/import-url', methods=['POST'])
+@login_required
 def import_faqs_from_url():
     """
     Fetch a webpage by URL, extract visible text, then use AI to parse

@@ -472,61 +472,96 @@ def send_welcome_email(email: str) -> None:
     def _send():
         try:
             msg = Message(
-                subject    = "Welcome to Lumvi — your AI chatbot is ready 🚀",
+                subject    = "Welcome to Lumvi — your AI Employee is ready",
                 sender     = "Lumvi <support@lumvi.net>",
                 recipients = [email],
                 html       = """
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#0f172a;font-family:'Inter',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a;padding:40px 0;">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Welcome to Lumvi</title></head>
+<body style="margin:0;padding:0;background:#F7F4EF;font-family:Georgia,'Times New Roman',serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F7F4EF;padding:48px 0;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
-        <tr><td style="background:linear-gradient(135deg,#6366f1 0%,#7c3aed 50%,#a78bfa 100%);border-radius:16px 16px 0 0;padding:36px 40px;text-align:center;">
-          <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:12px;padding:10px 20px;margin-bottom:16px;">
-            <span style="font-size:26px;font-weight:900;color:#ffffff;letter-spacing:-0.5px;">&#9889; Lumvi</span>
+
+        <!-- Header -->
+        <tr><td style="padding:0 40px 32px;text-align:center;">
+          <span style="font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:700;color:#1E1E1E;letter-spacing:0.5px;">LUMVI</span>
+          <div style="margin-top:18px;">
+            <span style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:#B79349;">&mdash; MEET YOUR AI EMPLOYEE</span>
           </div>
-          <h1 style="margin:0;font-size:24px;font-weight:800;color:#ffffff;line-height:1.3;">
-            You're all set &mdash; let's build your first chatbot!
-          </h1>
         </td></tr>
-        <tr><td style="background:#1e293b;padding:36px 40px;">
-          <p style="margin:0 0 20px;color:#94a3b8;font-size:15px;line-height:1.7;">
-            Hey there &#128075; &mdash; welcome to Lumvi! You're now part of a growing group of agencies and businesses using AI chatbots to capture leads and answer questions automatically.
+
+        <!-- Main card -->
+        <tr><td style="background:#FFFFFF;border:1px solid #EAE4D9;border-radius:4px;padding:48px 44px;">
+
+          <h1 style="margin:0 0 20px;font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:400;color:#1E1E1E;line-height:1.3;text-align:center;">
+            Your store just hired<br/>its best employee.
+          </h1>
+
+          <p style="margin:0 0 32px;font-family:Arial,Helvetica,sans-serif;color:#4A4A4A;font-size:15px;line-height:1.7;text-align:center;">
+            Welcome to Lumvi. It works like your best hire &mdash; it just doesn't sleep.
+            From today, your Shopify or WooCommerce store has someone answering customers,
+            tracking orders, recommending products, and handling returns around the clock.
           </p>
-          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-            <tr><td style="padding:14px 16px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;">
-              <strong style="font-size:14px;font-weight:700;color:#c7d2fe;">1. Create your first chatbot</strong>
-              <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.6;">Go to your dashboard and click "Create New Chatbot".</p>
-            </td></tr>
-            <tr><td style="height:10px;"></td></tr>
-            <tr><td style="padding:14px 16px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;">
-              <strong style="font-size:14px;font-weight:700;color:#c7d2fe;">2. Add your FAQs</strong>
-              <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.6;">Upload a CSV or PDF, or add them manually in the FAQ Manager.</p>
-            </td></tr>
-            <tr><td style="height:10px;"></td></tr>
-            <tr><td style="padding:14px 16px;background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:12px;">
-              <strong style="font-size:14px;font-weight:700;color:#c7d2fe;">3. Embed on your website</strong>
-              <p style="margin:6px 0 0;font-size:13px;color:#64748b;line-height:1.6;">Copy the one-line embed code from your dashboard and paste it into any website.</p>
-            </td></tr>
+
+          <!-- Divider -->
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+            <tr><td style="border-top:1px solid #EAE4D9;font-size:1px;line-height:1px;">&nbsp;</td></tr>
           </table>
+
+          <!-- Steps -->
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:36px;">
+            <tr>
+              <td width="36" valign="top" style="padding-bottom:22px;">
+                <span style="display:inline-block;width:24px;height:24px;border:1px solid #B79349;border-radius:50%;text-align:center;line-height:24px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:#B79349;">1</span>
+              </td>
+              <td valign="top" style="padding-bottom:22px;padding-left:8px;">
+                <strong style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#1E1E1E;">Connect your store</strong>
+                <p style="margin:6px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#767676;line-height:1.6;">Link your Shopify or WooCommerce store in a couple of clicks &mdash; no developer needed.</p>
+              </td>
+            </tr>
+            <tr>
+              <td width="36" valign="top" style="padding-bottom:22px;">
+                <span style="display:inline-block;width:24px;height:24px;border:1px solid #B79349;border-radius:50%;text-align:center;line-height:24px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:#B79349;">2</span>
+              </td>
+              <td valign="top" style="padding-bottom:22px;padding-left:8px;">
+                <strong style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#1E1E1E;">Teach it your business</strong>
+                <p style="margin:6px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#767676;line-height:1.6;">Add your FAQs, policies, and product details so it sounds like you.</p>
+              </td>
+            </tr>
+            <tr>
+              <td width="36" valign="top">
+                <span style="display:inline-block;width:24px;height:24px;border:1px solid #B79349;border-radius:50%;text-align:center;line-height:24px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:#B79349;">3</span>
+              </td>
+              <td valign="top" style="padding-left:8px;">
+                <strong style="font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#1E1E1E;">Put it to work</strong>
+                <p style="margin:6px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#767676;line-height:1.6;">Embed one line of code and your AI Employee starts serving customers immediately.</p>
+              </td>
+            </tr>
+          </table>
+
+          <!-- CTA -->
           <table width="100%" cellpadding="0" cellspacing="0">
-            <tr><td align="center" style="padding:8px 0 28px;">
-              <a href="https://lumvi.net/dashboard" style="display:inline-block;background:linear-gradient(135deg,#6366f1,#7c3aed);color:#ffffff;text-decoration:none;padding:15px 36px;border-radius:10px;font-weight:800;font-size:15px;">
-                Go to My Dashboard &rarr;
+            <tr><td align="center" style="padding-bottom:8px;">
+              <a href="https://lumvi.net/dashboard" style="display:inline-block;background:#1E1E1E;color:#F7F4EF;text-decoration:none;padding:16px 40px;border-radius:2px;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;">
+                Start Free Trial
               </a>
             </td></tr>
           </table>
-          <p style="margin:0;color:#475569;font-size:13px;line-height:1.7;border-top:1px solid rgba(255,255,255,0.06);padding-top:20px;">
-            Questions? Reply to this email or reach us at <a href="mailto:support@lumvi.net" style="color:#818cf8;text-decoration:none;">support@lumvi.net</a>.
+
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="padding:32px 40px 0;text-align:center;">
+          <p style="margin:0;font-family:Arial,Helvetica,sans-serif;color:#9A9A9A;font-size:12px;line-height:1.7;">
+            Questions? Reply to this email or reach us at <a href="mailto:support@lumvi.net" style="color:#B79349;text-decoration:none;">support@lumvi.net</a>
+          </p>
+          <p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;color:#C4C4C4;font-size:11px;">
+            &copy; 2026 Lumvi &middot; <a href="https://lumvi.net" style="color:#C4C4C4;text-decoration:none;">lumvi.net</a>
           </p>
         </td></tr>
-        <tr><td style="background:#0f172a;border-radius:0 0 16px 16px;padding:20px 40px;text-align:center;">
-          <p style="margin:0;color:#334155;font-size:12px;">
-            &copy; 2025 Lumvi &middot; <a href="https://lumvi.net" style="color:#475569;text-decoration:none;">lumvi.net</a>
-          </p>
-        </td></tr>
+
       </table>
     </td></tr>
   </table>
