@@ -24,6 +24,7 @@ import os
 import re
 import secrets
 import shutil
+import smtplib
 import threading
 import uuid
 import warnings as _warnings
@@ -458,16 +459,32 @@ def send_welcome_email(email: str) -> None:
 
     FIX: fires in a background daemon thread now — this used to run
     synchronously inside the signup()/google_callback() request itself.
-    mail.send() is a blocking SMTP call with no explicit timeout; if the
-    mail server is slow, rate-limiting, or unreachable, the whole signup
-    request hangs until Cloudflare's origin timeout and the new user gets
-    a 524 instead of an account (this is exactly what was reported —
-    signup via email timing out). Safe to background with no app-context
-    handling needed: `mail = Mail(app)` above uses direct init (stores
-    `self.app` internally), not the `init_app()` deferred pattern, so
-    mail.send() doesn't touch current_app. Same reasoning applies to the
-    app.logger calls below — they're the real `app` object, not the
-    current_app proxy.
+    mail.send() is a blocking SMTP call; if the mail server is slow,
+    rate-limiting, or unreachable, the whole signup request used to hang
+    until Cloudflare's origin timeout and the new user got a 524 instead
+    of an account (this is exactly what was reported — signup via email
+    timing out). Safe to background with no app-context handling needed:
+    `mail = Mail(app)` above uses direct init (stores `self.app`
+    internally), not the `init_app()` deferred pattern, so mail.send()
+    doesn't touch current_app. Same reasoning applies to the app.logger
+    calls below — they're the real `app` object, not the current_app
+    proxy.
+
+    FIX: previously set app.config['MAIL_TIMEOUT'] and assumed Flask-Mail
+    applied it to the underlying smtplib connection. It doesn't — classic
+    Flask-Mail's Connection.configure_host() calls
+    smtplib.SMTP(server, port) with no timeout kwarg at all, so
+    MAIL_TIMEOUT was dead config. With no socket timeout, a connect that
+    gets no response (as happened for tobiasfrankfort@gmail.com) blocks
+    on the OS's own TCP retry timeout instead of failing fast — that's
+    why the observed error was a raw OSError [Errno 110] rather than a
+    clean ~20s Python-level timeout. Backgrounding to a thread stopped it
+    from taking the signup request down with it, but the send attempt
+    itself could still hang far longer than intended.
+    Fix: bypass Flask-Mail's connection handling for this call and open
+    the SMTP connection ourselves with an explicit, enforced timeout, so
+    a dead/unreachable server fails in ~20s instead of however long the
+    OS takes to give up.
     """
     def _send():
         try:
@@ -568,7 +585,40 @@ def send_welcome_email(email: str) -> None:
 </body>
 </html>"""
             )
-            mail.send(msg)
+
+            # Build the MIME payload via Flask-Mail (keeps the HTML/subject/
+            # sender logic above unchanged) but send it over our own
+            # smtplib connection below, instead of mail.send(msg), so the
+            # timeout is actually enforced. NOTE: deliberately not calling
+            # mail.connect()/mail.send() anywhere here — those go through
+            # Flask-Mail's Connection.configure_host(), which is exactly
+            # the untimed smtplib.SMTP(...) call this fix exists to avoid.
+            mime_msg = msg.as_bytes() if hasattr(msg, 'as_bytes') else None
+            if mime_msg is None:
+                # Fallback: construct the MIME message the same way
+                # Flask-Mail does internally, in case as_bytes() isn't
+                # available on this version.
+                from email.mime.multipart import MIMEMultipart
+                from email.mime.text import MIMEText
+                mime = MIMEMultipart('alternative')
+                mime['Subject'] = msg.subject
+                mime['From']    = msg.sender
+                mime['To']      = ', '.join(msg.recipients)
+                mime.attach(MIMEText(msg.html, 'html', 'utf-8'))
+                mime_msg = mime.as_bytes()
+
+            smtp_cls = smtplib.SMTP_SSL if app.config['MAIL_USE_SSL'] else smtplib.SMTP
+            with smtp_cls(
+                app.config['MAIL_SERVER'],
+                app.config['MAIL_PORT'],
+                timeout=20,          # <- the real, enforced timeout
+            ) as smtp:
+                if app.config['MAIL_USE_TLS']:
+                    smtp.starttls()
+                if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
+                    smtp.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+                smtp.sendmail(msg.sender, msg.recipients, mime_msg)
+
             app.logger.info(f'Welcome email sent to {email}')
         except Exception as e:
             app.logger.error(f'Welcome email failed for {email}: {type(e).__name__}: {e}')
