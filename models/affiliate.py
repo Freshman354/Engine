@@ -4,6 +4,7 @@ models/affiliate.py
 Affiliate programme — account creation, referral tracking,
 commission recording, and stats.
 """
+import psycopg2
 import secrets
 import uuid
 from datetime import datetime

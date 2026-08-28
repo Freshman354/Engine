@@ -1633,7 +1633,21 @@ def handle_shopify_webhook(client_id: str, raw_body: bytes, hmac_header: str,
                                  record_ref=_hash_pii_ref(order_data.get('customer_email', '')))
 
         if order_data.get('checkout_token'):
-            models.mark_cart_recovered(client_id, order_data['checkout_token'])
+            recovery = models.mark_cart_recovered(
+                client_id, order_data['checkout_token'],
+                order_id=order_data.get('order_id'),
+                revenue=order_data.get('total_amount'),
+            )
+            # first_time guards against Shopify's own webhook redelivery;
+            # is_recovery guards against crediting Lumvi for a sale that
+            # completed before any recovery email went out (see
+            # mark_cart_recovered's docstring — V1 "recovered" definition).
+            if recovery.get('is_recovery') and recovery.get('first_time') and recovery.get('cart_id'):
+                models.create_recovery_notification(
+                    client_id, recovery['cart_id'],
+                    order_id=order_data.get('order_id'),
+                    revenue=order_data.get('total_amount'),
+                )
 
         logger.info(
             f'[Shopify] {topic} → order={order_data["order_id"]} '

@@ -5,6 +5,7 @@ User creation, authentication, profile management, password reset,
 Google OAuth linking, and onboarding completion.
 """
 import bcrypt
+import psycopg2
 import secrets
 import uuid
 from datetime import datetime

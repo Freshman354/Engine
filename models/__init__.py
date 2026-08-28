@@ -411,6 +411,7 @@ from .migrations import (
     migrate_seat_subscriptions,     # agency per-seat purchase subscriptions
     migrate_ai_employee_plan_rename,  # Shopify/WooCommerce pivot: agency -> ai_scale
     migrate_cart_recovery,          # abandoned_carts table + clients.cart_recovery_enabled
+    migrate_cart_recovery_attribution,  # recovery attribution/concurrency + recovery_notifications table
     migrate_admin_activity_tracking,  # admin dashboard: users activity cols + analytics_events IP/UA
 )
 
@@ -419,7 +420,13 @@ from .cart_recovery import (
     upsert_abandoned_cart,
     mark_cart_recovered,
     get_carts_due_for_recovery_email,
+    claim_carts_for_recovery_email,
+    revert_recovery_email_claim,
     mark_recovery_email_sent,
     get_cart_by_reply_local_part,
     increment_reply_forwarded,
+    create_recovery_notification,
+    get_recovery_notifications,
+    mark_recovery_notification_read,
+    get_recovery_analytics,
 )

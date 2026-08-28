@@ -2383,6 +2383,131 @@ def migrate_cart_recovery():
             except Exception: pass
 
 
+def migrate_cart_recovery_attribution():
+    """
+    Cart Recovery V1 — attribution, concurrency, and merchant notification.
+
+    Extends abandoned_carts (no new table for attribution itself — the
+    existing row already has status/recovered_at; it was just missing
+    *what* was recovered):
+
+      recovered_order_id      — the Shopify order_id that converted this
+                                 cart (orders.order_id, same client_id).
+                                 Set once, by mark_cart_recovered().
+      recovered_revenue       — snapshot of that order's total_amount at
+                                 the moment of recovery (NOT the
+                                 abandoned cart's own estimated total —
+                                 see webhooks.py's mark_cart_recovered
+                                 call, which now passes the completed
+                                 order's real amount). A snapshot rather
+                                 than a live join to orders.total_amount
+                                 because an order can be edited/refunded
+                                 later; "revenue recovered by Lumvi" is a
+                                 point-in-time claim about what happened
+                                 at the moment of recovery, not a number
+                                 that should silently drift afterward.
+      recovery_send_claimed_at — see below.
+
+    Concurrency fix (production-readiness audit, Problems 1 & 2):
+    the old flow was SELECT pending carts, then separately send email,
+    then separately mark_recovery_email_sent(). Two overlapping cron
+    calls could both SELECT the same row before either marked it sent
+    (Problem 2), and a send-succeeds/mark-fails split could leave a row
+    eligible to be re-selected and re-emailed (Problem 1).
+
+    Fix: claim_carts_for_recovery_email() (cart_recovery.py) now does the
+    SELECT + claim as ONE atomic statement — `UPDATE ... WHERE id IN
+    (SELECT ... FOR UPDATE SKIP LOCKED) SET status='sending',
+    recovery_send_claimed_at=NOW() RETURNING *`. FOR UPDATE SKIP LOCKED
+    means a second concurrent call physically cannot select a row the
+    first call already has locked — it skips it instead, closing
+    Problem 2 at the database level rather than in application code.
+
+    status='sending' is a new intermediate state between 'pending' and
+    'sent'/'recovered'. A row only reaches 'sent' after the email
+    genuinely goes out (mark_recovery_email_sent, unchanged). If the
+    send fails, the row is reverted to 'pending' by the caller so it can
+    be retried on the next run. If a process crashes mid-send and never
+    reverts it, recovery_send_claimed_at lets a later run reclaim a
+    'sending' row that's been stuck for more than
+    CART_RECOVERY_STALE_CLAIM_MINUTES — see
+    claim_carts_for_recovery_email()'s WHERE clause.
+
+    Honest remaining limitation (documented per audit instructions, not
+    silently assumed away): if the email genuinely sends successfully
+    but the process crashes before calling mark_recovery_email_sent, the
+    row stays 'sending' until the stale-claim window passes, and will
+    then be re-claimed and re-sent. This is a real, narrow double-send
+    window inherent to SMTP not being transactional with Postgres — it
+    is not eliminated, only shrunk from "any DB hiccup" (before) to
+    "a crash in the few-hundred-ms gap between a successful send and one
+    UPDATE statement, undetected for the whole stale-claim window"
+    (after). True exactly-once delivery across an external SMTP call and
+    a database write is not achievable without a transactional outbox/
+    idempotent-provider-side dedup, which is out of scope for this pass.
+
+    recovery_notifications — one row per successfully recovered cart,
+    for the merchant-facing in-app notification. No existing in-app
+    notification/feed table was found anywhere in the schema to reuse
+    (usage_notifications is an email-threshold dedup gate, never
+    rendered in any dashboard template — confirmed by grep, not
+    assumed). UNIQUE(cart_id) makes notification creation idempotent
+    the same way usage_notifications' UNIQUE(client_id, period_start,
+    threshold) does: create_recovery_notification() does
+    INSERT ... ON CONFLICT (cart_id) DO NOTHING, so a duplicate order
+    webhook (or a reclaimed 'sending' row that happens to resolve twice)
+    can never create two notifications for the same cart.
+
+    Idempotent — CREATE TABLE/COLUMN IF NOT EXISTS throughout.
+    """
+    conn = cursor = None
+    try:
+        conn, cursor = get_db()
+        cursor.execute(
+            "ALTER TABLE abandoned_carts ADD COLUMN IF NOT EXISTS "
+            "recovered_order_id TEXT"
+        )
+        cursor.execute(
+            "ALTER TABLE abandoned_carts ADD COLUMN IF NOT EXISTS "
+            "recovered_revenue DECIMAL(10,2)"
+        )
+        cursor.execute(
+            "ALTER TABLE abandoned_carts ADD COLUMN IF NOT EXISTS "
+            "recovery_send_claimed_at TIMESTAMP"
+        )
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS recovery_notifications (
+                id              SERIAL      PRIMARY KEY,
+                client_id       TEXT        NOT NULL,
+                cart_id         INTEGER     NOT NULL,
+                order_id        TEXT,
+                revenue         DECIMAL(10,2),
+                message         TEXT        NOT NULL,
+                read_at         TIMESTAMP,
+                created_at      TIMESTAMP   NOT NULL DEFAULT NOW(),
+                UNIQUE(cart_id)
+            )
+        ''')
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_recovery_notifications_client "
+            "ON recovery_notifications (client_id, created_at DESC)"
+        )
+        conn.commit()
+        print("migrate_cart_recovery_attribution complete")
+    except Exception as e:
+        if conn:
+            try: conn.rollback()
+            except Exception: pass
+        print(f"migrate_cart_recovery_attribution error: {e}")
+    finally:
+        if cursor:
+            try: cursor.close()
+            except Exception: pass
+        if conn:
+            try: conn.close()
+            except Exception: pass
+
+
 def migrate_seat_subscriptions():
     """
     Create seat_subscriptions table for agency per-seat purchases.

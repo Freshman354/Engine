@@ -265,6 +265,13 @@ def get_analytics():
                 {'hour': h, 'count': hour_counts.get(h, 0)} for h in range(24)
             ]
 
+        # ── Cart recovery — real metrics only, see get_recovery_analytics's
+        # docstring for exact metric definitions. Included regardless of
+        # plan tier (cart_recovery_enabled is its own separate gate) —
+        # shows zeros for clients who've never turned the feature on,
+        # which is accurate, not misleading.
+        result['cart_recovery'] = models.get_recovery_analytics(client_id, start_date=start_date, end_date=now)
+
         cursor.close()
         conn.close()
 

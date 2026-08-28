@@ -1084,6 +1084,7 @@ try:
         'migrate_system_settings',             # generic key-value store for live admin toggles
         'migrate_ai_employee_plan_rename',     # Shopify/WooCommerce pivot: agency -> ai_scale (one-time)
         'migrate_cart_recovery',               # abandoned_carts table + clients.cart_recovery_enabled
+        'migrate_cart_recovery_attribution',   # recovery attribution/concurrency columns + recovery_notifications table
         'migrate_usage_notifications',         # usage_notifications table + clients.ai_unavailable_mode/human_support_contact
         'migrate_admin_activity_tracking',     # admin dashboard: users activity cols + analytics_events IP/UA
     ]

@@ -291,8 +291,14 @@ def google_callback():
         if is_new and _send_welcome_email:
             try:
                 _send_welcome_email(email)
-            except Exception:
-                pass
+            except Exception as e:
+                # Previously a bare `except: pass` — any failure here was
+                # completely invisible, with no log line anywhere, making
+                # a live "Google signup didn't get a welcome email" report
+                # undiagnosable after the fact. Logging it doesn't change
+                # behavior (login still succeeds either way), it just
+                # means the next occurrence leaves evidence.
+                current_app.logger.error(f'[Google OAuth] welcome email failed for {email}: {e}')
 
         return redirect(url_for('auth.dashboard'))
 

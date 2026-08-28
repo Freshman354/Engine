@@ -308,6 +308,49 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
   <!-- SINGLE-CLIENT DEEP DIVE -->
   <div id="singleView" style="display:none;">
 
+    {% if plan_limits.cart_recovery %}
+    <!-- Cart Recovery -->
+    <div class="section" style="margin-bottom:20px;">
+      <div class="section-head">
+        <span class="section-title">Cart Recovery</span>
+      </div>
+      <div class="section-body">
+        <div class="summary-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:0;" id="crRow">
+          <div class="stat-card blue">
+            <div class="stat-label">Recovery Emails Sent</div>
+            <div class="stat-value" id="cr-sent"><div class="skeleton" style="width:60px;height:32px;"></div></div>
+            <div class="stat-sub">this period</div>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-label">Recovered Carts</div>
+            <div class="stat-value" id="cr-recovered"><div class="skeleton" style="width:60px;height:32px;"></div></div>
+            <div class="stat-sub">this period</div>
+          </div>
+          <div class="stat-card amber">
+            <div class="stat-label">Recovery Rate</div>
+            <div class="stat-value" id="cr-rate"><div class="skeleton" style="width:60px;height:32px;"></div></div>
+            <div class="stat-sub" id="cr-rate-sub">recovered / emailed</div>
+          </div>
+          <div class="stat-card gold">
+            <div class="stat-label">Recovered Revenue</div>
+            <div class="stat-value" id="cr-revenue"><div class="skeleton" style="width:60px;height:32px;"></div></div>
+            <div class="stat-sub" id="cr-revenue-sub">not adjusted for refunds</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Recoveries -->
+    <div class="section" style="margin-bottom:20px;">
+      <div class="section-head"><span class="section-title">Recent Recoveries</span></div>
+      <div class="section-body">
+        <ul class="q-list" id="recoveryNotifList">
+          <li style="color:var(--sub);font-size:13px;padding:10px;">Loading…</li>
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- Top Questions -->
     <div class="section" style="margin-bottom:20px;">
       <div class="section-head">
@@ -540,6 +583,10 @@ async function loadSingleData(clientId, range) {
   renderUnansweredQuestions(a.unanswered);
   renderLeadsTable(a.leads_captured);
   renderTranscripts(a.transcripts);
+  if (a.cart_recovery) {
+    renderCartRecovery(a.cart_recovery);
+    fetchRecoveryNotifications(clientId);
+  }
   if (IS_ADVANCED) {
     renderSatisfaction(a.satisfaction);
     renderPeakTimes(a.peak_times);
@@ -716,6 +763,63 @@ function renderUnansweredQuestions(qs) {
       <div class="q-bar-bg"><div class="q-bar-fill" style="width:${Math.round(q.count/max*100)}%"></div></div>
       <span class="q-count" style="color:var(--danger);">${q.count}×</span>
     </li>`).join('') : '<li style="color:var(--sub);font-size:13px;padding:10px;">No unanswered questions. All caught!</li>';
+}
+
+// ── Cart recovery ──────────────────────────────────────────────────────
+function fmtMoney(amount, currency) {
+  try {
+    return new Intl.NumberFormat('en-US', {style: 'currency', currency: currency || 'USD'}).format(amount);
+  } catch {
+    return `$${Number(amount).toFixed(2)}`;
+  }
+}
+
+function renderCartRecovery(cr) {
+  setStat('cr-sent',      cr.recovery_attempts, 'this period');
+  setStat('cr-recovered', cr.recovered_carts,   'this period');
+  setStat('cr-rate',      cr.recovery_rate + '%', 'recovered / emailed');
+
+  // recovered_revenue is null when more than one currency appears in the
+  // window (see get_recovery_analytics's docstring) — the backend
+  // deliberately never blends currencies into one misleading number, so
+  // the UI shows the real per-currency breakdown instead of a fake total.
+  const revenueEl    = document.getElementById('cr-revenue');
+  const revenueSubEl = document.getElementById('cr-revenue-sub');
+  if (cr.multi_currency) {
+    const parts = Object.entries(cr.recovered_revenue_by_currency || {})
+      .map(([code, amt]) => fmtMoney(amt, code));
+    revenueEl.textContent = parts.length ? parts.join(' + ') : '—';
+    revenueSubEl.textContent = 'multiple currencies — not summed';
+  } else {
+    const onlyCurrency = Object.keys(cr.recovered_revenue_by_currency || {})[0] || 'USD';
+    revenueEl.textContent = fmtMoney(cr.recovered_revenue || 0, onlyCurrency);
+    revenueSubEl.textContent = 'not adjusted for refunds';
+  }
+}
+
+async function fetchRecoveryNotifications(clientId) {
+  const el = document.getElementById('recoveryNotifList');
+  if (!el) return;
+  try {
+    const res  = await fetch(`/api/client/recovery-notifications?client_id=${encodeURIComponent(clientId)}`);
+    const data = await res.json();
+    renderRecoveryNotifications(data.success ? data.notifications : []);
+  } catch {
+    el.innerHTML = '<li style="color:var(--sub);font-size:13px;padding:10px;">Couldn\'t load recent recoveries.</li>';
+  }
+}
+
+function renderRecoveryNotifications(list) {
+  const el = document.getElementById('recoveryNotifList');
+  if (!list || !list.length) {
+    el.innerHTML = '<li style="color:var(--sub);font-size:13px;padding:10px;">No recoveries yet.</li>';
+    return;
+  }
+  el.innerHTML = list.map(n => `
+    <li class="q-item">
+      <span class="q-text">${esc(n.message)}</span>
+      <span class="q-count" style="color:var(--success);">${n.created_at ? new Date(n.created_at).toLocaleDateString() : ''}</span>
+    </li>`).join('');
 }
 
 // ── Leads table ────────────────────────────────────────────────────────

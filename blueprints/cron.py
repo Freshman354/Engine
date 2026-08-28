@@ -494,9 +494,16 @@ def send_cart_recovery_emails():
     """
     Sends one recovery email per abandoned cart that's been sitting for
     CART_RECOVERY_DELAY_HOURS with cart_recovery_enabled=True on the
-    client and a known customer_email. See
-    models.get_carts_due_for_recovery_email's docstring — single touch
-    only, no follow-up sequence yet.
+    client and a known customer_email. Single touch only, no follow-up
+    sequence yet.
+
+    Concurrency: claim_carts_for_recovery_email() atomically claims each
+    cart (status -> 'sending') before this function ever attempts a
+    send, so two overlapping cron calls can never both send for the
+    same cart — see that function's and migrate_cart_recovery_
+    attribution's docstrings for the full reasoning and the one
+    remaining honest limitation (a crash in the narrow window between a
+    successful send and mark_recovery_email_sent's DB write).
 
     Reply-To is a unique per-cart address at CART_RECOVERY_REPLY_DOMAIN —
     Brevo's inbound parsing webhook (blueprints/inbound_email.py) is what
@@ -504,7 +511,7 @@ def send_cart_recovery_emails():
     first outbound email.
     """
     t0 = time.time()
-    carts = models.get_carts_due_for_recovery_email(delay_hours=CART_RECOVERY_DELAY_HOURS)
+    carts = models.claim_carts_for_recovery_email(delay_hours=CART_RECOVERY_DELAY_HOURS)
     sent = skipped = errors = 0
 
     for cart in carts:
@@ -517,6 +524,10 @@ def send_cart_recovery_emails():
                 line_items = []
 
         if not cart.get('checkout_url'):
+            # Claimed but not actually sendable — release the claim
+            # rather than leaving it stuck in 'sending' for the full
+            # stale-claim window over something that won't fix itself.
+            models.revert_recovery_email_claim(cart['id'])
             skipped += 1
             continue
 
@@ -544,6 +555,10 @@ def send_cart_recovery_emails():
                 f"[CartRecovery] sent cart={cart['id']} client={cart['client_id']} reply_to={reply_to}"
             )
         except Exception as e:
+            # Send failed (or _mail itself raised) — release the claim so
+            # the next run retries this cart instead of it sitting in
+            # 'sending' until the stale-claim window passes.
+            models.revert_recovery_email_claim(cart['id'])
             current_app.logger.error(f"[CartRecovery] failed for cart={cart.get('id')}: {e}")
             errors += 1
 
@@ -1177,6 +1192,33 @@ def cart_recovery_test_email():
     except Exception as e:
         current_app.logger.error(f'[CartRecovery] test email failed client={client.get("client_id")}: {e}')
         return jsonify({'success': False, 'error': 'Could not send test email — try again'}), 500
+
+
+@cron_bp.route('/api/client/recovery-notifications', methods=['GET'])
+@login_required
+def recovery_notifications_list():
+    """
+    Merchant-facing recovery notification feed. Pass ?unread=1 to fetch
+    only unread ones (e.g. for a badge count).
+    """
+    client, error = _cart_recovery_entitled_or_error()
+    if error:
+        return error
+    unread_only = request.args.get('unread', '').strip() in ('1', 'true', 'yes')
+    notifications = models.get_recovery_notifications(
+        client['client_id'], unread_only=unread_only
+    )
+    return jsonify({'success': True, 'notifications': notifications})
+
+
+@cron_bp.route('/api/client/recovery-notifications/<int:notification_id>/read', methods=['POST'])
+@login_required
+def recovery_notification_mark_read(notification_id):
+    client, error = _cart_recovery_entitled_or_error()
+    if error:
+        return error
+    ok = models.mark_recovery_notification_read(notification_id, client['client_id'])
+    return jsonify({'success': ok})
 
 
 @cron_bp.route('/cron/status', methods=['GET'])
