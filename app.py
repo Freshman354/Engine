@@ -25,12 +25,17 @@ import re
 import secrets
 import shutil
 import smtplib
+import socket
+import ssl
 import threading
 import uuid
 import warnings as _warnings
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FuturesTimeout
 from datetime import datetime, timedelta
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formataddr, parseaddr
 from functools import wraps
 from io import StringIO
 from logging.handlers import RotatingFileHandler
@@ -174,6 +179,19 @@ if not app.config['MAIL_USERNAME'] or not app.config['MAIL_PASSWORD']:
         '[Startup] MAIL_USERNAME/MAIL_PASSWORD not set — outbound email '
         '(signup, password reset, cart recovery, etc.) will fail silently '
         'until these are configured.'
+    )
+_has_brevo_api = bool(
+    (os.environ.get('BREVO_API_KEY') or os.environ.get('MAIL_API_KEY') or '').strip()
+    or (app.config.get('MAIL_PASSWORD') or '').startswith('xkeysib-')
+)
+if _has_brevo_api:
+    app.logger.info('[Startup] outbound email via Brevo HTTP API (port 443)')
+else:
+    app.logger.warning(
+        '[Startup] BREVO_API_KEY not set — welcome/reset emails will use SMTP '
+        'on 2525/587/465. Railway Hobby/Free blocks 25/465/587, which is why '
+        'welcome emails currently log TimeoutError after 20s. Set BREVO_API_KEY '
+        'from Brevo → SMTP & API → API keys (not the SMTP key in MAIL_PASSWORD).'
     )
 if not os.environ.get('INBOUND_EMAIL_SECRET', '').strip():
     app.logger.warning(
@@ -453,60 +471,190 @@ GENERIC_TAGS = {
 # They will migrate to services/ in the next refactor phase.
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def send_welcome_email(email: str) -> None:
-    """
-    Send a branded welcome email to a new Lumvi user.
+_SMTP_CONNECT_TIMEOUT = 8
+_BREVO_API_TIMEOUT    = 15
+_BREVO_API_URL        = 'https://api.brevo.com/v3/smtp/email'
+_DEFAULT_FROM         = 'Lumvi <support@lumvi.net>'
 
-    FIX: fires in a background daemon thread now — this used to run
-    synchronously inside the signup()/google_callback() request itself.
-    mail.send() is a blocking SMTP call; if the mail server is slow,
-    rate-limiting, or unreachable, the whole signup request used to hang
-    until Cloudflare's origin timeout and the new user got a 524 instead
-    of an account (this is exactly what was reported — signup via email
-    timing out). Safe to background with no app-context handling needed:
-    `mail = Mail(app)` above uses direct init (stores `self.app`
-    internally), not the `init_app()` deferred pattern, so mail.send()
-    doesn't touch current_app. Same reasoning applies to the app.logger
-    calls below — they're the real `app` object, not the current_app
-    proxy.
 
-    FIX: previously set app.config['MAIL_TIMEOUT'] and assumed Flask-Mail
-    applied it to the underlying smtplib connection. It doesn't — classic
-    Flask-Mail's Connection.configure_host() calls
-    smtplib.SMTP(server, port) with no timeout kwarg at all, so
-    MAIL_TIMEOUT was dead config. With no socket timeout, a connect that
-    gets no response (as happened for tobiasfrankfort@gmail.com) blocks
-    on the OS's own TCP retry timeout instead of failing fast — that's
-    why the observed error was a raw OSError [Errno 110] rather than a
-    clean ~20s Python-level timeout. Backgrounding to a thread stopped it
-    from taking the signup request down with it, but the send attempt
-    itself could still hang far longer than intended.
-    FIX (2026-08-28, confirmed via production log): backgrounding to a
-    thread (above) means this code runs with NO Flask application
-    context — `current_app` doesn't resolve there. `app.config[...]` and
-    the raw smtplib calls below are fine either way (they use the real
-    `app`/`smtplib` objects directly), but something inside Flask-Mail's
-    own `Message(...)` construction or `.as_bytes()` call does reach for
-    `current_app` internally (Flask-Mail's exact source/version isn't
-    available to inspect here — no requirements.txt was provided, and
-    the package isn't installed in this environment — so the single
-    exact offending line inside its internals is unverifiable from
-    static code alone). The live error confirmed it either way:
-    `RuntimeError: Working outside of application context.` on every
-    attempt. Wrapping the whole send in `with app.app_context():` is the
-    standard fix for this class of bug (any Flask extension used from a
-    background thread) and covers the failure regardless of which exact
-    internal line triggers it.
+def _brevo_api_key() -> str:
+    """Return a Brevo *API* key, or '' if we only have SMTP credentials."""
+    for env_name in ('BREVO_API_KEY', 'MAIL_API_KEY'):
+        val = (os.environ.get(env_name) or '').strip()
+        if val:
+            return val
+    pw = (app.config.get('MAIL_PASSWORD') or '').strip()
+    if pw.startswith('xkeysib-'):
+        return pw
+    return ''
+
+
+def _split_from_addr(from_addr: str):
+    name, addr = parseaddr(from_addr or '')
+    addr = (addr or from_addr or '').strip()
+    name = (name or 'Lumvi').strip()
+    return name, addr
+
+
+def _build_mime(from_addr, recipients, subject, html) -> bytes:
+    name, addr = _split_from_addr(from_addr)
+    mime = MIMEMultipart('alternative')
+    mime['Subject'] = subject
+    mime['From']    = formataddr((name, addr))
+    mime['To']      = ', '.join(recipients)
+    mime.attach(MIMEText(html, 'html', 'utf-8'))
+    return mime.as_bytes()
+
+
+def _connect_ipv4(host: str, port: int, timeout: float):
+    """TCP connect using A records only. Avoids gevent IPv6 blackholes eating the timeout."""
+    last_err = None
+    for res in socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM):
+        af, socktype, proto, _canon, sa = res
+        sock = None
+        try:
+            sock = socket.socket(af, socktype, proto)
+            sock.settimeout(timeout)
+            sock.connect(sa)
+            return sock
+        except OSError as e:
+            last_err = e
+            if sock is not None:
+                try:
+                    sock.close()
+                except OSError:
+                    pass
+    raise last_err or TimeoutError(f'IPv4 connect failed to {host}:{port}')
+
+
+class _SMTP4(smtplib.SMTP):
+    def _get_socket(self, host, port, timeout):
+        return _connect_ipv4(host, port, timeout)
+
+
+class _SMTP4_SSL(smtplib.SMTP_SSL):
+    def _get_socket(self, host, port, timeout):
+        sock = _connect_ipv4(host, port, timeout)
+        context = self.context or ssl.create_default_context()
+        return context.wrap_socket(sock, server_hostname=host)
+
+
+def _send_via_brevo_api(from_addr, recipients, subject, html) -> str:
+    api_key = _brevo_api_key()
+    if not api_key:
+        raise RuntimeError('no Brevo API key configured')
+    name, addr = _split_from_addr(from_addr)
+    resp = requests.post(
+        _BREVO_API_URL,
+        headers={
+            'api-key':      api_key,
+            'accept':       'application/json',
+            'content-type': 'application/json',
+        },
+        json={
+            'sender':      {'name': name, 'email': addr},
+            'to':          [{'email': r} for r in recipients],
+            'subject':     subject,
+            'htmlContent': html,
+        },
+        timeout=_BREVO_API_TIMEOUT,
+    )
+    if resp.status_code not in (200, 201, 202):
+        raise RuntimeError(
+            f'Brevo API HTTP {resp.status_code}: {(resp.text or "")[:300]}'
+        )
+    message_id = ''
+    try:
+        message_id = (resp.json() or {}).get('messageId') or ''
+    except ValueError:
+        pass
+    return message_id
+
+
+def _send_via_smtp(from_addr, recipients, mime_bytes) -> str:
+    host     = app.config.get('MAIL_SERVER') or 'smtp-relay.brevo.com'
+    username = app.config.get('MAIL_USERNAME') or ''
+    password = app.config.get('MAIL_PASSWORD') or ''
+    if not username or not password:
+        raise RuntimeError(
+            'MAIL_USERNAME/MAIL_PASSWORD not set and no BREVO_API_KEY — '
+            'cannot send via SMTP either'
+        )
+    attempts = (
+        (2525, _SMTP4,     True),
+        (587,  _SMTP4,     True),
+        (465,  _SMTP4_SSL, False),
+    )
+    errors = []
+    tls_ctx = ssl.create_default_context()
+    for port, cls, starttls in attempts:
+        smtp = None
+        try:
+            if cls is _SMTP4_SSL:
+                smtp = cls(host, port, timeout=_SMTP_CONNECT_TIMEOUT, context=tls_ctx)
+            else:
+                smtp = cls(host, port, timeout=_SMTP_CONNECT_TIMEOUT)
+            smtp.ehlo()
+            if starttls and smtp.has_extn('starttls'):
+                smtp.starttls(context=tls_ctx)
+                smtp.ehlo()
+            smtp.login(username, password)
+            smtp.sendmail(from_addr, recipients, mime_bytes)
+            try:
+                smtp.quit()
+            except Exception:
+                smtp.close()
+            return f'{host}:{port}'
+        except Exception as e:
+            errors.append(f'{host}:{port} {type(e).__name__}: {e}')
+            app.logger.warning(f'[mail] SMTP {host}:{port} failed: {type(e).__name__}: {e}')
+            if smtp is not None:
+                try:
+                    smtp.close()
+                except Exception:
+                    pass
+    raise RuntimeError('all SMTP ports failed: ' + ' | '.join(errors))
+
+
+def send_email(to, subject: str, html: str, from_addr: str = None) -> None:
     """
+    Send one HTML email in a background daemon thread.
+    Never raises to the caller. Prefers Brevo HTTPS API (port 443).
+    Falls back to SMTP on 2525/587/465 if no API key is configured.
+    """
+    recipients = [to] if isinstance(to, str) else list(to)
+    sender     = from_addr or app.config.get('MAIL_DEFAULT_SENDER') or _DEFAULT_FROM
+
     def _send():
         try:
             with app.app_context():
-                msg = Message(
-                    subject    = "Welcome to Lumvi — your AI Employee is ready",
-                    sender     = "Lumvi <support@lumvi.net>",
-                    recipients = [email],
-                    html       = """
-<!DOCTYPE html>
+                if _brevo_api_key():
+                    message_id = _send_via_brevo_api(sender, recipients, subject, html)
+                    app.logger.info(
+                        f'Email sent via Brevo API to {recipients} '
+                        f'subject={subject!r} messageId={message_id}'
+                    )
+                    return
+                mime = _build_mime(sender, recipients, subject, html)
+                via  = _send_via_smtp(sender, recipients, mime)
+                app.logger.info(
+                    f'Email sent via SMTP ({via}) to {recipients} subject={subject!r}'
+                )
+        except Exception as e:
+            app.logger.error(
+                f'Email failed for {recipients} subject={subject!r}: '
+                f'{type(e).__name__}: {e}'
+            )
+
+    threading.Thread(target=_send, daemon=True).start()
+
+
+def send_welcome_email(email: str) -> None:
+    """Send a branded welcome email. Backgrounded. See send_email() for transport."""
+    send_email(
+        to      = email,
+        subject = "Welcome to Lumvi — your AI Employee is ready",
+        html    = """<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Welcome to Lumvi</title></head>
 <body style="margin:0;padding:0;background:#F7F4EF;font-family:Georgia,'Times New Roman',serif;">
@@ -596,47 +744,9 @@ def send_welcome_email(email: str) -> None:
     </td></tr>
   </table>
 </body>
-</html>"""
-                )
+</html>""",
+    )
 
-                # Build the MIME payload via Flask-Mail (keeps the HTML/subject/
-                # sender logic above unchanged) but send it over our own
-                # smtplib connection below, instead of mail.send(msg), so the
-                # timeout is actually enforced. NOTE: deliberately not calling
-                # mail.connect()/mail.send() anywhere here — those go through
-                # Flask-Mail's Connection.configure_host(), which is exactly
-                # the untimed smtplib.SMTP(...) call this fix exists to avoid.
-                mime_msg = msg.as_bytes() if hasattr(msg, 'as_bytes') else None
-                if mime_msg is None:
-                    # Fallback: construct the MIME message the same way
-                    # Flask-Mail does internally, in case as_bytes() isn't
-                    # available on this version.
-                    from email.mime.multipart import MIMEMultipart
-                    from email.mime.text import MIMEText
-                    mime = MIMEMultipart('alternative')
-                    mime['Subject'] = msg.subject
-                    mime['From']    = msg.sender
-                    mime['To']      = ', '.join(msg.recipients)
-                    mime.attach(MIMEText(msg.html, 'html', 'utf-8'))
-                    mime_msg = mime.as_bytes()
-
-                smtp_cls = smtplib.SMTP_SSL if app.config['MAIL_USE_SSL'] else smtplib.SMTP
-                with smtp_cls(
-                    app.config['MAIL_SERVER'],
-                    app.config['MAIL_PORT'],
-                    timeout=20,          # <- the real, enforced timeout
-                ) as smtp:
-                    if app.config['MAIL_USE_TLS']:
-                        smtp.starttls()
-                    if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
-                        smtp.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
-                    smtp.sendmail(msg.sender, msg.recipients, mime_msg)
-
-                app.logger.info(f'Welcome email sent to {email}')
-        except Exception as e:
-            app.logger.error(f'Welcome email failed for {email}: {type(e).__name__}: {e}')
-
-    threading.Thread(target=_send, daemon=True).start()
 
 
 def get_subscription_status(user: dict) -> dict:
@@ -1269,6 +1379,7 @@ init_auth(
     valid_verticals=VALID_VERTICALS,
     get_subscription_status=get_subscription_status,
     send_welcome_email=send_welcome_email,
+    send_email=send_email,
     User=User,
 )
 app.register_blueprint(auth_bp)

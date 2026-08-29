@@ -48,7 +48,6 @@ from flask import (Blueprint, flash, jsonify, redirect,
                    render_template, request, current_app, session, url_for)
 from flask_login import (current_user, login_required,
                          login_user, logout_user)
-from flask_mail import Message
 
 import models
 import webhooks as _webhooks
@@ -65,23 +64,26 @@ _plan_limits             = None
 _valid_verticals         = None
 _get_subscription_status = None
 _send_welcome_email      = None
+_send_email              = None
 _User                    = None
 
 
 def init_auth(mail, google_oauth, plan_limits, valid_verticals,
-              get_subscription_status, send_welcome_email, User):
+              get_subscription_status, send_welcome_email, User,
+              send_email=None):
     """
     Called once in app.py after all shared objects are ready.
     Must be called before the first request reaches this blueprint.
     """
     global _mail, _google_oauth, _plan_limits, _valid_verticals, \
-            _get_subscription_status, _send_welcome_email, _User
+            _get_subscription_status, _send_welcome_email, _send_email, _User
     _mail                    = mail
     _google_oauth            = google_oauth
     _plan_limits             = plan_limits
     _valid_verticals         = valid_verticals
     _get_subscription_status = get_subscription_status
     _send_welcome_email      = send_welcome_email
+    _send_email              = send_email
     _User                    = User
 
 
@@ -168,12 +170,7 @@ def forgot_password():
             expires_at = datetime.utcnow() + timedelta(hours=1)
             models.save_password_reset_token(user_data['id'], token, expires_at)
             reset_url  = url_for('auth.reset_password', token=token, _external=True)
-            try:
-                msg = Message(
-                    subject    = "Reset your Lumvi password",
-                    sender     = "Lumvi <support@lumvi.net>",
-                    recipients = [email],
-                    html       = f"""
+            reset_html = f"""
                     <div style="font-family:Inter,sans-serif;max-width:480px;margin:0 auto;background:#0f172a;color:#f8fafc;padding:40px;border-radius:16px;">
                         <div style="text-align:center;margin-bottom:32px;">
                             <div style="display:inline-block;background:linear-gradient(135deg,#6366f1,#a78bfa);border-radius:12px;padding:12px 20px;font-size:24px;font-weight:800;margin-bottom:12px;">⚡ Lumvi</div>
@@ -191,12 +188,11 @@ def forgot_password():
                             Or copy this link: <span style="color:#6366f1;">{reset_url}</span>
                         </p>
                     </div>"""
-                )
-                if _mail:
-                    _mail.send(msg)
-            except Exception as e:
+            if _send_email:
+                _send_email(email, "Reset your Lumvi password", reset_html)
+            else:
                 current_app.logger.error(
-                    f"Password reset email failed: {type(e).__name__}: {e}"
+                    'Password reset email skipped: send_email helper is not wired up'
                 )
 
         return render_template('forgot_password.html', success=success_msg)
