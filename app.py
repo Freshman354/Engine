@@ -481,18 +481,31 @@ def send_welcome_email(email: str) -> None:
     clean ~20s Python-level timeout. Backgrounding to a thread stopped it
     from taking the signup request down with it, but the send attempt
     itself could still hang far longer than intended.
-    Fix: bypass Flask-Mail's connection handling for this call and open
-    the SMTP connection ourselves with an explicit, enforced timeout, so
-    a dead/unreachable server fails in ~20s instead of however long the
-    OS takes to give up.
+    FIX (2026-08-28, confirmed via production log): backgrounding to a
+    thread (above) means this code runs with NO Flask application
+    context — `current_app` doesn't resolve there. `app.config[...]` and
+    the raw smtplib calls below are fine either way (they use the real
+    `app`/`smtplib` objects directly), but something inside Flask-Mail's
+    own `Message(...)` construction or `.as_bytes()` call does reach for
+    `current_app` internally (Flask-Mail's exact source/version isn't
+    available to inspect here — no requirements.txt was provided, and
+    the package isn't installed in this environment — so the single
+    exact offending line inside its internals is unverifiable from
+    static code alone). The live error confirmed it either way:
+    `RuntimeError: Working outside of application context.` on every
+    attempt. Wrapping the whole send in `with app.app_context():` is the
+    standard fix for this class of bug (any Flask extension used from a
+    background thread) and covers the failure regardless of which exact
+    internal line triggers it.
     """
     def _send():
         try:
-            msg = Message(
-                subject    = "Welcome to Lumvi — your AI Employee is ready",
-                sender     = "Lumvi <support@lumvi.net>",
-                recipients = [email],
-                html       = """
+            with app.app_context():
+                msg = Message(
+                    subject    = "Welcome to Lumvi — your AI Employee is ready",
+                    sender     = "Lumvi <support@lumvi.net>",
+                    recipients = [email],
+                    html       = """
 <!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Welcome to Lumvi</title></head>
@@ -584,42 +597,42 @@ def send_welcome_email(email: str) -> None:
   </table>
 </body>
 </html>"""
-            )
+                )
 
-            # Build the MIME payload via Flask-Mail (keeps the HTML/subject/
-            # sender logic above unchanged) but send it over our own
-            # smtplib connection below, instead of mail.send(msg), so the
-            # timeout is actually enforced. NOTE: deliberately not calling
-            # mail.connect()/mail.send() anywhere here — those go through
-            # Flask-Mail's Connection.configure_host(), which is exactly
-            # the untimed smtplib.SMTP(...) call this fix exists to avoid.
-            mime_msg = msg.as_bytes() if hasattr(msg, 'as_bytes') else None
-            if mime_msg is None:
-                # Fallback: construct the MIME message the same way
-                # Flask-Mail does internally, in case as_bytes() isn't
-                # available on this version.
-                from email.mime.multipart import MIMEMultipart
-                from email.mime.text import MIMEText
-                mime = MIMEMultipart('alternative')
-                mime['Subject'] = msg.subject
-                mime['From']    = msg.sender
-                mime['To']      = ', '.join(msg.recipients)
-                mime.attach(MIMEText(msg.html, 'html', 'utf-8'))
-                mime_msg = mime.as_bytes()
+                # Build the MIME payload via Flask-Mail (keeps the HTML/subject/
+                # sender logic above unchanged) but send it over our own
+                # smtplib connection below, instead of mail.send(msg), so the
+                # timeout is actually enforced. NOTE: deliberately not calling
+                # mail.connect()/mail.send() anywhere here — those go through
+                # Flask-Mail's Connection.configure_host(), which is exactly
+                # the untimed smtplib.SMTP(...) call this fix exists to avoid.
+                mime_msg = msg.as_bytes() if hasattr(msg, 'as_bytes') else None
+                if mime_msg is None:
+                    # Fallback: construct the MIME message the same way
+                    # Flask-Mail does internally, in case as_bytes() isn't
+                    # available on this version.
+                    from email.mime.multipart import MIMEMultipart
+                    from email.mime.text import MIMEText
+                    mime = MIMEMultipart('alternative')
+                    mime['Subject'] = msg.subject
+                    mime['From']    = msg.sender
+                    mime['To']      = ', '.join(msg.recipients)
+                    mime.attach(MIMEText(msg.html, 'html', 'utf-8'))
+                    mime_msg = mime.as_bytes()
 
-            smtp_cls = smtplib.SMTP_SSL if app.config['MAIL_USE_SSL'] else smtplib.SMTP
-            with smtp_cls(
-                app.config['MAIL_SERVER'],
-                app.config['MAIL_PORT'],
-                timeout=20,          # <- the real, enforced timeout
-            ) as smtp:
-                if app.config['MAIL_USE_TLS']:
-                    smtp.starttls()
-                if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
-                    smtp.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
-                smtp.sendmail(msg.sender, msg.recipients, mime_msg)
+                smtp_cls = smtplib.SMTP_SSL if app.config['MAIL_USE_SSL'] else smtplib.SMTP
+                with smtp_cls(
+                    app.config['MAIL_SERVER'],
+                    app.config['MAIL_PORT'],
+                    timeout=20,          # <- the real, enforced timeout
+                ) as smtp:
+                    if app.config['MAIL_USE_TLS']:
+                        smtp.starttls()
+                    if app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD']:
+                        smtp.login(app.config['MAIL_USERNAME'], app.config['MAIL_PASSWORD'])
+                    smtp.sendmail(msg.sender, msg.recipients, mime_msg)
 
-            app.logger.info(f'Welcome email sent to {email}')
+                app.logger.info(f'Welcome email sent to {email}')
         except Exception as e:
             app.logger.error(f'Welcome email failed for {email}: {type(e).__name__}: {e}')
 
