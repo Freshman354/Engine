@@ -377,7 +377,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
   <div class="step-panel active" id="step1">
     <div class="step-eyebrow">Welcome to Lumvi</div>
     <h2 class="step-h">Connect your store</h2>
-    <p class="step-sub">Connect your Shopify or WooCommerce store in under two minutes. We'll pull in everything your AI employee needs to start helping customers.</p>
+    <p class="step-sub">Connect your Shopify or WooCommerce store in under two minutes. We'll import your store policies automatically. Product details are always looked up live, so they're never out of date.</p>
 
     <div class="platform-grid">
       <div class="platform-card" data-platform="shopify" onclick="selectPlatform('shopify')">
@@ -463,7 +463,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
       </div>
       <div class="step-eyebrow">Setting things up</div>
       <h2 class="step-h">Importing your store</h2>
-      <p class="step-sub" id="importSub">This only takes a moment. Your AI employee will learn your catalog and policies automatically — nothing to type.</p>
+      <p class="step-sub" id="importSub">This only takes a moment. We're importing your store policies now — product details are always looked up live.</p>
     </div>
 
     <div class="card">
@@ -895,7 +895,7 @@ function startImport() {
     if (pct >= 100) {
       clearInterval(interval);
       storeData = counts;
-      document.getElementById('importSub').textContent = 'Your store is imported. Your AI employee already knows your catalog and policies.';
+      document.getElementById('importSub').textContent = 'Your policies are imported. Product details are looked up live, so they\'re always current.';
       document.getElementById('nextStep2').disabled = false;
       return;
     }

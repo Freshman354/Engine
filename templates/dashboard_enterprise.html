@@ -317,12 +317,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
             Affiliate
         </a>
-        {% if plan_limits.webhooks or user.is_admin %}
-        <a href="/integrations" class="nav-item">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            Integrations
-        </a>
-        {% endif %}
         <div class="nav-label">Account</div>
         <a href="/upgrade" class="nav-item">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
@@ -590,7 +584,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
                         <a href="/faq-manager?client_id={{ client.client_id }}" class="card-menu-item">Knowledge</a>
                         <a href="/article-manager?client_id={{ client.client_id }}" class="card-menu-item">Articles</a>
                         <button onclick="closeAllCardMenus();showEmbedCode('{{ client.client_id }}')" class="card-menu-item">Install</button>
-                        {% if plan_limits.webhooks or user.is_admin %}<a href="/integrations?client_id={{ client.client_id }}" class="card-menu-item">Integrations</a>{% endif %}
                         {% if plan_limits.cart_recovery %}<a href="/cart-recovery?client_id={{ client.client_id }}" class="card-menu-item">Cart Recovery</a>{% endif %}
                         {% if plan_limits.customization %}<a href="/customize?client_id={{ client.client_id }}" class="card-menu-item">Customize AI</a>{% endif %}
                         {% if plan_limits.analytics %}<a href="/client-report?client_id={{ client.client_id }}" class="card-menu-item">Report</a>{% endif %}
@@ -1000,10 +993,6 @@ async function loadCdashData(cid, name) {
           <a href="/widget?client_id=${cid}" target="_blank" class="cdash-link">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             Preview Assistant
-          </a>
-          <a href="/integrations?client_id=${cid}" class="cdash-link">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-            Integrations
           </a>
         </div>
       </div>
