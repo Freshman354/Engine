@@ -44,6 +44,7 @@ from .migrations import (
     migrate_kb_gaps,
     migrate_kb_gap_status,
     migrate_knowledge_base,
+    migrate_knowledge_base_quality_column,
     migrate_webhooks,
     migrate_external_integrations,
     migrate_api_usage_log,

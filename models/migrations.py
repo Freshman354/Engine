@@ -2508,6 +2508,79 @@ def migrate_cart_recovery_attribution():
             except Exception: pass
 
 
+def migrate_knowledge_base_quality_column():
+    """
+    Targeted fix for a live, confirmed bug (Railway log, 2026-09-01):
+
+        [save_knowledge_chunks] error: column "quality" of relation
+        "knowledge_base" does not exist
+
+    Root cause: there are three separate `CREATE TABLE IF NOT EXISTS
+    knowledge_base` definitions across this migration history (this
+    file's migrate_faq_to_knowledge_base, the "Conversation feature"
+    migration, and migrate_knowledge_base itself) — and they disagree.
+    Two name the score column `quality_score`; only
+    migrate_knowledge_base uses `quality`. Whichever ran FIRST against
+    a given database wins, since CREATE TABLE IF NOT EXISTS is a no-op
+    once the table exists — so migrate_knowledge_base's own `quality
+    REAL DEFAULT 0.8` column definition never actually applies on a
+    database where the table already existed from one of the other two.
+    Meanwhile every actual code path (save_knowledge_chunks,
+    get_knowledge_chunks_raw) has only ever used the bare `quality`
+    name — `quality_score` on this table is dead, referenced nowhere
+    outside these migration definitions (checked).
+
+    This does not touch or rename `quality_score` — leaving whatever
+    historical column is there alone; `quality` is simply added
+    alongside it as a new, independent column, defaulting existing
+    rows to 0.8 (matching every other definition's own default).
+
+    Also reconciles a second, latent instance of the exact same class
+    of bug that hasn't been hit yet but will be: save_knowledge_chunks()
+    does `ON CONFLICT (kb_id)`, which requires kb_id to have a unique
+    index/constraint. The one prior migration that reconciled `kb_id`
+    onto a `chunk_id`-only table (see the "Schema reconciliation"
+    block above) only ever added it as a plain column, never a unique
+    one — so ON CONFLICT (kb_id) would fail the same way once a
+    duplicate save hit that database. Attempted defensively, in its
+    own savepoint, so a database with genuine duplicate kb_id values
+    doesn't block the quality-column fix above it from landing.
+
+    Idempotent — safe to run every startup.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            "ALTER TABLE knowledge_base ADD COLUMN IF NOT EXISTS quality REAL DEFAULT 0.8"
+        )
+        conn.commit()
+        print("✅ migrate_knowledge_base_quality_column: quality column ready.")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  migrate_knowledge_base_quality_column: {e}")
+
+    # Separate savepoint: kb_id's uniqueness is a different, independent
+    # risk (could legitimately fail on a database with pre-existing
+    # duplicate kb_id values) — must not roll back the quality-column
+    # fix above if this part fails.
+    try:
+        cursor.execute("SAVEPOINT sp_kb_id_unique")
+        cursor.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_kb_kb_id_unique ON knowledge_base (kb_id)"
+        )
+        cursor.execute("RELEASE SAVEPOINT sp_kb_id_unique")
+        conn.commit()
+        print("✅ migrate_knowledge_base_quality_column: kb_id unique index ready.")
+    except Exception as e:
+        cursor.execute("ROLLBACK TO SAVEPOINT sp_kb_id_unique")
+        conn.commit()
+        print(f"⚠️  migrate_knowledge_base_quality_column (kb_id unique index — "
+              f"likely pre-existing duplicate kb_id values, needs manual review): {e}")
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def migrate_seat_subscriptions():
     """
     Create seat_subscriptions table for agency per-seat purchases.

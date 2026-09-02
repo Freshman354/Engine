@@ -1182,7 +1182,7 @@ try:
         'migrate_clients_table', 'migrate_faqs_table',
         'migrate_faq_to_knowledge_base', 'migrate_subscription_expiry',
         'migrate_to_recurring_subscriptions', 'migrate_conversation_features',
-        'migrate_knowledge_base', 'migrate_faqs_import_tracking',
+        'migrate_knowledge_base', 'migrate_knowledge_base_quality_column', 'migrate_faqs_import_tracking',
         'migrate_business_knowledge',
         'migrate_webhooks', 'migrate_white_label',
         'migrate_client_status', 'migrate_onboarding', 'migrate_cron_tables',
@@ -2102,7 +2102,7 @@ def save_customization():
         conn   = models.get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            '''UPDATE clients SET branding_settings=%s, company_name=%s,
+            '''UPDATE clients SET branding_settings=%s, company_name=COALESCE(%s, company_name),
                widget_color=%s, welcome_message=%s, remove_branding=%s
                WHERE client_id=%s AND user_id=%s''',
             (
@@ -2360,7 +2360,7 @@ def build_embed_activation_urls(shop: str) -> dict:
     if SHOPIFY_APP_CLIENT_ID:
         activate_embed_url = (
             f'https://{shop}/admin/themes/current/editor'
-            f'?context=apps&template=index&activateAppId={SHOPIFY_APP_CLIENT_ID}/chat-embed'
+            f'?context=apps&template=index&activateAppId={SHOPIFY_APP_CLIENT_ID}/lumvi-chat-embed'
         )
     else:
         app.logger.warning('[Shopify OAuth] SHOPIFY_APP_CLIENT_ID not set — omitting '
