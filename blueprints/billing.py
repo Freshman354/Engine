@@ -144,7 +144,7 @@ def upgrade_page():
         return result
 
     return render_template(
-        'upgrade-shopify.html',
+        'upgrade.html',
         user=current_user,
         flw_public_key=os.environ.get('FLW_PUBLIC_KEY', ''),
         FLW_PLAN_IDS_MONTHLY=_parse_plan_ids('FLW_PLAN_IDS_MONTHLY'),

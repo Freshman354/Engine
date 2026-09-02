@@ -259,9 +259,9 @@ def save_knowledge_chunks(client_id: str, chunks: list) -> int:
         for chunk in chunks:
             cursor.execute(
                 '''INSERT INTO knowledge_base
-                   (client_id, kb_id, title, content, type, category, tags,
+                   (client_id, kb_id, chunk_id, title, content, type, category, tags,
                     embedding, metadata, quality)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT (kb_id)
                    DO UPDATE SET
                      title     = EXCLUDED.title,
@@ -276,6 +276,7 @@ def save_knowledge_chunks(client_id: str, chunks: list) -> int:
                      updated_at = CURRENT_TIMESTAMP''',
                 (
                     client_id,
+                    chunk['kb_id'],
                     chunk['kb_id'],
                     chunk.get('title', ''),
                     chunk.get('content', ''),
