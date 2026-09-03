@@ -1975,9 +1975,6 @@ def customize_page():
     fresh_user  = models.get_user_by_id(current_user.id)
     plan_type   = (fresh_user or {}).get('plan_type', current_user.plan_type)
     plan_limits = PLAN_LIMITS.get(plan_type, PLAN_LIMITS['free'])
-    if not plan_limits['customization']:
-        return render_template('customize_upgrade.html',
-                               user=current_user, plan_type=plan_type), 403
     client = models.get_client_by_id(client_id)
     branding_settings = {}
     if client and client.get('branding_settings'):
@@ -2020,6 +2017,28 @@ def save_customization():
         fresh_user  = models.get_user_by_id(current_user.id)
         fresh_plan  = (fresh_user or {}).get('plan_type', 'ai_starter')
         plan_limits = PLAN_LIMITS.get(fresh_plan, PLAN_LIMITS['free'])
+
+        if not plan_limits['customization']:
+            _hex_re = re.compile(r'^#[0-9A-Fa-f]{6}$')
+            incoming_color = str(data.get('branding', {}).get('primary_color', '')).strip()
+            if not _hex_re.match(incoming_color):
+                return jsonify({'success': False, 'error': 'Invalid color'}), 400
+
+            try:
+                existing_settings = json.loads(client.get('branding_settings') or '{}')
+            except Exception:
+                existing_settings = {}
+            existing_settings.setdefault('branding', {})['primary_color'] = incoming_color
+
+            conn   = models.get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE clients SET branding_settings=%s, widget_color=%s WHERE client_id=%s AND user_id=%s',
+                (json.dumps(existing_settings), incoming_color, client_id, current_user.id)
+            )
+            conn.commit(); cursor.close(); conn.close()
+            app.logger.info(f'Widget color saved (free plan) for client: {client_id}')
+            return jsonify({'success': True, 'message': 'Color saved successfully'})
 
         incoming_integrations = data.get('integrations', {})
         if plan_limits['webhooks']:
