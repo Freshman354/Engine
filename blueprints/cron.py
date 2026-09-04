@@ -16,6 +16,7 @@ Routes
 ------
   POST        /api/admin/enforce-subscriptions        admin_enforce_subscriptions
   GET/POST    /cron/enforce-subscriptions             cron_enforce_subscriptions
+  GET/POST    /cron/reconcile-shopify-subscriptions   cron_reconcile_shopify_subscriptions
   GET/POST    /cron/weekly-digest                     cron_weekly_digest
   GET/POST    /cron/cleanup-logs                      cron_cleanup_logs
   GET/POST    /cron/hard-delete-accounts               cron_hard_delete_accounts
@@ -37,6 +38,7 @@ Registration in app.py:
       enforce_subscriptions=enforce_subscriptions,
       agency_included_clients=AGENCY_INCLUDED_CLIENTS,
       agency_seat_price=AGENCY_SEAT_PRICE,
+      reconcile_shopify_subscriptions=reconcile_shopify_subscriptions,
   )
   app.register_blueprint(cron_bp)
 """
@@ -68,18 +70,22 @@ _mail                    = None
 _enforce_subscriptions   = None
 _agency_included_clients = None
 _agency_seat_price       = None
+_reconcile_shopify_subscriptions = None
 
 
-def init_cron(mail, enforce_subscriptions, agency_included_clients, agency_seat_price):
+def init_cron(mail, enforce_subscriptions, agency_included_clients, agency_seat_price,
+              reconcile_shopify_subscriptions):
     """
     Called once in app.py after all shared objects are ready.
     Must be called before the first request reaches this blueprint.
     """
     global _mail, _enforce_subscriptions, _agency_included_clients, _agency_seat_price
+    global _reconcile_shopify_subscriptions
     _mail                    = mail
     _enforce_subscriptions   = enforce_subscriptions
     _agency_included_clients = agency_included_clients
     _agency_seat_price       = agency_seat_price
+    _reconcile_shopify_subscriptions = reconcile_shopify_subscriptions
 
 
 # ── Shared secret validator ───────────────────────────────────────────────────
@@ -888,6 +894,36 @@ def cron_enforce_subscriptions():
         'success':          True,
         'ran_at':           datetime.utcnow().isoformat(),
         'downgraded_count': len(downgraded),
+    })
+
+
+@cron_bp.route('/cron/reconcile-shopify-subscriptions', methods=['GET', 'POST'])
+def cron_reconcile_shopify_subscriptions():
+    """
+    Daily cron — reconciles Shopify App Pricing subscription state via the
+    Partner API. Necessary (not optional): that billing rail sends no
+    subscription-change webhooks at all (removed platform-wide April 28
+    2026), so this is the only thing that catches a merchant cancelling
+    or freezing their plan entirely inside Shopify admin without ever
+    triggering a redirect back through /billing/shopify/return. See
+    app.py's reconcile_shopify_subscriptions() for the full logic.
+
+    Same CRON_SECRET as every other /cron/* route.
+    Recommended schedule: daily, same window as /cron/enforce-subscriptions.
+
+    Usage:
+      GET  /cron/reconcile-shopify-subscriptions?secret=YOUR_CRON_SECRET
+      POST /cron/reconcile-shopify-subscriptions  (body: {"secret": "YOUR_CRON_SECRET"})
+    """
+    _, err = _check_cron_secret()
+    if err:
+        return err
+
+    result = _reconcile_shopify_subscriptions()
+    return jsonify({
+        'success': True,
+        'ran_at':  datetime.utcnow().isoformat(),
+        **result,
     })
 
 

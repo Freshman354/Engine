@@ -149,6 +149,36 @@ def downgrade_expired_users():
         conn.close()
 
 
+def get_shopify_app_pricing_users():
+    """
+    All non-admin users currently on the Shopify App Pricing rail —
+    input list for the daily reconciliation job
+    (app.py::reconcile_shopify_subscriptions). Needed because that
+    billing_provider gets no subscription-change webhooks at all
+    (Shopify removed them platform-wide April 28 2026) — see
+    shopify_billing.py's module docstring.
+
+    subscription_id holds the shop's own GID
+    ("gid://shopify/Shop/<id>") for these rows, not a Flutterwave-style
+    transaction/plan reference — see shopify_billing.py for why.
+    """
+    conn, cursor = get_db()
+    try:
+        cursor.execute(
+            '''SELECT id, email, plan_type, subscription_id, is_annual
+               FROM users
+               WHERE billing_provider = 'shopify_app_pricing'
+                 AND (is_admin IS NOT TRUE)'''
+        )
+        return [dict(u) for u in cursor.fetchall()]
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def downgrade_single_user(user_id):
     """Immediately downgrade one user to free plan."""
     conn, cursor = get_db()

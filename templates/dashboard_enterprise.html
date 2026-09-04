@@ -297,6 +297,21 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--dark);
     </style>
 </head>
 <body>
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div id="flashStack" style="position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:200;display:flex;flex-direction:column;gap:8px;width:min(420px,90vw);">
+    {% for category, message in messages %}
+    <div class="flash-msg" style="padding:12px 16px;border-radius:10px;font-size:13.5px;font-weight:500;box-shadow:0 4px 16px rgba(0,0,0,0.08);
+      {% if category == 'success' %}background:var(--success-lt);color:var(--success);border:1px solid rgba(22,163,74,0.2);
+      {% elif category == 'error' %}background:var(--danger-lt);color:var(--danger);border:1px solid rgba(239,68,68,0.2);
+      {% else %}background:var(--gold-lt);color:var(--gold-dk);border:1px solid rgba(184,146,74,0.2);{% endif %}">
+      {{ message }}
+    </div>
+    {% endfor %}
+  </div>
+  <script>setTimeout(() => { const s = document.getElementById('flashStack'); if (s) s.style.display = 'none'; }, 6000);</script>
+  {% endif %}
+{% endwith %}
 <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
 <aside class="sidebar" id="sidebar">
     <a href="{{ url_for('account.settings_page') }}" class="sidebar-logo" title="Account settings">

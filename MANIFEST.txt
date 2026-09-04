@@ -1,0 +1,43 @@
+Lumvi — Shopify App Pricing — files edited across Phase 1 + Phase 1.1 bugfix
+=============================================================================
+Paths below are relative to your project root — drop each file in over
+the matching existing path. Only files that were actually changed are
+included; nothing else in your project was touched.
+
+NEW FILE (didn't exist before):
+  shopify_billing.py          Partner API client, plan-handle mapping,
+                               hosted pricing-page URL builder.
+
+EDITED FILES:
+  app.py                      + import shopify_billing
+                               + User.__init__ gains self.billing_provider
+                               + new reconcile_shopify_subscriptions()
+                               + init_billing(..., User=User)
+                               + init_cron(..., reconcile_shopify_subscriptions=...)
+
+  blueprints/billing.py       + _resolve_billing_rail()
+                               + /upgrade redirects Shopify-rail users to
+                                 Shopify's hosted plan page
+                               + new /billing/shopify/return route
+
+  blueprints/cron.py          + new /cron/reconcile-shopify-subscriptions route
+                               + init_cron() takes one new parameter
+
+  models/billing.py           + new get_shopify_app_pricing_users() helper
+
+NOT included (read, but never modified): admin_routes.py, webhooks.py,
+commerce_adapters.py, and every other file under models/ and blueprints/.
+
+Before testing, you still need (see the Phase 1 report for detail):
+  - 5 new env vars: SHOPIFY_APP_GID, SHOPIFY_PARTNER_ORG_ID,
+    SHOPIFY_PARTNER_API_TOKEN, SHOPIFY_APP_STORE_HANDLE,
+    SHOPIFY_APP_PRICING_PLAN_HANDLES
+  - 3 plans configured in the Partner Dashboard, welcome link on all three
+    pointed at https://<your-domain>/billing/shopify/return
+  - /cron/reconcile-shopify-subscriptions wired into your scheduler
+  - No database migration needed — billing_provider is a plain TEXT column.
+
+All five files compile together cleanly (python3 -m py_compile) as of this
+zip. None of this has been run against a live Shopify store or live DB —
+see the Phase 1 and Phase 1.1 reports for exactly what was and wasn't
+tested.

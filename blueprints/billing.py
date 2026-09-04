@@ -20,6 +20,7 @@ nothing has been changed except:
 Routes
 ------
   GET         /upgrade                                upgrade_page
+  GET         /billing/shopify/return                 shopify_pricing_return
   GET         /payment/flutterwave/callback           flutterwave_callback
   POST        /payment/flutterwave/webhook            flutterwave_webhook
   GET/POST    /subscription/cancel                    cancel_subscription
@@ -28,8 +29,24 @@ Routes
 
 Registration in app.py:
   from blueprints.billing import billing_bp, init_billing, PLAN_PRICES_FLW
-  init_billing(mail=mail, get_subscription_status=get_subscription_status)
+  init_billing(mail=mail, get_subscription_status=get_subscription_status, User=User)
   app.register_blueprint(billing_bp)
+
+Shopify App Pricing (added — see shopify_billing.py for the Partner API
+client this blueprint calls into):
+  - upgrade_page() now detects which billing rail a user is on
+    (_resolve_billing_rail()) and redirects Shopify-rail users straight to
+    Shopify's own hosted plan-selection page instead of rendering
+    upgrade.html — Flutterwave users' rendering of that template is
+    completely unchanged.
+  - shopify_pricing_return() is the welcome-link target configured for all
+    three plans in the Partner Dashboard; confirms subscription state via
+    the Partner API and writes it through the existing
+    models.update_user_subscription(billing_provider='shopify_app_pricing').
+  - Subscription-change webhooks don't exist for Shopify App Pricing (none
+    since April 28 2026) — see app.py's reconcile_shopify_subscriptions()
+    (daily cron, blueprints/cron.py) for the safety net that catches
+    cancellations/freezes done entirely inside Shopify admin.
 """
 
 import base64
@@ -38,11 +55,13 @@ import time
 
 import requests as _requests
 from flask import (Blueprint, flash, jsonify, redirect,
-                   render_template, request, current_app, url_for)
-from flask_login import current_user, login_required
+                   render_template, request, current_app, url_for, session)
+from flask_login import current_user, login_required, login_user
 from flask_mail import Message
 
 import models
+import webhooks as _webhooks
+import shopify_billing
 from bot_protection import get_client_ip
 
 # ── Blueprint ────────────────────────────────────────────────────────────────
@@ -52,16 +71,55 @@ billing_bp = Blueprint('billing', __name__)
 # Injected dependencies — populated by init_billing() before first request.
 _mail                   = None
 _get_subscription_status = None
+_User                    = None  # flask-login UserMixin wrapper — same class
+                                  # app.py's connect_shopify_callback uses to
+                                  # log a merchant in with no password step.
+                                  # Injected rather than imported directly to
+                                  # avoid a circular import (app.py imports
+                                  # this blueprint).
 
 
-def init_billing(mail, get_subscription_status):
+def init_billing(mail, get_subscription_status, User):
     """
     Called once in app.py after all shared objects are ready.
     Must be called before the first request reaches this blueprint.
     """
-    global _mail, _get_subscription_status
+    global _mail, _get_subscription_status, _User
     _mail                    = mail
     _get_subscription_status = get_subscription_status
+    _User                    = User
+
+
+def _resolve_billing_rail(user) -> str:
+    """
+    Returns 'shopify_app_pricing' or 'flutterwave' — which billing rail a
+    given user's upgrade/plan-change click should go through.
+
+    - If the user already has an explicit billing_provider on record (not
+      the 'manual' default every user starts with — i.e. they've
+      subscribed via one rail before, whether or not they're currently
+      back on the free plan after a cancellation), keep using that same
+      rail. Never re-derive once a real provider is on record: a merchant
+      who later connects/disconnects a Shopify integration shouldn't be
+      bounced to a different checkout for a plan they already pay for
+      elsewhere.
+    - Otherwise (never subscribed via either rail yet — still on
+      billing_provider's 'manual' default) derive it from whether any of
+      the user's clients has an active Shopify integration. A Shopify App
+      Store headless install already lands here with no billing_provider
+      set (see models/users.py::create_or_link_shopify_user) — this is
+      the only place that fact feeds into billing routing; everywhere
+      else in the app, a Shopify-provisioned free user and a
+      directly-signed-up free user are identical.
+    """
+    provider = (getattr(user, 'billing_provider', None) or 'manual').lower()
+    if provider in ('shopify_app_pricing', 'flutterwave'):
+        return provider
+
+    for client in models.get_user_clients(user.id):
+        if _webhooks.get_integration(client['client_id'], 'shopify'):
+            return 'shopify_app_pricing'
+    return 'flutterwave'
 
 
 # ── Pricing table ─────────────────────────────────────────────────────────────
@@ -102,6 +160,37 @@ PLAN_PRICES_FLW = {
 @billing_bp.route('/upgrade')
 @login_required
 def upgrade_page():
+    # Rail detection — the actual gap Phase 0 surfaced: this route used to
+    # be unconditionally Flutterwave, which would show Shopify-App-Store
+    # merchants a non-compliant checkout. A Shopify-App-Pricing user gets
+    # sent straight to Shopify's OWN hosted plan-selection page (Shopify
+    # hosts it — Lumvi has no template of its own to render for it, and
+    # none is needed); a Flutterwave user's experience below is completely
+    # unchanged, byte-for-byte, including for existing grandfathered
+    # solo/starter/pro/growth subscribers.
+    if _resolve_billing_rail(current_user) == 'shopify_app_pricing':
+        integration = None
+        for client in models.get_user_clients(current_user.id):
+            integration = _webhooks.get_integration(client['client_id'], 'shopify')
+            if integration:
+                break
+        shop_domain = (integration or {}).get('platform_config', {}).get('shop_domain', '')
+        redirect_url = shopify_billing.pricing_plans_url(shop_domain)
+        if redirect_url:
+            return redirect(redirect_url)
+        # Fails safe rather than 500s or stranding the merchant: falls
+        # through to the Flutterwave page below so there's still SOME
+        # upgrade path, and logs loudly since this means either
+        # SHOPIFY_APP_STORE_HANDLE isn't configured or this user's Shopify
+        # integration is missing/inactive despite being on this rail —
+        # both need investigating, neither should be silent.
+        current_app.logger.error(
+            f'[Billing] user={current_user.id} is on the shopify_app_pricing rail '
+            f'but pricing_plans_url() returned None (missing SHOPIFY_APP_STORE_HANDLE '
+            f'or no active shop_domain) — falling back to the Flutterwave page so the '
+            f'merchant is not stuck; this should be investigated.'
+        )
+
     def _parse_plan_ids(env_var_name):
         """Parse 'ai_starter:<id>,ai_growth:<id>,ai_scale:<id>' into
         {'ai_starter': '<id>', ...} with env validation logging.
@@ -150,6 +239,117 @@ def upgrade_page():
         FLW_PLAN_IDS_MONTHLY=_parse_plan_ids('FLW_PLAN_IDS_MONTHLY'),
         FLW_PLAN_IDS_ANNUAL=_parse_plan_ids('FLW_PLAN_IDS_ANNUAL'),
     )
+
+
+@billing_bp.route('/billing/shopify/return')
+def shopify_pricing_return():
+    """
+    Shopify redirects here after a merchant approves or changes a plan on
+    Shopify's hosted plan-selection page (the 'welcome link', configured
+    per-plan in the Partner Dashboard, same URL for all three tiers).
+
+    NOT @login_required: per Shopify's current docs, for an app with no
+    embedded App Home landing page (Lumvi's case — the dashboard is a
+    standalone web app, not a Shopify Admin iframe), both `plan_handle`
+    and `shop` are appended to this URL regardless of session state. A
+    merchant who changes their plan from inside Shopify admin itself,
+    days later, on a different device than the one they installed from,
+    may have no Lumvi session at all when they land here — this mirrors
+    app.py's connect_shopify_callback, which resolves the same way for
+    its own headless-install branch via the same
+    get_client_id_by_shopify_shop() lookup, and logs the merchant in the
+    same way (no password step) rather than bouncing them to a login wall.
+
+    plan_handle is used only to decide whether it's worth calling the
+    Partner API at all — it is NOT trusted as the source of truth for
+    what plan_type to set. Shopify's own guidance is to always confirm
+    via activeSubscription after a redirect; this queries it every time.
+    """
+    shop        = (request.args.get('shop') or '').strip().lower()
+    plan_handle = (request.args.get('plan_handle') or '').strip()
+
+    if not shop:
+        current_app.logger.error('[Shopify Billing] return handler hit with no shop param')
+        return redirect(url_for('auth.login'))
+
+    client_id = _webhooks.get_client_id_by_shopify_shop(shop)
+    if not client_id:
+        current_app.logger.error(f'[Shopify Billing] return handler: unknown shop={shop}')
+        return redirect(url_for('auth.login'))
+
+    owner_client = models.get_client_by_id(client_id)
+    owner_user   = models.get_user_by_id(owner_client['user_id']) if owner_client else None
+    if not owner_user:
+        current_app.logger.error(
+            f'[Shopify Billing] return handler: shop={shop} maps to client={client_id} '
+            f'but its owning user was not found'
+        )
+        return redirect(url_for('auth.login'))
+
+    integration = _webhooks.get_integration(client_id, 'shopify')
+    access_token = (integration or {}).get('platform_config', {}).get('access_token', '')
+    if not access_token:
+        current_app.logger.error(
+            f'[Shopify Billing] return handler: no Shopify access_token on file for '
+            f'client={client_id} shop={shop} — cannot resolve shop GID'
+        )
+        return redirect(url_for('auth.dashboard'))
+
+    shop_gid = shopify_billing.fetch_shop_gid(shop, access_token)
+    if not shop_gid:
+        current_app.logger.error(f'[Shopify Billing] return handler: could not resolve '
+                                  f'shop GID for shop={shop} client={client_id}')
+        return redirect(url_for('auth.dashboard'))
+
+    sub, sub_error = shopify_billing.get_active_subscription(shop_gid)
+    if not sub:
+        # Two different reasons land here (see get_active_subscription's
+        # docstring): a real "no subscription" (merchant backed out of the
+        # plan page, or hasn't picked one yet) vs. the Partner API call
+        # itself failing. Neither is grounds to change plan_type — but
+        # they're worth logging differently so a Partner API problem is
+        # distinguishable from ordinary merchant behavior after the fact.
+        if sub_error:
+            current_app.logger.error(
+                f'[Shopify Billing] return handler: could not confirm subscription for '
+                f'shop={shop} client={client_id} plan_handle={plan_handle!r} '
+                f'({sub_error}) — leaving plan_type unchanged'
+            )
+        else:
+            current_app.logger.warning(
+                f'[Shopify Billing] return handler: no active subscription found for '
+                f'shop={shop} client={client_id} plan_handle={plan_handle!r} — leaving '
+                f'plan_type unchanged'
+            )
+    else:
+        plan_type = shopify_billing.plan_handle_to_plan_type(sub['plan_handle'])
+        if not plan_type:
+            current_app.logger.error(
+                f'[Shopify Billing] return handler: unmapped plan_handle='
+                f'{sub["plan_handle"]!r} for shop={shop} client={client_id} — check '
+                f'SHOPIFY_APP_PRICING_PLAN_HANDLES'
+            )
+        else:
+            models.update_user_subscription(
+                user_id=owner_user['id'],
+                plan_type=plan_type,
+                billing_provider='shopify_app_pricing',
+                subscription_id=shop_gid,
+                is_annual=(sub['billing_period'] == 'ANNUAL'),
+            )
+            flash(f'You are now on the {plan_type.replace("ai_", "").title()} plan.', 'success')
+
+    # Log the merchant in regardless of outcome above — same no-password
+    # mechanism app.py's connect_shopify_callback uses for its headless
+    # branches, including the _user_cache key that session relies on
+    # elsewhere. Re-fetch in case update_user_subscription just changed
+    # this row.
+    current_owner_user = models.get_user_by_id(owner_user['id']) or owner_user
+    login_user(_User(current_owner_user), remember=True)
+    session.permanent = True
+    session['_user_cache'] = dict(current_owner_user)
+
+    return redirect(url_for('auth.dashboard'))
 
 
 @billing_bp.route('/payment/flutterwave/callback')

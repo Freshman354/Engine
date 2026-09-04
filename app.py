@@ -57,6 +57,7 @@ from paypalrestsdk import Payment, configure
 # ── Local ─────────────────────────────────────────────────────────────────────
 import cache_utils
 import commerce_adapters
+import shopify_billing
 import models
 import shopify_connect
 import webhooks as _webhooks
@@ -227,10 +228,19 @@ login_manager.login_view = 'auth.login'
 
 class User(UserMixin):
     def __init__(self, user_data):
-        self.id        = user_data['id']
-        self.email     = user_data['email']
-        self.plan_type = user_data['plan_type']
-        self.is_admin  = bool(user_data.get('is_admin', False))
+        self.id               = user_data['id']
+        self.email            = user_data['email']
+        self.plan_type        = user_data['plan_type']
+        self.is_admin         = bool(user_data.get('is_admin', False))
+        # Added for the Shopify App Pricing rail-detection fix — see
+        # blueprints/billing.py::_resolve_billing_rail(), which reads this
+        # off current_user and needs it present for its "never re-derive
+        # once a real provider is on record" rule to actually apply.
+        # .get(...) with a 'manual' fallback (not user_data['billing_provider'])
+        # deliberately matches the users.billing_provider column's own
+        # DEFAULT 'manual', in case a caller ever constructs User(...) from
+        # a hand-built dict that omits the key rather than a full row.
+        self.billing_provider = user_data.get('billing_provider') or 'manual'
 
 
 @login_manager.user_loader
@@ -831,6 +841,136 @@ def enforce_subscriptions() -> list:
         return []
 
 
+def reconcile_shopify_subscriptions() -> dict:
+    """
+    Daily cron — the safety net Phase 0 flagged as necessary (not
+    optional): Shopify App Pricing sends NO subscription-change webhooks
+    at all (removed platform-wide April 28 2026 — see shopify_billing.py's
+    module docstring, re-verified current as of this writing). A merchant
+    who cancels or freezes their subscription entirely from inside
+    Shopify admin never triggers a redirect back through
+    blueprints/billing.py's shopify_pricing_return(), so without this job
+    they'd keep paid-tier access forever.
+
+    For every non-admin user on billing_provider='shopify_app_pricing',
+    re-queries the Partner API (via the shop GID already stored in
+    users.subscription_id — see shopify_billing.py for why that's what
+    lives in that column for these rows) and corrects plan_type if it's
+    drifted:
+      - No active contract any more (cancelled/uninstalled) -> downgrade
+        to free via the existing models.downgrade_single_user() —
+        deliberately not a new mutation path, matches how
+        downgrade_expired_users() already downgrades Flutterwave users
+        (billing_provider is left as-is on downgrade in both cases, on
+        purpose — it's a record of which rail this merchant would
+        resubscribe through, not a live-subscription flag).
+      - Active contract, but on a different plan/cycle than we have on
+        record (e.g. a prior run's redirect-time confirmation failed
+        partway, or Shopify processed a plan change we somehow missed)
+        -> re-run the existing models.update_user_subscription() with the
+        corrected values.
+      - Active contract, matches what's on record -> no-op.
+      - Partner API call failed for this user (network issue, transient
+        Shopify error) -> skip and log; counted separately from
+        "downgraded" so a Partner API outage shows up as a spike in
+        `skipped`, never as a spike in `downgraded`. Getting this
+        distinction wrong would mass-downgrade paying merchants on a
+        transient API hiccup — see shopify_billing.get_active_subscription's
+        docstring.
+
+    Mirrors enforce_subscriptions()'s shape (models call + per-user log +
+    log_cron_run) but needs a live Partner API round-trip per user, so it
+    is intentionally its own function rather than folded into that one's
+    single SQL-only pass.
+
+    Recommended schedule: daily, same window as /cron/enforce-subscriptions.
+    """
+    import time as _time
+    t0 = _time.time()
+    checked = downgraded = corrected = skipped = 0
+    try:
+        users = models.get_shopify_app_pricing_users()
+        for u in users:
+            shop_gid = u.get('subscription_id')
+            if not shop_gid:
+                app.logger.error(
+                    f"[ShopifyReconcile] user {u['id']} ({u.get('email')}) is on "
+                    f"billing_provider=shopify_app_pricing but has no subscription_id "
+                    f"(shop GID) on record — skipping, needs manual investigation"
+                )
+                skipped += 1
+                continue
+
+            checked += 1
+            sub, sub_error = shopify_billing.get_active_subscription(shop_gid)
+
+            if sub_error:
+                # The Partner API call itself failed — NOT confirmation that
+                # the subscription is gone. Must fall into `skipped`, never
+                # `downgraded`: a transient outage here would otherwise
+                # mass-downgrade every paying Shopify-billed merchant on
+                # this run. See shopify_billing.get_active_subscription's
+                # docstring.
+                skipped += 1
+                app.logger.warning(
+                    f"[ShopifyReconcile] user {u['id']} ({u.get('email')}): could not "
+                    f"confirm subscription this run ({sub_error}) — skipping, will "
+                    f"retry on the next scheduled run"
+                )
+                continue
+
+            if sub is None:
+                if u['plan_type'] != 'free':
+                    models.downgrade_single_user(u['id'])
+                    downgraded += 1
+                    app.logger.info(
+                        f"[ShopifyReconcile] user {u['id']} ({u.get('email')}) has no "
+                        f"active Shopify subscription — downgraded to free"
+                    )
+                continue
+
+            mapped_plan = shopify_billing.plan_handle_to_plan_type(sub['plan_handle'])
+            if not mapped_plan:
+                app.logger.error(
+                    f"[ShopifyReconcile] user {u['id']} ({u.get('email')}): unmapped "
+                    f"plan_handle={sub['plan_handle']!r} — skipping, check "
+                    f"SHOPIFY_APP_PRICING_PLAN_HANDLES"
+                )
+                skipped += 1
+                continue
+
+            is_annual = sub['billing_period'] == 'ANNUAL'
+            if mapped_plan != u['plan_type'] or is_annual != bool(u.get('is_annual')):
+                models.update_user_subscription(
+                    user_id=u['id'], plan_type=mapped_plan,
+                    billing_provider='shopify_app_pricing',
+                    subscription_id=shop_gid, is_annual=is_annual,
+                )
+                corrected += 1
+                app.logger.info(
+                    f"[ShopifyReconcile] user {u['id']} ({u.get('email')}) corrected: "
+                    f"{u['plan_type']} -> {mapped_plan}"
+                )
+
+        duration_ms = int((_time.time() - t0) * 1000)
+        result = {'checked': checked, 'downgraded': downgraded,
+                  'corrected': corrected, 'skipped': skipped}
+        app.logger.info(f'[ShopifyReconcile] done — {result} dur={duration_ms}ms')
+        models.log_cron_run(
+            'reconcile_shopify_subscriptions', success=True,
+            result=result, duration_ms=duration_ms,
+        )
+        return result
+    except Exception as e:
+        app.logger.error(f'[ShopifyReconcile] error: {e}')
+        models.log_cron_run(
+            'reconcile_shopify_subscriptions', success=False,
+            result={'error': str(e)}, duration_ms=0,
+        )
+        return {'checked': checked, 'downgraded': downgraded,
+                'corrected': corrected, 'skipped': skipped, 'error': str(e)}
+
+
 # ── Client owner plan cache ───────────────────────────────────────────────────
 # 60-second TTL avoids 2 extra DB round-trips on every chat message.
 # Thread-safe: double-checked locking pattern prevents stale overwrites.
@@ -1357,7 +1497,7 @@ app.register_blueprint(business_knowledge_bp)
 # TODO(legacy, out of scope): update billing.py's own pricing table to only
 # price Starter/Growth/Scale, since that's a change to billing.py.
 from blueprints.billing import billing_bp, init_billing
-init_billing(mail=mail, get_subscription_status=get_subscription_status)
+init_billing(mail=mail, get_subscription_status=get_subscription_status, User=User)
 app.register_blueprint(billing_bp)
 
 # Agency (stripped down — single-store analytics/dashboard only, see
@@ -1391,6 +1531,7 @@ init_cron(
     enforce_subscriptions=enforce_subscriptions,
     agency_included_clients=AGENCY_INCLUDED_CLIENTS,
     agency_seat_price=AGENCY_SEAT_PRICE,
+    reconcile_shopify_subscriptions=reconcile_shopify_subscriptions,
 )
 app.register_blueprint(cron_bp)
 
