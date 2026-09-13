@@ -1,6 +1,21 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+    // Lumvi's session login isn't built around Shopify's embedded-app APIs
+    // (App Bridge/session tokens) — it's a standalone lumvi.net login that
+    // depends on setting a normal session cookie. Inside Shopify's embedded
+    // admin iframe, that Set-Cookie response is cross-origin/third-party,
+    // which modern browsers increasingly block outright — this is exactly
+    // why login silently fails when this page loads inside Shopify admin.
+    // Breaking out to the top-level tab before any login attempt sidesteps
+    // the problem entirely, since a top-level page is never third-party to
+    // itself. Deliberately synchronous and first in <head>, so it fires
+    // before the form can even be interacted with inside the iframe.
+    if (window.self !== window.top) {
+        window.top.location.href = window.location.href;
+    }
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign In — Lumvi</title>

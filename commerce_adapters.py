@@ -396,12 +396,21 @@ class ShopifyAdapter(CommerceAdapter):
         import requests
         try:
             access_token = self._get_access_token()
-            resp = requests.get(
-                f'https://{self.shop_domain}/admin/api/{self.API_VERSION}/shop.json',
+            resp = requests.post(
+                f'https://{self.shop_domain}/admin/api/{self.API_VERSION}/graphql.json',
+                json={'query': '{ shop { id } }'},
                 headers={'X-Shopify-Access-Token': access_token},
                 timeout=5,
             )
-            return resp.status_code == 200
+            if resp.status_code != 200:
+                return False
+            data = resp.json()
+            # GraphQL can return HTTP 200 with an errors array for an
+            # invalid/expired token — REST's plain status-code check didn't
+            # need this, GraphQL does.
+            if data.get('errors'):
+                return False
+            return bool((data.get('data') or {}).get('shop'))
         except Exception:
             return False
 

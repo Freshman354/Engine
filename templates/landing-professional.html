@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+    // See login.html for the full explanation — same fix, same reason.
+    // This is actually the FIRST page an unauthenticated embedded visit
+    // hits (index() redirects here), so this is the earliest point to
+    // break out, before the merchant ever reaches login/signup.
+    if (window.self !== window.top) {
+        window.top.location.href = window.location.href;
+    }
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lumvi — The AI Employee for Shopify Stores</title>

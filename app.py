@@ -2547,24 +2547,39 @@ def _get_or_create_client_for_user(user_id, company_name, vertical='ecommerce'):
 
 def _fetch_shopify_shop_email(shop_domain: str, access_token: str) -> str:
     """
-    Fetch the store's contact email via the Admin API, right after a
+    Fetch the store's contact email via the Admin GraphQL API, right after a
     headless install's token exchange — used to find-or-create the Lumvi
     account that owns this store (see models.create_or_link_shopify_user).
     Returns '' on any failure; the caller falls back to a synthetic
     placeholder rather than blocking account creation on it.
+
+    NOTE: converted from the REST shop.json endpoint (GraphQL-only is a
+    Shopify App Store requirement for new public apps). REST's `email` /
+    `customer_email` fallback pair is mapped here to GraphQL's `email` /
+    `contactEmail` fields as the closest equivalents — this mapping is
+    inferred from Shopify's schema, not independently confirmed against a
+    live call in this environment. Given the function already returns ''
+    safely on any failure and the caller already handles that with its own
+    placeholder fallback, a wrong field name degrades to "returns '' more
+    often" rather than breaking anything — but worth a real test against a
+    live shop before fully trusting the contactEmail fallback specifically.
     """
     try:
-        resp = requests.get(
-            f'https://{shop_domain}/admin/api/{SHOPIFY_API_VERSION}/shop.json',
+        resp = requests.post(
+            f'https://{shop_domain}/admin/api/{SHOPIFY_API_VERSION}/graphql.json',
+            json={'query': '{ shop { email contactEmail } }'},
             headers={'X-Shopify-Access-Token': access_token},
             timeout=10,
         )
         if resp.status_code != 200:
             return ''
-        shop_data = (resp.json() or {}).get('shop', {}) or {}
-        return (shop_data.get('email') or shop_data.get('customer_email') or '').strip().lower()
+        data = resp.json() or {}
+        if data.get('errors'):
+            return ''
+        shop_data = (data.get('data') or {}).get('shop') or {}
+        return (shop_data.get('email') or shop_data.get('contactEmail') or '').strip().lower()
     except requests.exceptions.RequestException as e:
-        app.logger.warning(f'[Shopify OAuth] shop.json fetch failed for {shop_domain}: {e}')
+        app.logger.warning(f'[Shopify OAuth] shop GraphQL fetch failed for {shop_domain}: {e}')
         return ''
 
 

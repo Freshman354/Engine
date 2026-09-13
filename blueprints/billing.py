@@ -687,6 +687,12 @@ def cancel_subscription():
 
         if success:
             user = models.get_user_by_id(current_user.id)
+            # Defaults for non-Shopify users, and Shopify users for whom the
+            # branch below never assigns a real value (e.g. no Shopify
+            # client found at all) — the email section needs these defined
+            # unconditionally to decide what it can honestly promise.
+            _shopify_cancel_ok    = False
+            _shopify_cancel_error = None
 
             # Notify Flutterwave to stop future charges
             if (user and user.get('subscription_id')
@@ -754,6 +760,36 @@ def cancel_subscription():
                         f"PayPal cancel API call failed: {_e}"
                     )
 
+            # Notify Shopify to stop future charges (App Pricing)
+            elif (user and user.get('billing_provider') == 'shopify_app_pricing'):
+                _shopify_cancel_ok    = False
+                _shopify_cancel_error = 'no_shopify_client_found'
+                try:
+                    for _client in models.get_user_clients(current_user.id):
+                        _integration = _webhooks.get_integration(_client['client_id'], 'shopify')
+                        if not (_integration and _integration.get('access_token')):
+                            continue
+                        _shop_domain = _integration.get('shop_domain') or _integration.get('platform_store_id')
+                        if not _shop_domain:
+                            continue
+                        _shopify_cancel_ok, _shopify_cancel_error = shopify_billing.cancel_shopify_subscription(
+                            _shop_domain, _integration['access_token']
+                        )
+                        break  # one Shopify client per user is the current product model
+                    if _shopify_cancel_ok:
+                        current_app.logger.info(
+                            f"[Cancel] Shopify App Pricing subscription cancelled "
+                            f"for user {current_user.id}"
+                        )
+                    else:
+                        current_app.logger.warning(
+                            f"[Cancel] Shopify cancel call did not confirm success for "
+                            f"user {current_user.id}: {_shopify_cancel_error}"
+                        )
+                except Exception as _e:
+                    _shopify_cancel_error = str(_e)
+                    current_app.logger.warning(f"Shopify cancel API call failed: {_e}")
+
             models.track_event('subscription_cancelled', user_id=current_user.id,
                                ip_address=get_client_ip(),
                                user_agent=request.headers.get('User-Agent', ''))
@@ -772,6 +808,30 @@ def cancel_subscription():
                     if _expires and hasattr(_expires, 'strftime')
                     else 'the end of your current billing period'
                 )
+                _is_shopify_user = bool(user and user.get('billing_provider') == 'shopify_app_pricing')
+                if _is_shopify_user and not _shopify_cancel_ok:
+                    # Confirmed gap this fixes: previously this claim was
+                    # unconditional for every provider, including a Shopify
+                    # user whose actual Shopify subscription might NOT have
+                    # been cancelled (see cancel_shopify_subscription's
+                    # possible failure reasons) — this codebase must not
+                    # promise something it doesn't actually know is true.
+                    _billing_note = (
+                        "Your Lumvi account has been downgraded and you will retain "
+                        f"full access until <strong>{_access_ends}</strong>. We weren't "
+                        "able to confirm your Shopify subscription was cancelled on "
+                        "Shopify's side — as a safety check, please also verify this "
+                        "from your Shopify admin under Apps, or reach out to "
+                        "support@lumvi.net and we'll help make sure you're not billed "
+                        "again."
+                    )
+                else:
+                    _billing_note = (
+                        f"Your Lumvi subscription has been cancelled. You will retain "
+                        f"full access until <strong>{_access_ends}</strong>. After that, "
+                        f"your account will revert to the free plan automatically — no "
+                        f"further charges will be made."
+                    )
                 if _mail:
                     _cancel_msg = Message(
                         subject="Your Lumvi subscription has been cancelled",
@@ -783,9 +843,7 @@ def cancel_subscription():
                           <h2 style="font-size:20px;font-weight:700;color:#1C1917;margin-bottom:8px;">
                             Subscription Cancelled</h2>
                           <p style="color:#57534E;font-size:14px;line-height:1.6;margin-bottom:16px;">
-                            Your Lumvi subscription has been cancelled. You will retain full access
-                            until <strong>{_access_ends}</strong>. After that, your account will
-                            revert to the free plan automatically — no further charges will be made.</p>
+                            {_billing_note}</p>
                           <p style="color:#57534E;font-size:14px;line-height:1.6;margin-bottom:24px;">
                             Changed your mind? You can resubscribe at any time from your
                             <a href="https://lumvi.net/upgrade" style="color:#B8924A;">upgrade page</a>.

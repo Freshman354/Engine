@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script>
+    // See login.html for the full explanation — same fix, same reason:
+    // Lumvi's session system depends on a normal cookie that Shopify's
+    // embedded admin iframe treats as third-party and blocks. Breaking out
+    // to the top-level tab before signup begins avoids it entirely.
+    if (window.self !== window.top) {
+        window.top.location.href = window.location.href;
+    }
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Launch Your AI Employee — Lumvi</title>

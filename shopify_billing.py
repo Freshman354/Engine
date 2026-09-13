@@ -244,36 +244,46 @@ def get_active_subscription(shop_gid: str):
 
 def fetch_shop_gid(shop_domain: str, access_token: str):
     """
-    Resolves a shop's numeric ID via the Admin API and returns it as the
-    GID activeSubscription's shopId argument needs
-    ("gid://shopify/Shop/<id>"), or None on failure.
+    Resolves a shop's GID via the Admin GraphQL API — the format
+    activeSubscription's shopId argument needs ("gid://shopify/Shop/<id>"),
+    or None on failure.
 
-    Same shop.json call as app.py's _fetch_shopify_shop_email — reuses the
-    per-shop access_token already stored in
-    client_integrations.platform_config from the original OAuth token
-    exchange (connect_shopify_callback), so this needs no credential of
-    its own. Only called once, at the moment blueprints/billing.py's
+    Same underlying lookup as app.py's _fetch_shopify_shop_email (converted
+    from REST's shop.json to GraphQL together, for the same App Store
+    GraphQL-only requirement) — reuses the per-shop access_token already
+    stored in client_integrations.platform_config from the original OAuth
+    token exchange (connect_shopify_callback), so this needs no credential
+    of its own. Only called once, at the moment blueprints/billing.py's
     shopify_pricing_return() first confirms a merchant's subscription —
     the resulting GID is then persisted as users.subscription_id, so every
     later reconciliation check goes straight to the Partner API.
+
+    Note: GraphQL's shop.id field is already a full GID string
+    ("gid://shopify/Shop/<id>"), unlike REST's bare numeric id — so unlike
+    the old version, there's no manual f-string GID construction needed
+    here anymore.
     """
     try:
-        resp = requests.get(
+        resp = requests.post(
             f'https://{shop_domain}/admin/api/'
-            f'{SHOPIFY_ADMIN_API_VERSION_FOR_SHOP_LOOKUP}/shop.json',
+            f'{SHOPIFY_ADMIN_API_VERSION_FOR_SHOP_LOOKUP}/graphql.json',
+            json={'query': '{ shop { id } }'},
             headers={'X-Shopify-Access-Token': access_token},
             timeout=10,
         )
         if resp.status_code != 200:
-            logger.error(f'[ShopifyBilling] shop.json fetch failed for {shop_domain}: '
+            logger.error(f'[ShopifyBilling] shop GraphQL fetch failed for {shop_domain}: '
                          f'http_{resp.status_code}')
             return None
-        shop_id = ((resp.json() or {}).get('shop') or {}).get('id')
-        if not shop_id:
+        data = resp.json() or {}
+        if data.get('errors'):
+            logger.error(f'[ShopifyBilling] shop GraphQL errors for {shop_domain}: '
+                         f'{data["errors"]}')
             return None
-        return f'gid://shopify/Shop/{shop_id}'
+        shop_gid = ((data.get('data') or {}).get('shop') or {}).get('id')
+        return shop_gid or None
     except requests.exceptions.RequestException as e:
-        logger.error(f'[ShopifyBilling] shop.json fetch failed for {shop_domain}: {e}')
+        logger.error(f'[ShopifyBilling] shop GraphQL fetch failed for {shop_domain}: {e}')
         return None
 
 
@@ -304,3 +314,120 @@ def pricing_plans_url(shop_domain: str):
         f'https://admin.shopify.com/store/{store_handle}'
         f'/charges/{SHOPIFY_APP_STORE_HANDLE}/pricing_plans'
     )
+
+
+# ── Cancellation ─────────────────────────────────────────────────────────
+
+_ACTIVE_SUBSCRIPTIONS_ADMIN_QUERY = '''
+query CurrentAppInstallationSubscriptions {
+  currentAppInstallation {
+    activeSubscriptions {
+      id
+    }
+  }
+}
+'''
+
+_APP_SUBSCRIPTION_CANCEL_MUTATION = '''
+mutation AppSubscriptionCancel($id: ID!, $prorate: Boolean) {
+  appSubscriptionCancel(id: $id, prorate: $prorate) {
+    userErrors { field message }
+    appSubscription { id status }
+  }
+}
+'''
+
+
+def cancel_shopify_subscription(shop_domain: str, access_token: str) -> tuple[bool, str | None]:
+    """
+    Cancels a shop's active Shopify App Pricing subscription. Returns
+    (True, None) on confirmed success, (False, reason) otherwise —
+    callers (blueprints/billing.py::cancel_subscription()) must use the
+    reason to decide what to actually tell the merchant: this codebase
+    doesn't get to promise "no further charges" unless this genuinely
+    returned (True, None).
+
+    CORRECTION vs. earlier guidance in this project: appSubscriptionCancel
+    is an *Admin* GraphQL API mutation (admin/api/{version}/graphql.json),
+    not a Partner API one — called with the shop's own per-store access
+    token (the same one stored in client_integrations.platform_config from
+    the original OAuth connect, already reused by fetch_shop_gid and
+    _fetch_shopify_shop_email), NOT SHOPIFY_PARTNER_API_TOKEN. No
+    "View financials" Partner API permission is actually needed for this
+    specific call — that permission gates a different mutation
+    (appCreditCreate), not this one.
+
+    prorate=False (the mutation's own default) is used deliberately, to
+    match the existing Flutterwave/PayPal cancellation behavior elsewhere
+    in this codebase: access continues until the end of the current
+    billing period, no immediate refund/proration. Keeping this consistent
+    across all three providers, rather than giving Shopify-billed
+    customers different cancellation economics than everyone else, was a
+    deliberate choice here, not an oversight — revisit only as a real
+    product decision, not a technical default.
+
+    Two API calls, both using the shop's own admin/api/{version}/graphql.json
+    endpoint: first currentAppInstallation.activeSubscriptions to get the
+    subscription's own GID (get_active_subscription's Partner-API-sourced
+    dict doesn't carry this — different object, different API surface,
+    confirmed by checking its query), then appSubscriptionCancel with that
+    GID.
+
+    KNOWN EDGE CASE, not silently ignored: Shopify's developer community
+    has reported currentAppInstallation.activeSubscriptions occasionally
+    returning an empty array immediately after a reinstall despite a real
+    active subscription existing. If this function returns
+    (False, 'no_active_subscription_found') for a merchant who insists
+    they're still being charged, that's the first thing to suspect —
+    not a Lumvi-side bug on its own.
+    """
+    try:
+        resp = requests.post(
+            f'https://{shop_domain}/admin/api/{SHOPIFY_ADMIN_API_VERSION_FOR_SHOP_LOOKUP}/graphql.json',
+            json={'query': _ACTIVE_SUBSCRIPTIONS_ADMIN_QUERY},
+            headers={'X-Shopify-Access-Token': access_token},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return False, f'active_subscriptions_lookup_http_{resp.status_code}'
+        data = resp.json() or {}
+        if data.get('errors'):
+            return False, f'active_subscriptions_lookup_errors:{data["errors"]}'
+        subs = (((data.get('data') or {}).get('currentAppInstallation') or {})
+                .get('activeSubscriptions') or [])
+        if not subs:
+            return False, 'no_active_subscription_found'
+        subscription_gid = subs[0].get('id')
+        if not subscription_gid:
+            return False, 'active_subscription_missing_id'
+    except requests.exceptions.RequestException as e:
+        logger.error(f'[ShopifyBilling] active subscription lookup failed for {shop_domain}: {e}')
+        return False, f'active_subscriptions_lookup_request_failed:{e}'
+
+    try:
+        resp = requests.post(
+            f'https://{shop_domain}/admin/api/{SHOPIFY_ADMIN_API_VERSION_FOR_SHOP_LOOKUP}/graphql.json',
+            json={'query': _APP_SUBSCRIPTION_CANCEL_MUTATION,
+                  'variables': {'id': subscription_gid, 'prorate': False}},
+            headers={'X-Shopify-Access-Token': access_token},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return False, f'cancel_mutation_http_{resp.status_code}'
+        data = resp.json() or {}
+        if data.get('errors'):
+            return False, f'cancel_mutation_errors:{data["errors"]}'
+        payload = ((data.get('data') or {}).get('appSubscriptionCancel') or {})
+        user_errors = payload.get('userErrors') or []
+        if user_errors:
+            logger.warning(f'[ShopifyBilling] cancel userErrors for {shop_domain}: {user_errors}')
+            return False, f'cancel_user_errors:{user_errors}'
+        status = ((payload.get('appSubscription') or {}).get('status') or '').upper()
+        if status not in ('CANCELLED', 'EXPIRED'):
+            logger.warning(f'[ShopifyBilling] unexpected post-cancel status for '
+                            f'{shop_domain}: {status!r}')
+            return False, f'unexpected_post_cancel_status:{status}'
+        return True, None
+    except requests.exceptions.RequestException as e:
+        logger.error(f'[ShopifyBilling] cancel mutation failed for {shop_domain}: {e}')
+        return False, f'cancel_mutation_request_failed:{e}'
