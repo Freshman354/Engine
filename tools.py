@@ -934,6 +934,8 @@ def _select_product_variants(matches, customer_query: str):
         values = {_normalise_option_text(value) for value in match.options.values()}
         if requested_values.issubset(values):
             selected.append(match)
+    if not selected:
+        return matches, True
     return selected, len(selected) != 1
 
 
@@ -1013,7 +1015,7 @@ def _catalog_search(client_id: str, query: str, limit: int, fresh: bool = False)
     response = {'success': True, 'products': products, 'count': len(products), 'query': query}
     if needs_clarification:
         response['clarification_required'] = True
-        response['message'] = 'Please choose from the available product options.'
+        response['message'] = 'Here are the available product options. Which one would you prefer?'
     return response
 
 

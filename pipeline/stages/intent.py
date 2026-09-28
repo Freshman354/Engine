@@ -322,7 +322,7 @@ def _build_tool_response_text(tool_name: str, result: Dict) -> str:
         if not products:
             return result.get('message', "I couldn't find anything matching that.")
         lines = [
-            "I found several matching product options. Which one would you like?"
+            "Here are the available product options. Which one would you prefer?"
             if result.get('clarification_required') else "Here's what I found:"
         ]
         for p in products[:5]:
