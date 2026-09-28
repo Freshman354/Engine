@@ -898,7 +898,53 @@ def search_knowledge_base(client_id: str, query: str, limit: int = 5) -> dict:
 # need to (re)connect via the Shopify OAuth flow to grant read_products.
 # =====================================================================
 
-def _catalog_search(client_id: str, query: str, limit: int) -> dict:
+def _parse_product_request(query: str) -> tuple[str, dict]:
+    """Reduce a shopper sentence to a catalog query and exact options."""
+    clean = query.strip()
+
+    product_query = clean.split(',', 1)[0] if ',' in clean else clean
+    product_query = re.sub(
+        r'\bdo you have\b|\bis there\b|\bcan i get\b|\bthis\b',
+        ' ', clean, flags=re.IGNORECASE,
+    )
+    product_query = re.sub(
+        r'\b(?:in|with)\s+[a-z0-9][a-z0-9 /-]*?(?=,|\s*$)',
+        ' ', product_query, flags=re.IGNORECASE,
+    )
+    product_query = re.sub(r'[^\w\s-]', ' ', product_query)
+    product_query = re.sub(r'\s+', ' ', product_query).strip()
+    return product_query or clean, {}
+
+
+def _normalise_option_text(value: str) -> str:
+    return re.sub(r'[^a-z0-9]+', ' ', str(value).casefold()).strip()
+
+
+def _select_product_variants(matches, customer_query: str):
+    """Select only unambiguous variants; preserve choices when uncertain."""
+    query_text = _normalise_option_text(customer_query)
+    if not matches:
+        return [], True
+
+    requested_values = set()
+    for match in matches:
+        for value in match.options.values():
+            normalised = _normalise_option_text(value)
+            if normalised and re.search(rf'\b{re.escape(normalised)}\b', query_text):
+                requested_values.add(normalised)
+
+    if not requested_values:
+        return matches, len(matches) != 1
+
+    selected = []
+    for match in matches:
+        values = {_normalise_option_text(value) for value in match.options.values()}
+        if requested_values.issubset(values):
+            selected.append(match)
+    return (selected or matches), len(selected) != 1
+
+
+def _catalog_search(client_id: str, query: str, limit: int, fresh: bool = False) -> dict:
     """
     Shared implementation behind search_products (reactive: "is X in
     stock?") and recommend_products (proactive: "the customer described a
@@ -917,7 +963,13 @@ def _catalog_search(client_id: str, query: str, limit: int) -> dict:
 
     try:
         from commerce_adapters import search_inventory_cached
-        result = search_inventory_cached(client_id, query)
+        catalog_query, requested_options = _parse_product_request(query)
+        result = search_inventory_cached(
+            client_id,
+            catalog_query,
+            requested_options=requested_options,
+            fresh=fresh,
+        )
     except Exception as e:
         logger.error(f'[Tool:_catalog_search] commerce_adapters import/call failed: {e}')
         return {
@@ -936,26 +988,42 @@ def _catalog_search(client_id: str, query: str, limit: int) -> dict:
                 'success': False,
                 'error': "I'm not able to check live product availability for this store yet.",
             }
+        if 'scope' in (result.error or '').lower():
+            logger.error(
+                f'[Tool:_catalog_search] Shopify inventory scope failure '
+                f'client={client_id} error={result.error}'
+            )
+            return {
+                'success': False,
+                'error': 'Live product availability requires Shopify read_products and read_inventory scopes. Reconnect the store with both scopes enabled.',
+            }
         logger.warning(f'[Tool:_catalog_search] live lookup failed client={client_id} error={result.error}')
         return {
             'success': False,
             'error': "I'm having trouble checking our products right now — please try again in a moment.",
         }
 
+    selected_matches, needs_clarification = _select_product_variants(result.matches, query)
     products = []
-    for m in result.matches[:limit]:
+    for m in selected_matches[:limit]:
         products.append({
             'title':       m.title,
             'available':   m.available,
             'quantity':    m.quantity,
             'variant':     m.variant,
+            'options':     m.options,
             'price':       m.price,
+            'compare_at_price': m.compare_at_price,
             'product_url': m.product_url,
             'description': m.description,
             'image_url':   m.image_url,
         })
 
-    return {'success': True, 'products': products, 'count': len(products), 'query': query}
+    response = {'success': True, 'products': products, 'count': len(products), 'query': query}
+    if needs_clarification:
+        response['clarification_required'] = True
+        response['message'] = 'Please choose from the available product options.'
+    return response
 
 
 def search_products(client_id: str, query: str, limit: int = 5) -> dict:
@@ -975,7 +1043,7 @@ def search_products(client_id: str, query: str, limit: int = 5) -> dict:
          product_url, description, image_url}], count, query} or
         {success: False, error: str}
     """
-    result = _catalog_search(client_id, query, limit)
+    result = _catalog_search(client_id, query, limit, fresh=True)
     if not result['success']:
         return result
     if not result['products']:

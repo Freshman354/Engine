@@ -2468,7 +2468,7 @@ SHOPIFY_APP_CLIENT_ID     = os.environ.get('SHOPIFY_APP_CLIENT_ID', '')
 # api_key is the app's own client ID — i.e. SHOPIFY_APP_CLIENT_ID above.
 # See build_embed_activation_urls below.
 SHOPIFY_APP_CLIENT_SECRET = os.environ.get('SHOPIFY_APP_CLIENT_SECRET', '')
-SHOPIFY_APP_SCOPES        = 'read_products,read_orders'
+SHOPIFY_APP_SCOPES        = 'read_products,read_inventory,read_orders'
 SHOPIFY_API_VERSION       = '2026-07'  # matches commerce_adapters.ShopifyAdapter.API_VERSION
 
 
@@ -2802,7 +2802,9 @@ def connect_shopify_callback():
         )
         if resp.status_code != 200:
             raise ValueError(f'token exchange returned http_{resp.status_code}')
-        access_token = resp.json().get('access_token')
+        token_data   = resp.json()
+        access_token = token_data.get('access_token')
+        granted_scopes = token_data.get('scope', '')
         if not access_token:
             raise ValueError('token exchange response had no access_token')
     except Exception as e:
@@ -2888,6 +2890,7 @@ def connect_shopify_callback():
         merged_config.update({
             'shop_domain':          shop,
             'access_token':         access_token,
+            'shopify_scopes':       granted_scopes,
             'order_lookup_enabled': True,
             'inventory_enabled':    True,
         })

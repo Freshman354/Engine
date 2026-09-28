@@ -321,12 +321,20 @@ def _build_tool_response_text(tool_name: str, result: Dict) -> str:
         products = result.get('products', [])
         if not products:
             return result.get('message', "I couldn't find anything matching that.")
-        lines = ["Here's what I found:"]
+        lines = [
+            "I found several matching product options. Which one would you like?"
+            if result.get('clarification_required') else "Here's what I found:"
+        ]
         for p in products[:5]:
             status = 'in stock' if p.get('available') else 'out of stock'
-            variant_part = f" ({p['variant']})" if p.get('variant') else ''
+            option_values = p.get('options') or {}
+            variant_part = (
+                f" ({', '.join(f'{name}: {value}' for name, value in option_values.items())})"
+                if option_values else (f" ({p['variant']})" if p.get('variant') else '')
+            )
             price_part = f" — {p['price']}" if p.get('price') else ''
-            lines.append(f"• {p.get('title', '')}{variant_part}{price_part} — {status}")
+            quantity_part = f", {p['quantity']} available" if p.get('quantity') is not None else ''
+            lines.append(f"• {p.get('title', '')}{variant_part}{price_part} — {status}{quantity_part}")
         return '\n'.join(lines)
 
     # cancel_order, escalate_to_human, and anything else already using 'message'
