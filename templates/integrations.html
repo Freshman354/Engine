@@ -927,6 +927,30 @@ a { text-decoration: none; color: inherit; }
   background: var(--panel);
   color: var(--sub);
 }
+.shopify-scope-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  margin: 0 0 14px;
+  border: 1px solid rgba(217,119,6,0.28);
+  border-radius: var(--radius-sm);
+  background: var(--warning-lt);
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.shopify-scope-warning button {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
 </style>
 <!-- Jinja2 template variables — populated by Flask's render_template() -->
 <script>
@@ -1764,6 +1788,27 @@ function setCardState(platform, connected, clientId, webhookUrl) {
       }
       methodBadge.className = `card-connection-method ${isNativeShopify ? 'native' : 'manual'}`;
       methodBadge.textContent = isNativeShopify ? '🛍️ Installed via Shopify App' : 'Manual setup';
+
+      const scopes = String(cfg.shopify_scopes || '')
+        .split(',')
+        .map(scope => scope.trim().toLowerCase())
+        .filter(Boolean);
+      const needsInventoryScope = !scopes.includes('read_inventory');
+      let scopeWarning = document.getElementById('shopify-scope-warning');
+      if (needsInventoryScope) {
+        if (!scopeWarning) {
+          scopeWarning = document.createElement('div');
+          scopeWarning.id = 'shopify-scope-warning';
+          scopeWarning.className = 'shopify-scope-warning';
+          methodBadge.insertAdjacentElement('afterend', scopeWarning);
+        }
+        scopeWarning.innerHTML = `
+          <span>Product availability needs the Shopify <strong>read_inventory</strong> permission. Reconnect to grant it.</span>
+          <button type="button" onclick="reconnectShopifyNative('${clientId}')">Reconnect</button>
+        `;
+      } else if (scopeWarning) {
+        scopeWarning.remove();
+      }
     } else if (methodBadge) {
       methodBadge.remove();
     }
@@ -1822,6 +1867,8 @@ function setCardState(platform, connected, clientId, webhookUrl) {
   } else {
     status.className   = 'platform-status not-connected';
     status.textContent = 'Not connected';
+    const scopeWarning = document.getElementById('shopify-scope-warning');
+    if (scopeWarning) scopeWarning.remove();
     const lastEvent = document.getElementById(`${platform}-last-event`);
     if (lastEvent) lastEvent.remove();
     if (methodBadge) methodBadge.remove();
