@@ -903,14 +903,27 @@ def _normalise_option_text(value: str) -> str:
 
 
 def _requires_fresh_product_lookup(query: str) -> bool:
-    return bool(re.search(
-        r'\b(?:in stock|out of stock|stock|available|availability|price|cost|how much|'
-        r'color|colour|size|variant|option)\b|'
-        r'\b(?:in|with)\s+(?:the\s+)?[a-z0-9-]+\b|'
-        r'\bthe\s+[a-z0-9-]+\s+one\b',
+    """Bypass cache for live stock/price checks or a specific variant request."""
+    live_status_or_price = re.search(
+        r"\b(?:in stock|out of stock|stock|available|availability|sold out|"
+        r"price|cost|how much|what(?:'s| is) the price)\b",
         query,
         flags=re.IGNORECASE,
-    ))
+    )
+    specific_option = re.search(
+        r"\b(?:in|with)\s+(?:the\s+)?[a-z0-9-]+\b|"
+        r"\b(?:the\s+)?[a-z0-9-]+\s+(?:one|size|color|colour)\b|"
+        r"\b(?:size|color|colour|variant|option)\s*(?:is|:)?\s+[a-z0-9-]+\b",
+        query,
+        flags=re.IGNORECASE,
+    )
+    contextual_availability = re.search(
+        r"\b(?:do you have|can i get|is there|is that|is it)\s+"
+        r"(?:it|that|this|one)\b",
+        query,
+        flags=re.IGNORECASE,
+    )
+    return bool(live_status_or_price or specific_option or contextual_availability)
 
 
 def _select_product_variants(matches, customer_query: str):
