@@ -193,10 +193,6 @@ def get_analytics():
             (client_id,)
         )
         raw_turns = cursor.fetchall()
-        current_app.logger.info(
-            f'[ANALYTICS] returned {len(raw_turns)} conversation rows '
-            f'for client_id={client_id}'
-        )
         sessions_order = []
         sessions_map   = {}
         for r in raw_turns:

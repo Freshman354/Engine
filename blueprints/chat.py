@@ -128,15 +128,12 @@ def chat():
             return jsonify({'success': False, 'error': 'Message is required'}), 400
 
         client = None  # always defined — stays None if DB call below fails
-        fallback_reason = None
         try:
             client = models.get_client_by_id(client_id)
             if not client:
-                fallback_reason = f'client_id_invalid_or_not_found client_id={client_id}'
-                current_app.logger.error(
-                    f'[DEMO-FALLBACK-TRIGGERED] reason: {fallback_reason}'
+                current_app.logger.warning(
+                    f'Client not found: {client_id}, using demo FAQs'
                 )
-                fallback_reason = None
                 faqs_list = [
                     {
                         "id": "demo_1",
@@ -181,10 +178,6 @@ def chat():
                     )
         except Exception as db_error:
             current_app.logger.error(f'Database error: {db_error}')
-            fallback_reason = f'client_lookup_failed error={db_error}'
-            current_app.logger.error(
-                f'[DEMO-FALLBACK-TRIGGERED] reason: {fallback_reason}'
-            )
             faqs_list = []
             config    = {}
 
@@ -624,18 +617,6 @@ def chat():
                 current_app.logger.error(
                     f"[RAG Pipeline] error: {ai_error}", exc_info=True
                 )
-                fallback_reason = f'ai_pipeline_error error={ai_error}'
-                current_app.logger.error(
-                    f'[DEMO-FALLBACK-TRIGGERED] reason: {fallback_reason} '
-                    f'client_id={client_id}'
-                )
-
-        if not (_ai_helper and _ai_helper.enabled):
-            fallback_reason = 'ai_credentials_missing_or_invalid'
-            current_app.logger.error(
-                f'[DEMO-FALLBACK-TRIGGERED] reason: {fallback_reason} '
-                f'client_id={client_id}'
-            )
 
         # ── Step 3: Keyword fallback (threshold=0.68, AI disabled/failed) ──
         best_faq, confidence = _find_best_match(message, faqs_list)
