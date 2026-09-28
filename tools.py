@@ -898,24 +898,6 @@ def search_knowledge_base(client_id: str, query: str, limit: int = 5) -> dict:
 # need to (re)connect via the Shopify OAuth flow to grant read_products.
 # =====================================================================
 
-def _parse_product_request(query: str) -> tuple[str, dict]:
-    """Reduce a shopper sentence to a catalog query and exact options."""
-    clean = query.strip()
-
-    product_query = clean.split(',', 1)[0] if ',' in clean else clean
-    product_query = re.sub(
-        r'\bdo you have\b|\bis there\b|\bcan i get\b|\bthis\b',
-        ' ', clean, flags=re.IGNORECASE,
-    )
-    product_query = re.sub(
-        r'\b(?:in|with)\s+[a-z0-9][a-z0-9 /-]*?(?=,|\s*$)',
-        ' ', product_query, flags=re.IGNORECASE,
-    )
-    product_query = re.sub(r'[^\w\s-]', ' ', product_query)
-    product_query = re.sub(r'\s+', ' ', product_query).strip()
-    return product_query or clean, {}
-
-
 def _normalise_option_text(value: str) -> str:
     return re.sub(r'[^a-z0-9]+', ' ', str(value).casefold()).strip()
 
@@ -963,11 +945,9 @@ def _catalog_search(client_id: str, query: str, limit: int, fresh: bool = False)
 
     try:
         from commerce_adapters import search_inventory_cached
-        catalog_query, requested_options = _parse_product_request(query)
         result = search_inventory_cached(
             client_id,
-            catalog_query,
-            requested_options=requested_options,
+            query,
             fresh=fresh,
         )
     except Exception as e:
