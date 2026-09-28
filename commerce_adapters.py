@@ -658,56 +658,15 @@ class WooCommerceAdapter(CommerceAdapter):
             for p in products:
                 stock_status = p.get('stock_status')  # 'instock' | 'outofstock' | 'onbackorder'
                 images = p.get('images') or []
-                attributes = {
-                    str(attribute.get('name', '')).strip().lower(): str(
-                        attribute.get('option') or
-                        ((attribute.get('options') or [''])[0] if attribute.get('options') else '')
-                    ).strip()
-                    for attribute in (p.get('attributes') or [])
-                    if attribute.get('name') and (attribute.get('option') or attribute.get('options'))
-                }
-                variations = p.get('variations') or []
-                if not variations:
-                    variations = [None]
-                elif all(isinstance(variation, (int, str)) for variation in variations):
-                    hydrated = []
-                    for variation_id in variations:
-                        try:
-                            variation_resp = requests.get(
-                                f'{url}/{p.get("id")}/variations/{variation_id}',
-                                auth=(self.consumer_key, self.consumer_secret),
-                                timeout=5,
-                            )
-                            if variation_resp.status_code == 200:
-                                hydrated.append(variation_resp.json())
-                        except requests.exceptions.RequestException as variation_error:
-                            logger.warning(
-                                f'[WooCommerceAdapter] variation lookup failed '
-                                f'product={p.get("id")} variation={variation_id}: {variation_error}'
-                            )
-                    variations = hydrated or [None]
-                for variation in variations:
-                    variation = variation or {}
-                    variation_attributes = dict(attributes)
-                    variation_attributes.update({
-                        str(attribute.get('name', '')).strip().lower(): str(attribute.get('option', '')).strip()
-                        for attribute in (variation.get('attributes') or [])
-                        if attribute.get('name') and attribute.get('option')
-                    })
-                    variation_image = (variation.get('image') or {}).get('src')
-                    variation_price = variation.get('price') or p.get('price') or None
-                    matches.append(InventoryMatch(
-                        title=p.get('name', ''),
-                        available=(variation.get('stock_status') or stock_status) == 'instock',
-                        quantity=variation.get('stock_quantity', p.get('stock_quantity')),
-                        variant=variation.get('name') or None,
-                        price=variation_price,
-                        compare_at_price=variation.get('regular_price') or p.get('regular_price') or None,
-                        product_url=variation.get('permalink') or p.get('permalink') or None,
-                        description=_strip_html(p.get('short_description') or p.get('description') or '') or None,
-                        image_url=variation_image or (images[0].get('src') if images else None),
-                        options=variation_attributes,
-                    ))
+                matches.append(InventoryMatch(
+                    title=p.get('name', ''),
+                    available=(stock_status == 'instock'),
+                    quantity=p.get('stock_quantity'),
+                    price=p.get('price') or None,
+                    product_url=p.get('permalink') or None,
+                    description=_strip_html(p.get('short_description') or p.get('description') or '') or None,
+                    image_url=(images[0].get('src') if images else None),
+                ))
             return InventoryResult(resolved=True, matches=matches)
 
         except requests.exceptions.Timeout:
