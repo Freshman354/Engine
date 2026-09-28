@@ -387,7 +387,9 @@ def chat():
         if _ai_helper and _ai_helper.enabled:
             try:
                 # Load 15-message history — summarisation handled inside generate_response
-                convo_history = models.get_recent_conversations(client_id, limit=15)
+                convo_history = models.get_recent_conversations(
+                    client_id, session_id, limit=15
+                )
 
                 current_app.logger.info(
                     f"[Chat] client={client_id} faqs={len(faqs_list)} "
