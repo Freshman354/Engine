@@ -902,6 +902,17 @@ def _normalise_option_text(value: str) -> str:
     return re.sub(r'[^a-z0-9]+', ' ', str(value).casefold()).strip()
 
 
+def _requires_fresh_product_lookup(query: str) -> bool:
+    return bool(re.search(
+        r'\b(?:in stock|out of stock|stock|available|availability|price|cost|how much|'
+        r'color|colour|size|variant|option)\b|'
+        r'\b(?:in|with)\s+(?:the\s+)?[a-z0-9-]+\b|'
+        r'\bthe\s+[a-z0-9-]+\s+one\b',
+        query,
+        flags=re.IGNORECASE,
+    ))
+
+
 def _select_product_variants(matches, customer_query: str):
     """Select only unambiguous variants; preserve choices when uncertain."""
     query_text = _normalise_option_text(customer_query)
@@ -1023,7 +1034,12 @@ def search_products(client_id: str, query: str, limit: int = 5) -> dict:
          product_url, description, image_url}], count, query} or
         {success: False, error: str}
     """
-    result = _catalog_search(client_id, query, limit, fresh=True)
+    result = _catalog_search(
+        client_id,
+        query,
+        limit,
+        fresh=_requires_fresh_product_lookup(query),
+    )
     if not result['success']:
         return result
     if not result['products']:
