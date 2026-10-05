@@ -613,6 +613,8 @@ def chat():
                         'method':     method,
                         'session_id': session_id,  # echoed so widget can store it
                         **({'quick_replies': _confirm_replies} if _confirm_replies else {}),
+                        **({'products': result['products']}
+                           if result.get('products') is not None else {}),
                     })
 
             except Exception as ai_error:

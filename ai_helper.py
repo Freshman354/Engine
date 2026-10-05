@@ -1404,6 +1404,12 @@ class AIHelper:
                     ),
                     confidence=0.9 if tool_result.get('success') else 0.0,
                     action={'tool': tool_name, **tool_result},
+                    products=(
+                        tool_result.get('data', {}).get('products')
+                        if tool_name in ('search_products', 'recommend_products')
+                        and tool_result.get('success')
+                        else None
+                    ),
                 ).to_dict()
 
             # ── Confidence thresholds (sales queries get lower floor) ──

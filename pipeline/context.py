@@ -184,6 +184,7 @@ class PipelineResult:
     lead_metadata: Optional[Dict]         = None
     action: Optional[Dict]                = None
     trigger_lead_collection: bool         = False
+    products: Optional[List[Dict]]        = None
 
     # Handoff / clarification (optional — only set on specific code paths)
     handoff: Optional[Dict]               = None
@@ -213,6 +214,8 @@ class PipelineResult:
             d['needs_followup'] = self.needs_followup
         if self.trigger_lead_collection:
             d['trigger_lead_collection'] = self.trigger_lead_collection
+        if self.products is not None:
+            d['products'] = self.products
         return d
 
     # ── Common result constructors ────────────────────────────────────

@@ -10,6 +10,7 @@ from commerce_adapters import InventoryMatch, _shopify_product_search_query
 from commerce_adapters import InventoryResult
 from pipeline.stages.generation import generate_product_recommendation_response
 from pipeline.stages.intent import _build_tool_response_text
+from pipeline.context import PipelineResult
 from tools import _catalog_search, _rank_product_matches
 
 
@@ -155,3 +156,21 @@ def test_recommendation_formatter_asks_for_clarification_on_no_match():
 
     assert "preferred product type or budget" in response
     assert "No products found" not in response
+
+
+def test_pipeline_result_adds_products_only_when_available():
+    products = [{"title": "The Complete Snowboard"}]
+    with_products = PipelineResult(
+        response="Here is an option.",
+        method="product_recommendation",
+        confidence=0.9,
+        products=products,
+    ).to_dict()
+    without_products = PipelineResult(
+        response="I can help with that.",
+        method="rag",
+        confidence=0.8,
+    ).to_dict()
+
+    assert with_products["products"] == products
+    assert "products" not in without_products

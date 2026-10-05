@@ -97,6 +97,7 @@ def _run_mock_generation_cases() -> list[dict[str, Any]]:
 
     from pipeline.stages.generation import generate_product_recommendation_response
     from pipeline.stages.intent import _build_tool_response_text
+    from pipeline.context import PipelineResult
 
     products = [{
         "title": "The Complete Snowboard",
@@ -126,6 +127,18 @@ def _run_mock_generation_cases() -> list[dict[str, Any]]:
             "Find a winter snowboard", products, model=object(),
         )
 
+    contract_result = PipelineResult(
+        response=grounded or fallback,
+        method="product_recommendation",
+        confidence=0.9,
+        products=products,
+    ).to_dict()
+    unrelated_result = PipelineResult(
+        response="A standard answer.",
+        method="rag",
+        confidence=0.8,
+    ).to_dict()
+
     return [
         {
             "scenario": "grounded generation accepts retrieved title",
@@ -141,6 +154,16 @@ def _run_mock_generation_cases() -> list[dict[str, Any]]:
             ),
             "execution": "mock-only",
             "fallback": fallback,
+        },
+        {
+            "scenario": "products array is additive and omitted for ordinary answers",
+            "status": (
+                "PASS"
+                if contract_result.get("products") == products
+                and "products" not in unrelated_result
+                else "FAIL"
+            ),
+            "execution": "mock-only",
         },
     ]
 

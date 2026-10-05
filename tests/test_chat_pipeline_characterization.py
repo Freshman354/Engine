@@ -149,6 +149,52 @@ class TestChatResponseCharacterization:
         assert helper.kwargs['conversation_history'] == []
         recent_history.assert_called_once_with('demo', 'session-demo', limit=15)
 
+    def test_api_chat_forwards_products_as_an_additive_field(self):
+        products = [{
+            'title': 'The Complete Snowboard',
+            'available': True,
+            'variants': [],
+        }]
+
+        class FakeAIHelper:
+            enabled = True
+
+            def generate_response(self, **kwargs):
+                return {
+                    'response': 'The Complete Snowboard may fit.',
+                    'method': 'product_recommendation',
+                    'confidence': 0.9,
+                    'products': products,
+                }
+
+        app = Flask(__name__)
+        app.register_blueprint(chat_blueprint.chat_bp)
+        chat_blueprint.init_chat(
+            limiter=None,
+            ai_helper=FakeAIHelper(),
+            plan_limits={},
+            vertical_prompts={},
+            log_conversation=Mock(),
+            find_best_match=Mock(return_value=(None, 0.0)),
+            get_cached_client_owner=Mock(return_value=None),
+            fire_webhook=Mock(),
+            notify_handoff=Mock(),
+            notify_usage_threshold=Mock(),
+        )
+
+        with (
+            patch.object(chat_blueprint.models, 'get_client_by_id', return_value=None),
+            patch.object(chat_blueprint.models, 'get_recent_conversations', return_value=[]),
+        ):
+            response = app.test_client().post('/api/chat', json={
+                'message': 'recommend a winter product',
+                'client_id': 'demo',
+                'session_id': 'session-products',
+            })
+
+        assert response.status_code == 200
+        assert response.get_json()['products'] == products
+
 
 class TestConversationHistoryCharacterization:
     def test_recent_history_isolated_by_session_for_same_client(self):
