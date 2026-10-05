@@ -317,14 +317,22 @@ def _build_tool_response_text(tool_name: str, result: Dict) -> str:
             return "I couldn't find anything matching that in our knowledge base."
         return results[0].get('answer', '') or "I found something but couldn't format it — let me try again."
 
-    if tool_name == 'search_products':
+    if tool_name in ('search_products', 'recommend_products'):
         products = result.get('products', [])
         if not products:
+            if tool_name == 'recommend_products':
+                return (
+                    "I couldn't find a clear match in the current catalog. "
+                    "Could you share a preferred product type or budget?"
+                )
             return result.get('message', "I couldn't find anything matching that.")
-        lines = [
-            "Here are the available product options. Which one would you prefer?"
-            if result.get('clarification_required') else "Here's what I found:"
-        ]
+        if tool_name == 'recommend_products':
+            lines = ["Here are a few catalog options that may fit:"]
+        else:
+            lines = [
+                "Here are the available product options. Which one would you prefer?"
+                if result.get('clarification_required') else "Here's what I found:"
+            ]
         for p in products[:5]:
             status = 'in stock' if p.get('available') else 'out of stock'
             option_values = p.get('options') or {}

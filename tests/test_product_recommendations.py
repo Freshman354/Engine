@@ -1,11 +1,15 @@
 """Deterministic checks for commerce product retrieval and ranking."""
 
 import os
+from types import SimpleNamespace
+from unittest.mock import patch
 
 os.environ.setdefault("DATABASE_URL", "postgresql://unused:unused@localhost:5432/unused")
 
 from commerce_adapters import InventoryMatch, _shopify_product_search_query
 from commerce_adapters import InventoryResult
+from pipeline.stages.generation import generate_product_recommendation_response
+from pipeline.stages.intent import _build_tool_response_text
 from tools import _catalog_search, _rank_product_matches
 
 
@@ -95,3 +99,59 @@ def test_catalog_result_groups_variants_by_product():
     assert len(result["products"]) == 1
     assert result["products"][0]["available"] is True
     assert len(result["products"][0]["variants"]) == 2
+
+
+def test_generated_recommendation_must_name_a_retrieved_product():
+    products = [{
+        "title": "The Complete Snowboard",
+        "description": "A premium snowboard.",
+        "available": True,
+        "price": "699.95",
+    }]
+    with patch(
+        "pipeline.stages.generation._gemini_generate",
+        return_value=SimpleNamespace(
+            text="The Complete Snowboard is available for 699.95."
+        ),
+    ) as generate:
+        response = generate_product_recommendation_response(
+            "Find me a winter snowboard", products, model=object(),
+        )
+
+    assert response == "The Complete Snowboard is available for 699.95."
+    assert "The Complete Snowboard" in generate.call_args.args[1]
+
+
+def test_unanchored_generation_uses_formatter_fallback():
+    products = [{"title": "The Complete Snowboard", "available": True, "price": "699.95"}]
+    with patch(
+        "pipeline.stages.generation._gemini_generate",
+        return_value=SimpleNamespace(text="Try our all-new Alpine Pro 9000."),
+    ):
+        response = generate_product_recommendation_response(
+            "Find me a snowboard", products, model=object(),
+        )
+
+    assert response is None
+    fallback = _build_tool_response_text("recommend_products", {
+        "products": products,
+    })
+    assert "The Complete Snowboard" in fallback
+    assert "Alpine Pro 9000" not in fallback
+
+
+def test_generation_is_skipped_when_model_or_products_are_missing():
+    with patch("pipeline.stages.generation._gemini_generate") as generate:
+        assert generate_product_recommendation_response("need", [], object()) is None
+        assert generate_product_recommendation_response(
+            "need", [{"title": "Item"}], None,
+        ) is None
+
+    generate.assert_not_called()
+
+
+def test_recommendation_formatter_asks_for_clarification_on_no_match():
+    response = _build_tool_response_text("recommend_products", {"products": []})
+
+    assert "preferred product type or budget" in response
+    assert "No products found" not in response

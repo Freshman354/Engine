@@ -91,6 +91,60 @@ def _run_case(
     }
 
 
+def _run_mock_generation_cases() -> list[dict[str, Any]]:
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from pipeline.stages.generation import generate_product_recommendation_response
+    from pipeline.stages.intent import _build_tool_response_text
+
+    products = [{
+        "title": "The Complete Snowboard",
+        "description": "A premium snowboard.",
+        "available": True,
+        "price": "699.95",
+        "product_url": "https://example.invalid/products/the-complete-snowboard",
+    }]
+    generated = "The Complete Snowboard is listed at 699.95."
+    with patch(
+        "pipeline.stages.generation._gemini_generate",
+        return_value=SimpleNamespace(text=generated),
+    ):
+        grounded = generate_product_recommendation_response(
+            "Find a winter snowboard", products, model=object(),
+        )
+    fallback = _build_tool_response_text(
+        "recommend_products",
+        {"products": products},
+    )
+
+    with patch(
+        "pipeline.stages.generation._gemini_generate",
+        return_value=SimpleNamespace(text="Try the Alpine Pro 9000."),
+    ):
+        ungrounded = generate_product_recommendation_response(
+            "Find a winter snowboard", products, model=object(),
+        )
+
+    return [
+        {
+            "scenario": "grounded generation accepts retrieved title",
+            "status": "PASS" if grounded == generated else "FAIL",
+            "execution": "mock-only",
+        },
+        {
+            "scenario": "ungrounded generation falls back",
+            "status": (
+                "PASS"
+                if ungrounded is None and "The Complete Snowboard" in fallback
+                else "FAIL"
+            ),
+            "execution": "mock-only",
+            "fallback": fallback,
+        },
+    ]
+
+
 def main() -> int:
     args = _parser().parse_args()
     repo_root = Path(__file__).resolve().parents[1]
@@ -189,9 +243,14 @@ def main() -> int:
         results.append(result)
         print(json.dumps(result, ensure_ascii=True, default=str))
 
+    mock_results = _run_mock_generation_cases()
+    for result in mock_results:
+        print(json.dumps(result, ensure_ascii=True))
+
     passed = sum(result["status"] == "PASS" for result in results)
     failed = sum(result["status"] == "FAIL" for result in results)
     limitations = sum(result["status"] == "LIMITATION" for result in results)
+    mock_failed = sum(result["status"] == "FAIL" for result in mock_results)
     print(json.dumps({
         "summary": {
             "passed": passed,
@@ -200,8 +259,13 @@ def main() -> int:
             "total": len(results),
             "source": "real dev-store Shopify API",
         },
+        "mock_only": {
+            "passed": len(mock_results) - mock_failed,
+            "failed": mock_failed,
+            "total": len(mock_results),
+        },
     }))
-    return 1 if failed else 0
+    return 1 if failed or mock_failed else 0
 
 
 if __name__ == "__main__":

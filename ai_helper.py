@@ -52,6 +52,7 @@ from pipeline.stages.math_helpers import topic_overlap
 from pipeline.stages.generation  import (
     build_context,
     dynamic_fallback,
+    generate_product_recommendation_response,
     guardrails,
     make_fallback,
     maybe_summarise,
@@ -1373,6 +1374,16 @@ class AIHelper:
                     tool_name, ctx.clean_message, client_id, ctx.session_mem,
                     session_id=session_id,
                 )
+                response_text = tool_result.get('response', make_fallback(vertical))
+                if tool_name == 'recommend_products' and tool_result.get('success'):
+                    product_data = tool_result.get('data', {}).get('products', [])
+                    generated_recommendation = generate_product_recommendation_response(
+                        ctx.clean_message,
+                        product_data,
+                        self.model,
+                    )
+                    if generated_recommendation:
+                        response_text = generated_recommendation
 
                 # FIX: check_availability's slots were shown to the user as
                 # text but never remembered anywhere — a follow-up booking
@@ -1386,8 +1397,11 @@ class AIHelper:
                         _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
 
                 return PipelineResult(
-                    response=tool_result.get('response', make_fallback(vertical)),
-                    method='tool',
+                    response=response_text,
+                    method=(
+                        'product_recommendation'
+                        if tool_name == 'recommend_products' else 'tool'
+                    ),
                     confidence=0.9 if tool_result.get('success') else 0.0,
                     action={'tool': tool_name, **tool_result},
                 ).to_dict()

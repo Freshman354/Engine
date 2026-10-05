@@ -12,6 +12,7 @@ All functions receive `model` as an explicit parameter.
 No reference to AIHelper — importable and testable independently.
 """
 
+import json
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -326,6 +327,53 @@ def rag_generate_and_polish(
     except Exception as e:
         log_crash(logger, 'Generation/RAG', e, query_preview=query[:60])
         return make_fallback(vertical, session_mem.get('is_frustrated', False)), 0.0, 'rag_error'
+
+
+def generate_product_recommendation_response(
+    query: str,
+    products: List[Dict],
+    model: Any,
+) -> Optional[str]:
+    """Generate a recommendation using only retrieved product facts."""
+    if model is None or not products:
+        return None
+
+    facts = [
+        {
+            'title': product.get('title'),
+            'description': product.get('description'),
+            'tags': product.get('tags') or [],
+            'product_type': product.get('product_type'),
+            'vendor': product.get('vendor'),
+            'available': product.get('available'),
+            'price': product.get('price'),
+            'product_url': product.get('product_url'),
+            'variants': product.get('variants') or [],
+        }
+        for product in products[:5]
+    ]
+    prompt = (
+        "Recommend products to a shopper using only the catalog facts below.\n"
+        "Do not invent product names, features, prices, stock, or links. "
+        "State availability accurately. If the catalog does not establish a fit, "
+        "ask one concise clarifying question instead of guessing.\n\n"
+        f"Shopper request: {query[:500]}\n"
+        f"Retrieved products: {json.dumps(facts, ensure_ascii=True)}\n\n"
+        "Reply in 1-3 concise sentences. Mention the exact title of each product "
+        "you recommend, and include its supplied product link when useful."
+    )
+    try:
+        response = _gemini_generate(model, prompt)
+        text = (getattr(response, 'text', None) or '').strip()
+        if not text or not any(
+            str(product.get('title') or '').casefold() in text.casefold()
+            for product in facts
+        ):
+            return None
+        return text[:1200]
+    except Exception as error:
+        log_crash(logger, 'Generation/ProductRecommendation', error, query_preview=query[:60])
+        return None
 
 
 # ── Vertical fallback generation ──────────────────────────────────────────────
