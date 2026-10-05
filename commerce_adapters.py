@@ -48,6 +48,10 @@ class InventoryMatch:
     description:  Optional[str] = None   # short, plain text (HTML stripped for WooCommerce)
     image_url:    Optional[str] = None
     options:      Dict[str, str] = field(default_factory=dict)
+    tags:          List[str] = field(default_factory=list)
+    product_type:  Optional[str] = None
+    vendor:        Optional[str] = None
+    status:        Optional[str] = None
 
 
 def _strip_html(text: str, max_length: int = 200) -> str:
@@ -84,6 +88,29 @@ class OrderLookupResult:
     resolved: bool                                     # True = got a real platform answer
     order:    Optional[OrderInfo] = None
     error:    Optional[str] = None                      # set when resolved=False, for logging/display
+
+
+def _shopify_product_search_query(query: str) -> str:
+    terms = [
+        term for term in re.findall(r'[a-zA-Z0-9]+', query)
+        if len(term) > 1 and term.lower() not in {
+            'a', 'an', 'and', 'for', 'i', 'in', 'is', 'it', 'me',
+            'my', 'of', 'or', 'some', 'something', 'the', 'to', 'with',
+        }
+    ][:8]
+    if not terms:
+        return 'status:active'
+
+    clauses = []
+    for term in terms:
+        escaped = term.replace('"', '\\"')
+        clauses.extend((
+            f'title:*{escaped}*',
+            f'tag:"{escaped}"',
+            f'product_type:"{escaped}"',
+            f'vendor:"{escaped}"',
+        ))
+    return f"status:active AND ({' OR '.join(clauses)})"
 
 
 # ── Adapter contract ───────────────────────────────────────────────────
@@ -253,12 +280,16 @@ class ShopifyAdapter(CommerceAdapter):
         url = f'https://{self.shop_domain}/admin/api/{self.API_VERSION}/graphql.json'
         gql = '''
         query SearchProducts($q: String!) {
-          products(first: 5, query: $q) {
+          products(first: 50, query: $q) {
             edges {
               node {
                 title
                 handle
                 description(truncateAt: 200)
+                tags
+                productType
+                vendor
+                status
                 featuredImage { url }
                 variants(first: 10) {
                   edges {
@@ -282,7 +313,7 @@ class ShopifyAdapter(CommerceAdapter):
             access_token = self._get_access_token()
             resp = requests.post(
                 url,
-                json={'query': gql, 'variables': {'q': f'title:*{query}*'}},
+                json={'query': gql, 'variables': {'q': _shopify_product_search_query(query)}},
                 headers={'X-Shopify-Access-Token': access_token},
                 timeout=5,
             )
@@ -335,6 +366,7 @@ class ShopifyAdapter(CommerceAdapter):
                 product_url = f'https://{self.shop_domain}/products/{handle}' if handle else None
                 description = node.get('description') or None
                 image_url   = ((node.get('featuredImage') or {}).get('url')) or None
+                tags = [str(tag) for tag in (node.get('tags') or [])]
                 for v_edge in ((node.get('variants') or {}).get('edges') or []):
                     v = v_edge.get('node', {})
                     options = {
@@ -353,6 +385,10 @@ class ShopifyAdapter(CommerceAdapter):
                         description=description,
                         image_url=((v.get('image') or {}).get('url') or image_url),
                         options=options,
+                        tags=tags,
+                        product_type=node.get('productType'),
+                        vendor=node.get('vendor'),
+                        status=node.get('status'),
                     ))
             return InventoryResult(resolved=True, matches=matches)
 

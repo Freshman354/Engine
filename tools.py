@@ -930,26 +930,91 @@ def _select_product_variants(matches, customer_query: str):
     """Select only unambiguous variants; preserve choices when uncertain."""
     query_text = _normalise_option_text(customer_query)
     if not matches:
-        return [], True
+        return [], False, 'no_match'
 
-    requested_values = set()
+    requested_options = []
+    option_names = []
     for match in matches:
-        for value in match.options.values():
+        for name, value in match.options.items():
+            if name not in option_names:
+                option_names.append(name)
             normalised = _normalise_option_text(value)
-            if normalised and re.search(rf'\b{re.escape(normalised)}\b', query_text):
-                requested_values.add(normalised)
+            option = (name, normalised)
+            if (normalised and option not in requested_options
+                    and re.search(rf'\b{re.escape(normalised)}\b', query_text)):
+                requested_options.append(option)
 
-    if not requested_values:
-        return matches, len(matches) != 1
+    if not requested_options:
+        ambiguous = len(matches) != 1
+        return matches, ambiguous, 'ambiguous' if ambiguous else 'matched'
 
-    selected = []
-    for match in matches:
-        values = {_normalise_option_text(value) for value in match.options.values()}
-        if requested_values.issubset(values):
-            selected.append(match)
-    if not selected:
-        return matches, True
-    return selected, len(selected) != 1
+    requested_by_name = {}
+    for name, value in requested_options:
+        requested_by_name.setdefault(name, set()).add(value)
+
+    selected = [
+        match for match in matches
+        if all(
+            _normalise_option_text(match.options.get(name, '')) in values
+            for name, values in requested_by_name.items()
+        )
+    ]
+    if selected:
+        ambiguous = len(selected) != 1
+        return selected, ambiguous, 'ambiguous' if ambiguous else 'matched'
+
+    if len(requested_by_name) > 1:
+        for name in option_names:
+            values = requested_by_name.get(name)
+            if values:
+                partial_matches = [
+                    match for match in matches
+                    if _normalise_option_text(match.options.get(name, '')) in values
+                ]
+                if partial_matches:
+                    return partial_matches, False, 'combination_not_found'
+
+    return matches, True, 'ambiguous'
+
+
+def _rank_product_matches(matches, query: str):
+    query_terms = {
+        term for term in re.findall(r'[a-z0-9]+', query.lower())
+        if len(term) > 1 and term not in {
+            'a', 'an', 'and', 'for', 'i', 'in', 'is', 'it', 'me', 'my',
+            'of', 'or', 'some', 'something', 'the', 'to', 'with',
+        }
+    }
+
+    def score(match):
+        fields = {
+            'title': (match.title or '', 5),
+            'tags': (' '.join(getattr(match, 'tags', []) or []), 3),
+            'product_type': (getattr(match, 'product_type', '') or '', 3),
+            'description': (match.description or '', 2),
+            'vendor': (getattr(match, 'vendor', '') or '', 1),
+            'options': (' '.join((match.options or {}).values()), 2),
+        }
+        field_terms = {
+            name: set(re.findall(r'[a-z0-9]+', text.lower()))
+            for name, (text, _) in fields.items()
+        }
+        score_value = sum(
+            len(query_terms & field_terms[name]) * weight
+            for name, (_, weight) in fields.items()
+        )
+        title_terms = {
+            term for term in field_terms['title']
+            if term not in {'a', 'an', 'and', 'for', 'in', 'of', 'the', 'to', 'with'}
+        }
+        if query_terms and query_terms == title_terms:
+            score_value += 8
+        return score_value, bool(match.available)
+
+    if not query_terms:
+        return []
+    relevant = [match for match in matches if score(match)[0] > 0]
+    return sorted(relevant, key=score, reverse=True)
 
 
 def _catalog_search(client_id: str, query: str, limit: int, fresh: bool = False) -> dict:
@@ -1009,23 +1074,46 @@ def _catalog_search(client_id: str, query: str, limit: int, fresh: bool = False)
             'error': "I'm having trouble checking our products right now — please try again in a moment.",
         }
 
-    selected_matches, needs_clarification = _select_product_variants(result.matches, query)
-    products = []
-    for m in selected_matches[:limit]:
-        products.append({
-            'title':       m.title,
-            'available':   m.available,
-            'quantity':    m.quantity,
-            'variant':     m.variant,
-            'options':     m.options,
-            'price':       m.price,
-            'compare_at_price': m.compare_at_price,
-            'product_url': m.product_url,
-            'description': m.description,
-            'image_url':   m.image_url,
+    selected_matches, needs_clarification, response_state = _select_product_variants(result.matches, query)
+    selected_matches = _rank_product_matches(selected_matches, query)
+    product_groups = {}
+    for match in selected_matches:
+        key = match.product_url or (match.title or '').casefold()
+        product = product_groups.setdefault(key, {
+            'title': match.title,
+            'available': False,
+            'quantity': match.quantity,
+            'variant': match.variant,
+            'options': match.options,
+            'price': match.price,
+            'compare_at_price': match.compare_at_price,
+            'product_url': match.product_url,
+            'description': match.description,
+            'image_url': match.image_url,
+            'tags': getattr(match, 'tags', []),
+            'product_type': getattr(match, 'product_type', None),
+            'vendor': getattr(match, 'vendor', None),
+            'variants': [],
+        })
+        product['available'] = product['available'] or bool(match.available)
+        product['variants'].append({
+            'title': match.variant,
+            'available': match.available,
+            'quantity': match.quantity,
+            'options': match.options,
+            'price': match.price,
+            'compare_at_price': match.compare_at_price,
         })
 
-    response = {'success': True, 'products': products, 'count': len(products), 'query': query}
+    products = list(product_groups.values())[:limit]
+
+    response = {
+        'success': True,
+        'products': products,
+        'count': len(products),
+        'query': query,
+        'response_state': response_state,
+    }
     if needs_clarification:
         response['clarification_required'] = True
         response['message'] = 'Here are the available product options. Which one would you prefer?'
