@@ -63,6 +63,7 @@ from pipeline.stages.intent import (
     detect_intent,
     detect_action_intent,
     detect_simple_intent,
+    should_route_product_recommendation,
     dispatch_tool,
     extract_tool_args,
     handle_detected_action,
@@ -794,6 +795,7 @@ class AIHelper:
         session_id:            Optional[str] = None,
         lead_q3:               str = '',
         product_recommendations_enabled: bool = True,
+        product_recommendation_routing_enabled: bool = False,
     ) -> Dict:
 
         conversation_history = conversation_history or []
@@ -814,6 +816,7 @@ class AIHelper:
             kb_version=kb_version,
             session_id=session_id,
             product_recommendations_enabled=product_recommendations_enabled,
+            product_recommendation_routing_enabled=product_recommendation_routing_enabled,
         )
 
         # ── Response cache key ─────────────────────────────────────────
@@ -1268,6 +1271,19 @@ class AIHelper:
                     action=action_data,
                 ).to_dict()
 
+            # This pure detector is deliberately evaluated after the legacy
+            # action/tool precedence but independently of Tier 3's result.
+            # It still recognizes needs when Tier 3 was skipped, disabled,
+            # unavailable, or returned its generic "question" fallback.
+            if (not intent.get('tool')
+                    and should_route_product_recommendation(
+                        ctx.clean_message,
+                        ctx.product_recommendation_routing_enabled,
+                        ctx.product_recommendations_enabled,
+                    )):
+                intent['intent'] = 'tool'
+                intent['tool'] = 'recommend_products'
+
             # ── Tool dispatch exit ────────────────────────────────────
             # FIX: search_products had no plan gate at all — PLAN_LIMITS
             # ['product_recommendations'] is False on Free/Starter but was
@@ -1280,7 +1296,7 @@ class AIHelper:
             # and no "upgrade your plan" messaging leaks to them (that's
             # the merchant's billing relationship, not theirs to see).
             if (intent['intent'] == 'tool' and intent.get('tool')
-                    and not (intent['tool'] == 'search_products'
+                    and not (intent['tool'] in ('search_products', 'recommend_products')
                              and not ctx.product_recommendations_enabled)):
                 tool_name = intent['tool']
 

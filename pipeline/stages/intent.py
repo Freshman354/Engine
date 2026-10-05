@@ -43,7 +43,7 @@ def detect_simple_intent(clean_message: str) -> Optional[str]:
     """
     msg = clean_message.lower().strip()
     for intent, keywords in SIMPLE_INTENTS.items():
-        if any(kw in msg for kw in keywords):
+        if any(re.search(rf'(?<!\w){re.escape(kw)}(?!\w)', msg) for kw in keywords):
             return intent
     return None
 
@@ -118,6 +118,43 @@ def detect_tool_intent(clean_message: str) -> Optional[str]:
                 best_tool = tool_key
                 best_len = len(kw)
     return best_tool
+
+
+_PRODUCT_RECOMMENDATION_PATTERNS = (
+    r'\brecommend(?:ation|ations)?\b',
+    r'\bsuggest(?:ion|ions)?\b',
+    r'\blooking for\b',
+    r'\bshopping for\b',
+    r'\bsearching for\b',
+    r'\bsomething for\b',
+    r'\bsomething (?:good|suitable|best) for\b',
+    r'\banything for\b',
+    r'\bgift (?:for|under|below|around)\b',
+    r'\bhelp me choose\b',
+    r'\bwhat should i (?:buy|get|choose)\b',
+    r'\bwhich (?:product|item|option)\b',
+    r'\bneed (?:something|anything|a product|an item|a gift|a present)\b',
+    r'\bwant (?:something|anything|a product|an item|a gift|a present)\b',
+    r'\b(?:need|want) (?:a|an|some) (?!(?:human|person|agent|support|help|refund|return|order|appointment|booking|answer|information|update|status|password|account)\b)[a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2}\b',
+)
+
+
+def detect_product_recommendation_intent(clean_message: str) -> bool:
+    """Detect explicit catalog-seeking language without relying on Gemini."""
+    message = clean_message.casefold()
+    if re.search(r"\b(?:don't|do not|never)\s+(?:recommend|suggest)\b", message):
+        return False
+    return any(re.search(pattern, message) for pattern in _PRODUCT_RECOMMENDATION_PATTERNS)
+
+
+def should_route_product_recommendation(
+    clean_message: str,
+    routing_enabled: bool,
+    plan_enabled: bool,
+) -> bool:
+    """Always detect intent; only route when both client and plan gates allow it."""
+    detected = detect_product_recommendation_intent(clean_message)
+    return detected and routing_enabled and plan_enabled
 
 
 def dispatch_tool(
@@ -242,6 +279,9 @@ def extract_tool_args(
         # to 300 chars itself; capped a bit tighter here since product
         # search queries are short phrases, not full questions.
         args['query'] = user_message[:300]
+
+    elif tool_name == 'recommend_products':
+        args['customer_need'] = user_message[:300]
 
     return args
 

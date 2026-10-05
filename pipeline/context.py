@@ -66,6 +66,7 @@ class PipelineRequest:
     # in app.py. False on Free/Starter. Checked in the tool-dispatch stage
     # (ai_helper.generate_response) before search_products is allowed to run.
     product_recommendations_enabled: bool = True
+    product_recommendation_routing_enabled: bool = False
 
     # ── Preprocessing ─────────────────────────────────────────────────
     # clean_message: whitespace-normalised version of user_message.

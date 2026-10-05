@@ -96,7 +96,12 @@ def _run_mock_generation_cases() -> list[dict[str, Any]]:
     from unittest.mock import patch
 
     from pipeline.stages.generation import generate_product_recommendation_response
-    from pipeline.stages.intent import _build_tool_response_text
+    from pipeline.stages.intent import (
+        _build_tool_response_text,
+        detect_intent,
+        detect_product_recommendation_intent,
+        should_route_product_recommendation,
+    )
     from pipeline.context import PipelineResult
 
     products = [{
@@ -118,6 +123,10 @@ def _run_mock_generation_cases() -> list[dict[str, Any]]:
         "recommend_products",
         {"products": products},
     )
+    no_match_fallback = _build_tool_response_text(
+        "recommend_products",
+        {"products": []},
+    )
 
     with patch(
         "pipeline.stages.generation._gemini_generate",
@@ -138,6 +147,23 @@ def _run_mock_generation_cases() -> list[dict[str, Any]]:
         method="rag",
         confidence=0.8,
     ).to_dict()
+    no_model_message = "I need something for dry skin"
+    no_model_intent = detect_intent(
+        no_model_message, "ecommerce", [], model=None, skip_gemini=True,
+    )
+    resolved_message = "I'm looking for a winter moisturizer; what is the price?"
+    with patch("pipeline.stages.intent.classify_intent_gemini") as classify:
+        resolved_intent = detect_intent(
+            resolved_message, "ecommerce", [], model=object(), skip_gemini=False,
+        )
+    failed_message = "I'm looking for a winter moisturizer"
+    with patch(
+        "pipeline.stages.intent._gemini_generate",
+        side_effect=RuntimeError("mock provider failure"),
+    ):
+        failed_intent = detect_intent(
+            failed_message, "ecommerce", [], model=object(), skip_gemini=False,
+        )
 
     return [
         {
@@ -156,11 +182,65 @@ def _run_mock_generation_cases() -> list[dict[str, Any]]:
             "fallback": fallback,
         },
         {
+            "scenario": "no catalog match asks a clarifying question",
+            "status": (
+                "PASS"
+                if "preferred product type or budget" in no_match_fallback
+                and "No products found" not in no_match_fallback
+                else "FAIL"
+            ),
+            "execution": "mock-only",
+            "fallback": no_match_fallback,
+        },
+        {
             "scenario": "products array is additive and omitted for ordinary answers",
             "status": (
                 "PASS"
                 if contract_result.get("products") == products
                 and "products" not in unrelated_result
+                else "FAIL"
+            ),
+            "execution": "mock-only",
+        },
+        {
+            "scenario": "need detected without Tier 3 model",
+            "status": (
+                "PASS"
+                if no_model_intent["intent"] == "question"
+                and should_route_product_recommendation(no_model_message, True, True)
+                else "FAIL"
+            ),
+            "execution": "mock-only",
+        },
+        {
+            "scenario": "need detected when lead and sales skip Tier 3",
+            "status": (
+                "PASS"
+                if resolved_intent["is_lead"] and resolved_intent["is_sales"]
+                and not classify.called
+                and detect_product_recommendation_intent(resolved_message)
+                else "FAIL"
+            ),
+            "execution": "mock-only",
+        },
+        {
+            "scenario": "need detected after Tier 3 failure defaults to question",
+            "status": (
+                "PASS"
+                if failed_intent["intent"] == "question"
+                and detect_product_recommendation_intent(failed_message)
+                else "FAIL"
+            ),
+            "execution": "mock-only",
+        },
+        {
+            "scenario": "disabled opt-in detects but does not route",
+            "status": (
+                "PASS"
+                if detect_product_recommendation_intent(no_model_message)
+                and not should_route_product_recommendation(
+                    no_model_message, False, True,
+                )
                 else "FAIL"
             ),
             "execution": "mock-only",

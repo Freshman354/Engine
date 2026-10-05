@@ -195,6 +195,94 @@ class TestChatResponseCharacterization:
         assert response.status_code == 200
         assert response.get_json()['products'] == products
 
+    def test_opted_in_recommendations_use_formatter_when_ai_is_disabled(self):
+        products = [{
+            'title': 'The Complete Snowboard',
+            'available': True,
+            'variants': [],
+        }]
+
+        class DisabledAIHelper:
+            enabled = False
+
+        app = Flask(__name__)
+        app.register_blueprint(chat_blueprint.chat_bp)
+        chat_blueprint.init_chat(
+            limiter=None,
+            ai_helper=DisabledAIHelper(),
+            plan_limits={},
+            vertical_prompts={},
+            log_conversation=Mock(),
+            find_best_match=Mock(return_value=(None, 0.0)),
+            get_cached_client_owner=Mock(return_value=None),
+            fire_webhook=Mock(),
+            notify_handoff=Mock(),
+            notify_usage_threshold=Mock(),
+        )
+        client = {
+            'branding_settings': (
+                '{"bot_settings": {"product_recommendation_routing_enabled": true}}'
+            ),
+        }
+
+        with (
+            patch.object(chat_blueprint.models, 'get_client_by_id', return_value=client),
+            patch.object(chat_blueprint.models, 'get_faqs', return_value=[]),
+            patch.object(
+                chat_blueprint.models,
+                'get_business_knowledge_for_retrieval',
+                return_value=[],
+            ),
+            patch(
+                'tools.recommend_products',
+                return_value={
+                    'success': True,
+                    'products': products,
+                    'count': 1,
+                    'query': 'I need something for dry skin',
+                },
+            ) as recommend,
+        ):
+            response = app.test_client().post('/api/chat', json={
+                'message': 'I need something for dry skin',
+                'client_id': 'demo',
+                'session_id': 'session-recommendations',
+            })
+
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload['method'] == 'product_recommendation'
+        assert payload['products'] == products
+        assert 'The Complete Snowboard' in payload['response']
+        recommend.assert_called_once_with(
+            client_id='demo',
+            customer_need='I need something for dry skin',
+        )
+
+        with (
+            patch.object(
+                chat_blueprint.models,
+                'get_client_by_id',
+                return_value={'branding_settings': '{"bot_settings": {}}'},
+            ),
+            patch.object(chat_blueprint.models, 'get_faqs', return_value=[]),
+            patch.object(
+                chat_blueprint.models,
+                'get_business_knowledge_for_retrieval',
+                return_value=[],
+            ),
+            patch('tools.recommend_products') as default_off_recommend,
+        ):
+            default_off_response = app.test_client().post('/api/chat', json={
+                'message': 'I need something for dry skin',
+                'client_id': 'demo',
+                'session_id': 'session-recommendations-default-off',
+            })
+
+        assert default_off_response.status_code == 200
+        assert default_off_response.get_json()['method'] == 'fallback'
+        default_off_recommend.assert_not_called()
+
 
 class TestConversationHistoryCharacterization:
     def test_recent_history_isolated_by_session_for_same_client(self):

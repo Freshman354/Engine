@@ -2195,6 +2195,35 @@ def save_customization():
         incoming_vertical = data.get('vertical', 'general')
         vertical = incoming_vertical if incoming_vertical in VALID_VERTICALS else 'general'
 
+        recommendation_setting = 'product_recommendation_routing_enabled'
+        incoming_bot_settings = data.get('bot_settings', {})
+        if not isinstance(incoming_bot_settings, dict):
+            return jsonify({'success': False, 'error': 'Invalid bot settings'}), 400
+        if recommendation_setting in incoming_bot_settings:
+            if not isinstance(incoming_bot_settings[recommendation_setting], bool):
+                return jsonify({
+                    'success': False,
+                    'error': f'{recommendation_setting} must be a boolean',
+                }), 400
+        else:
+            raw_settings = client.get('branding_settings')
+            if isinstance(raw_settings, str):
+                try:
+                    existing_settings = json.loads(raw_settings)
+                except ValueError:
+                    existing_settings = {}
+            else:
+                existing_settings = raw_settings if isinstance(raw_settings, dict) else {}
+            if not isinstance(existing_settings, dict):
+                existing_settings = {}
+            existing_bot_settings = existing_settings.get('bot_settings', {})
+            saved_value = (
+                existing_bot_settings.get(recommendation_setting, False)
+                if isinstance(existing_bot_settings, dict) else False
+            )
+            incoming_bot_settings = dict(incoming_bot_settings)
+            incoming_bot_settings[recommendation_setting] = saved_value is True
+
         _hex_re         = re.compile(r'^#[0-9A-Fa-f]{6}$')
         incoming_branding = data.get('branding', {})
         _br_raw = incoming_branding.get('bubble_radius')
@@ -2210,7 +2239,7 @@ def save_customization():
         branding_settings = {
             'branding':     incoming_branding,
             'contact':      data.get('contact', {}),
-            'bot_settings': data.get('bot_settings', {}),
+            'bot_settings': incoming_bot_settings,
             'integrations': integrations,
             'vertical':     vertical,
         }

@@ -9,8 +9,13 @@ os.environ.setdefault("DATABASE_URL", "postgresql://unused:unused@localhost:5432
 from commerce_adapters import InventoryMatch, _shopify_product_search_query
 from commerce_adapters import InventoryResult
 from pipeline.stages.generation import generate_product_recommendation_response
-from pipeline.stages.intent import _build_tool_response_text
-from pipeline.context import PipelineResult
+from pipeline.stages.intent import (
+    _build_tool_response_text,
+    detect_intent,
+    detect_product_recommendation_intent,
+    should_route_product_recommendation,
+)
+from pipeline.context import PipelineRequest, PipelineResult
 from tools import _catalog_search, _rank_product_matches
 
 
@@ -174,3 +179,63 @@ def test_pipeline_result_adds_products_only_when_available():
 
     assert with_products["products"] == products
     assert "products" not in without_products
+
+
+def test_need_detection_works_without_tier_three_model():
+    message = "I need something for dry skin"
+    intent = detect_intent(
+        message, "ecommerce", [], model=None, skip_gemini=True,
+    )
+
+    assert intent["intent"] == "question"
+    assert detect_product_recommendation_intent(message) is True
+    assert should_route_product_recommendation(message, True, True) is True
+
+
+def test_need_detection_survives_tier_three_skip_after_lead_and_sales_resolve():
+    message = "I'm looking for a winter moisturizer; what is the price?"
+    with patch("pipeline.stages.intent.classify_intent_gemini") as classify:
+        intent = detect_intent(
+            message, "ecommerce", [], model=object(), skip_gemini=False,
+        )
+
+    assert intent["is_lead"] is True
+    assert intent["is_sales"] is True
+    classify.assert_not_called()
+    assert detect_product_recommendation_intent(message) is True
+    assert should_route_product_recommendation(message, True, True) is True
+
+
+def test_need_detection_survives_tier_three_question_fallback():
+    message = "I'm looking for a winter moisturizer"
+    with patch(
+        "pipeline.stages.intent._gemini_generate",
+        side_effect=RuntimeError("mock provider failure"),
+    ):
+        intent = detect_intent(
+            message, "ecommerce", [], model=object(), skip_gemini=False,
+        )
+
+    assert intent["intent"] == "question"
+    assert detect_product_recommendation_intent(message) is True
+    assert should_route_product_recommendation(message, True, True) is True
+
+
+def test_disabled_or_uncertain_routing_keeps_existing_path():
+    assert detect_product_recommendation_intent("I like winter products") is False
+    assert should_route_product_recommendation(
+        "I need something for dry skin",
+        routing_enabled=False,
+        plan_enabled=True,
+    ) is False
+    assert should_route_product_recommendation(
+        "I need something for dry skin",
+        routing_enabled=True,
+        plan_enabled=False,
+    ) is False
+
+
+def test_recommendation_routing_setting_defaults_off():
+    request = PipelineRequest(user_message="need something", faqs=[])
+
+    assert request.product_recommendation_routing_enabled is False

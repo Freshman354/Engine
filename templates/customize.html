@@ -404,6 +404,16 @@ hr.div{border:none;border-top:1px solid var(--border);margin:16px 0;}
         <p class="hint">Shown when the assistant doesn't have a good answer.</p>
       </div>
 
+      <div class="field">
+        <label>Product recommendations</label>
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:13px;">
+          <input type="checkbox" id="product_recommendation_routing_enabled"
+          {{ 'checked' if bs.get('product_recommendation_routing_enabled', False) else '' }}>
+          Suggest catalog products when shoppers describe what they need
+        </label>
+        <p class="hint">Off by default. Requires an eligible plan and a connected product catalog.</p>
+      </div>
+
       <div class="field-group">
         <label class="field-label">Floating Button Icon</label>
         <div class="opt-grid" id="iconGrid" style="grid-template-columns:repeat(4,1fr);">
@@ -1044,6 +1054,8 @@ async function save() {
       bot_avatar_url:   _avatar || '',
       welcome_message:  document.getElementById('welcome_message').value.trim(),
       fallback_message: document.getElementById('fallback_message').value.trim(),
+      product_recommendation_routing_enabled:
+        document.getElementById('product_recommendation_routing_enabled').checked,
       quick_replies:    getQR(),
       featured_product: {
         enabled: document.getElementById('fp_enabled').checked,
@@ -1121,5 +1133,3 @@ up();
 </script>
 </body>
 </html>
-
-

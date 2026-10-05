@@ -210,6 +210,11 @@ def chat():
         _chat_monthly_limit  = None
         lead_capture_allowed = True
         product_recs_allowed = True
+        product_recommendation_routing_enabled = (
+            config.get('bot_settings', {}).get(
+                'product_recommendation_routing_enabled', False
+            ) is True
+        )
         if client and client_id != 'demo':
             owner = _get_cached_client_owner(client_id)
             if owner:
@@ -416,6 +421,9 @@ def chat():
                     kb_version            = kb_version,
                     session_id            = session_id,
                     product_recommendations_enabled = product_recs_allowed,
+                    product_recommendation_routing_enabled = (
+                        product_recommendation_routing_enabled
+                    ),
                 )
 
                 response_text = result.get('response', '')
@@ -621,6 +629,57 @@ def chat():
                 current_app.logger.error(
                     f"[RAG Pipeline] error: {ai_error}", exc_info=True
                 )
+
+        # Recommendation intent detection is independent of Tier 3. This
+        # fallback keeps the client opt-in usable when AI is disabled or the
+        # model is unavailable; it uses the existing deterministic formatter.
+        from pipeline.stages.intent import dispatch_tool, should_route_product_recommendation
+
+        if should_route_product_recommendation(
+            message,
+            product_recommendation_routing_enabled,
+            product_recs_allowed,
+        ):
+            recommendation = dispatch_tool(
+                'recommend_products',
+                message,
+                client_id,
+                {},
+                session_id=session_id,
+            )
+            recommendation_data = recommendation.get('data') or {}
+            response_text = (
+                recommendation.get('response')
+                or recommendation.get('error')
+                or "I couldn't check the product catalog right now. Please try again."
+            )
+            products = (
+                recommendation_data.get('products')
+                if recommendation.get('success') else None
+            )
+            _log_conversation(
+                client_id, message, response_text,
+                matched=bool(products),
+                method='product_recommendation',
+                session_id=session_id,
+                daily_limit=_chat_daily_limit,
+                monthly_limit=_chat_monthly_limit,
+            )
+            _fire_webhook(client_id, 'message_sent', {
+                'session_id': session_id,
+                'message': message,
+                'response': response_text,
+                'method': 'product_recommendation',
+                'confidence': 0.9 if recommendation.get('success') else 0.0,
+            })
+            return jsonify({
+                'success': True,
+                'response': response_text,
+                'confidence': 0.9 if products else 0.0,
+                'method': 'product_recommendation',
+                'session_id': session_id,
+                **({'products': products} if products is not None else {}),
+            })
 
         # ── Step 3: Keyword fallback (threshold=0.68, AI disabled/failed) ──
         best_faq, confidence = _find_best_match(message, faqs_list)
