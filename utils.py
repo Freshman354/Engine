@@ -13,9 +13,16 @@ AI_PROVIDER env var controls which LLM is primary for generate():
                  env var to change it) primary, Groq fallback on error.
                  Gemini is not called at all in this mode.
 
+GEMINI_FALLBACK_PROVIDER env var (optional, default 'groq'):
+  Controls which provider handles Gemini quota/auth failures when AI_PROVIDER='gemini':
+  'groq'       (default) — fall back to Groq (preserves existing production behavior)
+  'openrouter' — fall back to OpenRouter first, then Groq if OpenRouter also fails
+
 Changes from original:
-  - generate() now catches Gemini quota/auth errors and transparently
-    retries on Groq (llama-3.1-8b-instant) before re-raising.
+  - When AI_PROVIDER='gemini' and a quota/auth error occurs,
+    _generate_gemini_primary routes to the configured fallback (Groq by default, or
+    OpenRouter if GEMINI_FALLBACK_PROVIDER='openrouter'), preserving existing behavior
+    unless explicitly opted in.
   - _OpenAICompatResponse wraps Groq/OpenRouter completions so resp.text
     works identically to google.genai's GenerateContentResponse — zero
     changes needed in any pipeline stage.
@@ -69,6 +76,11 @@ if AI_PROVIDER_ENV not in ('gemini', 'openrouter'):
     AI_PROVIDER_ENV = 'gemini'
 
 OPENROUTER_MODEL = os.environ.get('OPENROUTER_MODEL', 'meta-llama/llama-4-maverick')
+
+GEMINI_FALLBACK_PROVIDER = os.environ.get('GEMINI_FALLBACK_PROVIDER', 'groq').strip().lower()
+if GEMINI_FALLBACK_PROVIDER not in ('groq', 'openrouter'):
+    _logger.warning(f"[Utils] Unknown GEMINI_FALLBACK_PROVIDER={GEMINI_FALLBACK_PROVIDER!r}, defaulting to 'groq'")
+    GEMINI_FALLBACK_PROVIDER = 'groq'
 
 _provider_cache: dict = {'value': None, 'expires_at': 0.0}
 _PROVIDER_CACHE_TTL_SECONDS = 15
@@ -189,7 +201,9 @@ class _OpenAICompatResponse:
     stage does resp.text — this ensures they work without any changes,
     regardless of which provider actually answered.
     """
-    def __init__(self, completion: Any) -> None:
+    def __init__(self, completion: Any, provider: str, model: str) -> None:
+        self.provider = provider
+        self.model = model
         try:
             self.text: Optional[str] = (
                 completion.choices[0].message.content or ''
@@ -244,7 +258,7 @@ _GroqResponse = _OpenAICompatResponse
 def _is_quota_error(exc: Exception) -> bool:
     """
     Return True if this is a Gemini quota exhaustion or auth error that
-    warrants a Groq fallback attempt.
+    warrants a provider fallback attempt.
 
     Covers ResourceExhausted (429), PermissionDenied (bad/revoked key),
     and ServiceUnavailable (503). Uses both isinstance checks and string
@@ -288,7 +302,7 @@ def generate(model_client: Any, prompt: str, model_name: str = '',
     model_client : google.genai Client().models object from AIHelper.
                    Ignored when the live provider is 'openrouter'.
     prompt       : plain text prompt string
-    model_name   : e.g. 'gemini-2.0-flash'. Ignored when the live provider
+    model_name   : e.g. 'gemini-3.8-flash'. Ignored when the live provider
                    is 'openrouter' (OPENROUTER_MODEL env var is used instead).
     client_id    : optional — when provided, this call's token usage is
                    logged to api_usage_log (models.log_api_usage) for the
@@ -302,10 +316,13 @@ def generate(model_client: Any, prompt: str, model_name: str = '',
     provider = get_ai_provider()
     if provider == 'openrouter':
         resp = _generate_openrouter_primary(prompt)
-        used_model = OPENROUTER_MODEL
     else:
         resp = _generate_gemini_primary(model_client, prompt, model_name)
-        used_model = model_name or os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash')
+    used_model = getattr(resp, 'model', None) or (
+        OPENROUTER_MODEL
+        if provider == 'openrouter'
+        else model_name or os.environ.get('GEMINI_MODEL', 'gemini-3.8-flash')
+    )
 
     if client_id:
         _log_usage_fire_and_forget(resp, client_id, used_model, endpoint)
@@ -333,11 +350,11 @@ def _log_usage_fire_and_forget(resp: Any, client_id: str, model: str, endpoint: 
 
 
 def _generate_gemini_primary(model_client: Any, prompt: str, model_name: str = '') -> Any:
-    """Original behavior: Gemini primary, Groq fallback on quota/auth errors."""
+    """Gemini primary; use the configured fallback (Groq or OpenRouter) on quota errors."""
     gemini_exc: Optional[Exception] = None
     try:
         from google.genai import types as _types
-        name = model_name or os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash')
+        name = model_name or os.environ.get('GEMINI_MODEL', 'gemini-3.8-flash')
         return model_client.generate_content(
             model=name,
             contents=prompt,
@@ -352,10 +369,30 @@ def _generate_gemini_primary(model_client: Any, prompt: str, model_name: str = '
 
         gemini_exc = exc
         _logger.error(
-            f'[Utils] Gemini quota/auth error — attempting Groq fallback. '
+            f'[Utils] Gemini quota/auth error — attempting {GEMINI_FALLBACK_PROVIDER} fallback. '
             f'error={type(exc).__name__}: {str(exc)[:120]}'
         )
 
+    # Route to the configured fallback provider
+    if GEMINI_FALLBACK_PROVIDER == 'openrouter':
+        try:
+            resp = _generate_openrouter_primary(prompt)
+            _logger.info(
+                '[Utils] Provider fallback succeeded '
+                f'provider={getattr(resp, "provider", "openrouter")} '
+                f'len={len(resp.text or "")} '
+                f'model={getattr(resp, "model", OPENROUTER_MODEL)}'
+            )
+            return resp
+        except Exception as fallback_exc:
+            _logger.error(
+                '[Utils] OpenRouter fallback failed, trying Groq. '
+                f'fallback_error={type(fallback_exc).__name__}: '
+                f'{str(fallback_exc)[:120]}'
+            )
+            # Fall through to try Groq
+    
+    # Try Groq (either as primary fallback or secondary after OpenRouter failed)
     groq = _get_groq_client()
     if groq is None:
         _logger.error(
@@ -372,7 +409,7 @@ def _generate_gemini_primary(model_client: Any, prompt: str, model_name: str = '
             temperature=_DEFAULT_GENAI_CONFIG['temperature'],
             max_tokens=_DEFAULT_GENAI_CONFIG['max_output_tokens'],
         )
-        resp = _OpenAICompatResponse(completion)
+        resp = _OpenAICompatResponse(completion, 'groq', _groq_model)
         _logger.info(
             f'[Utils] Groq fallback succeeded '
             f'len={len(resp.text or "")} model={_groq_model}'
@@ -404,7 +441,11 @@ def _generate_openrouter_primary(prompt: str) -> Any:
                 temperature=_DEFAULT_GENAI_CONFIG['temperature'],
                 max_tokens=_DEFAULT_GENAI_CONFIG['max_output_tokens'],
             )
-            return _OpenAICompatResponse(completion)
+            return _OpenAICompatResponse(
+                completion,
+                'openrouter',
+                OPENROUTER_MODEL,
+            )
         except Exception as exc:
             if not _is_quota_error(exc):
                 raise   # Non-quota error — don't mask it, raise immediately
@@ -430,7 +471,7 @@ def _generate_openrouter_primary(prompt: str) -> Any:
             temperature=_DEFAULT_GENAI_CONFIG['temperature'],
             max_tokens=_DEFAULT_GENAI_CONFIG['max_output_tokens'],
         )
-        resp = _OpenAICompatResponse(completion)
+        resp = _OpenAICompatResponse(completion, 'groq', _groq_model)
         _logger.info(
             f'[Utils] Groq fallback succeeded '
             f'len={len(resp.text or "")} model={_groq_model}'
