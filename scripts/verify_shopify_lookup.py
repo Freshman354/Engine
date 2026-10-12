@@ -11,9 +11,16 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from dataclasses import asdict
 from itertools import combinations
+from pathlib import Path
 from typing import Any
+
+_HARMLESS_IMPORT_PROBES = {
+    "aioquic", "backports", "brotli", "brotlicffi", "chardet", "fcntl",
+    "h2", "posix", "simplejson", "socks", "wmi",
+}
 
 
 CATALOG_QUERY = """
@@ -34,6 +41,23 @@ query VerifyProductCatalog {
       }
     }
   }
+}
+"""
+
+LIVE_INVENTORY_SCOPE_QUERY = """
+query VerifyLiveInventoryScope {
+    currentAppInstallation {
+        accessScopes { handle }
+    }
+    inventoryItems(first: 1) {
+        edges {
+            node {
+                inventoryLevels(first: 1) {
+                    edges { node { id } }
+                }
+            }
+        }
+    }
 }
 """
 
@@ -151,6 +175,7 @@ def _scenario_fixtures(products: list[dict[str, Any]]) -> dict[str, dict[str, An
                         "product": product,
                         "request": f"{title} {missing[0]} {missing[1]}",
                         "expected_options": {first_name: missing[0], second_name: missing[1]},
+                        "expected_matching_option": {first_name: missing[0]},
                     }
                     break
 
@@ -248,8 +273,8 @@ def _run_case(
     title = product["title"]
     result, raw_responses = _capture_lookup(client_id, title, fresh=True)
     candidates = _same_product_matches(result, title) if result.resolved else []
-    selected, needs_clarification = _select_product_variants(candidates, customer_request)
-    passed = bool(check(result, selected, needs_clarification))
+    selected, needs_clarification, response_state = _select_product_variants(candidates, customer_request)
+    passed = bool(check(result, selected, needs_clarification, response_state))
     _emit({
         "scenario": label,
         "status": "PASS" if passed else "FAIL",
@@ -259,6 +284,7 @@ def _run_case(
         "post_search_selection": {
             "variants": [asdict(match) for match in selected],
             "clarification_required": needs_clarification,
+            "response_state": response_state,
         },
     }, secret_values)
     return passed
@@ -286,13 +312,73 @@ def _run_missing_scope_case(client_id: str, adapter: Any, secret_values: list[st
 
     passed = not result.resolved and "scope" in (result.error or "").lower()
     _emit({
-        "scenario": "missing-scope error",
+        "scenario": "local stored-scope guard",
         "status": "PASS" if passed else "FAIL",
         "raw_shopify_response": {
             "request_sent": False,
             "reason": "the adapter rejects the deliberately reduced scope set locally",
         },
         "adapter_output": asdict(result),
+    }, secret_values)
+    return passed
+
+
+def _run_live_scope_case(adapter: Any, secret_values: list[str]) -> bool:
+    import requests
+
+    try:
+        access_token = adapter._get_access_token()
+        secret_values.append(access_token)
+        response = requests.post(
+            f"https://{adapter.shop_domain}/admin/api/{adapter.API_VERSION}/graphql.json",
+            json={"query": LIVE_INVENTORY_SCOPE_QUERY},
+            headers={"X-Shopify-Access-Token": access_token},
+            timeout=15,
+        )
+        payload = response.json()
+    except (requests.exceptions.RequestException, ValueError) as error:
+        _emit({
+            "scenario": "live Shopify read_inventory scope enforcement",
+            "status": "FAIL",
+            "reason": f"live Admin API probe failed ({type(error).__name__})",
+        }, secret_values)
+        return False
+    except Exception as error:
+        _emit({
+            "scenario": "live Shopify read_inventory scope enforcement",
+            "status": "FAIL",
+            "reason": f"could not obtain a usable Shopify token ({type(error).__name__})",
+        }, secret_values)
+        return False
+
+    data = payload.get("data") or {}
+    installation = data.get("currentAppInstallation") or {}
+    scopes = {
+        scope.get("handle", "")
+        for scope in installation.get("accessScopes") or []
+    }
+    has_read_inventory = "read_inventory" in scopes
+    errors = payload.get("errors") or []
+    denial_codes = {"ACCESS_DENIED", "FORBIDDEN", "UNAUTHORIZED"}
+    inventory_denied = response.status_code in (401, 403) or any(
+        str((error.get("extensions") or {}).get("code", "")).upper() in denial_codes
+        or any(term in str(error.get("message", "")).lower()
+               for term in ("access denied", "insufficient scope", "missing scope"))
+        for error in errors
+    )
+    scope_state_known = "currentAppInstallation" in data and "accessScopes" in installation
+    passed = scope_state_known and (
+        (has_read_inventory and response.status_code == 200 and not inventory_denied and not errors)
+        or (not has_read_inventory and inventory_denied)
+    )
+    inventory_result = "denied" if inventory_denied else "allowed"
+    _emit({
+        "scenario": "live Shopify read_inventory scope enforcement",
+        "status": "PASS" if passed else "FAIL",
+        "shopify_reports_read_inventory": has_read_inventory,
+        "inventory_levels_api": inventory_result,
+        "http_status": response.status_code,
+        "graphql_errors": [str(error.get("message", "GraphQL error")) for error in errors],
     }, secret_values)
     return passed
 
@@ -366,12 +452,24 @@ def _run_isolation_check(
 
 def main() -> int:
     args = _parser().parse_args()
+    repo_root = Path(__file__).resolve().parents[1]
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
 
     try:
         from dotenv import load_dotenv
         load_dotenv()
         import commerce_adapters
         from commerce_adapters import ShopifyAdapter, get_adapter_for_client
+    except ModuleNotFoundError as error:
+        if error.name in _HARMLESS_IMPORT_PROBES:
+            pass
+        else:
+            print(
+                "ERROR: unable to initialize application modules "
+                f"(missing module: {error.name or 'unknown'})"
+            )
+            return 2
     except Exception as error:
         print(f"ERROR: unable to initialize application modules ({type(error).__name__})")
         return 2
@@ -393,25 +491,31 @@ def main() -> int:
     passed = failed = skipped = 0
 
     checks = {
-        "exact variant match": lambda result, selected, clarify, fixture: (
+        "exact variant match": lambda result, selected, clarify, state, fixture: (
             result.resolved and len(selected) == 1
             and selected[0].options == fixture["options"]
-            and not clarify
+            and not clarify and state == "matched"
         ),
-        "out-of-stock variant": lambda result, selected, clarify, fixture: (
+        "out-of-stock variant": lambda result, selected, clarify, state, fixture: (
             result.resolved and len(selected) == 1
             and not selected[0].available
             and selected[0].options == fixture["options"]
         ),
-        "single-variant product": lambda result, selected, clarify, fixture: (
-            result.resolved and len(selected) == 1 and not clarify
+        "single-variant product": lambda result, selected, clarify, state, fixture: (
+            result.resolved and len(selected) == 1 and not clarify and state == "matched"
         ),
-        'ambiguous request "the blue one"': lambda result, selected, clarify, fixture: (
+        'ambiguous request "the blue one"': lambda result, selected, clarify, state, fixture: (
             result.resolved and len(selected) > 1 and clarify
+            and state == "ambiguous"
             and all(any(_normalise(value) == "blue" for value in match.options.values()) for match in selected)
         ),
-        "nonexistent combination": lambda result, selected, clarify, fixture: (
-            result.resolved and not selected
+        "nonexistent combination": lambda result, selected, clarify, state, fixture: (
+            result.resolved and bool(selected) and not clarify
+            and state == "combination_not_found"
+            and all(
+                all(match.options.get(name) == value for name, value in fixture["expected_matching_option"].items())
+                for match in selected
+            )
         ),
     }
 
@@ -427,8 +531,8 @@ def main() -> int:
             product,
             fixture["request"],
             secrets_a,
-            lambda result, selected, clarify, fixture=fixture, label=label: checks[label](
-                result, selected, clarify, fixture
+            lambda result, selected, clarify, state, fixture=fixture, label=label: checks[label](
+                result, selected, clarify, state, fixture
             ),
         )
         passed += int(ok)
@@ -437,6 +541,10 @@ def main() -> int:
     scope_ok = _run_missing_scope_case(args.client_id, adapter_a, secrets_a)
     passed += int(scope_ok)
     failed += int(not scope_ok)
+
+    live_scope_ok = _run_live_scope_case(adapter_a, secrets_a)
+    passed += int(live_scope_ok)
+    failed += int(not live_scope_ok)
 
     if args.compare_client_id:
         adapter_b = get_adapter_for_client(args.compare_client_id)
