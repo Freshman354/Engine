@@ -15,7 +15,7 @@ class Config:
     
     # Gemini API Configuration - ACTUALLY WORKS
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
-    GEMINI_MODEL = 'gemini-2.0-flash'  # Updated to the latest model
+    GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-3.8-flash')
     USE_AI = os.getenv('USE_AI', 'True').lower() == 'true'
     
     # Plan limits...
