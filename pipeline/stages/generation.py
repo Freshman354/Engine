@@ -24,7 +24,7 @@ logger = get_logger('lumvi.generation')
 
 # ── Fallback pool ─────────────────────────────────────────────────────────────
 # 20 varied options across different registers and styles.
-# Used when Gemini is unavailable or as a fast baseline.
+# Used when provider generation is unavailable or as a fast baseline.
 # Rotated randomly so repeat IDK responses don't feel identical.
 
 _FALLBACK_POOL = [
@@ -365,9 +365,13 @@ def generate_product_recommendation_response(
     try:
         response = _gemini_generate(model, prompt)
         text = (getattr(response, 'text', None) or '').strip()
-        if not text or not any(
-            str(product.get('title') or '').casefold() in text.casefold()
-            for product in facts
+        if (
+            not text
+            or re.search(r"\[[^\]]+\]\([^)]*$", text)
+            or not any(
+                str(product.get('title') or '').casefold() in text.casefold()
+                for product in facts
+            )
         ):
             return None
         return text[:1200]

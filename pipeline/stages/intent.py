@@ -359,6 +359,45 @@ def _build_tool_response_text(tool_name: str, result: Dict) -> str:
 
     if tool_name in ('search_products', 'recommend_products'):
         products = result.get('products', [])
+        price_constraint = result.get('price_constraint')
+        constraint_satisfied = result.get('price_constraint_satisfied', True)
+        if tool_name == 'recommend_products' and price_constraint:
+            amount = f"{price_constraint.get('currency', '')}{price_constraint['amount']:g}"
+            operator = price_constraint.get('operator')
+            if operator in ('lt', 'lte'):
+                constraint_name = 'budget'
+                if not constraint_satisfied:
+                    if not products:
+                        return (
+                            f"I couldn't find a price-confirmed option within your "
+                            f"{constraint_name} of {amount}. Would you like to raise "
+                            "your budget?"
+                        )
+                    lines = [
+                        f"None of the retrieved matching products fit your budget "
+                        f"of {amount}. "
+                        "The closest options are above budget, not within it:"
+                    ]
+                else:
+                    lines = [f"These catalog options fit your budget of {amount}:"]
+            else:
+                constraint_name = 'minimum price'
+                if not constraint_satisfied:
+                    if not products:
+                        return (
+                            f"I couldn't find a price-confirmed option meeting your "
+                            f"minimum price of {amount}. Would you like to lower it?"
+                        )
+                    lines = [
+                        f"No catalog options meet your minimum price of {amount}. "
+                        "The closest options are below it, not within it:"
+                    ]
+                else:
+                    lines = [
+                        f"These catalog options meet your minimum price of {amount}:"
+                    ]
+        else:
+            lines = []
         if not products:
             if tool_name == 'recommend_products':
                 return (
@@ -366,9 +405,9 @@ def _build_tool_response_text(tool_name: str, result: Dict) -> str:
                     "Could you share a preferred product type or budget?"
                 )
             return result.get('message', "I couldn't find anything matching that.")
-        if tool_name == 'recommend_products':
+        if tool_name == 'recommend_products' and not lines:
             lines = ["Here are a few catalog options that may fit:"]
-        else:
+        elif tool_name != 'recommend_products':
             lines = [
                 "Here are the available product options. Which one would you prefer?"
                 if result.get('clarification_required') else "Here's what I found:"

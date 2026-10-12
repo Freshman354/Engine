@@ -977,16 +977,124 @@ def _select_product_variants(matches, customer_query: str):
     return matches, True, 'ambiguous'
 
 
-def _rank_product_matches(matches, query: str):
+_PRICE_AMOUNT_PATTERN = r'(?P<amount>\d[\d,]*(?:\.\d{1,2})?)'
+_PRICE_CONSTRAINT_PATTERNS = (
+    (
+        'lt',
+        re.compile(
+            rf'\b(?:under|below|less than)\s*(?P<currency>[$£€])?\s*'
+            rf'{_PRICE_AMOUNT_PATTERN}',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'lte',
+        re.compile(
+            rf'\b(?:up to|no more than|at most|max(?:imum)?)\s*'
+            rf'(?P<currency>[$£€])?\s*{_PRICE_AMOUNT_PATTERN}',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'gt',
+        re.compile(
+            rf'\b(?:over|above|more than)\s*(?P<currency>[$£€])?\s*'
+            rf'{_PRICE_AMOUNT_PATTERN}',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'gte',
+        re.compile(
+            rf'\b(?:at least|minimum(?: of)?)\s*(?P<currency>[$£€])?\s*'
+            rf'{_PRICE_AMOUNT_PATTERN}',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'lte',
+        re.compile(
+            rf'\bbudget(?:\s+(?:of|is|up to))?\s*[:=]?\s*'
+            rf'(?P<currency>[$£€])?\s*{_PRICE_AMOUNT_PATTERN}',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'lte',
+        re.compile(rf'(?P<currency>[$£€])\s*{_PRICE_AMOUNT_PATTERN}'),
+    ),
+)
+_PRODUCT_QUERY_STOPWORDS = {
+    'a', 'an', 'and', 'are', 'at', 'can', 'for', 'i', 'in', 'is', 'it',
+    'me', 'my', 'of', 'or', 'recommend', 'recommendation', 'recommendations',
+    'some', 'something', 'suggest', 'suggestion', 'suggestions', 'the', 'to',
+    'under', 'up', 'with', 'you',
+}
+
+
+def _extract_price_constraint(query: str):
+    for operator, pattern in _PRICE_CONSTRAINT_PATTERNS:
+        match = pattern.search(query)
+        if not match:
+            continue
+        return {
+            'operator': operator,
+            'amount': float(match.group('amount').replace(',', '')),
+            'currency': match.groupdict().get('currency') or '',
+            'span': match.span(),
+        }
+    return None
+
+
+def _match_price(match):
+    try:
+        return float(match.price) if match.price is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _price_constraint_matches(price, constraint):
+    if price is None:
+        return False
+    operator = constraint['operator']
+    amount = constraint['amount']
+    if operator == 'lt':
+        return price < amount
+    if operator == 'lte':
+        return price <= amount
+    if operator == 'gt':
+        return price > amount
+    return price >= amount
+
+
+def _price_constraint_distance(price, constraint):
+    return abs(price - constraint['amount'])
+
+
+def _has_non_vendor_product_match(match, query: str):
     query_terms = {
         term for term in re.findall(r'[a-z0-9]+', query.lower())
-        if len(term) > 1 and term not in {
-            'a', 'an', 'and', 'for', 'i', 'in', 'is', 'it', 'me', 'my',
-            'of', 'or', 'some', 'something', 'the', 'to', 'with',
-        }
+        if len(term) > 1 and term not in _PRODUCT_QUERY_STOPWORDS
+    }
+    product_terms = set()
+    for value in (
+        match.title or '',
+        ' '.join(getattr(match, 'tags', []) or []),
+        getattr(match, 'product_type', '') or '',
+        match.description or '',
+        ' '.join((match.options or {}).values()),
+    ):
+        product_terms.update(re.findall(r'[a-z0-9]+', value.lower()))
+    return bool(query_terms & product_terms)
+
+
+def _rank_product_matches(matches, query: str, price_constraint=None):
+    query_terms = {
+        term for term in re.findall(r'[a-z0-9]+', query.lower())
+        if len(term) > 1 and term not in _PRODUCT_QUERY_STOPWORDS
     }
 
-    def score(match):
+    def relevance_score(match):
         fields = {
             'title': (match.title or '', 5),
             'tags': (' '.join(getattr(match, 'tags', []) or []), 3),
@@ -1009,11 +1117,27 @@ def _rank_product_matches(matches, query: str):
         }
         if query_terms and query_terms == title_terms:
             score_value += 8
+        return score_value
+
+    def score(match):
+        score_value = relevance_score(match)
+        if price_constraint:
+            price = _match_price(match)
+            fits_constraint = _price_constraint_matches(price, price_constraint)
+            distance = (
+                _price_constraint_distance(price, price_constraint)
+                if price is not None else float('inf')
+            )
+            if price_constraint['operator'] in ('lt', 'lte') and fits_constraint:
+                price_priority = -price
+            else:
+                price_priority = -distance
+            return fits_constraint, price_priority, score_value, bool(match.available)
         return score_value, bool(match.available)
 
     if not query_terms:
         return []
-    relevant = [match for match in matches if score(match)[0] > 0]
+    relevant = [match for match in matches if relevance_score(match) > 0]
     return sorted(relevant, key=score, reverse=True)
 
 
@@ -1075,7 +1199,33 @@ def _catalog_search(client_id: str, query: str, limit: int, fresh: bool = False)
         }
 
     selected_matches, needs_clarification, response_state = _select_product_variants(result.matches, query)
-    selected_matches = _rank_product_matches(selected_matches, query)
+    price_constraint = _extract_price_constraint(query)
+    constraint_satisfied = True
+    ranking_query = query
+    if price_constraint:
+        start, end = price_constraint['span']
+        ranking_query = f'{query[:start]} {query[end:]}'
+        core_matches = [
+            match for match in selected_matches
+            if _has_non_vendor_product_match(match, ranking_query)
+        ]
+        if core_matches:
+            selected_matches = core_matches
+        price_matches = [
+            match for match in selected_matches
+            if _match_price(match) is not None
+        ]
+        fitting_matches = [
+            match for match in price_matches
+            if _price_constraint_matches(_match_price(match), price_constraint)
+        ]
+        constraint_satisfied = bool(fitting_matches)
+        selected_matches = fitting_matches or price_matches
+    selected_matches = _rank_product_matches(
+        selected_matches,
+        ranking_query,
+        price_constraint=price_constraint,
+    )
     product_groups = {}
     for match in selected_matches:
         key = match.product_url or (match.title or '').casefold()
@@ -1114,6 +1264,12 @@ def _catalog_search(client_id: str, query: str, limit: int, fresh: bool = False)
         'query': query,
         'response_state': response_state,
     }
+    if price_constraint:
+        response['price_constraint'] = {
+            key: value for key, value in price_constraint.items()
+            if key != 'span'
+        }
+        response['price_constraint_satisfied'] = constraint_satisfied
     if needs_clarification:
         response['clarification_required'] = True
         response['message'] = 'Here are the available product options. Which one would you prefer?'
@@ -1189,10 +1345,7 @@ def recommend_products(client_id: str, customer_need: str, limit: int = 3) -> di
         return result
     if not result['products']:
         return {
-            'success': True,
-            'products': [],
-            'count': 0,
-            'query': result['query'],
+            **result,
             'message': f'No matching products found for "{result["query"]}" to recommend.',
         }
     logger.info(f'[Tool:recommend_products] client={client_id} need="{result["query"]}" found={len(result["products"])}')

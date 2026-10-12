@@ -16,7 +16,11 @@ from pipeline.stages.intent import (
     should_route_product_recommendation,
 )
 from pipeline.context import PipelineRequest, PipelineResult
-from tools import _catalog_search, _rank_product_matches
+from tools import (
+    _catalog_search,
+    _extract_price_constraint,
+    _rank_product_matches,
+)
 
 
 def test_shopify_query_uses_verified_fields_and_active_status():
@@ -72,6 +76,111 @@ def test_vague_or_stopword_only_need_does_not_select_random_products():
     matches = [InventoryMatch(title="Gift Card", available=True)]
 
     assert _rank_product_matches(matches, "something for me") == []
+
+
+def test_extracts_price_ceiling_from_budget_request():
+    constraint = _extract_price_constraint(
+        "Can you recommend a snowboard under $500?"
+    )
+
+    assert constraint['operator'] == 'lt'
+    assert constraint['amount'] == 500.0
+    assert constraint['currency'] == '$'
+    assert "under $500" == "Can you recommend a snowboard under $500?"[
+        constraint['span'][0]:constraint['span'][1]
+    ]
+
+
+def test_catalog_search_filters_to_products_within_budget_before_ranking():
+    matches = [
+        InventoryMatch(title="Premium Snowboard", price="699.95", available=True),
+        InventoryMatch(title="Affordable Snowboard", price="450.00", available=True),
+        InventoryMatch(title="Budget Snowboard", price="499.99", available=True),
+    ]
+
+    with patch(
+        "commerce_adapters.search_inventory_cached",
+        return_value=InventoryResult(resolved=True, matches=matches),
+    ):
+        result = _catalog_search(
+            "tenant-x", "snowboard under $500", 3,
+        )
+
+    assert [p['title'] for p in result['products']] == [
+        "Affordable Snowboard",
+        "Budget Snowboard",
+    ]
+    assert result['price_constraint_satisfied'] is True
+
+
+def test_catalog_search_returns_closest_products_when_none_fit_budget():
+    matches = [
+        InventoryMatch(
+            title="Gift Card",
+            price="10.00",
+            available=True,
+            vendor="Snowboard Vendor",
+        ),
+        InventoryMatch(title="Snowboard 700", price="700.00", available=True),
+        InventoryMatch(title="Hydrogen Snowboard", price="600.00", available=True),
+        InventoryMatch(title="Multi-managed Snowboard", price="629.95", available=True),
+    ]
+
+    with patch(
+        "commerce_adapters.search_inventory_cached",
+        return_value=InventoryResult(resolved=True, matches=matches),
+    ):
+        result = _catalog_search(
+            "tenant-x", "snowboard under $500", 2,
+        )
+
+    assert [p['title'] for p in result['products']] == [
+        "Hydrogen Snowboard",
+        "Multi-managed Snowboard",
+    ]
+    assert result['price_constraint_satisfied'] is False
+
+
+def test_catalog_search_respects_minimum_price_constraint():
+    matches = [
+        InventoryMatch(title="Budget Snowboard", price="499.95", available=True),
+        InventoryMatch(title="Hydrogen Snowboard", price="600.00", available=True),
+        InventoryMatch(title="Multi-managed Snowboard", price="629.95", available=True),
+    ]
+
+    with patch(
+        "commerce_adapters.search_inventory_cached",
+        return_value=InventoryResult(resolved=True, matches=matches),
+    ):
+        result = _catalog_search(
+            "tenant-x", "snowboard at least $600", 3,
+        )
+
+    assert [p['title'] for p in result['products']] == [
+        "Hydrogen Snowboard",
+        "Multi-managed Snowboard",
+    ]
+    assert result['price_constraint_satisfied'] is True
+
+
+def test_recommendation_fallback_discloses_when_only_over_budget_options_exist():
+    response = _build_tool_response_text("recommend_products", {
+        'products': [
+            {'title': 'Hydrogen Snowboard', 'price': '600.00', 'available': True},
+            {'title': 'Multi-managed Snowboard', 'price': '629.95', 'available': True},
+        ],
+        'price_constraint': {
+            'operator': 'lt',
+            'amount': 500.0,
+            'currency': '$',
+        },
+        'price_constraint_satisfied': False,
+    })
+
+    assert "None of the retrieved matching products fit your budget of $500" in response
+    assert "above budget, not within it" in response
+    assert "Hydrogen Snowboard" in response
+    assert "600.00" in response
 
 
 def test_catalog_result_groups_variants_by_product():
@@ -144,6 +253,30 @@ def test_unanchored_generation_uses_formatter_fallback():
     })
     assert "The Complete Snowboard" in fallback
     assert "Alpine Pro 9000" not in fallback
+
+
+def test_incomplete_generated_product_link_uses_formatter_fallback():
+    products = [{
+        "title": "The Complete Snowboard",
+        "available": True,
+        "price": "699.95",
+    }]
+    with patch(
+        "pipeline.stages.generation._gemini_generate",
+        return_value=SimpleNamespace(
+            text="Try [The Complete Snowboard](https://store.example/products/"
+        ),
+    ):
+        response = generate_product_recommendation_response(
+            "Find me a snowboard", products, model=object(),
+        )
+
+    assert response is None
+    fallback = _build_tool_response_text("recommend_products", {
+        "products": products,
+    })
+    assert "The Complete Snowboard" in fallback
+    assert "https://store.example/products/" not in fallback
 
 
 def test_generation_is_skipped_when_model_or_products_are_missing():
