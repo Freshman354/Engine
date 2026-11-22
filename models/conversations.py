@@ -170,7 +170,7 @@ def save_conversation_summary(client_id: str, summary: str, message_count: int) 
         pass  # Non-critical — never break chat over a summary failure
 
 
-def get_recent_conversations(client_id: str, limit: int = 15) -> list:
+def get_recent_conversations(client_id: str, session_id: str, limit: int = 15) -> list:
     """
     Return the last `limit` real conversation turns for a client,
     oldest → newest, as a list of {role, content} dicts
@@ -184,10 +184,11 @@ def get_recent_conversations(client_id: str, limit: int = 15) -> list:
             '''SELECT user_message, bot_response
                FROM conversations
                WHERE client_id = %s
+                                 AND session_id = %s
                  AND (method IS NULL OR method != 'lead_captured')
                ORDER BY timestamp DESC
                LIMIT %s''',
-            (client_id, limit)
+                        (client_id, session_id, limit)
         )
         rows = cursor.fetchall()
         cursor.close()

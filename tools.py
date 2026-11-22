@@ -898,7 +898,250 @@ def search_knowledge_base(client_id: str, query: str, limit: int = 5) -> dict:
 # need to (re)connect via the Shopify OAuth flow to grant read_products.
 # =====================================================================
 
-def _catalog_search(client_id: str, query: str, limit: int) -> dict:
+def _normalise_option_text(value: str) -> str:
+    return re.sub(r'[^a-z0-9]+', ' ', str(value).casefold()).strip()
+
+
+def _requires_fresh_product_lookup(query: str) -> bool:
+    """Bypass cache for live stock/price checks or a specific variant request."""
+    live_status_or_price = re.search(
+        r"\b(?:in stock|out of stock|stock|available|availability|sold out|"
+        r"price|cost|how much|what(?:'s| is) the price)\b",
+        query,
+        flags=re.IGNORECASE,
+    )
+    specific_option = re.search(
+        r"\b(?:in|with)\s+(?:the\s+)?[a-z0-9-]+\b|"
+        r"\b(?:the\s+)?[a-z0-9-]+\s+(?:one|size|color|colour)\b|"
+        r"\b(?:size|color|colour|variant|option)\s*(?:is|:)?\s+[a-z0-9-]+\b",
+        query,
+        flags=re.IGNORECASE,
+    )
+    contextual_availability = re.search(
+        r"\b(?:do you have|can i get|is there|is that|is it)\s+"
+        r"(?:it|that|this|one)\b",
+        query,
+        flags=re.IGNORECASE,
+    )
+    return bool(live_status_or_price or specific_option or contextual_availability)
+
+
+def _select_product_variants(matches, customer_query: str):
+    """Select only unambiguous variants; preserve choices when uncertain."""
+    query_text = _normalise_option_text(customer_query)
+    if not matches:
+        return [], False, 'no_match'
+
+    requested_options = []
+    option_names = []
+    for match in matches:
+        for name, value in match.options.items():
+            if name not in option_names:
+                option_names.append(name)
+            normalised = _normalise_option_text(value)
+            option = (name, normalised)
+            if (normalised and option not in requested_options
+                    and re.search(rf'\b{re.escape(normalised)}\b', query_text)):
+                requested_options.append(option)
+
+    if not requested_options:
+        ambiguous = len(matches) != 1
+        return matches, ambiguous, 'ambiguous' if ambiguous else 'matched'
+
+    requested_by_name = {}
+    for name, value in requested_options:
+        requested_by_name.setdefault(name, set()).add(value)
+
+    selected = [
+        match for match in matches
+        if all(
+            _normalise_option_text(match.options.get(name, '')) in values
+            for name, values in requested_by_name.items()
+        )
+    ]
+    if selected:
+        ambiguous = len(selected) != 1
+        return selected, ambiguous, 'ambiguous' if ambiguous else 'matched'
+
+    if len(requested_by_name) > 1:
+        for name in option_names:
+            values = requested_by_name.get(name)
+            if values:
+                partial_matches = [
+                    match for match in matches
+                    if _normalise_option_text(match.options.get(name, '')) in values
+                ]
+                if partial_matches:
+                    return partial_matches, False, 'combination_not_found'
+
+    return matches, True, 'ambiguous'
+
+
+_PRICE_AMOUNT_PATTERN = r'(?P<amount>\d[\d,]*(?:\.\d{1,2})?)'
+_PRICE_CONSTRAINT_PATTERNS = (
+    (
+        'lt',
+        re.compile(
+            rf'\b(?:under|below|less than)\s*(?P<currency>[$£€])?\s*'
+            rf'{_PRICE_AMOUNT_PATTERN}',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'lte',
+        re.compile(
+            rf'\b(?:up to|no more than|at most|max(?:imum)?)\s*'
+            rf'(?P<currency>[$£€])?\s*{_PRICE_AMOUNT_PATTERN}',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'gt',
+        re.compile(
+            rf'\b(?:over|above|more than)\s*(?P<currency>[$£€])?\s*'
+            rf'{_PRICE_AMOUNT_PATTERN}',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'gte',
+        re.compile(
+            rf'\b(?:at least|minimum(?: of)?)\s*(?P<currency>[$£€])?\s*'
+            rf'{_PRICE_AMOUNT_PATTERN}',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'lte',
+        re.compile(
+            rf'\bbudget(?:\s+(?:of|is|up to))?\s*[:=]?\s*'
+            rf'(?P<currency>[$£€])?\s*{_PRICE_AMOUNT_PATTERN}',
+            re.IGNORECASE,
+        ),
+    ),
+    (
+        'lte',
+        re.compile(rf'(?P<currency>[$£€])\s*{_PRICE_AMOUNT_PATTERN}'),
+    ),
+)
+_PRODUCT_QUERY_STOPWORDS = {
+    'a', 'an', 'and', 'are', 'at', 'can', 'for', 'i', 'in', 'is', 'it',
+    'me', 'my', 'of', 'or', 'recommend', 'recommendation', 'recommendations',
+    'some', 'something', 'suggest', 'suggestion', 'suggestions', 'the', 'to',
+    'under', 'up', 'with', 'you',
+}
+
+
+def _extract_price_constraint(query: str):
+    for operator, pattern in _PRICE_CONSTRAINT_PATTERNS:
+        match = pattern.search(query)
+        if not match:
+            continue
+        return {
+            'operator': operator,
+            'amount': float(match.group('amount').replace(',', '')),
+            'currency': match.groupdict().get('currency') or '',
+            'span': match.span(),
+        }
+    return None
+
+
+def _match_price(match):
+    try:
+        return float(match.price) if match.price is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _price_constraint_matches(price, constraint):
+    if price is None:
+        return False
+    operator = constraint['operator']
+    amount = constraint['amount']
+    if operator == 'lt':
+        return price < amount
+    if operator == 'lte':
+        return price <= amount
+    if operator == 'gt':
+        return price > amount
+    return price >= amount
+
+
+def _price_constraint_distance(price, constraint):
+    return abs(price - constraint['amount'])
+
+
+def _has_non_vendor_product_match(match, query: str):
+    query_terms = {
+        term for term in re.findall(r'[a-z0-9]+', query.lower())
+        if len(term) > 1 and term not in _PRODUCT_QUERY_STOPWORDS
+    }
+    product_terms = set()
+    for value in (
+        match.title or '',
+        ' '.join(getattr(match, 'tags', []) or []),
+        getattr(match, 'product_type', '') or '',
+        match.description or '',
+        ' '.join((match.options or {}).values()),
+    ):
+        product_terms.update(re.findall(r'[a-z0-9]+', value.lower()))
+    return bool(query_terms & product_terms)
+
+
+def _rank_product_matches(matches, query: str, price_constraint=None):
+    query_terms = {
+        term for term in re.findall(r'[a-z0-9]+', query.lower())
+        if len(term) > 1 and term not in _PRODUCT_QUERY_STOPWORDS
+    }
+
+    def relevance_score(match):
+        fields = {
+            'title': (match.title or '', 5),
+            'tags': (' '.join(getattr(match, 'tags', []) or []), 3),
+            'product_type': (getattr(match, 'product_type', '') or '', 3),
+            'description': (match.description or '', 2),
+            'vendor': (getattr(match, 'vendor', '') or '', 1),
+            'options': (' '.join((match.options or {}).values()), 2),
+        }
+        field_terms = {
+            name: set(re.findall(r'[a-z0-9]+', text.lower()))
+            for name, (text, _) in fields.items()
+        }
+        score_value = sum(
+            len(query_terms & field_terms[name]) * weight
+            for name, (_, weight) in fields.items()
+        )
+        title_terms = {
+            term for term in field_terms['title']
+            if term not in {'a', 'an', 'and', 'for', 'in', 'of', 'the', 'to', 'with'}
+        }
+        if query_terms and query_terms == title_terms:
+            score_value += 8
+        return score_value
+
+    def score(match):
+        score_value = relevance_score(match)
+        if price_constraint:
+            price = _match_price(match)
+            fits_constraint = _price_constraint_matches(price, price_constraint)
+            distance = (
+                _price_constraint_distance(price, price_constraint)
+                if price is not None else float('inf')
+            )
+            if price_constraint['operator'] in ('lt', 'lte') and fits_constraint:
+                price_priority = -price
+            else:
+                price_priority = -distance
+            return fits_constraint, price_priority, score_value, bool(match.available)
+        return score_value, bool(match.available)
+
+    if not query_terms:
+        return []
+    relevant = [match for match in matches if relevance_score(match) > 0]
+    return sorted(relevant, key=score, reverse=True)
+
+
+def _catalog_search(client_id: str, query: str, limit: int, fresh: bool = False) -> dict:
     """
     Shared implementation behind search_products (reactive: "is X in
     stock?") and recommend_products (proactive: "the customer described a
@@ -917,7 +1160,11 @@ def _catalog_search(client_id: str, query: str, limit: int) -> dict:
 
     try:
         from commerce_adapters import search_inventory_cached
-        result = search_inventory_cached(client_id, query)
+        result = search_inventory_cached(
+            client_id,
+            query,
+            fresh=fresh,
+        )
     except Exception as e:
         logger.error(f'[Tool:_catalog_search] commerce_adapters import/call failed: {e}')
         return {
@@ -936,26 +1183,97 @@ def _catalog_search(client_id: str, query: str, limit: int) -> dict:
                 'success': False,
                 'error': "I'm not able to check live product availability for this store yet.",
             }
+        if 'scope' in (result.error or '').lower():
+            logger.error(
+                f'[Tool:_catalog_search] Shopify inventory scope failure '
+                f'client={client_id} error={result.error}'
+            )
+            return {
+                'success': False,
+                'error': 'Live product availability requires Shopify read_products and read_inventory scopes. Reconnect the store with both scopes enabled.',
+            }
         logger.warning(f'[Tool:_catalog_search] live lookup failed client={client_id} error={result.error}')
         return {
             'success': False,
             'error': "I'm having trouble checking our products right now — please try again in a moment.",
         }
 
-    products = []
-    for m in result.matches[:limit]:
-        products.append({
-            'title':       m.title,
-            'available':   m.available,
-            'quantity':    m.quantity,
-            'variant':     m.variant,
-            'price':       m.price,
-            'product_url': m.product_url,
-            'description': m.description,
-            'image_url':   m.image_url,
+    selected_matches, needs_clarification, response_state = _select_product_variants(result.matches, query)
+    price_constraint = _extract_price_constraint(query)
+    constraint_satisfied = True
+    ranking_query = query
+    if price_constraint:
+        start, end = price_constraint['span']
+        ranking_query = f'{query[:start]} {query[end:]}'
+        core_matches = [
+            match for match in selected_matches
+            if _has_non_vendor_product_match(match, ranking_query)
+        ]
+        if core_matches:
+            selected_matches = core_matches
+        price_matches = [
+            match for match in selected_matches
+            if _match_price(match) is not None
+        ]
+        fitting_matches = [
+            match for match in price_matches
+            if _price_constraint_matches(_match_price(match), price_constraint)
+        ]
+        constraint_satisfied = bool(fitting_matches)
+        selected_matches = fitting_matches or price_matches
+    selected_matches = _rank_product_matches(
+        selected_matches,
+        ranking_query,
+        price_constraint=price_constraint,
+    )
+    product_groups = {}
+    for match in selected_matches:
+        key = match.product_url or (match.title or '').casefold()
+        product = product_groups.setdefault(key, {
+            'title': match.title,
+            'available': False,
+            'quantity': match.quantity,
+            'variant': match.variant,
+            'options': match.options,
+            'price': match.price,
+            'compare_at_price': match.compare_at_price,
+            'product_url': match.product_url,
+            'description': match.description,
+            'image_url': match.image_url,
+            'tags': getattr(match, 'tags', []),
+            'product_type': getattr(match, 'product_type', None),
+            'vendor': getattr(match, 'vendor', None),
+            'variants': [],
+        })
+        product['available'] = product['available'] or bool(match.available)
+        product['variants'].append({
+            'title': match.variant,
+            'available': match.available,
+            'quantity': match.quantity,
+            'options': match.options,
+            'price': match.price,
+            'compare_at_price': match.compare_at_price,
         })
 
-    return {'success': True, 'products': products, 'count': len(products), 'query': query}
+    products = list(product_groups.values())[:limit]
+
+    response = {
+        'success': True,
+        'products': products,
+        'count': len(products),
+        'query': query,
+        'response_state': response_state,
+    }
+    if price_constraint:
+        response['price_constraint'] = {
+            key: value for key, value in price_constraint.items()
+            if key != 'span'
+        }
+        response['price_constraint_satisfied'] = constraint_satisfied
+    if needs_clarification:
+        response['clarification_required'] = True
+        response['message'] = 'Here are the available product options. Which one would you prefer?'
+    return response
 
 
 def search_products(client_id: str, query: str, limit: int = 5) -> dict:
@@ -975,7 +1293,12 @@ def search_products(client_id: str, query: str, limit: int = 5) -> dict:
          product_url, description, image_url}], count, query} or
         {success: False, error: str}
     """
-    result = _catalog_search(client_id, query, limit)
+    result = _catalog_search(
+        client_id,
+        query,
+        limit,
+        fresh=_requires_fresh_product_lookup(query),
+    )
     if not result['success']:
         return result
     if not result['products']:
@@ -1022,10 +1345,7 @@ def recommend_products(client_id: str, customer_need: str, limit: int = 3) -> di
         return result
     if not result['products']:
         return {
-            'success': True,
-            'products': [],
-            'count': 0,
-            'query': result['query'],
+            **result,
             'message': f'No matching products found for "{result["query"]}" to recommend.',
         }
     logger.info(f'[Tool:recommend_products] client={client_id} need="{result["query"]}" found={len(result["products"])}')

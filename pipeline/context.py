@@ -66,6 +66,7 @@ class PipelineRequest:
     # in app.py. False on Free/Starter. Checked in the tool-dispatch stage
     # (ai_helper.generate_response) before search_products is allowed to run.
     product_recommendations_enabled: bool = True
+    product_recommendation_routing_enabled: bool = False
 
     # ── Preprocessing ─────────────────────────────────────────────────
     # clean_message: whitespace-normalised version of user_message.
@@ -184,6 +185,7 @@ class PipelineResult:
     lead_metadata: Optional[Dict]         = None
     action: Optional[Dict]                = None
     trigger_lead_collection: bool         = False
+    products: Optional[List[Dict]]        = None
 
     # Handoff / clarification (optional — only set on specific code paths)
     handoff: Optional[Dict]               = None
@@ -213,6 +215,8 @@ class PipelineResult:
             d['needs_followup'] = self.needs_followup
         if self.trigger_lead_collection:
             d['trigger_lead_collection'] = self.trigger_lead_collection
+        if self.products is not None:
+            d['products'] = self.products
         return d
 
     # ── Common result constructors ────────────────────────────────────

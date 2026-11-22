@@ -214,7 +214,7 @@ def get_all_leads_admin(limit=500, client_id_filter=None, search=None):
 
 
 def log_api_usage(user_id, client_id, input_tokens, output_tokens,
-                  model='gemini-2.0-flash', endpoint=None):
+                  model='gemini-3.8-flash', endpoint=None):
     """Log one AI generation call's token usage for cost tracking. Never raises."""
     try:
         conn, cursor = get_db()

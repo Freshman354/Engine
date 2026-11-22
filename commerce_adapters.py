@@ -38,6 +38,7 @@ class InventoryMatch:
     quantity:     Optional[int] = None
     variant:      Optional[str] = None   # e.g. "Red / Large" — None for simple products
     price:        Optional[str] = None
+    compare_at_price: Optional[str] = None
     # Added for tools.search_products (product recommendations) — the
     # original three fields above were enough to answer "is X in stock",
     # but not enough to usefully recommend a product in chat. These three
@@ -46,6 +47,11 @@ class InventoryMatch:
     product_url:  Optional[str] = None
     description:  Optional[str] = None   # short, plain text (HTML stripped for WooCommerce)
     image_url:    Optional[str] = None
+    options:      Dict[str, str] = field(default_factory=dict)
+    tags:          List[str] = field(default_factory=list)
+    product_type:  Optional[str] = None
+    vendor:        Optional[str] = None
+    status:        Optional[str] = None
 
 
 def _strip_html(text: str, max_length: int = 200) -> str:
@@ -84,6 +90,29 @@ class OrderLookupResult:
     error:    Optional[str] = None                      # set when resolved=False, for logging/display
 
 
+def _shopify_product_search_query(query: str) -> str:
+    terms = [
+        term for term in re.findall(r'[a-zA-Z0-9]+', query)
+        if len(term) > 1 and term.lower() not in {
+            'a', 'an', 'and', 'for', 'i', 'in', 'is', 'it', 'me',
+            'my', 'of', 'or', 'some', 'something', 'the', 'to', 'with',
+        }
+    ][:8]
+    if not terms:
+        return 'status:active'
+
+    clauses = []
+    for term in terms:
+        escaped = term.replace('"', '\\"')
+        clauses.extend((
+            f'title:*{escaped}*',
+            f'tag:"{escaped}"',
+            f'product_type:"{escaped}"',
+            f'vendor:"{escaped}"',
+        ))
+    return f"status:active AND ({' OR '.join(clauses)})"
+
+
 # ── Adapter contract ───────────────────────────────────────────────────
 
 class CommerceAdapter(ABC):
@@ -101,7 +130,7 @@ class CommerceAdapter(ABC):
         self.credentials = credentials or {}
 
     @abstractmethod
-    def search_inventory(self, query: str) -> InventoryResult:
+    def search_inventory(self, query: str, requested_options: Optional[Dict[str, str]] = None) -> InventoryResult:
         """Search the platform's product catalog by name and return
         matching products with stock status. Must never raise — all
         failure modes (timeout, auth, rate limit) return
@@ -210,6 +239,9 @@ class ShopifyAdapter(CommerceAdapter):
         self.shop_domain          = (credentials.get('shop_domain') or '').strip()
         self.shopify_client_id     = (credentials.get('shopify_client_id') or '').strip()
         self.shopify_client_secret = (credentials.get('shopify_client_secret') or '').strip()
+        self.shopify_scopes       = {
+            scope.strip() for scope in (credentials.get('shopify_scopes') or '').split(',') if scope.strip()
+        }
         # Legacy fallback only — a static token pasted directly, from a
         # custom app created before Shopify's Jan 1 2026 cutoff. No Lumvi
         # client predates that, but this keeps a manual-testing escape
@@ -230,28 +262,45 @@ class ShopifyAdapter(CommerceAdapter):
             return self._static_access_token
         return _get_shopify_access_token(self.shop_domain, self.shopify_client_id, self.shopify_client_secret)
 
-    def search_inventory(self, query: str) -> InventoryResult:
+    def search_inventory(self, query: str, requested_options: Optional[Dict[str, str]] = None) -> InventoryResult:
         if not self._has_credentials():
             return InventoryResult(resolved=False, error='shopify_credentials_missing')
+        missing_scopes = {'read_products', 'read_inventory'} - self.shopify_scopes if self.shopify_scopes else set()
+        if missing_scopes:
+            logger.error(
+                f'[ShopifyAdapter] INVENTORY-SCOPE-ERROR status=local '
+                f'shop={self.shop_domain} missing_scopes={sorted(missing_scopes)}'
+            )
+            return InventoryResult(
+                resolved=False,
+                error=f'missing_shopify_scopes:{",".join(sorted(missing_scopes))}',
+            )
 
         import requests
         url = f'https://{self.shop_domain}/admin/api/{self.API_VERSION}/graphql.json'
         gql = '''
         query SearchProducts($q: String!) {
-          products(first: 5, query: $q) {
+          products(first: 50, query: $q) {
             edges {
               node {
                 title
                 handle
                 description(truncateAt: 200)
+                tags
+                productType
+                vendor
+                status
                 featuredImage { url }
                 variants(first: 10) {
                   edges {
                     node {
                       title
+                      selectedOptions { name value }
                       availableForSale
                       inventoryQuantity
                       price
+                      compareAtPrice
+                      image { url }
                     }
                   }
                 }
@@ -264,19 +313,45 @@ class ShopifyAdapter(CommerceAdapter):
             access_token = self._get_access_token()
             resp = requests.post(
                 url,
-                json={'query': gql, 'variables': {'q': f'title:*{query}*'}},
+                json={'query': gql, 'variables': {'q': _shopify_product_search_query(query)}},
                 headers={'X-Shopify-Access-Token': access_token},
                 timeout=5,
             )
             if resp.status_code == 429:
                 logger.warning(f'[ShopifyAdapter] rate limited shop={self.shop_domain}')
                 return InventoryResult(resolved=False, error='rate_limited')
-            if resp.status_code == 401:
-                return InventoryResult(resolved=False, error='unauthorized')
+            if resp.status_code in (401, 403):
+                logger.error(
+                    f'[ShopifyAdapter] INVENTORY-SCOPE-ERROR status={resp.status_code} '
+                    f'shop={self.shop_domain} required_scopes=read_products,read_inventory '
+                    f'possible_cause=missing_or_revoked_inventory_enabled_oauth_scope'
+                )
+                return InventoryResult(
+                    resolved=False,
+                    error=f'http_{resp.status_code}_inventory_scope_missing',
+                )
             if resp.status_code != 200:
+                logger.error(
+                    f'[ShopifyAdapter] inventory lookup failed status={resp.status_code} '
+                    f'shop={self.shop_domain}'
+                )
                 return InventoryResult(resolved=False, error=f'http_{resp.status_code}')
 
             data  = resp.json()
+            if data.get('errors'):
+                errors = data.get('errors') or []
+                error_text = '; '.join(str(e.get('message', e)) for e in errors)
+                if any('access' in error_text.lower() or 'scope' in error_text.lower()
+                       for _ in errors):
+                    logger.error(
+                        f'[ShopifyAdapter] INVENTORY-SCOPE-ERROR status=200 '
+                        f'shop={self.shop_domain} required_scopes=read_products,read_inventory '
+                        f'graphql_errors={error_text}'
+                    )
+                    return InventoryResult(
+                        resolved=False,
+                        error='graphql_inventory_scope_missing',
+                    )
             edges = (((data.get('data') or {}).get('products') or {}).get('edges') or [])
             matches: List[InventoryMatch] = []
             for edge in edges:
@@ -291,17 +366,29 @@ class ShopifyAdapter(CommerceAdapter):
                 product_url = f'https://{self.shop_domain}/products/{handle}' if handle else None
                 description = node.get('description') or None
                 image_url   = ((node.get('featuredImage') or {}).get('url')) or None
+                tags = [str(tag) for tag in (node.get('tags') or [])]
                 for v_edge in ((node.get('variants') or {}).get('edges') or []):
                     v = v_edge.get('node', {})
+                    options = {
+                        str(option.get('name', '')).strip().lower(): str(option.get('value', '')).strip()
+                        for option in (v.get('selectedOptions') or [])
+                        if option.get('name') and option.get('value')
+                    }
                     matches.append(InventoryMatch(
                         title=title,
                         available=bool(v.get('availableForSale')),
                         quantity=v.get('inventoryQuantity'),
                         variant=v.get('title') if v.get('title') not in (None, 'Default Title') else None,
                         price=v.get('price'),
+                        compare_at_price=v.get('compareAtPrice'),
                         product_url=product_url,
                         description=description,
-                        image_url=image_url,
+                        image_url=((v.get('image') or {}).get('url') or image_url),
+                        options=options,
+                        tags=tags,
+                        product_type=node.get('productType'),
+                        vendor=node.get('vendor'),
+                        status=node.get('status'),
                     ))
             return InventoryResult(resolved=True, matches=matches)
 
@@ -581,7 +668,7 @@ class WooCommerceAdapter(CommerceAdapter):
         self.consumer_key     = (credentials.get('consumer_key') or '').strip()
         self.consumer_secret  = (credentials.get('consumer_secret') or '').strip()
 
-    def search_inventory(self, query: str) -> InventoryResult:
+    def search_inventory(self, query: str, requested_options: Optional[Dict[str, str]] = None) -> InventoryResult:
         if not self.store_url or not self.consumer_key or not self.consumer_secret:
             return InventoryResult(resolved=False, error='woocommerce_credentials_missing')
 
@@ -737,6 +824,7 @@ def _shopify_credentials(cfg: dict) -> dict:
         'access_token':         cfg.get('access_token', ''),
         'shopify_client_id':     cfg.get('shopify_client_id', ''),
         'shopify_client_secret': cfg.get('shopify_client_secret', ''),
+        'shopify_scopes':       cfg.get('shopify_scopes', ''),
     }
 
 
@@ -893,23 +981,41 @@ _INVENTORY_CACHE: Dict[str, tuple] = {}   # cache_key -> (InventoryResult, expir
 _CACHE_TTL_SEC = 60
 
 
-def search_inventory_cached(client_id: str, query: str) -> InventoryResult:
+def search_inventory_cached(
+    client_id: str,
+    query: str,
+    requested_options: Optional[Dict[str, str]] = None,
+    fresh: bool = False,
+) -> InventoryResult:
     """
     Entry point for Layer 4. Checks the cache first, then the client's
     connected adapter (if any). Returns resolved=False with no error
     when no adapter is connected — that's the expected common case, not
     a failure.
     """
-    cache_key = f'{client_id}:{query.lower().strip()}'
+    option_key = ','.join(
+        f'{name.lower()}={value.casefold()}'
+        for name, value in sorted((requested_options or {}).items())
+    )
+    cache_key = f'{client_id}:{query.lower().strip()}:{option_key}'
     cached = _INVENTORY_CACHE.get(cache_key)
-    if cached and cached[1] > time.time():
+    if not fresh and cached and cached[1] > time.time():
+        logger.info(
+            f'[CACHE-HIT] product_id={query} client_id={client_id} '
+            f'cache_key={cache_key}'
+        )
         return cached[0]
+
+    logger.info(
+        f'[LIVE-LOOKUP] product_id={query} client_id={client_id} '
+        f'cache_key={cache_key} fresh={fresh}'
+    )
 
     adapter = get_adapter_for_client(client_id)
     if not adapter:
         return InventoryResult(resolved=False, error='no_adapter_connected')
 
-    result = adapter.search_inventory(query)
+    result = adapter.search_inventory(query, requested_options=requested_options)
     if result.resolved:
         _INVENTORY_CACHE[cache_key] = (result, time.time() + _CACHE_TTL_SEC)
     return result

@@ -2195,6 +2195,35 @@ def save_customization():
         incoming_vertical = data.get('vertical', 'general')
         vertical = incoming_vertical if incoming_vertical in VALID_VERTICALS else 'general'
 
+        recommendation_setting = 'product_recommendation_routing_enabled'
+        incoming_bot_settings = data.get('bot_settings', {})
+        if not isinstance(incoming_bot_settings, dict):
+            return jsonify({'success': False, 'error': 'Invalid bot settings'}), 400
+        if recommendation_setting in incoming_bot_settings:
+            if not isinstance(incoming_bot_settings[recommendation_setting], bool):
+                return jsonify({
+                    'success': False,
+                    'error': f'{recommendation_setting} must be a boolean',
+                }), 400
+        else:
+            raw_settings = client.get('branding_settings')
+            if isinstance(raw_settings, str):
+                try:
+                    existing_settings = json.loads(raw_settings)
+                except ValueError:
+                    existing_settings = {}
+            else:
+                existing_settings = raw_settings if isinstance(raw_settings, dict) else {}
+            if not isinstance(existing_settings, dict):
+                existing_settings = {}
+            existing_bot_settings = existing_settings.get('bot_settings', {})
+            saved_value = (
+                existing_bot_settings.get(recommendation_setting, False)
+                if isinstance(existing_bot_settings, dict) else False
+            )
+            incoming_bot_settings = dict(incoming_bot_settings)
+            incoming_bot_settings[recommendation_setting] = saved_value is True
+
         _hex_re         = re.compile(r'^#[0-9A-Fa-f]{6}$')
         incoming_branding = data.get('branding', {})
         _br_raw = incoming_branding.get('bubble_radius')
@@ -2210,7 +2239,7 @@ def save_customization():
         branding_settings = {
             'branding':     incoming_branding,
             'contact':      data.get('contact', {}),
-            'bot_settings': data.get('bot_settings', {}),
+            'bot_settings': incoming_bot_settings,
             'integrations': integrations,
             'vertical':     vertical,
         }
@@ -2468,7 +2497,7 @@ SHOPIFY_APP_CLIENT_ID     = os.environ.get('SHOPIFY_APP_CLIENT_ID', '')
 # api_key is the app's own client ID — i.e. SHOPIFY_APP_CLIENT_ID above.
 # See build_embed_activation_urls below.
 SHOPIFY_APP_CLIENT_SECRET = os.environ.get('SHOPIFY_APP_CLIENT_SECRET', '')
-SHOPIFY_APP_SCOPES        = 'read_products,read_orders'
+SHOPIFY_APP_SCOPES        = 'read_products,read_inventory,read_orders'
 SHOPIFY_API_VERSION       = '2026-07'  # matches commerce_adapters.ShopifyAdapter.API_VERSION
 
 
@@ -2802,7 +2831,9 @@ def connect_shopify_callback():
         )
         if resp.status_code != 200:
             raise ValueError(f'token exchange returned http_{resp.status_code}')
-        access_token = resp.json().get('access_token')
+        token_data   = resp.json()
+        access_token = token_data.get('access_token')
+        granted_scopes = token_data.get('scope', '')
         if not access_token:
             raise ValueError('token exchange response had no access_token')
     except Exception as e:
@@ -2888,6 +2919,7 @@ def connect_shopify_callback():
         merged_config.update({
             'shop_domain':          shop,
             'access_token':         access_token,
+            'shopify_scopes':       granted_scopes,
             'order_lookup_enabled': True,
             'inventory_enabled':    True,
         })

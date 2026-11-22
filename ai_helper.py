@@ -52,6 +52,7 @@ from pipeline.stages.math_helpers import topic_overlap
 from pipeline.stages.generation  import (
     build_context,
     dynamic_fallback,
+    generate_product_recommendation_response,
     guardrails,
     make_fallback,
     maybe_summarise,
@@ -62,6 +63,7 @@ from pipeline.stages.intent import (
     detect_intent,
     detect_action_intent,
     detect_simple_intent,
+    should_route_product_recommendation,
     dispatch_tool,
     extract_tool_args,
     handle_detected_action,
@@ -257,7 +259,7 @@ def get_ai_helper(
             if _ai_helper_instance is None:
                 _ai_helper_instance = AIHelper(
                     api_key    = api_key    or os.environ.get('GEMINI_API_KEY', ''),
-                    model_name = model_name or os.environ.get('GEMINI_MODEL', 'gemini-2.0-flash'),
+                    model_name = model_name or os.environ.get('GEMINI_MODEL', 'gemini-3.8-flash'),
                 )
     return _ai_helper_instance
 
@@ -271,7 +273,7 @@ class AIHelper:
     def __init__(
         self,
         api_key:    str = '',
-        model_name: str = 'gemini-2.0-flash',
+        model_name: str = 'gemini-3.8-flash',
     ) -> None:
         self.api_key    = api_key
         self.model_name = model_name
@@ -793,6 +795,7 @@ class AIHelper:
         session_id:            Optional[str] = None,
         lead_q3:               str = '',
         product_recommendations_enabled: bool = True,
+        product_recommendation_routing_enabled: bool = False,
     ) -> Dict:
 
         conversation_history = conversation_history or []
@@ -813,6 +816,7 @@ class AIHelper:
             kb_version=kb_version,
             session_id=session_id,
             product_recommendations_enabled=product_recommendations_enabled,
+            product_recommendation_routing_enabled=product_recommendation_routing_enabled,
         )
 
         # ── Response cache key ─────────────────────────────────────────
@@ -1267,6 +1271,19 @@ class AIHelper:
                     action=action_data,
                 ).to_dict()
 
+            # This pure detector is deliberately evaluated after the legacy
+            # action/tool precedence but independently of Tier 3's result.
+            # It still recognizes needs when Tier 3 was skipped, disabled,
+            # unavailable, or returned its generic "question" fallback.
+            if (not intent.get('tool')
+                    and should_route_product_recommendation(
+                        ctx.clean_message,
+                        ctx.product_recommendation_routing_enabled,
+                        ctx.product_recommendations_enabled,
+                    )):
+                intent['intent'] = 'tool'
+                intent['tool'] = 'recommend_products'
+
             # ── Tool dispatch exit ────────────────────────────────────
             # FIX: search_products had no plan gate at all — PLAN_LIMITS
             # ['product_recommendations'] is False on Free/Starter but was
@@ -1279,7 +1296,7 @@ class AIHelper:
             # and no "upgrade your plan" messaging leaks to them (that's
             # the merchant's billing relationship, not theirs to see).
             if (intent['intent'] == 'tool' and intent.get('tool')
-                    and not (intent['tool'] == 'search_products'
+                    and not (intent['tool'] in ('search_products', 'recommend_products')
                              and not ctx.product_recommendations_enabled)):
                 tool_name = intent['tool']
 
@@ -1373,6 +1390,16 @@ class AIHelper:
                     tool_name, ctx.clean_message, client_id, ctx.session_mem,
                     session_id=session_id,
                 )
+                response_text = tool_result.get('response', make_fallback(vertical))
+                if tool_name == 'recommend_products' and tool_result.get('success'):
+                    product_data = tool_result.get('data', {}).get('products', [])
+                    generated_recommendation = generate_product_recommendation_response(
+                        ctx.clean_message,
+                        product_data,
+                        self.model,
+                    )
+                    if generated_recommendation:
+                        response_text = generated_recommendation
 
                 # FIX: check_availability's slots were shown to the user as
                 # text but never remembered anywhere — a follow-up booking
@@ -1386,10 +1413,19 @@ class AIHelper:
                         _bg_submit(persist_session, client_id, session_id, ctx.session_mem)
 
                 return PipelineResult(
-                    response=tool_result.get('response', make_fallback(vertical)),
-                    method='tool',
+                    response=response_text,
+                    method=(
+                        'product_recommendation'
+                        if tool_name == 'recommend_products' else 'tool'
+                    ),
                     confidence=0.9 if tool_result.get('success') else 0.0,
                     action={'tool': tool_name, **tool_result},
+                    products=(
+                        tool_result.get('data', {}).get('products')
+                        if tool_name in ('search_products', 'recommend_products')
+                        and tool_result.get('success')
+                        else None
+                    ),
                 ).to_dict()
 
             # ── Confidence thresholds (sales queries get lower floor) ──

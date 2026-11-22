@@ -43,7 +43,7 @@ def detect_simple_intent(clean_message: str) -> Optional[str]:
     """
     msg = clean_message.lower().strip()
     for intent, keywords in SIMPLE_INTENTS.items():
-        if any(kw in msg for kw in keywords):
+        if any(re.search(rf'(?<!\w){re.escape(kw)}(?!\w)', msg) for kw in keywords):
             return intent
     return None
 
@@ -118,6 +118,43 @@ def detect_tool_intent(clean_message: str) -> Optional[str]:
                 best_tool = tool_key
                 best_len = len(kw)
     return best_tool
+
+
+_PRODUCT_RECOMMENDATION_PATTERNS = (
+    r'\brecommend(?:ation|ations)?\b',
+    r'\bsuggest(?:ion|ions)?\b',
+    r'\blooking for\b',
+    r'\bshopping for\b',
+    r'\bsearching for\b',
+    r'\bsomething for\b',
+    r'\bsomething (?:good|suitable|best) for\b',
+    r'\banything for\b',
+    r'\bgift (?:for|under|below|around)\b',
+    r'\bhelp me choose\b',
+    r'\bwhat should i (?:buy|get|choose)\b',
+    r'\bwhich (?:product|item|option)\b',
+    r'\bneed (?:something|anything|a product|an item|a gift|a present)\b',
+    r'\bwant (?:something|anything|a product|an item|a gift|a present)\b',
+    r'\b(?:need|want) (?:a|an|some) (?!(?:human|person|agent|support|help|refund|return|order|appointment|booking|answer|information|update|status|password|account)\b)[a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2}\b',
+)
+
+
+def detect_product_recommendation_intent(clean_message: str) -> bool:
+    """Detect explicit catalog-seeking language without relying on Gemini."""
+    message = clean_message.casefold()
+    if re.search(r"\b(?:don't|do not|never)\s+(?:recommend|suggest)\b", message):
+        return False
+    return any(re.search(pattern, message) for pattern in _PRODUCT_RECOMMENDATION_PATTERNS)
+
+
+def should_route_product_recommendation(
+    clean_message: str,
+    routing_enabled: bool,
+    plan_enabled: bool,
+) -> bool:
+    """Always detect intent; only route when both client and plan gates allow it."""
+    detected = detect_product_recommendation_intent(clean_message)
+    return detected and routing_enabled and plan_enabled
 
 
 def dispatch_tool(
@@ -243,6 +280,9 @@ def extract_tool_args(
         # search queries are short phrases, not full questions.
         args['query'] = user_message[:300]
 
+    elif tool_name == 'recommend_products':
+        args['customer_need'] = user_message[:300]
+
     return args
 
 
@@ -317,16 +357,71 @@ def _build_tool_response_text(tool_name: str, result: Dict) -> str:
             return "I couldn't find anything matching that in our knowledge base."
         return results[0].get('answer', '') or "I found something but couldn't format it — let me try again."
 
-    if tool_name == 'search_products':
+    if tool_name in ('search_products', 'recommend_products'):
         products = result.get('products', [])
+        price_constraint = result.get('price_constraint')
+        constraint_satisfied = result.get('price_constraint_satisfied', True)
+        if tool_name == 'recommend_products' and price_constraint:
+            amount = f"{price_constraint.get('currency', '')}{price_constraint['amount']:g}"
+            operator = price_constraint.get('operator')
+            if operator in ('lt', 'lte'):
+                constraint_name = 'budget'
+                if not constraint_satisfied:
+                    if not products:
+                        return (
+                            f"I couldn't find a price-confirmed option within your "
+                            f"{constraint_name} of {amount}. Would you like to raise "
+                            "your budget?"
+                        )
+                    lines = [
+                        f"None of the retrieved matching products fit your budget "
+                        f"of {amount}. "
+                        "The closest options are above budget, not within it:"
+                    ]
+                else:
+                    lines = [f"These catalog options fit your budget of {amount}:"]
+            else:
+                constraint_name = 'minimum price'
+                if not constraint_satisfied:
+                    if not products:
+                        return (
+                            f"I couldn't find a price-confirmed option meeting your "
+                            f"minimum price of {amount}. Would you like to lower it?"
+                        )
+                    lines = [
+                        f"No catalog options meet your minimum price of {amount}. "
+                        "The closest options are below it, not within it:"
+                    ]
+                else:
+                    lines = [
+                        f"These catalog options meet your minimum price of {amount}:"
+                    ]
+        else:
+            lines = []
         if not products:
+            if tool_name == 'recommend_products':
+                return (
+                    "I couldn't find a clear match in the current catalog. "
+                    "Could you share a preferred product type or budget?"
+                )
             return result.get('message', "I couldn't find anything matching that.")
-        lines = ["Here's what I found:"]
+        if tool_name == 'recommend_products' and not lines:
+            lines = ["Here are a few catalog options that may fit:"]
+        elif tool_name != 'recommend_products':
+            lines = [
+                "Here are the available product options. Which one would you prefer?"
+                if result.get('clarification_required') else "Here's what I found:"
+            ]
         for p in products[:5]:
             status = 'in stock' if p.get('available') else 'out of stock'
-            variant_part = f" ({p['variant']})" if p.get('variant') else ''
+            option_values = p.get('options') or {}
+            variant_part = (
+                f" ({', '.join(f'{name}: {value}' for name, value in option_values.items())})"
+                if option_values else (f" ({p['variant']})" if p.get('variant') else '')
+            )
             price_part = f" — {p['price']}" if p.get('price') else ''
-            lines.append(f"• {p.get('title', '')}{variant_part}{price_part} — {status}")
+            quantity_part = f", {p['quantity']} available" if p.get('quantity') is not None else ''
+            lines.append(f"• {p.get('title', '')}{variant_part}{price_part} — {status}{quantity_part}")
         return '\n'.join(lines)
 
     # cancel_order, escalate_to_human, and anything else already using 'message'
